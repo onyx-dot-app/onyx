@@ -25,7 +25,8 @@ After this refactor, onyx-cli has two modes determined by TTY detection:
 
 Conventions for all agent-usable commands:
 - Results to stdout, progress/errors to stderr
-- No output truncation, no ANSI codes, no interactive prompts
+- Non-TTY output truncated to 4096 bytes with full response in temp file (agents can read more if needed)
+- No ANSI codes, no interactive prompts
 - Every failure has a distinct exit code and an actionable error message on stderr
 
 ### Human path (TTY present)
@@ -83,9 +84,9 @@ The CLI is a Go project at `cli/` (Go 1.26.1, Cobra + Bubble Tea), distributed a
 
 `root.go:104-109` unconditionally falls through to `chatCmd.RunE`. Change: when no TTY is present, print help and exit 0. When TTY is present, keep the current fallthrough to the TUI.
 
-**2. Remove non-TTY output truncation** (`cmd/ask.go`)
+**2. Keep non-TTY output truncation (no change)** (`cmd/ask.go`, `internal/overflow/writer.go`)
 
-Delete the `defaultMaxOutputBytes = 4096` constant. Change lines 85–92 so non-TTY defaults to `truncateAt = 0` (no truncation). The `--max-output N` flag remains as an opt-in override.
+The existing truncation behavior is correct for agents. Coding agents have tool call output limits — dumping a full LLM response into the agent's context window wastes tokens. The current design handles this well: full response goes to a temp file, first 4096 bytes go to stdout, and the agent gets the file path to read more if needed. No changes required.
 
 **3. Remove `configure` non-interactive path** (`cmd/configure.go`)
 
@@ -147,7 +148,6 @@ PR 1: Behavior  ──►  PR 2: Error contract  ──►  PR 3: Docs
 ### Unit tests (Go `_test.go` files)
 
 - **Default command**: bare `onyx-cli` without TTY prints help, exits 0
-- **Truncation**: non-TTY no longer truncates by default; `--max-output N` still works
 - **Exit code mapping**: HTTP 429 → `RateLimited`, 5xx → `ServerError`, 401 → `AuthFailure`, etc.
 Extend existing test files: `exitcodes/codes_test.go`, `overflow/writer_test.go`, `config/config_test.go`.
 
@@ -155,5 +155,5 @@ Extend existing test files: `exitcodes/codes_test.go`, `overflow/writer_test.go`
 
 1. `onyx-cli` with TTY → launches TUI (unchanged)
 2. `echo "" | onyx-cli` → prints help, exits 0
-3. `onyx-cli ask "test" | cat` → full response, no truncation
+3. `onyx-cli ask "test" | cat` → truncated response with temp file path (existing behavior, unchanged)
 4. `onyx-cli ask --json "test" | head -1 | jq .type` → NDJSON events (unchanged)

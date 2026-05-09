@@ -130,7 +130,7 @@ Non-interactive mode output must be optimized for LLM consumption:
 - `--json` flag switches to structured JSON (for programmatic consumers)
 - `--quiet` flag suppresses progress/status output (already exists on `ask`)
 - Progress and status information goes to stderr; results go to stdout (clean pipe separation)
-- No truncation by default when piped (the current 4096-byte truncation for non-TTY is wrong for agent use — agents need the full response)
+- Non-TTY output is truncated to 4096 bytes with the full response saved to a temp file. This is intentional — coding agents have tool call output limits, and the temp file path lets the agent read more if needed. The `--max-output` flag provides an override.
 
 #### R1.3: Configuration isolation
 
