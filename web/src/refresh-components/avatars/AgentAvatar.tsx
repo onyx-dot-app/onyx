@@ -1,7 +1,7 @@
 "use client";
 
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
+import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { SvgOnyxLogo } from "@opal/logos";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";

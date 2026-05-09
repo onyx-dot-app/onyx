@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 import { DocumentSetSummary, ValidSources } from "./types";
 import { getSourcesForPersona } from "./sources";
 

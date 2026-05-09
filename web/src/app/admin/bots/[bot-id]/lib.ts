@@ -1,5 +1,5 @@
 import { SlackBotResponseType } from "@/lib/types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 
 interface SlackChannelConfigCreationRequest {
   slack_bot_id: number;

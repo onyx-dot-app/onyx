@@ -25,8 +25,8 @@ import {
   deleteAgent,
   toggleAgentFeatured,
   toggleAgentListed,
-} from "@/refresh-pages/admin/AgentsPage/svc";
-import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
+} from "@/lib/agents/svc";
+import type { AgentRow } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -34,7 +34,7 @@ import { useAgent } from "@/hooks/useAgents";
 import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useUser } from "@/providers/UserProvider";
 

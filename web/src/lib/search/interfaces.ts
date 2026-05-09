@@ -1,6 +1,6 @@
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Tag, ValidSources } from "../types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 
 export const FlowType = {
   SEARCH: "search",

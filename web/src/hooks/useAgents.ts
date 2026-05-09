@@ -7,10 +7,10 @@ import {
   MinimalPersonaSnapshot,
   FullPersona,
   Persona,
-} from "@/app/admin/agents/interfaces";
+} from "@/lib/agents/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
-import { pinAgents } from "@/lib/agents";
+import { pinAgents } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";

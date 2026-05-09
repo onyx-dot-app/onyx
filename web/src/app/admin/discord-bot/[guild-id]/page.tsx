@@ -25,7 +25,7 @@ import {
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
 import { useAdminAgents } from "@/hooks/useAgents";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;

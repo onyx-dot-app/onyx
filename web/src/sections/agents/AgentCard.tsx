@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -12,11 +12,11 @@ import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import {
-  checkUserOwnsAgent,
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,

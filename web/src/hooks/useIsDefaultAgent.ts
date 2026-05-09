@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession } from "@/app/app/interfaces";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 /**

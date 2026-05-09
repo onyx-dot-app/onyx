@@ -6,8 +6,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
-import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
+import { FullPersona } from "@/lib/agents/types";
+import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -69,11 +69,8 @@ import CustomAgentAvatar, {
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents } from "@/hooks/useAgents";
-import {
-  createPersona,
-  updatePersona,
-  PersonaUpsertParameters,
-} from "@/app/admin/agents/lib";
+import { createPersona, updatePersona } from "@/lib/agents/svc";
+import { PersonaUpsertParameters } from "@/lib/agents/types";
 import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -88,7 +85,7 @@ import {
   deleteAgent,
   updateAgentFeaturedStatus,
   updateAgentSharedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
@@ -931,16 +928,18 @@ export default function AgentEditorPage({
   async function handleDeleteAgent() {
     if (!existingAgent) return;
 
-    const error = await deleteAgent(existingAgent.id);
-
-    if (error) {
-      toast.error(`Failed to delete agent: ${error}`);
-    } else {
+    try {
+      await deleteAgent(existingAgent.id);
       toast.success("Agent deleted successfully");
-
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
+    } catch (e) {
+      toast.error(
+        `Failed to delete agent: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`
+      );
     }
   }
 

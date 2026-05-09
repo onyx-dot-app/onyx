@@ -11,7 +11,7 @@ import useSWRInfinite from "swr/infinite";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import useAppFocus from "./useAppFocus";
 import { useAgents } from "./useAgents";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";

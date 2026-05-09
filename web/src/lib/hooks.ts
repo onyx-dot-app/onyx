@@ -27,10 +27,7 @@ import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import {
-  MinimalPersonaSnapshot,
-  PersonaLabel,
-} from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot, PersonaLabel } from "@/lib/agents/types";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";

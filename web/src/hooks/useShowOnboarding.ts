@@ -11,7 +11,7 @@ import {
 } from "@/interfaces/onboarding";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 

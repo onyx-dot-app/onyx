@@ -33,7 +33,7 @@ import { ProjectFile } from "@/app/app/projects/projectsService";
 import {
   AttachedDocumentSnapshot,
   HierarchyNodeSnapshot,
-} from "@/app/admin/agents/interfaces";
+} from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 import { Disabled } from "@opal/core";

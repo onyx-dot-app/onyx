@@ -12,7 +12,7 @@ import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button } from "@opal/components";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";

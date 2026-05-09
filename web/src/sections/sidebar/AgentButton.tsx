@@ -1,7 +1,7 @@
 "use client";
 
 import React, { memo } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import { usePinnedAgents, useCurrentAgent } from "@/hooks/useAgents";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";

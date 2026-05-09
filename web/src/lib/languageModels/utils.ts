@@ -1,4 +1,4 @@
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import {
   DefaultModel,
   LLMProviderDescriptor,

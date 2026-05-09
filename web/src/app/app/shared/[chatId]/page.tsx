@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
 import * as AppLayouts from "@/layouts/app-layouts";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 
 // This is used for rendering a persona in the shared chat display
 export function constructMiniFiedPersona(name: string, id: number): Persona {

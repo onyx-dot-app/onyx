@@ -1,6 +1,6 @@
 "use client";
 
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import { useCallback, useMemo, useState } from "react";
 import { ChatSession } from "@/app/app/interfaces";
 import { useAgents, usePinnedAgents } from "@/hooks/useAgents";

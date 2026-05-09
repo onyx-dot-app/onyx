@@ -1,7 +1,7 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 
 export interface AgentDescriptionProps {
   agent?: MinimalPersonaSnapshot;

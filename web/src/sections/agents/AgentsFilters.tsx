@@ -36,7 +36,7 @@ import useMcpServers from "@/hooks/useMcpServers";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
-import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import type { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,

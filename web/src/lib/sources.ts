@@ -1,7 +1,7 @@
 import { R2Icon, S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
 import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Persona } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";

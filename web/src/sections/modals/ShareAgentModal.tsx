@@ -29,7 +29,7 @@ import { useAgent } from "@/hooks/useAgents";
 import { Button, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
-import { PersonaLabel } from "@/app/admin/agents/interfaces";
+import { PersonaLabel } from "@/lib/agents/types";
 import { FetchError } from "@/lib/fetcher";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
