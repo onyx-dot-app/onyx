@@ -42,7 +42,14 @@ def _run_configure(
             f"{_PROVISIONING_MODULE}.get_recommendations",
             return_value=_patch_recommendations(),
         ),
-        patch(f"{_PROVISIONING_MODULE}.fetch_existing_llm_provider", return_value=None),
+        patch(
+            f"{_PROVISIONING_MODULE}.fetch_existing_llm_provider_by_name_and_type",
+            return_value=None,
+        ),
+        patch(
+            f"{_PROVISIONING_MODULE}.fetch_existing_llm_provider_by_type_nameless",
+            return_value=None,
+        ),
         patch(f"{_PROVISIONING_MODULE}.upsert_llm_provider") as upsert_mock,
         patch(f"{_PROVISIONING_MODULE}.update_default_provider"),
         patch(
