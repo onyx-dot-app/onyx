@@ -1,17 +1,15 @@
 """Composition-based tenant-aware Redis client.
 
 Replaces the old ``__getattribute__``-based ``TenantRedis`` (a ``redis.Redis``
-subclass that wrapped a hand-maintained allowlist of methods) with an
-explicit, hand-written client built by composition. Every public method that
-touches a key prefixes it deliberately. Calling a Redis method that is not
-exposed here is a typing error, not a silent cross-tenant write.
-
-See `plans/2026-05-07-tenant-redis-composition-refactor.md` for context.
+subclass that wrapped a hand-maintained allowlist of methods) with an explicit,
+hand-written client built by composition. Every public method that touches a key
+prefixes it explicitly. Calling a Redis method that is not exposed here is a
+typing error, not a silent cross-tenant write.
 """
 
-# PEP 563 — annotations are stored as strings so that ``def set`` and
-# ``def hset`` etc. don't shadow the builtin types they reference in
-# return annotations like ``-> set[bytes]``.
+# PEP 563 — annotations are stored as strings so that ``def set`` and ``def
+# hset`` etc. don't shadow the builtin types they reference in return
+# annotations like ``-> set[bytes]``.
 from __future__ import annotations
 
 from collections.abc import Generator
@@ -27,46 +25,47 @@ KeyArg = str | bytes | memoryview
 
 # `set` is shadowed inside the class body by ``def set``, so a return-type
 # annotation like ``-> set[bytes]`` resolves to the method instead of the
-# builtin. Alias it once outside the class so static checkers (and ``ty``)
-# pick the right thing up.
+# builtin. Alias it once outside the class so static checkers (and ``ty``) pick
+# the right thing up.
 _BuiltinSet = set
 
 
 def _prefix_key(prefix: str, key: KeyArg) -> KeyArg:
-    """Idempotently prepend the tenant prefix to a key.
+    """Idempotently prepends the tenant prefix to a key.
 
     Module-level (not a method) so ``TenantRedisClient`` and
-    ``TenantRedisPipeline`` share a single definition. The prefixing
-    contract is security-relevant — divergence between the client and the
-    pipeline would silently break tenant isolation.
+    ``TenantRedisPipeline`` share a single definition. The prefixing contract is
+    security-relevant — divergence between the client and the pipeline would
+    silently break tenant isolation.
 
     Args:
         prefix: The tenant id (or shared namespace prefix) to prepend.
-        key: The user-supplied key. ``str``, ``bytes``, and ``memoryview``
-            are all supported because redis-py accepts all three at
-            runtime even where its stubs say otherwise.
+        key: The user-supplied key. ``str``, ``bytes``, and ``memoryview`` are
+            all supported because redis-py accepts all three at runtime even
+            where its stubs say otherwise.
+
+    Raises:
+        TypeError: If ``key`` is not one of the supported key types.
 
     Returns:
         The key with ``"{prefix}:"`` prepended, in the same type the caller
         passed in. If the key already starts with the prefix it is returned
         unchanged.
-
-    Raises:
-        TypeError: If ``key`` is not one of the supported key types.
     """
     full = f"{prefix}:"
     if isinstance(key, str):
         return key if key.startswith(full) else full + key
-    if isinstance(key, bytes):
+    elif isinstance(key, bytes):
         full_bytes = full.encode()
         return key if key.startswith(full_bytes) else full_bytes + key
-    if isinstance(key, memoryview):
+    elif isinstance(key, memoryview):
         full_bytes = full.encode()
         key_bytes = key.tobytes()
         if key_bytes.startswith(full_bytes):
             return key
         return memoryview(full_bytes + key_bytes)
-    raise TypeError(f"Unsupported key type: {type(key)}")
+    else:
+        raise TypeError(f"Unsupported key type: {type(key)}.")
 
 
 class TenantRedisClient:
@@ -77,68 +76,68 @@ class TenantRedisClient:
     """
 
     def __init__(self, prefix: str, client: redis.Redis) -> None:
-        """Initialize the wrapper around a redis-py client.
+        """Initializes the wrapper around a redis-py client.
 
         Args:
-            prefix: Tenant id, or the shared namespace prefix for
-                cross-tenant data. All key-bearing commands prepend
-                ``"{prefix}:"`` to their key argument.
+            prefix: Tenant ID, or the shared namespace prefix for cross-tenant
+                data. All key-bearing commands prepend ``"{prefix}:"`` to their
+                key argument.
             client: The underlying ``redis.Redis`` instance to delegate to.
         """
         self._prefix: str = prefix
         # Typed as ``Any`` internally because redis-py's type stubs are
         # inconsistent (some commands declare ``name: str`` even though
-        # ``bytes`` and ``memoryview`` work at runtime). The public API of
-        # this class accepts the wider ``KeyArg`` union — strict types stay
-        # on the boundary that callers actually see.
+        # ``bytes`` and ``memoryview`` work at runtime). The public API of this
+        # class accepts the wider ``KeyArg`` union — strict types stay on the
+        # boundary that callers actually see.
         self._r: Any = client
 
     @property
     def tenant_id(self) -> str:
-        """The tenant id (or shared namespace prefix) used for keys."""
+        """The tenant ID (or shared namespace prefix) used for keys."""
         return self._prefix
 
     @property
     def raw_client(self) -> redis.Redis:
         """Escape hatch for code that genuinely needs the unwrapped client.
 
-        Used by the lock-diagnostic helper, which inspects a `Lock` whose
-        `name` attribute already carries the prefix and so must round-trip
-        through a non-prefixing client. Prefer adding a method on this class
-        over reaching for this.
+        Used by the lock-diagnostic helper, which inspects a `Lock` whose `name`
+        attribute already carries the prefix and so must round-trip through a
+        non-prefixing client. Prefer adding a method on this class over reaching
+        for this.
         """
         return self._r
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Internal helpers
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def _strip_prefix_bytes(self, key: bytes) -> bytes:
-        """Strip the leading ``"{prefix}:"`` from a Redis-returned key.
+        """Strips the leading ``"{prefix}:"`` from a Redis-returned key.
 
-        Used on the return path of commands like BLPOP that echo back the
-        key the server matched on — the server sees the prefixed form, and
-        callers expect the unprefixed form.
+        Used on the return path of commands like BLPOP that echo back the key
+        the server matched on — the server sees the prefixed form, and callers
+        expect the unprefixed form.
 
         Args:
-            key: A key as returned by the Redis server, typically still
-                carrying the tenant prefix.
+            key: A key as returned by the Redis server, typically still carrying
+                the tenant prefix.
 
         Returns:
             ``key`` with the leading prefix removed if present, otherwise
-            ``key`` unchanged.
+                ``key`` unchanged.
         """
         prefix_bytes = f"{self._prefix}:".encode()
         if key.startswith(prefix_bytes):
             return key[len(prefix_bytes) :]
         return key
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Strings / generic
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def get(self, name: KeyArg) -> bytes | None:
-        """Issue a GET against a tenant-prefixed key.
+        """Issues a GET against a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key to read.
@@ -162,7 +161,7 @@ class TenantRedisClient:
         exat: int | None = None,
         pxat: int | None = None,
     ) -> Any:
-        """Issue a SET against a tenant-prefixed key.
+        """Issues a SET against a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key to write.
@@ -173,12 +172,13 @@ class TenantRedisClient:
             xx: Only set the key if it already exists.
             keepttl: Retain the existing TTL when overwriting.
             get: Return the previous value of the key.
-            exat: Absolute unix timestamp (seconds) at which the key expires.
-            pxat: Absolute unix timestamp (milliseconds) at which the key expires.
+            exat: Absolute Unix timestamp (seconds) at which the key expires.
+            pxat: Absolute Unix timestamp (milliseconds) at which the key
+                expires.
 
         Returns:
-            ``True`` on success, ``None`` if ``nx``/``xx`` prevented the
-            write, or — when ``get=True`` — the previous value.
+            ``True`` on success, ``None`` if ``nx``/``xx`` prevented the write,
+                or — when ``get=True`` — the previous value.
         """
         return self._r.set(
             _prefix_key(self._prefix, name),
@@ -199,7 +199,7 @@ class TenantRedisClient:
         time: int,
         value: str | bytes | int | float,
     ) -> bool:
-        """Issue a SETEX against a tenant-prefixed key.
+        """Issues a SETEX against a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key to write.
@@ -212,7 +212,7 @@ class TenantRedisClient:
         return cast(bool, self._r.setex(_prefix_key(self._prefix, name), time, value))
 
     def delete(self, *names: KeyArg) -> int:
-        """Issue a DEL against one or more tenant-prefixed keys.
+        """Issues a DEL against one or more tenant-prefixed keys.
 
         Args:
             *names: The (unprefixed) keys to delete.
@@ -224,20 +224,20 @@ class TenantRedisClient:
         return cast(int, self._r.delete(*prefixed))
 
     def exists(self, *names: KeyArg) -> int:
-        """Issue an EXISTS against one or more tenant-prefixed keys.
+        """Issues an EXISTS against one or more tenant-prefixed keys.
 
         Args:
             *names: The (unprefixed) keys to test.
 
         Returns:
-            The number of keys that exist (a key listed twice is counted
-            twice — this matches Redis semantics).
+            The number of keys that exist (a key listed twice is counted twice —
+            this matches Redis semantics).
         """
         prefixed = [_prefix_key(self._prefix, n) for n in names]
         return cast(int, self._r.exists(*prefixed))
 
     def incr(self, name: KeyArg, amount: int = 1) -> int:
-        """Atomically increment the integer at a tenant-prefixed key.
+        """Atomically increments the integer at a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) counter key.
@@ -261,7 +261,7 @@ class TenantRedisClient:
         return cast(int, self._r.incrby(_prefix_key(self._prefix, name), amount))
 
     def getset(self, name: KeyArg, value: str | bytes | int | float) -> bytes | None:
-        """Atomically set a tenant-prefixed key and return its old value.
+        """Atomically sets a tenant-prefixed key and returns its old value.
 
         Args:
             name: The (unprefixed) key.
@@ -269,15 +269,15 @@ class TenantRedisClient:
 
         Returns:
             The previous value as ``bytes``, or ``None`` if the key did not
-            exist.
+                exist.
         """
         return cast(
             "bytes | None", self._r.getset(_prefix_key(self._prefix, name), value)
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Hash
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def hset(
         self,
@@ -287,22 +287,22 @@ class TenantRedisClient:
         mapping: Mapping[Any, Any] | None = None,
         items: list[Any] | None = None,
     ) -> int:
-        """Issue an HSET against a tenant-prefixed hash key.
+        """Issues an HSET against a tenant-prefixed hash key.
 
-        Hash fields (``key``) are not prefixed — only the outer Redis key
-        is namespaced.
+        Hash fields (``key``) are not prefixed — only the outer Redis key is
+        namespaced.
 
         Args:
             name: The (unprefixed) hash key.
             key: Single hash field to set. Use with ``value``.
             value: Value for the single hash field set via ``key``.
             mapping: ``{field: value}`` dict to set in one call.
-            items: Flat ``[field1, value1, field2, value2, ...]`` list to
-                set in one call.
+            items: Flat ``[field1, value1, field2, value2, ...]`` list to set in
+                one call.
 
         Returns:
-            The number of fields that were newly added (existing fields
-            updated in place do not count).
+            The number of fields that were newly added (existing fields updated
+                in place do not count).
         """
         return cast(
             int,
@@ -316,15 +316,15 @@ class TenantRedisClient:
         )
 
     def hget(self, name: KeyArg, key: str | bytes) -> bytes | None:
-        """Issue an HGET against a tenant-prefixed hash key.
+        """Issues an HGET against a tenant-prefixed hash key.
 
         Args:
             name: The (unprefixed) hash key.
             key: The hash field to read.
 
         Returns:
-            The field value as ``bytes``, or ``None`` if either the hash or
-            the field is missing.
+            The field value as ``bytes``, or ``None`` if either the hash or the
+                field is missing.
         """
         return cast("bytes | None", self._r.hget(_prefix_key(self._prefix, name), key))
 
@@ -334,7 +334,7 @@ class TenantRedisClient:
         keys: list[str] | list[bytes],
         *args: str | bytes,
     ) -> list[bytes | None]:
-        """Issue an HMGET against a tenant-prefixed hash key.
+        """Issues an HMGET against a tenant-prefixed hash key.
 
         Args:
             name: The (unprefixed) hash key.
@@ -342,8 +342,8 @@ class TenantRedisClient:
             *args: Additional hash fields, appended to ``keys``.
 
         Returns:
-            A list with one entry per requested field, in input order.
-            Missing fields are returned as ``None``.
+            A list with one entry per requested field, in input order. Missing
+                fields are returned as ``None``.
         """
         return cast(
             "list[bytes | None]",
@@ -351,7 +351,7 @@ class TenantRedisClient:
         )
 
     def hdel(self, name: KeyArg, *keys: str | bytes) -> int:
-        """Issue an HDEL against a tenant-prefixed hash key.
+        """Issues an HDEL against a tenant-prefixed hash key.
 
         Args:
             name: The (unprefixed) hash key.
@@ -363,7 +363,7 @@ class TenantRedisClient:
         return cast(int, self._r.hdel(_prefix_key(self._prefix, name), *keys))
 
     def hexists(self, name: KeyArg, key: str | bytes) -> bool:
-        """Test whether a field exists in a tenant-prefixed hash key.
+        """Tests whether a field exists in a tenant-prefixed hash key.
 
         Args:
             name: The (unprefixed) hash key.
@@ -374,12 +374,12 @@ class TenantRedisClient:
         """
         return cast(bool, self._r.hexists(_prefix_key(self._prefix, name), key))
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Set
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def smembers(self, name: KeyArg) -> _BuiltinSet[bytes]:
-        """Return every member of a tenant-prefixed set key.
+        """Returns every member of a tenant-prefixed set key.
 
         Set members are not prefixed — only the outer Redis key is.
 
@@ -394,7 +394,7 @@ class TenantRedisClient:
         )
 
     def sismember(self, name: KeyArg, value: str | bytes | int | float) -> bool:
-        """Test whether ``value`` is a member of a tenant-prefixed set key.
+        """Tests whether ``value`` is a member of a tenant-prefixed set key.
 
         Args:
             name: The (unprefixed) set key.
@@ -406,7 +406,7 @@ class TenantRedisClient:
         return cast(bool, self._r.sismember(_prefix_key(self._prefix, name), value))
 
     def sadd(self, name: KeyArg, *values: str | bytes | int | float) -> int:
-        """Add one or more values to a tenant-prefixed set key.
+        """Adds one or more values to a tenant-prefixed set key.
 
         Args:
             name: The (unprefixed) set key.
@@ -414,12 +414,12 @@ class TenantRedisClient:
 
         Returns:
             The number of newly added members (existing members are not
-            counted).
+                counted).
         """
         return cast(int, self._r.sadd(_prefix_key(self._prefix, name), *values))
 
     def srem(self, name: KeyArg, *values: str | bytes | int | float) -> int:
-        """Remove one or more values from a tenant-prefixed set key.
+        """Removes one or more values from a tenant-prefixed set key.
 
         Args:
             name: The (unprefixed) set key.
@@ -431,7 +431,7 @@ class TenantRedisClient:
         return cast(int, self._r.srem(_prefix_key(self._prefix, name), *values))
 
     def scard(self, name: KeyArg) -> int:
-        """Return the cardinality of a tenant-prefixed set key.
+        """Returns the cardinality of a tenant-prefixed set key.
 
         Args:
             name: The (unprefixed) set key.
@@ -441,9 +441,9 @@ class TenantRedisClient:
         """
         return cast(int, self._r.scard(_prefix_key(self._prefix, name)))
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Sorted set
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def zadd(
         self,
@@ -455,27 +455,29 @@ class TenantRedisClient:
         incr: bool = False,
         gt: bool = False,
         lt: bool = False,
-    ) -> int:
-        """Add or update members of a tenant-prefixed sorted-set key.
+    ) -> int | float | None:
+        """Adds or updates members of a tenant-prefixed sorted-set key.
 
         Args:
             name: The (unprefixed) sorted-set key.
             mapping: ``{member: score}`` dict to upsert.
             nx: Only add new members; never update existing scores.
             xx: Only update existing members; never add new ones.
-            ch: Change the return value semantics from "added" to
-                "added or updated".
-            incr: Treat the score as a delta and increment instead of
-                replacing. Limits ``mapping`` to a single entry.
+            ch: Change the return value semantics from "added" to "added or
+                updated".
+            incr: Treat the score as a delta and increment instead of replacing.
+                Limits ``mapping`` to a single entry.
             gt: Only update an existing score if the new score is greater.
             lt: Only update an existing score if the new score is less.
 
         Returns:
-            The number of members added (or, with ``ch=True``, added or
-            updated). With ``incr=True`` the new score is returned instead.
+            With default flags: the ``int`` count of members added (or, with
+                ``ch=True``, added or updated). With ``incr=True``: the new
+                score as a ``float``, or ``None`` if ``nx``/``xx`` prevented the
+                write.
         """
         return cast(
-            int,
+            "int | float | None",
             self._r.zadd(
                 _prefix_key(self._prefix, name),
                 dict(mapping),
@@ -497,7 +499,7 @@ class TenantRedisClient:
         withscores: bool = False,
         score_cast_func: Any = float,
     ) -> list[Any]:
-        """Return a slice of a tenant-prefixed sorted-set key by index.
+        """Returns a slice of a tenant-prefixed sorted-set key by index.
 
         Args:
             name: The (unprefixed) sorted-set key.
@@ -505,12 +507,12 @@ class TenantRedisClient:
             end: Inclusive end index.
             desc: Iterate in descending score order instead of ascending.
             withscores: If ``True``, include the score alongside each member.
-            score_cast_func: Callable applied to each returned score.
-                Defaults to ``float``.
+            score_cast_func: Callable applied to each returned score. Defaults
+                to ``float``.
 
         Returns:
             A list of members, or — with ``withscores=True`` — a list of
-            ``(member, score)`` tuples.
+                ``(member, score)`` tuples.
         """
         return cast(
             list,
@@ -532,19 +534,20 @@ class TenantRedisClient:
         withscores: bool = False,
         score_cast_func: Any = float,
     ) -> list[Any]:
-        """Return a slice of a tenant-prefixed sorted-set key in descending order.
+        """
+        Returns a slice of a tenant-prefixed sorted-set key in descending order.
 
         Args:
             name: The (unprefixed) sorted-set key.
             start: Inclusive start index in the reversed order.
             end: Inclusive end index in the reversed order.
             withscores: If ``True``, include the score alongside each member.
-            score_cast_func: Callable applied to each returned score.
-                Defaults to ``float``.
+            score_cast_func: Callable applied to each returned score. Defaults
+                to ``float``.
 
         Returns:
             A list of members, or — with ``withscores=True`` — a list of
-            ``(member, score)`` tuples.
+                ``(member, score)`` tuples.
         """
         return cast(
             list,
@@ -567,18 +570,18 @@ class TenantRedisClient:
         withscores: bool = False,
         score_cast_func: Any = float,
     ) -> list[Any]:
-        """Return members of a tenant-prefixed sorted set within a score range.
+        """Returns members of a tenant-prefixed sorted set within a score range.
 
         Args:
             name: The (unprefixed) sorted-set key.
-            min: Inclusive lower bound. Use ``"-inf"`` or a ``"(value"``
-                string for an exclusive bound (Redis convention).
+            min: Inclusive lower bound. Use ``"-inf"`` or a ``"(value"`` string
+                for an exclusive bound (Redis convention).
             max: Inclusive upper bound. Same exclusive-bound convention.
             start: Offset into the result for pagination.
             num: Maximum number of results to return when paginating.
             withscores: If ``True``, include the score alongside each member.
-            score_cast_func: Callable applied to each returned score.
-                Defaults to ``float``.
+            score_cast_func: Callable applied to each returned score. Defaults
+                to ``float``.
 
         Returns:
             A list of members, or — with ``withscores=True`` — a list of
@@ -603,7 +606,7 @@ class TenantRedisClient:
         min: float | int | str | bytes,
         max: float | int | str | bytes,
     ) -> int:
-        """Remove members of a tenant-prefixed sorted set within a score range.
+        """Removes members of a tenant-prefixed sorted set within a score range.
 
         Args:
             name: The (unprefixed) sorted-set key.
@@ -618,7 +621,7 @@ class TenantRedisClient:
         )
 
     def zscore(self, name: KeyArg, value: str | bytes) -> float | None:
-        """Return the score of a member of a tenant-prefixed sorted-set key.
+        """Returns the score of a member of a tenant-prefixed sorted-set key.
 
         Args:
             name: The (unprefixed) sorted-set key.
@@ -632,7 +635,7 @@ class TenantRedisClient:
         )
 
     def zcard(self, name: KeyArg) -> int:
-        """Return the cardinality of a tenant-prefixed sorted-set key.
+        """Returns the cardinality of a tenant-prefixed sorted-set key.
 
         Args:
             name: The (unprefixed) sorted-set key.
@@ -642,12 +645,12 @@ class TenantRedisClient:
         """
         return cast(int, self._r.zcard(_prefix_key(self._prefix, name)))
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # List
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def rpush(self, name: KeyArg, *values: str | bytes | int | float) -> int:
-        """Append one or more values to a tenant-prefixed list key.
+        """Appends one or more values to a tenant-prefixed list key.
 
         Args:
             name: The (unprefixed) list key.
@@ -659,15 +662,15 @@ class TenantRedisClient:
         return cast(int, self._r.rpush(_prefix_key(self._prefix, name), *values))
 
     def lindex(self, name: KeyArg, index: int) -> bytes | None:
-        """Return the element at ``index`` of a tenant-prefixed list key.
+        """Returns the element at ``index`` of a tenant-prefixed list key.
 
         Args:
             name: The (unprefixed) list key.
             index: Zero-based index. Negative values count from the tail.
 
         Returns:
-            The element at that position as ``bytes``, or ``None`` if the
-            index is out of range or the key does not exist.
+            The element at that position as ``bytes``, or ``None`` if the index
+                is out of range or the key does not exist.
         """
         return cast(
             "bytes | None", self._r.lindex(_prefix_key(self._prefix, name), index)
@@ -681,20 +684,20 @@ class TenantRedisClient:
     ) -> tuple[bytes, bytes] | None:
         """Shared body for :meth:`blpop` and :meth:`brpop`.
 
-        Prefixes every key on the way in and strips the prefix from the
-        returned key on the way out — the server echoes back the matched
-        key in its prefixed form, but callers expect the unprefixed form.
+        Prefixes every key on the way in and strips the prefix from the returned
+        key on the way out — the server echoes back the matched key in its
+        prefixed form, but callers expect the unprefixed form.
 
         Args:
-            method_name: Either ``"blpop"`` or ``"brpop"`` — the redis-py
-                method to dispatch to.
-            keys: A single (unprefixed) key or a list of (unprefixed) keys
-                to wait on.
+            method_name: Either ``"blpop"`` or ``"brpop"`` — the redis-py method
+                to dispatch to.
+            keys: A single (unprefixed) key or a list of (unprefixed) keys to
+                wait on.
             timeout: Maximum seconds to block. ``0`` blocks indefinitely.
 
         Returns:
-            ``(key, value)`` with ``key`` stripped of its prefix on success,
-            or ``None`` if the timeout elapses.
+            ``(key, value)`` with ``key`` stripped of its prefix on success, or
+                ``None`` if the timeout elapses.
         """
         prefixed_keys: KeyArg | list[KeyArg]
         if isinstance(keys, (str, bytes, memoryview)):
@@ -706,25 +709,39 @@ class TenantRedisClient:
         if result is None:
             return None
         key, value = result[0], result[1]
-        if isinstance(key, bytes):
-            key = self._strip_prefix_bytes(key)
-        return (key, value)
+        # The bytes contract is security-relevant: if the key isn't bytes the
+        # `_strip_prefix_bytes` path silently degrades to "return the prefixed
+        # form unchanged", leaking the tenant namespace. Fail loudly so a future
+        # `decode_responses=True` flip is noisy rather than insecure.
+        if not isinstance(key, bytes):
+            raise TypeError(
+                f"{method_name.upper()} returned non-bytes key "
+                f"{type(key).__name__}; TenantRedisClient requires "
+                "decode_responses=False."
+            )
+        if not isinstance(value, bytes):
+            raise TypeError(
+                f"{method_name.upper()} returned non-bytes value "
+                f"{type(value).__name__}; TenantRedisClient requires "
+                "decode_responses=False."
+            )
+        return (self._strip_prefix_bytes(key), value)
 
     def blpop(
         self,
         keys: list[str] | list[bytes] | KeyArg,
         timeout: int = 0,
     ) -> tuple[bytes, bytes] | None:
-        """Blocking left-pop across one or more tenant-prefixed list keys.
+        """Blocking left-pops across one or more tenant-prefixed list keys.
 
         Args:
-            keys: A single (unprefixed) key or a list of (unprefixed) keys
-                to wait on. The server pops from the first key with data.
+            keys: A single (unprefixed) key or a list of (unprefixed) keys to
+                wait on. The server pops from the first key with data.
             timeout: Maximum seconds to block. ``0`` blocks indefinitely.
 
         Returns:
             ``(key, value)`` where ``key`` has been stripped of its tenant
-            prefix, or ``None`` if the timeout elapses.
+                prefix, or ``None`` if the timeout elapses.
         """
         return self._blpop_brpop("blpop", keys, timeout)
 
@@ -733,44 +750,44 @@ class TenantRedisClient:
         keys: list[str] | list[bytes] | KeyArg,
         timeout: int = 0,
     ) -> tuple[bytes, bytes] | None:
-        """Blocking right-pop across one or more tenant-prefixed list keys.
+        """Blocking right-pops across one or more tenant-prefixed list keys.
 
         Args:
-            keys: A single (unprefixed) key or a list of (unprefixed) keys
-                to wait on. The server pops from the first key with data.
+            keys: A single (unprefixed) key or a list of (unprefixed) keys to
+                wait on. The server pops from the first key with data.
             timeout: Maximum seconds to block. ``0`` blocks indefinitely.
 
         Returns:
             ``(key, value)`` where ``key`` has been stripped of its tenant
-            prefix, or ``None`` if the timeout elapses.
+                prefix, or ``None`` if the timeout elapses.
         """
         return self._blpop_brpop("brpop", keys, timeout)
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # TTL family
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def ttl(self, name: KeyArg) -> int:
-        """Return the remaining TTL of a tenant-prefixed key, in seconds.
+        """Returns the remaining TTL of a tenant-prefixed key, in seconds.
 
         Args:
             name: The (unprefixed) key.
 
         Returns:
-            Seconds until expiry, ``-1`` if the key has no TTL set, or
-            ``-2`` if the key does not exist.
+            Seconds until expiry, ``-1`` if the key has no TTL set, or ``-2`` if
+                the key does not exist.
         """
         return cast(int, self._r.ttl(_prefix_key(self._prefix, name)))
 
     def pttl(self, name: KeyArg) -> int:
-        """Return the remaining TTL of a tenant-prefixed key, in milliseconds.
+        """Returns the remaining TTL of a tenant-prefixed key, in milliseconds.
 
         Args:
             name: The (unprefixed) key.
 
         Returns:
             Milliseconds until expiry, ``-1`` if the key has no TTL set, or
-            ``-2`` if the key does not exist.
+                ``-2`` if the key does not exist.
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
 
@@ -783,7 +800,7 @@ class TenantRedisClient:
         gt: bool = False,
         lt: bool = False,
     ) -> bool:
-        """Set a TTL on a tenant-prefixed key.
+        """Sets a TTL on a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key.
@@ -794,8 +811,8 @@ class TenantRedisClient:
             lt: Only set if the new TTL is less than the current one.
 
         Returns:
-            ``True`` if the TTL was set, ``False`` otherwise (key missing
-            or a flag prevented the write).
+            ``True`` if the TTL was set, ``False`` otherwise (key missing or a
+                flag prevented the write).
         """
         return cast(
             bool,
@@ -813,7 +830,7 @@ class TenantRedisClient:
         gt: bool = False,
         lt: bool = False,
     ) -> bool:
-        """Set an absolute expiry on a tenant-prefixed key (unix seconds).
+        """Sets an absolute expiry on a tenant-prefixed key (Unix seconds).
 
         Args:
             name: The (unprefixed) key.
@@ -842,7 +859,7 @@ class TenantRedisClient:
         gt: bool = False,
         lt: bool = False,
     ) -> bool:
-        """Set a TTL on a tenant-prefixed key, in milliseconds.
+        """Sets a TTL on a tenant-prefixed key, in milliseconds.
 
         Args:
             name: The (unprefixed) key.
@@ -871,7 +888,7 @@ class TenantRedisClient:
         gt: bool = False,
         lt: bool = False,
     ) -> bool:
-        """Set an absolute expiry on a tenant-prefixed key (unix milliseconds).
+        """Sets an absolute expiry on a tenant-prefixed key (Unix milliseconds).
 
         Args:
             name: The (unprefixed) key.
@@ -891,14 +908,14 @@ class TenantRedisClient:
             ),
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Locks
     #
     # The returned `redis.lock.Lock` operates on the prefixed name internally
     # (its `name` attribute is the prefixed string). None of the lock's own
     # methods take a key argument, so this is safe — but callers should treat
     # `lock.name` as already-prefixed if they ever inspect it.
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def lock(
         self,
@@ -909,23 +926,21 @@ class TenantRedisClient:
         blocking_timeout: float | None = None,
         thread_local: bool = True,
     ) -> RedisLock:
-        """Construct a ``redis.lock.Lock`` over a tenant-prefixed key.
+        """Constructs a ``redis.lock.Lock`` over a tenant-prefixed key.
 
         The returned lock's ``.name`` attribute is the *prefixed* string —
         callers that read it back must treat it as already-prefixed.
 
         Args:
             name: The (unprefixed) lock key.
-            timeout: Maximum lifetime of the lock in seconds; ``None``
-                means no auto-release.
-            sleep: How long to sleep between acquisition attempts when
-                blocking.
-            blocking: Whether ``acquire()`` should block waiting for the
-                lock.
+            timeout: Maximum lifetime of the lock in seconds; ``None`` means no
+                auto-release.
+            sleep: How long to sleep between acquisition attempts when blocking.
+            blocking: Whether ``acquire()`` should block waiting for the lock.
             blocking_timeout: Maximum seconds ``acquire()`` will wait when
                 ``blocking=True``. ``None`` blocks indefinitely.
-            thread_local: Whether the lock token is stored in
-                thread-local state — see redis-py for the trade-offs.
+            thread_local: Whether the lock token is stored in thread-local state
+                — see redis-py for the trade-offs.
 
         Returns:
             A ``redis.lock.Lock`` bound to the prefixed key.
@@ -970,9 +985,9 @@ class TenantRedisClient:
             thread_local=thread_local,
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Scan
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def scan_iter(
         self,
@@ -980,20 +995,20 @@ class TenantRedisClient:
         count: int | None = None,
         _type: str | None = None,
     ) -> Generator[bytes, None, None]:
-        """Iterate every tenant-scoped key matching ``match``.
+        """Iterates every tenant-scoped key matching ``match``.
 
         When ``match`` is omitted we default to ``"{prefix}:*"`` rather than
         forwarding ``None`` — ``None`` would scan every key in Redis and
         un-stripped foreign-tenant keys would leak through the else branch
-        below. Defaulting to the tenant prefix keeps ``r.scan_iter()`` doing
-        the natural thing ("all my keys") without a cross-tenant leak.
+        below. Defaulting to the tenant prefix keeps ``r.scan_iter()`` doing the
+        natural thing ("all my keys") without a cross-tenant leak.
 
         Args:
             match: Glob-style pattern, e.g. ``"users:*"``. Tenant-prefixed
-                before being sent to the server. ``None`` means "every
-                key inside this tenant's namespace".
-            count: Hint to the server about how many keys to return per
-                round trip. Does not affect total results.
+                before being sent to the server. ``None`` means "every key
+                inside this tenant's namespace".
+            count: Hint to the server about how many keys to return per round
+                trip. Does not affect total results.
             _type: Filter by Redis type (``"string"``, ``"hash"``, ...).
 
         Yields:
@@ -1006,10 +1021,22 @@ class TenantRedisClient:
             _prefix_key(self._prefix, match) if match is not None else f"{prefix}*"
         )
         for key in self._r.scan_iter(match=prefixed_match, count=count, _type=_type):
-            if isinstance(key, bytes) and key.startswith(prefix_bytes):
-                yield key[prefix_len:]
-            else:
-                yield key
+            # Same security contract as `_blpop_brpop`: a non-bytes key would
+            # silently leak the tenant prefix to the caller. Fail loudly.
+            if not isinstance(key, bytes):
+                raise TypeError(
+                    f"SCAN returned non-bytes key {type(key).__name__}; "
+                    "TenantRedisClient requires decode_responses=False."
+                )
+            # By construction MATCH was `{prefix}*`, so every returned key must
+            # start with the prefix. Assert it instead of falling through to
+            # "yield prefixed".
+            if not key.startswith(prefix_bytes):
+                raise RuntimeError(
+                    f"SCAN returned key {key!r} that does not start with "
+                    f"tenant prefix {prefix_bytes!r}; this should be impossible."
+                )
+            yield key[prefix_len:]
 
     def sscan_iter(
         self,
@@ -1017,17 +1044,16 @@ class TenantRedisClient:
         match: str | bytes | None = None,
         count: int | None = None,
     ) -> Generator[bytes, None, None]:
-        """Iterate the members of a tenant-prefixed set key.
+        """Iterates the members of a tenant-prefixed set key.
 
-        The set members themselves are not prefixed and are returned
-        verbatim — only the outer key is namespaced.
+        The set members themselves are not prefixed and are returned verbatim —
+        only the outer key is namespaced.
 
         Args:
             name: The (unprefixed) set key.
-            match: Optional glob pattern applied to set members
-                server-side.
-            count: Hint to the server about how many members to return per
-                round trip.
+            match: Optional glob pattern applied to set members server-side.
+            count: Hint to the server about how many members to return per round
+                trip.
 
         Yields:
             Each matching member as ``bytes``.
@@ -1039,13 +1065,13 @@ class TenantRedisClient:
             ),
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Scripting
     #
     # The signature is `(script, keys, args)` rather than the redis-py native
     # `(script, numkeys, *keys_and_args)` so callers can't accidentally cross
     # the key/arg boundary. `numkeys` is computed from `len(keys)`.
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def eval(
         self,
@@ -1053,18 +1079,18 @@ class TenantRedisClient:
         keys: list[str] | list[bytes],
         args: list[str] | list[bytes] | list[int] | list[float] | None = None,
     ) -> Any:
-        """Run a Lua script with an explicit ``(keys, args)`` split.
+        """Runs a Lua script with an explicit ``(keys, args)`` split.
 
-        Tenant-prefixes every entry in ``keys``; ``args`` are passed
-        through verbatim. By convention Lua scripts must not put key
-        names in ``ARGV``, otherwise tenant scoping is bypassed.
+        Tenant-prefixes every entry in ``keys``; ``args`` are passed through
+        verbatim. By convention Lua scripts must not put key names in ``ARGV``,
+        otherwise tenant scoping is bypassed.
 
         Args:
             script: The Lua script source.
-            keys: Keys the script will operate on, in ``KEYS[i]`` order.
-                Each is tenant-prefixed before being sent to the server.
-            args: Non-key arguments, in ``ARGV[i]`` order. ``None`` is
-                treated as an empty list.
+            keys: Keys the script will operate on, in ``KEYS[i]`` order. Each is
+                tenant-prefixed before being sent to the server.
+            args: Non-key arguments, in ``ARGV[i]`` order. ``None`` is treated
+                as an empty list.
 
         Returns:
             Whatever the script returns, encoded per redis-py conventions.
@@ -1078,15 +1104,16 @@ class TenantRedisClient:
         keys: list[str] | list[bytes],
         args: list[str] | list[bytes] | list[int] | list[float] | None = None,
     ) -> Any:
-        """Run a previously loaded Lua script by SHA, with explicit key/arg split.
+        """
+        Runs a previously-loaded Lua script by SHA, with explicit key/arg split.
 
         Args:
-            sha: The SHA1 digest of a script previously loaded via
-                ``SCRIPT LOAD``.
-            keys: Keys the script will operate on, in ``KEYS[i]`` order.
-                Each is tenant-prefixed before being sent to the server.
-            args: Non-key arguments, in ``ARGV[i]`` order. ``None`` is
-                treated as an empty list.
+            sha: The SHA1 digest of a script previously loaded via ``SCRIPT
+                LOAD``.
+            keys: Keys the script will operate on, in ``KEYS[i]`` order. Each is
+                tenant-prefixed before being sent to the server.
+            args: Non-key arguments, in ``ARGV[i]`` order. ``None`` is treated
+                as an empty list.
 
         Returns:
             Whatever the script returns, encoded per redis-py conventions.
@@ -1094,12 +1121,12 @@ class TenantRedisClient:
         prefixed_keys = [_prefix_key(self._prefix, k) for k in keys]
         return self._r.evalsha(sha, len(prefixed_keys), *prefixed_keys, *(args or []))
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Pipeline
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
-    def pipeline(self, transaction: bool = True) -> "TenantRedisPipeline":
-        """Open a tenant-scoped pipeline that prefixes keys on every write.
+    def pipeline(self, transaction: bool = True) -> TenantRedisPipeline:
+        """Opens a tenant-scoped pipeline that prefixes keys on every write.
 
         Args:
             transaction: Whether the queued commands run as a MULTI/EXEC
@@ -1112,12 +1139,12 @@ class TenantRedisClient:
             self._prefix, self._r.pipeline(transaction=transaction)
         )
 
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Passthrough (no key)
-    # ------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def ping(self) -> bool:
-        """Issue a PING. No key, so no prefixing happens.
+        """Issues a PING. No key, so no prefixing happens.
 
         Returns:
             ``True`` if the server responded.
@@ -1125,7 +1152,7 @@ class TenantRedisClient:
         return cast(bool, self._r.ping())
 
     def info(self, section: str | None = None) -> dict[str, Any]:
-        """Issue an INFO. Server-level command — no key, no prefix.
+        """Issues an INFO. Server-level command — no key, no prefix.
 
         Args:
             section: Optional INFO section name (e.g. ``"memory"``,
@@ -1137,7 +1164,9 @@ class TenantRedisClient:
         return cast("dict[str, Any]", self._r.info(section))
 
     def close(self) -> None:
-        """Close the underlying redis-py client and release its connection pool."""
+        """
+        Closes the underlying redis-py client and releases its connection pool.
+        """
         self._r.close()
 
 
@@ -1150,16 +1179,14 @@ class TenantRedisPipeline:
     """
 
     def __init__(self, prefix: str, pipeline: Pipeline) -> None:
-        """Initialize the wrapper around a redis-py pipeline.
+        """Initializes the wrapper around a redis-py pipeline.
 
         Args:
-            prefix: Tenant id, or the shared namespace prefix. Must match
-                the prefix of the parent :class:`TenantRedisClient` —
-                callers should always obtain pipelines via
-                ``TenantRedisClient.pipeline()`` rather than constructing
-                one directly.
-            pipeline: The underlying ``redis.client.Pipeline`` to delegate
-                to.
+            prefix: Tenant ID, or the shared namespace prefix. Must match the
+                prefix of the parent :class:`TenantRedisClient` — callers should
+                always obtain pipelines via ``TenantRedisClient.pipeline()``
+                rather than constructing one directly.
+            pipeline: The underlying ``redis.client.Pipeline`` to delegate to.
         """
         self._prefix: str = prefix
         # Typed as ``Any`` internally for the same reason as
@@ -1167,7 +1194,10 @@ class TenantRedisPipeline:
         # the wider key types we actually pass at runtime.
         self._p: Any = pipeline
 
-    # write commands
+    # --------------------------------------------------------------------------
+    # Write commands
+    # --------------------------------------------------------------------------
+
     def set(
         self,
         name: KeyArg,
@@ -1180,8 +1210,8 @@ class TenantRedisPipeline:
         get: bool = False,
         exat: int | None = None,
         pxat: int | None = None,
-    ) -> "TenantRedisPipeline":
-        """Queue a SET against a tenant-prefixed key.
+    ) -> TenantRedisPipeline:
+        """Queues a SET against a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key to write.
@@ -1192,8 +1222,9 @@ class TenantRedisPipeline:
             xx: Only set the key if it already exists.
             keepttl: Retain the existing TTL when overwriting.
             get: Return the previous value (visible after :meth:`execute`).
-            exat: Absolute unix timestamp (seconds) at which the key expires.
-            pxat: Absolute unix timestamp (milliseconds) at which the key expires.
+            exat: Absolute Unix timestamp (seconds) at which the key expires.
+            pxat: Absolute Unix timestamp (milliseconds) at which the key
+                expires.
 
         Returns:
             ``self``, to allow chaining further pipeline commands.
@@ -1212,8 +1243,8 @@ class TenantRedisPipeline:
         )
         return self
 
-    def delete(self, *names: KeyArg) -> "TenantRedisPipeline":
-        """Queue a DEL against one or more tenant-prefixed keys.
+    def delete(self, *names: KeyArg) -> TenantRedisPipeline:
+        """Queues a DEL against one or more tenant-prefixed keys.
 
         Args:
             *names: The (unprefixed) keys to delete.
@@ -1224,8 +1255,8 @@ class TenantRedisPipeline:
         self._p.delete(*(_prefix_key(self._prefix, n) for n in names))
         return self
 
-    def incr(self, name: KeyArg, amount: int = 1) -> "TenantRedisPipeline":
-        """Queue an INCRBY against a tenant-prefixed counter key.
+    def incr(self, name: KeyArg, amount: int = 1) -> TenantRedisPipeline:
+        """Queues an INCRBY against a tenant-prefixed counter key.
 
         Args:
             name: The (unprefixed) counter key.
@@ -1245,8 +1276,8 @@ class TenantRedisPipeline:
         xx: bool = False,
         gt: bool = False,
         lt: bool = False,
-    ) -> "TenantRedisPipeline":
-        """Queue an EXPIRE against a tenant-prefixed key.
+    ) -> TenantRedisPipeline:
+        """Queues an EXPIRE against a tenant-prefixed key.
 
         Args:
             name: The (unprefixed) key.
@@ -1268,8 +1299,8 @@ class TenantRedisPipeline:
         self,
         name: KeyArg,
         *values: str | bytes | int | float,
-    ) -> "TenantRedisPipeline":
-        """Queue an SADD against a tenant-prefixed set key.
+    ) -> TenantRedisPipeline:
+        """Queues an SADD against a tenant-prefixed set key.
 
         Args:
             name: The (unprefixed) set key.
@@ -1281,26 +1312,30 @@ class TenantRedisPipeline:
         self._p.sadd(_prefix_key(self._prefix, name), *values)
         return self
 
-    # ---- terminators ----
+    # --------------------------------------------------------------------------
+    # Passthrough
+    # --------------------------------------------------------------------------
 
     def execute(self) -> list[Any]:
-        """Send every queued command to Redis and return their results.
+        """Sends every queued command to Redis and returns their results.
 
         Returns:
             A list of per-command results in queue order. With
-            ``transaction=True`` (the default) the list is the result of a
-            single MULTI/EXEC.
+                ``transaction=True`` (the default) the list is the result of a
+                single MULTI/EXEC.
         """
         return cast("list[Any]", self._p.execute())
 
     def reset(self) -> None:
-        """Discard the queued commands without executing them."""
+        """Discards the queued commands without executing them."""
         self._p.reset()
 
-    def __enter__(self) -> "TenantRedisPipeline":
-        """Enter a ``with`` block; returns ``self`` so callers can queue commands."""
+    def __enter__(self) -> TenantRedisPipeline:
+        """
+        Enters a ``with`` block; returns ``self`` so callers can queue commands.
+        """
         return self
 
     def __exit__(self, *exc_info: Any) -> None:
-        """Exit a ``with`` block, discarding any commands not yet executed."""
+        """Exits a ``with`` block, discarding any commands not yet executed."""
         self.reset()

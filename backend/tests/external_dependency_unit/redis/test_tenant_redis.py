@@ -276,9 +276,9 @@ class TestScanIter:
             }
             # We see our own key, unprefixed.
             assert my_key in returned
-            # We do not see the other tenant's key in any form — neither
-            # under its bare name nor with the foreign tenant prefix bolted
-            # on (the pre-fix leak shape).
+            # We do not see the other tenant's key in any form — neither under
+            # its bare name nor with the foreign tenant prefix bolted on (the
+            # pre-fix leak shape).
             assert other_key not in returned
             assert f"{other_tenant}:{other_key}" not in returned
             # And nothing in our result still wears the other tenant's prefix.
@@ -360,8 +360,8 @@ class TestEval:
     def test_eval_can_read_what_set_wrote(
         self, tenant_redis: TenantRedisClient
     ) -> None:
-        # Round-trip through wrapped methods: set via TenantRedisClient.set, read via
-        # EVAL. Both must target the same prefixed key.
+        # Round-trip through wrapped methods: set via TenantRedisClient.set,
+        # read via EVAL. Both must target the same prefixed key.
         key = _unique_key("lua")
         tenant_redis.set(key, "from_set")
         result = tenant_redis.eval(
@@ -398,7 +398,7 @@ class TestEval:
 
 
 # ------------------------------------------------------------------------------
-# Pipeline — closes the latent gap that the old TenantRedis never plugged
+# Pipeline
 # ------------------------------------------------------------------------------
 
 
@@ -441,9 +441,9 @@ class TestPipeline:
         tenant_id: str,
         raw_redis: Redis,
     ) -> None:
-        # Mirrors product_gating.overwrite_full_gated_set: clear the set,
-        # then add a batch of members in one pipeline. All operations must
-        # share the same prefixed key.
+        # Mirrors product_gating.overwrite_full_gated_set: clear the set, then
+        # add a batch of members in one pipeline. All operations must share the
+        # same prefixed key.
         key = _unique_key("pipe_set")
         tenant_redis.sadd(key, "stale_member")
 

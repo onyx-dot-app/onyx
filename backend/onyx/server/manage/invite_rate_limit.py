@@ -30,15 +30,15 @@ logger = setup_logger()
 _SECONDS_PER_MINUTE = 60
 _SECONDS_PER_DAY = 24 * 60 * 60
 
-# Rate limits apply to trial tenants only (enforced at call site). Paid
-# tenants bypass entirely — their guardrails are seat limits and the
-# per-admin lifetime counter. Self-hosted / Lite deployments fail open
-# when Redis is unavailable. Values are sized against the trial lifetime
-# cap `NUM_FREE_TRIAL_USER_INVITES=10` and the invite→remove→invite
-# bypass attack: per-day caps stay tight so a compromised or scripted
-# trial admin cannot exceed the lifetime cap even across window rolls,
-# and per-minute caps block burst automation while leaving headroom for
-# a human typing emails by hand.
+# Rate limits apply to trial tenants only (enforced at call site). Paid tenants
+# bypass entirely — their guardrails are seat limits and the per-admin lifetime
+# counter. Self-hosted / Lite deployments fail open when Redis is unavailable.
+# Values are sized against the trial lifetime cap
+# `NUM_FREE_TRIAL_USER_INVITES=10` and the invite -> remove -> invite bypass
+# attack: per-day caps stay tight so a compromised or scripted trial admin
+# cannot exceed the lifetime cap even across window rolls, and per-minute caps
+# block burst automation while leaving headroom for a human typing emails by
+# hand.
 _INVITE_ADMIN_PER_MIN = 3
 _INVITE_ADMIN_PER_DAY = 10
 _INVITE_TENANT_PER_DAY = 15
@@ -46,9 +46,9 @@ _REMOVE_ADMIN_PER_MIN = 3
 _REMOVE_ADMIN_PER_DAY = 30
 
 # Per-admin buckets are scoped by globally unique admin UUIDs. The tenant/day
-# bucket also embeds the tenant_id directly so two tenants never share a
-# bucket even when the script keys collide post-prefixing — defence in depth
-# alongside the per-tenant Redis prefix applied by ``TenantRedisClient``.
+# bucket also embeds the tenant_id directly so two tenants never share a bucket
+# even when the script keys collide post-prefixing — defence in depth alongside
+# the per-tenant Redis prefix applied by ``TenantRedisClient``.
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
 _INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:{tenant_id}:day"
@@ -59,11 +59,11 @@ _INVITE_REMOVE_ADMIN_DAY_KEY = "ratelimit:invite_remove:admin:{user_id}:day"
 # ARGV[1] = N (bucket count). For each bucket i=1..N, ARGV[2+(i-1)*3..4+(i-1)*3]
 # carry increment, limit, ttl. KEYS[i] is the bucket's Redis key.
 #
-# Buckets with limit <= 0 or increment <= 0 are skipped (a disabled tier).
-# On reject, returns the 1-indexed bucket number that failed so the caller
-# can report which scope tripped; on success returns 0. TTL is set with NX
-# semantics so pre-existing keys without a TTL are still given one, but
-# fresh increments do not reset the window (fixed-window, not sliding).
+# Buckets with limit <= 0 or increment <= 0 are skipped (a disabled tier). On
+# reject, returns the 1-indexed bucket number that failed so the caller can
+# report which scope tripped; on success returns 0. TTL is set with NX semantics
+# so pre-existing keys without a TTL are still given one, but fresh increments
+# do not reset the window (fixed-window, not sliding).
 _CHECK_AND_INCREMENT_SCRIPT = """
 local n = tonumber(ARGV[1])
 for i = 1, n do

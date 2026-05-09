@@ -463,10 +463,10 @@ async def retrieve_ws_token_data(token: str) -> dict | None:
 
 
 def redis_lock_dump(lock: RedisLock, r: TenantRedisClient) -> None:
-    # diagnostic logging for lock errors. `lock.name` is the prefixed
-    # name so we read through the raw client to avoid the prefix being
-    # applied a second time (idempotent prefixing handles it either way,
-    # but the raw client is the more honest call here).
+    # Diagnostic logging for lock errors. `lock.name` is the prefixed name so we
+    # read through the raw client to avoid the prefix being applied a second
+    # time (idempotent prefixing handles it either way, but the raw client is
+    # the more honest call here).
     name = lock.name
     raw = r.raw_client
     ttl = raw.ttl(name)
