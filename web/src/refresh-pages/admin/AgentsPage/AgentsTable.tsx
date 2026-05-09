@@ -9,7 +9,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import type { MinimalAgentSnapshot, Persona } from "@/lib/agents/types";
+import type { MinimalAgentSnapshot, Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { toast } from "@/hooks/useToast";
 import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
@@ -23,10 +23,7 @@ import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderCreatedByColumn(
-  _value: MinimalUserSnapshot | null,
-  row: Persona
-) {
+function renderCreatedByColumn(_value: MinimalUserSnapshot | null, row: Agent) {
   return (
     <Content
       sizePreset="main-ui"
@@ -37,13 +34,13 @@ function renderCreatedByColumn(
   );
 }
 
-function getAccessTitle(row: Persona): string {
+function getAccessTitle(row: Agent): string {
   if (row.is_public) return "Public";
   if (row.groups.length > 0 || row.users.length > 0) return "Shared";
   return "Private";
 }
 
-function renderAccessColumn(_isPublic: boolean, row: Persona) {
+function renderAccessColumn(_isPublic: boolean, row: Agent) {
   return (
     <Content
       sizePreset="main-ui"
@@ -60,7 +57,7 @@ function renderAccessColumn(_isPublic: boolean, row: Persona) {
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<Persona>();
+const tc = createTableColumns<Agent>();
 
 function buildColumns(onMutate: () => void) {
   return [

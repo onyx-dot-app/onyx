@@ -3,7 +3,13 @@
 import useSWR from "swr";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { FullPersona, MinimalAgentSnapshot, Persona } from "@/lib/agents/types";
+import {
+  FullAgent,
+  MinimalAgentSnapshot,
+  Agent,
+  UseAdminAgentsOptions,
+  PaginatedAgentsResponse,
+} from "@/lib/agents/types";
 import {
   UserSpecificAgentPreference,
   UserSpecificAgentPreferences,
@@ -43,7 +49,7 @@ export function useAgents() {
 }
 
 export function useAgent(agentId: number | null) {
-  const { data, error, isLoading, mutate } = useSWR<FullPersona>(
+  const { data, error, isLoading, mutate } = useSWR<FullAgent>(
     agentId ? SWR_KEYS.persona(agentId) : null,
     errorHandlingFetcher,
     {
@@ -59,19 +65,6 @@ export function useAgent(agentId: number | null) {
     error,
     refresh: mutate,
   };
-}
-
-interface UseAdminAgentsOptions {
-  includeDeleted?: boolean;
-  getEditable?: boolean;
-  includeDefault?: boolean;
-  pageNum?: number;
-  pageSize?: number;
-}
-
-interface PaginatedAgentsResponse {
-  items: Persona[];
-  total_items: number;
 }
 
 export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
@@ -99,12 +92,12 @@ export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
       });
 
   const { data, error, isLoading, mutate } = useSWR<
-    Persona[] | PaginatedAgentsResponse
+    Agent[] | PaginatedAgentsResponse
   >(url, errorHandlingFetcher);
 
   const agents = usePagination
     ? (data as PaginatedAgentsResponse)?.items || []
-    : (data as Persona[]) || [];
+    : (data as Agent[]) || [];
 
   const totalItems = usePagination
     ? (data as PaginatedAgentsResponse)?.total_items || 0

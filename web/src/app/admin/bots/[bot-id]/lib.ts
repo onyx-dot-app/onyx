@@ -1,5 +1,5 @@
 import { SlackBotResponseType } from "@/lib/types";
-import { Persona } from "@/lib/agents/types";
+import { Agent } from "@/lib/agents/types";
 
 interface SlackChannelConfigCreationRequest {
   slack_bot_id: number;
@@ -91,6 +91,6 @@ export const deleteSlackChannelConfig = async (id: number) => {
   });
 };
 
-export function isPersonaASlackBotPersona(persona: Persona) {
+export function isPersonaASlackBotPersona(persona: Agent) {
   return persona.name.startsWith("__slack_bot_persona__");
 }

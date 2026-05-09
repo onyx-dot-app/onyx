@@ -27,7 +27,7 @@ import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
-import { MinimalAgentSnapshot, PersonaLabel } from "@/lib/agents/types";
+import { MinimalAgentSnapshot, AgentLabel } from "@/lib/agents/types";
 import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
@@ -249,7 +249,7 @@ export const useFederatedConnectors = () => {
 
 export const useLabels = () => {
   const { mutate } = useSWRConfig();
-  const { data: labels, error } = useSWR<PersonaLabel[]>(
+  const { data: labels, error } = useSWR<AgentLabel[]>(
     SWR_KEYS.personaLabels,
     errorHandlingFetcher
   );
@@ -258,7 +258,7 @@ export const useLabels = () => {
     return mutate(SWR_KEYS.personaLabels);
   };
 
-  const createLabel = async (name: string): Promise<PersonaLabel | null> => {
+  const createLabel = async (name: string): Promise<AgentLabel | null> => {
     const response = await fetch(SWR_KEYS.personaLabels, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -269,10 +269,10 @@ export const useLabels = () => {
       return null;
     }
 
-    const newLabel: PersonaLabel = await response.json();
+    const newLabel: AgentLabel = await response.json();
     mutate(
       SWR_KEYS.personaLabels,
-      (currentLabels: PersonaLabel[] | undefined) => [
+      (currentLabels: AgentLabel[] | undefined) => [
         ...(currentLabels || []),
         newLabel,
       ],

@@ -26,7 +26,7 @@ import {
   toggleAgentFeatured,
   toggleAgentListed,
 } from "@/lib/agents/svc";
-import type { Persona } from "@/lib/agents/types";
+import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -43,7 +43,7 @@ import { useUser } from "@/providers/UserProvider";
 // ---------------------------------------------------------------------------
 
 interface PersonaActionsProps {
-  agent: Persona;
+  agent: Agent;
   onMutate: () => void;
 }
 

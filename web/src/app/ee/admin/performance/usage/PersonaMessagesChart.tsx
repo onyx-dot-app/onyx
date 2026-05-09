@@ -18,13 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo, useEffect } from "react";
-import { Persona } from "@/lib/agents/types";
+import { Agent } from "@/lib/agents/types";
 
 export function PersonaMessagesChart({
   availablePersonas,
   timeRange,
 }: {
-  availablePersonas: Persona[];
+  availablePersonas: Agent[];
   timeRange: DateRangePickerValue;
 }) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { FullPersona } from "@/lib/agents/types";
+import { FullAgent } from "@/lib/agents/types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
@@ -119,7 +119,7 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
  * On submit, navigates to the agent's chat with the message pre-filled.
  */
 interface AgentChatInputProps {
-  agent: FullPersona;
+  agent: FullAgent;
   onSubmit: (message: string) => void;
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
@@ -166,7 +166,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
  * - Advanced options (model, sharing status)
  */
 export interface AgentViewerModalProps {
-  agent: FullPersona;
+  agent: FullAgent;
 }
 export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();

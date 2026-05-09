@@ -29,7 +29,7 @@ import { useAgent } from "@/lib/agents/hooks";
 import { Button, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
-import { PersonaLabel } from "@/lib/agents/types";
+import { AgentLabel } from "@/lib/agents/types";
 import { FetchError } from "@/lib/fetcher";
 
 const YOUR_ORGANIZATION_TAB = "Your Organization";
@@ -156,7 +156,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
     );
   }
 
-  const selectedLabels: PersonaLabel[] = useMemo(() => {
+  const selectedLabels: AgentLabel[] = useMemo(() => {
     if (!allLabels) return [];
     return allLabels.filter((label) => values.labelIds.includes(label.id));
   }, [allLabels, values.labelIds]);
