@@ -211,7 +211,7 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
     def _document_builder(contents: list[str]) -> list[SimpleTestDocument]:
         # seed documents
         docs: list[SimpleTestDocument] = [
-            DocumentManager.seed_doc_with_content(
+            DocumentManager.seed(
                 cc_pair=cc_pair_1,
                 content=content,
                 api_key=api_key,

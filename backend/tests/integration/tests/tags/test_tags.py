@@ -44,7 +44,7 @@ def test_tag_creation_and_update(reset: None) -> None:  # noqa: ARG001
         ("multiple_list", "c", True),
         ("single_list", "x", True),
     }
-    doc1 = DocumentManager.seed_doc_with_content(
+    doc1 = DocumentManager.seed(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -87,7 +87,7 @@ def test_tag_creation_and_update(reset: None) -> None:  # noqa: ARG001
         ("multiple_list", "d", True),
         ("new_value", "new_val", False),
     }
-    doc1_new = DocumentManager.seed_doc_with_content(
+    doc1_new = DocumentManager.seed(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -152,7 +152,7 @@ def test_tag_sharing(reset: None) -> None:  # noqa: ARG001
         ("list", "b", True),
         ("same_key", "x", False),
     }
-    doc1 = DocumentManager.seed_doc_with_content(
+    doc1 = DocumentManager.seed(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -171,7 +171,7 @@ def test_tag_sharing(reset: None) -> None:  # noqa: ARG001
         ("list", "c", True),
         ("same_key", "x", True),
     }
-    doc2 = DocumentManager.seed_doc_with_content(
+    doc2 = DocumentManager.seed(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc2",

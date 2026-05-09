@@ -31,7 +31,7 @@ def test_multiple_document_sets_syncing_same_connnector(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
+    cc_pair_1.documents = DocumentManager.seed_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -92,13 +92,13 @@ def test_removing_connector(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_dummy_docs(
+    cc_pair_1.documents = DocumentManager.seed_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
 
-    cc_pair_2.documents = DocumentManager.seed_dummy_docs(
+    cc_pair_2.documents = DocumentManager.seed_multiple(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -178,7 +178,7 @@ def test_renaming_document_set(
         user_performing_action=admin_user,
     )
 
-    cc_pair.documents = DocumentManager.seed_dummy_docs(
+    cc_pair.documents = DocumentManager.seed_multiple(
         cc_pair=cc_pair,
         num_docs=NUM_DOCS,
         api_key=api_key,

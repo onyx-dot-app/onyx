@@ -31,7 +31,7 @@ def test_ingestion_api_crud(
     api_key.headers.update(admin_user.headers)
 
     # CREATE
-    doc = IngestionManager.seed_doc_with_content(
+    doc = IngestionManager.seed(
         cc_pair=cc_pair,
         content="Test document",
         document_id="test-doc-1",

@@ -30,7 +30,7 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
     # Seed a document
     cc_pair.documents = []
     cc_pair.documents.append(
-        DocumentManager.seed_doc_with_content(
+        DocumentManager.seed(
             cc_pair=cc_pair,
             content="The company's revenue in Q1 was $1M",
             api_key=api_key,

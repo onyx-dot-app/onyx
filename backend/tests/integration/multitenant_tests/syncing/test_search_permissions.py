@@ -52,12 +52,12 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG0
 
     # Seed documents for Tenant 1
     cc_pair_1.documents = []
-    doc1_tenant1 = DocumentManager.seed_doc_with_content(
+    doc1_tenant1 = DocumentManager.seed(
         cc_pair=cc_pair_1,
         content="Tenant 1 Document Content",
         api_key=api_key_1,
     )
-    doc2_tenant1 = DocumentManager.seed_doc_with_content(
+    doc2_tenant1 = DocumentManager.seed(
         cc_pair=cc_pair_1,
         content="Tenant 1 Document Content",
         api_key=api_key_1,
@@ -66,12 +66,12 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG0
 
     # Seed documents for Tenant 2
     cc_pair_2.documents = []
-    doc1_tenant2 = DocumentManager.seed_doc_with_content(
+    doc1_tenant2 = DocumentManager.seed(
         cc_pair=cc_pair_2,
         content="Tenant 2 Document Content",
         api_key=api_key_2,
     )
-    doc2_tenant2 = DocumentManager.seed_doc_with_content(
+    doc2_tenant2 = DocumentManager.seed(
         cc_pair=cc_pair_2,
         content="Tenant 2 Document Content",
         api_key=api_key_2,
