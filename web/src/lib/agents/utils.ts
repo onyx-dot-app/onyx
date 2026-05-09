@@ -15,6 +15,12 @@ export function checkUserOwnsAgent(
   );
 }
 
+// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
 export function buildAgentAvatarUrl(agentId: number) {
   return `/api/persona/${agentId}/avatar`;
+}
+
+// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+export function buildUpdateAgentPreferenceUrl(agentId: number) {
+  return `/api/user/assistant/${agentId}/preferences`;
 }

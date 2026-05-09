@@ -26,6 +26,7 @@ import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
+import { buildUpdateAgentPreferenceUrl } from "./utils";
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -283,10 +284,6 @@ export function useIsDefaultAgent({
 }
 
 // ── Agent preferences ─────────────────────────────────────────────────────────
-
-// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
-const buildUpdateAgentPreferenceUrl = (agentId: number) =>
-  `/api/user/assistant/${agentId}/preferences`;
 
 export function useAgentPreferences() {
   const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
