@@ -68,6 +68,8 @@ import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
+import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
+import { SWR_KEYS } from "@/lib/swr-keys";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -117,8 +119,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const [errorsItemsPerPage, setErrorsItemsPerPage] = useState(10);
-
   const {
     currentPageData: indexAttemptErrorsPage,
     totalPages: indexAttemptErrorsTotalPages,
@@ -126,7 +126,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     currentPage: indexAttemptErrorsCurrentPage,
     goToPage: goToIndexAttemptErrorsPage,
   } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: errorsItemsPerPage,
+    itemsPerPage: 10,
     pagesPerBatch: 1,
     endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
     disableUrlSync: true,
@@ -415,20 +415,45 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
-      {showIndexAttemptErrors && indexAttemptErrors && (
+      {showIndexAttemptErrors && indexAttemptErrors && ccPair && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
           totalPages={indexAttemptErrorsTotalPages}
           currentPage={indexAttemptErrorsCurrentPage}
           onPageChange={goToIndexAttemptErrorsPage}
-          onPageSizeChange={setErrorsItemsPerPage}
           onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
             setShowIndexAttemptErrors(false);
+            if (!ccPair.supports_targeted_reindex) {
+              setShowIsResolvingKickoffLoader(true);
+              await triggerReIndex(true);
+              return;
+            }
             setShowIsResolvingKickoffLoader(true);
-            await triggerReIndex(true);
+            try {
+              const result = await resolveAllErrorsForCCPair(ccPairId);
+              if (result.total_error_ids === 0) {
+                toast.success("No unresolved errors to retry.");
+              } else {
+                toast.success(
+                  `Targeted reindex submitted for ${result.total_error_ids} ${
+                    result.total_error_ids === 1 ? "document" : "documents"
+                  }. Errors will clear from the list as documents finish reindexing.`
+                );
+              }
+              mutate(
+                (key) =>
+                  typeof key === "string" &&
+                  key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
+              );
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              toast.error(`Targeted reindex failed: ${message}`);
+            } finally {
+              setShowIsResolvingKickoffLoader(false);
+            }
           }}
-          isResolvingErrors={isResolvingErrors}
+          supportsTargetedReindex={ccPair.supports_targeted_reindex}
         />
       )}
 

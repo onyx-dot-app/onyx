@@ -11,6 +11,7 @@ import bash from "highlight.js/lib/languages/bash";
 import {
   BashToolDelta,
   BashToolStart,
+  CodingAgentFinal,
   CodingAgentPacket,
   CodingAgentStart,
   CodingAgentThinkingDelta,
@@ -283,6 +284,31 @@ function CodingTaskStep({
   );
 }
 
+interface ResponseStepProps {
+  answer: string;
+  isLastStep: boolean;
+  isHover: boolean;
+}
+
+function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
+  return (
+    <StepContainer
+      stepIcon={SvgCheckCircle}
+      header="Response"
+      isLastStep={isLastStep}
+      isHover={isHover}
+      collapsible={true}
+      supportsCollapsible={true}
+    >
+      <div className="pl-[var(--timeline-common-text-padding)]">
+        <Text as="p" font="main-ui-muted" color="text-02">
+          {answer}
+        </Text>
+      </div>
+    </StepContainer>
+  );
+}
+
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   packets,
   renderType,
@@ -293,9 +319,10 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   const startPacket = packets.find(
     (p) => p.obj.type === PacketType.CODING_AGENT_START
   )?.obj as CodingAgentStart | undefined;
-  const hasFinal = packets.some(
+  const finalPacket = packets.find(
     (p) => p.obj.type === PacketType.CODING_AGENT_FINAL
-  );
+  )?.obj as CodingAgentFinal | undefined;
+  const hasFinal = finalPacket !== undefined;
   const errored = packets.some((p) => p.obj.type === PacketType.ERROR);
 
   const steps = useMemo(() => buildAgentSteps(packets), [packets]);
@@ -327,7 +354,14 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
     let header: string | null = null;
     let body: JSX.Element | null = null;
 
-    if (latestStep?.kind === "bash") {
+    if (finalPacket) {
+      header = "Response";
+      body = (
+        <Text as="p" font="main-ui-muted" color="text-02">
+          {finalPacket.answer}
+        </Text>
+      );
+    } else if (latestStep?.kind === "bash") {
       header = bashStepHeader(latestStep);
       body = <BashStepBody call={latestStep} />;
     } else if (latestStep?.kind === "thinking") {
@@ -358,6 +392,15 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   }
 
   if (renderType === RenderType.COMPACT) {
+    if (finalPacket) {
+      return wrap(
+        <ResponseStep
+          answer={finalPacket.answer}
+          isLastStep={true}
+          isHover={isHover}
+        />
+      );
+    }
     if (latestStep) {
       return wrap(
         renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
@@ -380,7 +423,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
       {startPacket && (
         <CodingTaskStep
           taskText={taskText}
-          isLastStep={lastStepIsActive && steps.length === 0}
+          isLastStep={lastStepIsActive && steps.length === 0 && !finalPacket}
           isHover={isHover}
         />
       )}
@@ -388,9 +431,16 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
         renderAgentStep(
           step,
           idx,
-          lastStepIsActive && idx === steps.length - 1,
+          lastStepIsActive && idx === steps.length - 1 && !finalPacket,
           isHover
         )
+      )}
+      {finalPacket && (
+        <ResponseStep
+          answer={finalPacket.answer}
+          isLastStep={true}
+          isHover={isHover}
+        />
       )}
     </div>
   );

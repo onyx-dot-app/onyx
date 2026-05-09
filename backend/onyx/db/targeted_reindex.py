@@ -231,6 +231,8 @@ def create_targeted_reindex_job(
                 from_beginning=False,
                 status=IndexingStatus.NOT_STARTED,
                 targeted_reindex_job_id=job.id,
+                # Mirror celery_task_id so the orphan sweeper skips this row.
+                celery_task_id=celery_task_id,
             )
             db_session.add(attempt)
             db_session.flush()

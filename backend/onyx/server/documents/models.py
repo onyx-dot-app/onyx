@@ -404,6 +404,10 @@ class CCPairFullInfo(BaseModel):
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
 
+    # True if this connector's class implements `Resolver.reindex`. The FE
+    # uses this to route Resolve-All to targeted reindex vs full reindex.
+    supports_targeted_reindex: bool
+
     @classmethod
     def _get_last_full_permission_sync(
         cls, cc_pair_model: ConnectorCredentialPair
@@ -457,6 +461,7 @@ class CCPairFullInfo(BaseModel):
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
+        supports_targeted_reindex: bool = False,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -514,6 +519,7 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_targeted_reindex=supports_targeted_reindex,
         )
 
 

@@ -2,7 +2,7 @@
 
 A snapshot of how Onyx Craft (a.k.a. "Build") is wired today, before the V1 work
 in this directory lands. The goal of this doc is to give a reader the mental
-model needed to read the V1 plans (`search.md`, `interception.md`,
+model needed to read the V1 plans (`search-design.md`, `interception.md`,
 `sandbox-backends.md`, `skills.md`, etc.) without having to spelunk the code
 themselves.
 
@@ -477,7 +477,7 @@ These are deliberately current-state observations; the V1 plans in this
 directory propose how to fix each.
 
 1. **Knowledge corpus is dumped as JSON files into the sandbox.** No ACL,
-   no freshness, no parity with chat search. (`search.md` replaces this
+   no freshness, no parity with chat search. (`search-design.md` replaces this
    with a `company_search` HTTP tool/skill.)
 2. **`local` is the docker-compose default and offers no isolation.**
    (`sandbox-backends.md` adds a `docker` backend.)

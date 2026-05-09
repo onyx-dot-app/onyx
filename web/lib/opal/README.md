@@ -130,6 +130,32 @@ cd web/lib/opal
 npm run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
+## Releasing to npm
+
+Releases go out through the `Release Opal` GitHub Actions workflow
+(`.github/workflows/release-opal.yml`). It uses npm OIDC Trusted Publishers — no
+`NPM_TOKEN`, signed provenance attestation. Pushing a tag is the only thing that triggers a
+release.
+
+Steps:
+
+1. Bump `version` in `web/lib/opal/package.json` (semver: `MAJOR.MINOR.PATCH`, prerelease
+   suffix `-rc.N` allowed).
+2. Open a PR with the version bump and any release-shaped changes. Merge it.
+3. From `main`, tag and push:
+
+   ```sh
+   git switch main && git pull
+   git tag opal/v0.1.1
+   git push origin opal/v0.1.1
+   ```
+
+4. The workflow runs automatically on tag push. It builds (`tsup` + CSS barrel) and runs
+   `npm publish --provenance --access public`. Watch the run under the Actions tab; verify
+   the new version on https://www.npmjs.com/package/@onyx-ai/opal.
+
+The tag pattern must match `opal/v*.*.*` for the workflow to fire.
+
 ## Conventions
 
 - Component directories are kebab-case (e.g. `select-button/`, `open-button/`,

@@ -46,7 +46,7 @@ Expose Onyx hybrid search to OpenCode as a first-party HTTP tool that exactly mi
 
 **Key decisions:** purpose-built HTTP tool (not MCP), exact behavioral parity with the regular search tool, search runs as the session/trigger owner.
 
-Detail doc: `search.md` (to be written).
+Detail doc: [`search-design.md`](features/search/search-design.md).
 
 ### 2. Docker-Compose Sandbox Backend
 

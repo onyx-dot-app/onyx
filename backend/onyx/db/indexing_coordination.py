@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import count_error_rows_for_index_attempt
 from onyx.db.index_attempt import create_index_attempt
@@ -14,8 +13,6 @@ from onyx.db.models import IndexAttempt
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-INDEXING_PROGRESS_TIMEOUT_HOURS = 6
 
 
 class CoordinationStatus(BaseModel):
@@ -266,50 +263,3 @@ class IndexingCoordination:
         )
 
         return [attempt.id for attempt in active_attempts]
-
-    @staticmethod
-    def update_progress_tracking(
-        db_session: Session,
-        index_attempt_id: int,
-        current_batches_completed: int,
-        timeout_hours: int = INDEXING_PROGRESS_TIMEOUT_HOURS,
-        force_update_progress: bool = False,
-    ) -> bool:
-        """
-        Update progress tracking for stall detection.
-        Returns True if sufficient progress was made, False if stalled.
-        """
-
-        attempt = get_index_attempt(db_session, index_attempt_id)
-        if not attempt:
-            logger.error("Index attempt %s not found in database", index_attempt_id)
-            return False
-
-        current_time = get_db_current_time(db_session)
-
-        # No progress - check if this is the first time tracking
-        # or if the caller wants to simulate guaranteed progress
-        if attempt.last_progress_time is None or force_update_progress:
-            # First time tracking - initialize
-            attempt.last_progress_time = current_time
-            attempt.last_batches_completed_count = current_batches_completed
-            db_session.commit()
-            return True
-
-        time_elapsed = (current_time - attempt.last_progress_time).total_seconds()
-        # only actually write to db every timeout_hours/2
-        # this ensure thats at most timeout_hours will pass with no activity
-        if time_elapsed < timeout_hours * 1800:
-            return True
-
-        # Check if progress has been made
-        if current_batches_completed <= attempt.last_batches_completed_count:
-            # if between timeout_hours/2 and timeout_hours has passed
-            # without an update, we consider the attempt stalled
-            return False
-
-        # Progress made - update tracking
-        attempt.last_progress_time = current_time
-        attempt.last_batches_completed_count = current_batches_completed
-        db_session.commit()
-        return True

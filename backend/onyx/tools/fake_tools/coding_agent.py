@@ -39,7 +39,6 @@ from onyx.server.query_and_chat.streaming_models import CodingAgentFinal
 from onyx.server.query_and_chat.streaming_models import CodingAgentThinkingDelta
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import PacketException
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
@@ -213,32 +212,14 @@ def _generate_final_answer(
             is_deep_research=False,
         )
 
-        # Route the agent's final answer (AgentResponseStart/Delta) to a
-        # separate group at turn_index + 1 so it renders as a chat bubble
-        # via MessageTextRenderer, distinct from the coding-agent timeline.
-        # This mirrors the reload convention (session_loading.py emits
-        # create_message_packets at max_tool_turn + 1). Reasoning and
-        # SectionEnd stay on the agent's placement.
-        chat_bubble_placement = Placement(turn_index=placement.turn_index + 1)
-        emitted_chat_bubble = False
-
         while True:
             try:
                 packet = next(answer_generator)
                 if isinstance(packet.obj, (AgentResponseStart, AgentResponseDelta)):
-                    emitted_chat_bubble = True
-                    emitter.emit(
-                        Packet(placement=chat_bubble_placement, obj=packet.obj),
-                    )
-                else:
-                    emitter.emit(Packet(placement=placement, obj=packet.obj))
+                    continue
+                emitter.emit(Packet(placement=placement, obj=packet.obj))
             except StopIteration as e:
                 llm_step_result, _ = e.value
-                emitter.emit(Packet(placement=placement, obj=SectionEnd()))
-                if emitted_chat_bubble:
-                    emitter.emit(
-                        Packet(placement=chat_bubble_placement, obj=SectionEnd()),
-                    )
                 break
 
         final_answer = llm_step_result.answer
