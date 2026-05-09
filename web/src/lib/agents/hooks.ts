@@ -30,6 +30,11 @@ import { buildUpdateAgentPreferenceUrl } from "./utils";
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
+/**
+ * Fetches the full list of agents visible to the current user.
+ * Results are deduplicated for 60 s and not revalidated on focus to avoid
+ * redundant round-trips across the app.
+ */
 export function useAgents() {
   const { data, error, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.personas,
@@ -49,6 +54,10 @@ export function useAgents() {
   };
 }
 
+/**
+ * Fetches a single agent by ID. Passing null skips the request entirely,
+ * which is useful when the agent ID isn't known yet.
+ */
 export function useAgent(agentId: number | null) {
   const { data, error, isLoading, mutate } = useSWR<FullAgent>(
     agentId ? SWR_KEYS.persona(agentId) : null,
@@ -68,6 +77,12 @@ export function useAgent(agentId: number | null) {
   };
 }
 
+/**
+ * Fetches agents for the admin panel. Supports optional server-side
+ * pagination — when pageNum and pageSize are both provided, the response is
+ * paginated and totalItems reflects the full count; otherwise all agents are
+ * returned in a flat array.
+ */
 export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
   const {
     includeDeleted = false,
@@ -109,6 +124,11 @@ export function useAdminAgents(options: UseAdminAgentsOptions = {}) {
 
 // ── Pinned agents ─────────────────────────────────────────────────────────────
 
+/**
+ * Manages the user's pinned agent list with optimistic local state.
+ * When the user has no explicit pins, falls back to featured agents
+ * (excluding the default agent at id=0).
+ */
 export function usePinnedAgents() {
   const { user, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
@@ -165,6 +185,11 @@ export function usePinnedAgents() {
 
 // ── Current agent (URL param or chat session) ─────────────────────────────────
 
+/**
+ * Resolves the active agent from the URL search param, falling back to the
+ * agent attached to the current chat session. Returns null when neither is
+ * available or the agent list hasn't loaded yet.
+ */
 export function useCurrentAgent(): MinimalAgent | null {
   const { agents } = useAgents();
   const searchParams = useSearchParams();
@@ -183,6 +208,13 @@ export function useCurrentAgent(): MinimalAgent | null {
 
 // ── Agent controller (chat UI selection) ──────────────────────────────────────
 
+/**
+ * Manages agent selection state for the chat UI. `liveAgent` is the agent
+ * that will actually be used for a new message, resolved by priority:
+ * explicit user selection → URL param → first pinned → first available.
+ * When `disable_default_assistant` is on, the built-in default (id=0) is
+ * skipped in the fallback chain.
+ */
 export function useAgentController(
   selectedChatSession: ChatSession | null | undefined,
   onAgentSelect?: () => void
@@ -244,6 +276,11 @@ export function useAgentController(
 
 // ── Default agent detection ───────────────────────────────────────────────────
 
+/**
+ * Returns true when the session is using the built-in default agent (id=0).
+ * Accounts for the URL param, the existing session's agent, and the
+ * `disable_default_assistant` setting which forces a non-default agent.
+ */
 export function useIsDefaultAgent(
   liveAgent: MinimalAgent | undefined,
   existingChatSessionId: string | null,
@@ -277,6 +314,11 @@ export function useIsDefaultAgent(
 
 // ── Agent preferences ─────────────────────────────────────────────────────────
 
+/**
+ * Fetches and updates per-user preferences for each agent (e.g. temperature
+ * overrides, custom instructions). Applies an optimistic local update before
+ * the server confirms to keep the UI responsive.
+ */
 export function useAgentPreferences() {
   const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
     SWR_KEYS.agentPreferences,
@@ -321,6 +363,7 @@ export function useAgentPreferences() {
 
 // ── MCP servers for agent editor ──────────────────────────────────────────────
 
+/** Fetches the list of MCP servers for display in the agent editor's tool selector. */
 export function useMcpServersForAgentEditor() {
   const {
     data: mcpData,

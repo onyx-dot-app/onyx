@@ -1,5 +1,10 @@
 import { AgentUpsertParameters, AgentUpsertRequest } from "@/lib/agents/types";
 
+/**
+ * Maps client-facing AgentUpsertParameters to the wire shape expected by the
+ * API. `display_priority` is always sent as null because ordering is managed
+ * server-side via the dedicated display-priorities endpoint.
+ */
 function buildAgentUpsertRequest(
   params: AgentUpsertParameters
 ): AgentUpsertRequest {
@@ -31,6 +36,7 @@ function buildAgentUpsertRequest(
   };
 }
 
+/** Extracts `detail` from a non-OK JSON response body, falling back to `fallback`. */
 async function parseErrorDetail(res: Response, fallback: string) {
   try {
     const body = await res.json();
@@ -42,6 +48,10 @@ async function parseErrorDetail(res: Response, fallback: string) {
 
 // ── Agent CRUD ───────────────────────────────────────────────────────────────
 
+/**
+ * Creates a new agent. Returns the raw Response so the caller can read the
+ * created agent's ID from the body.
+ */
 export async function createAgent(
   params: AgentUpsertParameters
 ): Promise<Response> {
@@ -53,6 +63,10 @@ export async function createAgent(
   });
 }
 
+/**
+ * Updates an existing agent. Returns the raw Response so the caller can
+ * inspect the updated fields.
+ */
 export async function updateAgent(
   id: number,
   params: AgentUpsertParameters
@@ -65,6 +79,7 @@ export async function updateAgent(
   });
 }
 
+/** Deletes an agent. Throws on failure. */
 export async function deleteAgent(agentId: number): Promise<void> {
   const res = await fetch(`/api/persona/${agentId}`, {
     method: "DELETE",
@@ -75,6 +90,10 @@ export async function deleteAgent(agentId: number): Promise<void> {
   }
 }
 
+/**
+ * Uploads an agent avatar image. Returns the server-assigned file ID on
+ * success, or null if the upload fails.
+ */
 export async function uploadFile(file: File): Promise<string | null> {
   const formData = new FormData();
   formData.append("file", file);
@@ -91,6 +110,11 @@ export async function uploadFile(file: File): Promise<string | null> {
 
 // ── Sharing & visibility ─────────────────────────────────────────────────────
 
+/**
+ * Updates the agent's sharing settings (users, groups, public flag, labels).
+ * Group sharing is EE-only — groupIds are silently dropped when enterprise
+ * features are disabled. Returns an error string on failure, null on success.
+ */
 export async function updateAgentSharedStatus(
   agentId: number,
   userIds: string[],
@@ -126,6 +150,10 @@ export async function updateAgentSharedStatus(
   }
 }
 
+/**
+ * Updates only the labels on an agent, leaving all other sharing settings
+ * untouched. Returns an error string on failure, null on success.
+ */
 export async function updateAgentLabels(
   agentId: number,
   labelIds: number[]
@@ -147,6 +175,10 @@ export async function updateAgentLabels(
 
 // ── Featured / listed / display priority ─────────────────────────────────────
 
+/**
+ * Sets the agent's featured status. Admin-only endpoint.
+ * Returns an error string on failure, null on success.
+ */
 export async function updateAgentFeaturedStatus(
   agentId: number,
   isFeatured: boolean
@@ -166,6 +198,7 @@ export async function updateAgentFeaturedStatus(
   }
 }
 
+/** Flips the agent's featured status. Admin-only. Throws on failure. */
 export async function toggleAgentFeatured(
   agentId: number,
   currentlyFeatured: boolean
@@ -183,6 +216,10 @@ export async function toggleAgentFeatured(
   }
 }
 
+/**
+ * Flips the agent's listed status. Unlisted agents are hidden from the
+ * explore list but remain accessible via direct link. Throws on failure.
+ */
 export async function toggleAgentListed(
   agentId: number,
   currentlyListed: boolean
@@ -198,6 +235,10 @@ export async function toggleAgentListed(
   }
 }
 
+/**
+ * Bulk-updates display order for agents in the admin panel. Used after
+ * drag-and-drop reordering. Throws on failure.
+ */
 export async function updateAgentDisplayPriorities(
   displayPriorityMap: Record<string, number>
 ): Promise<void> {
@@ -215,6 +256,10 @@ export async function updateAgentDisplayPriorities(
 
 // ── Pinned agents ─────────────────────────────────────────────────────────────
 
+/**
+ * Replaces the user's full ordered list of pinned agents. The order of the
+ * array determines sidebar display order. Throws on failure.
+ */
 export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
   const res = await fetch(`/api/user/pinned-assistants`, {
     method: "PATCH",
