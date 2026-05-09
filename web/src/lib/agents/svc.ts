@@ -241,7 +241,7 @@ export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
   const res = await fetch(`/api/user/pinned-assistants`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+    // TODO(ENG-3766): rename to agent
     body: JSON.stringify({ ordered_assistant_ids: pinnedAgentIds }),
   });
   if (!res.ok) {

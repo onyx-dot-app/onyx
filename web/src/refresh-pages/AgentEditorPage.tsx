@@ -935,6 +935,7 @@ export default function AgentEditorPage({
       await refreshAgents();
       router.push("/app/agents");
     } catch (e) {
+      console.error("Delete agent error:", e);
       toast.error(
         `Failed to delete agent: ${
           e instanceof Error ? e.message : "Unknown error"

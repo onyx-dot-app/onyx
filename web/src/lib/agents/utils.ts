@@ -20,13 +20,13 @@ export function checkUserOwnsAgent(
   );
 }
 
-// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+// TODO(ENG-3766): rename to agent
 /** Returns the URL for an agent's avatar image. */
 export function buildAgentAvatarUrl(agentId: number) {
   return `/api/persona/${agentId}/avatar`;
 }
 
-// TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+// TODO(ENG-3766): rename to agent
 /** Returns the URL for patching a user's per-agent preferences. */
 export function buildUpdateAgentPreferenceUrl(agentId: number) {
   return `/api/user/assistant/${agentId}/preferences`;

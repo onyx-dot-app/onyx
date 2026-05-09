@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   FullAgent,
@@ -92,14 +92,14 @@ export function useAdminAgents(
   const usePagination = pageNum !== undefined && pageSize !== undefined;
 
   const url = usePagination
-    ? buildApiPath("/api/admin/agents", {
+    ? buildApiPath(SWR_KEYS.adminAgents, {
         include_deleted: includeDeleted,
         get_editable: getEditable,
         include_default: includeDefault,
         page_num: pageNum,
         page_size: pageSize,
       })
-    : buildApiPath("/api/admin/persona", {
+    : buildApiPath(SWR_KEYS.adminPersona, {
         include_deleted: includeDeleted,
         get_editable: getEditable,
       });
@@ -229,13 +229,24 @@ export function useAgentController(
   const existingChatSessionAgentId = selectedChatSession?.persona_id;
   const [selectedAgent, setSelectedAssistant] = useState<
     MinimalAgent | undefined
-  >(
-    existingChatSessionAgentId !== undefined
-      ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
-      : defaultAgentId !== undefined
-        ? availableAgents.find((a) => a.id === defaultAgentId)
-        : undefined
-  );
+  >(undefined);
+
+  // The agents list loads asynchronously, so a useState initializer would
+  // always see an empty array. This effect runs the same logic once agents
+  // are available, and never again (agentsLoadedRef guard) so it doesn't
+  // override explicit user selections made via setSelectedAgentFromId.
+  const agentsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (agentsLoadedRef.current || availableAgents.length === 0) return;
+    agentsLoadedRef.current = true;
+    setSelectedAssistant(
+      existingChatSessionAgentId !== undefined
+        ? availableAgents.find((a) => a.id === existingChatSessionAgentId)
+        : defaultAgentId !== undefined
+          ? availableAgents.find((a) => a.id === defaultAgentId)
+          : undefined
+    );
+  }, [availableAgents, existingChatSessionAgentId, defaultAgentId]);
 
   const liveAgent: MinimalAgent | undefined = useMemo(() => {
     if (selectedAgent) return selectedAgent;
@@ -298,6 +309,8 @@ export function useIsDefaultAgent(
       existingChatSessionId &&
       selectedChatSession?.persona_id !== DEFAULT_AGENT_ID
     )
+      return false;
+    if (liveAgent !== undefined && liveAgent.id !== DEFAULT_AGENT_ID)
       return false;
     return true;
   }, [

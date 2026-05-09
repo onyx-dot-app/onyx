@@ -42,7 +42,7 @@ import { useUser } from "@/providers/UserProvider";
 // Types
 // ---------------------------------------------------------------------------
 
-interface PersonaActionsProps {
+interface AgentRowActionsProps {
   agent: Agent;
   onMutate: () => void;
 }
@@ -51,10 +51,10 @@ interface PersonaActionsProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PersonaActions({
+export default function AgentRowActions({
   agent,
   onMutate,
-}: PersonaActionsProps) {
+}: AgentRowActionsProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
