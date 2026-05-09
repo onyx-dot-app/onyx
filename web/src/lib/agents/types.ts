@@ -73,30 +73,3 @@ export interface Persona extends MinimalPersonaSnapshot {
 export interface FullPersona extends Persona {
   search_start_date: string | null;
 }
-
-// ── API / request types ───────────────────────────────────────────────────────
-
-export interface PersonaUpsertParameters {
-  name: string;
-  description: string;
-  system_prompt: string;
-  replace_base_system_prompt: boolean;
-  task_prompt: string;
-  datetime_aware: boolean;
-  document_set_ids: number[];
-  is_public: boolean;
-  default_model_configuration_id?: number | null;
-  starter_messages: StarterMessage[] | null;
-  users?: string[];
-  groups: number[];
-  tool_ids: number[];
-  remove_image?: boolean;
-  search_start_date: Date | null;
-  uploaded_image_id: string | null;
-  icon_name: string | null;
-  is_featured: boolean;
-  label_ids: number[] | null;
-  user_file_ids: string[];
-  hierarchy_node_ids?: number[];
-  document_ids?: string[];
-}

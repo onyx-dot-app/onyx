@@ -70,7 +70,7 @@ import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
 import { useAgents } from "@/lib/agents/hooks";
 import { createPersona, updatePersona } from "@/lib/agents/svc";
-import { PersonaUpsertParameters } from "@/lib/agents/types";
+import { PersonaUpsertParameters } from "@/lib/agents/svc";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
