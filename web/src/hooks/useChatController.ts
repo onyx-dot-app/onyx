@@ -62,7 +62,7 @@ import {
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePinnedAgents } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -71,7 +71,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";

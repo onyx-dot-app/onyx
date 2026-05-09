@@ -1,8 +1,4 @@
-import {
-  MinimalPersonaSnapshot,
-  PersonaUpsertParameters,
-  StarterMessage,
-} from "@/lib/agents/types";
+import { PersonaUpsertParameters, StarterMessage } from "@/lib/agents/types";
 
 interface PersonaUpsertRequest {
   name: string;

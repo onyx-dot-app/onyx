@@ -13,7 +13,7 @@ jest.mock("@/hooks/useShareableGroups", () => ({
   default: jest.fn(() => ({ data: [] })),
 }));
 
-jest.mock("@/hooks/useAgents", () => ({
+jest.mock("@/lib/agents/hooks", () => ({
   useAgent: jest.fn(() => ({ agent: null })),
 }));
 

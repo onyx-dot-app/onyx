@@ -24,7 +24,7 @@ import {
 } from "@/app/admin/discord-bot/lib";
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
-import { useAdminAgents } from "@/hooks/useAgents";
+import { useAdminAgents } from "@/lib/agents/hooks";
 import { Persona } from "@/lib/agents/types";
 
 interface Props {

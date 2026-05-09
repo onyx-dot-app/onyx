@@ -21,7 +21,7 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import { EmptyMessageCard } from "@opal/components";

@@ -25,7 +25,7 @@ import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
-import { useAgent } from "@/hooks/useAgents";
+import { useAgent } from "@/lib/agents/hooks";
 import { Button, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";

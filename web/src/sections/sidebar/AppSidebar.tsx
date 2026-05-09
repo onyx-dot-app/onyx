@@ -32,7 +32,11 @@ import {
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { useAgents, useCurrentAgent, usePinnedAgents } from "@/hooks/useAgents";
+import {
+  useAgents,
+  useCurrentAgent,
+  usePinnedAgents,
+} from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";

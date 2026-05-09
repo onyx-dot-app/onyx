@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import { MinimalPersonaSnapshot } from "@/lib/agents/types";
-import { usePinnedAgents, useCurrentAgent } from "@/hooks/useAgents";
+import { usePinnedAgents, useCurrentAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SidebarTab } from "@opal/components";

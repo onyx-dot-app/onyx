@@ -13,7 +13,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalPersonaSnapshot } from "@/lib/agents/types";
 import useAppFocus from "./useAppFocus";
-import { useAgents } from "./useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 const PAGE_SIZE = 50;

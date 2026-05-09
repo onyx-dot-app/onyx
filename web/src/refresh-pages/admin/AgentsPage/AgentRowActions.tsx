@@ -26,11 +26,11 @@ import {
   toggleAgentFeatured,
   toggleAgentListed,
 } from "@/lib/agents/svc";
-import type { AgentRow } from "@/lib/agents/types";
+import type { Persona } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { useAgent } from "@/hooks/useAgents";
+import { useAgent } from "@/lib/agents/hooks";
 import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
@@ -42,8 +42,8 @@ import { useUser } from "@/providers/UserProvider";
 // Types
 // ---------------------------------------------------------------------------
 
-interface AgentRowActionsProps {
-  agent: AgentRow;
+interface PersonaActionsProps {
+  agent: Persona;
   onMutate: () => void;
 }
 
@@ -51,10 +51,10 @@ interface AgentRowActionsProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AgentRowActions({
+export default function PersonaActions({
   agent,
   onMutate,
-}: AgentRowActionsProps) {
+}: PersonaActionsProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();

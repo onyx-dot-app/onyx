@@ -2,6 +2,8 @@ import { ValidSources } from "@/lib/types";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 
+// ── Domain / application types ────────────────────────────────────────────────
+
 export interface HierarchyNodeSnapshot {
   id: number;
   raw_node_id: string;
@@ -72,6 +74,8 @@ export interface FullPersona extends Persona {
   search_start_date: string | null;
 }
 
+// ── API / request types ───────────────────────────────────────────────────────
+
 export interface PersonaUpsertParameters {
   name: string;
   description: string;
@@ -95,21 +99,4 @@ export interface PersonaUpsertParameters {
   user_file_ids: string[];
   hierarchy_node_ids?: number[];
   document_ids?: string[];
-}
-
-export interface AgentRow {
-  id: number;
-  name: string;
-  description: string;
-  is_public: boolean;
-  is_listed: boolean;
-  is_featured: boolean;
-  builtin_persona: boolean;
-  display_priority: number | null;
-  owner: MinimalUserSnapshot | null;
-  groups: number[];
-  users: MinimalUserSnapshot[];
-  tools: ToolSnapshot[];
-  uploaded_image_id?: string;
-  icon_name?: string;
 }
