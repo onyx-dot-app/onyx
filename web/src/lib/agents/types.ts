@@ -113,5 +113,3 @@ export interface AgentRow {
   uploaded_image_id?: string;
   icon_name?: string;
 }
-
-export type FetchAgentsResponse = [MinimalPersonaSnapshot[], string | null];

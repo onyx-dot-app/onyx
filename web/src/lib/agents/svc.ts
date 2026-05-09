@@ -1,11 +1,8 @@
-import { fetchSS } from "@/lib/utilsSS";
 import {
-  FetchAgentsResponse,
   MinimalPersonaSnapshot,
   PersonaUpsertParameters,
   StarterMessage,
 } from "@/lib/agents/types";
-import { filterAgents } from "@/lib/agents/utils";
 
 interface PersonaUpsertRequest {
   name: string;
@@ -257,32 +254,5 @@ export async function pinAgents(pinnedAgentIds: number[]): Promise<void> {
   });
   if (!res.ok) {
     throw new Error("Failed to update pinned assistants");
-  }
-}
-
-// ── Server-side fetching ──────────────────────────────────────────────────────
-
-export async function fetchAgentsSS(): Promise<FetchAgentsResponse> {
-  const response = await fetchSS("/persona");
-  if (response.ok) {
-    return [(await response.json()) as MinimalPersonaSnapshot[], null];
-  }
-  return [
-    [],
-    ((await response.json()) as { detail?: string }).detail ?? "Unknown Error",
-  ];
-}
-
-export async function fetchAgentData(): Promise<MinimalPersonaSnapshot[]> {
-  try {
-    const [assistants, agentsFetchError] = await fetchAgentsSS();
-    if (agentsFetchError) {
-      console.warn(`Failed to fetch agents - ${agentsFetchError}`);
-      return [];
-    }
-    return filterAgents(assistants);
-  } catch (error) {
-    console.error("Unexpected error in fetchAgentData:", error);
-    return [];
   }
 }
