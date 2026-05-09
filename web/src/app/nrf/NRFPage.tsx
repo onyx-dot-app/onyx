@@ -95,10 +95,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: undefined,
-      onAgentSelect: () => {},
-    });
+    useAgentController(undefined, () => {});
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats

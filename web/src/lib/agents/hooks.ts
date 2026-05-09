@@ -183,13 +183,10 @@ export function useCurrentAgent(): MinimalAgent | null {
 
 // ── Agent controller (chat UI selection) ──────────────────────────────────────
 
-export function useAgentController({
-  selectedChatSession,
-  onAgentSelect,
-}: {
-  selectedChatSession: ChatSession | null | undefined;
-  onAgentSelect?: () => void;
-}) {
+export function useAgentController(
+  selectedChatSession: ChatSession | null | undefined,
+  onAgentSelect?: () => void
+) {
   const searchParams = useSearchParams();
   const { agents: availableAgents } = useAgents();
   const { pinnedAgents } = usePinnedAgents();
@@ -247,17 +244,12 @@ export function useAgentController({
 
 // ── Default agent detection ───────────────────────────────────────────────────
 
-export function useIsDefaultAgent({
-  liveAgent,
-  existingChatSessionId,
-  selectedChatSession,
-  settings,
-}: {
-  liveAgent: MinimalAgent | undefined;
-  existingChatSessionId: string | null;
-  selectedChatSession: ChatSession | undefined;
-  settings: CombinedSettings | null;
-}) {
+export function useIsDefaultAgent(
+  liveAgent: MinimalAgent | undefined,
+  existingChatSessionId: string | null,
+  selectedChatSession: ChatSession | undefined,
+  settings: CombinedSettings | null
+) {
   const searchParams = useSearchParams();
   const urlAssistantId = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 

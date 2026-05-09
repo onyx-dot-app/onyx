@@ -204,19 +204,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: currentChatSession,
-      onAgentSelect: () => {
-        // Only remove project context if user explicitly selected an agent
-        // (i.e., agentId is present). Avoid clearing project when agentId was removed.
-        const newSearchParams = new URLSearchParams(
-          searchParams?.toString() || ""
-        );
-        if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
-          newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-        }
-      },
+    useAgentController(currentChatSession, () => {
+      // Only remove project context if user explicitly selected an agent
+      // (i.e., agentId is present). Avoid clearing project when agentId was removed.
+      const newSearchParams = new URLSearchParams(
+        searchParams?.toString() || ""
+      );
+      if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
+        newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+        router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+      }
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -294,12 +291,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const filterManager = useFilters();
 
-  const isDefaultAgent = useIsDefaultAgent({
+  const isDefaultAgent = useIsDefaultAgent(
     liveAgent,
-    existingChatSessionId: currentChatSessionId,
-    selectedChatSession: currentChatSession ?? undefined,
-    settings,
-  });
+    currentChatSessionId,
+    currentChatSession ?? undefined,
+    settings
+  );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
