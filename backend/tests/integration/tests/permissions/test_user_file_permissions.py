@@ -33,7 +33,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -472,7 +472,7 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
-    document = DocumentManager.seed(
+    document = DocumentIngestionManager.ingest(
         cc_pair=public_cc_pair,
         content="hello from connector",
         api_key=api_key,
@@ -510,7 +510,7 @@ def test_connector_file_denied_for_users_without_access(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
-    document = DocumentManager.seed(
+    document = DocumentIngestionManager.ingest(
         cc_pair=private_cc_pair,
         content="private connector content",
         api_key=api_key,
@@ -601,7 +601,7 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
 
     # Document ingested against the cc_pair without `file_id` — the
     # "non-tabular" case under test.
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=public_cc_pair,
         content="non-tabular body text",
         api_key=api_key,
@@ -638,7 +638,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
         file_id=file_id,
         access_type=AccessType.PRIVATE,
     )
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=private_cc_pair,
         content="non-tabular private content",
         api_key=api_key,

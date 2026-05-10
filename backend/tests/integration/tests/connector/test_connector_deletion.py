@@ -23,7 +23,7 @@ from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -62,12 +62,12 @@ def test_connector_deletion(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_multiple(
+    cc_pair_1.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
-    cc_pair_2.documents = DocumentManager.seed_multiple(
+    cc_pair_2.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -175,7 +175,7 @@ def test_connector_deletion(
     )
 
     # validate vespa documents
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[],
@@ -190,7 +190,7 @@ def test_connector_deletion(
             user_group_2.name  # ty: ignore[possibly-unresolved-reference]
         ]
 
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[doc_set_2.name],
@@ -264,26 +264,26 @@ def test_connector_deletion_for_overlapping_connectors(
     )
 
     doc_ids = [str(uuid4())]
-    cc_pair_1.documents = DocumentManager.seed_multiple(
+    cc_pair_1.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_1,
         document_ids=doc_ids,
         api_key=api_key,
     )
-    cc_pair_2.documents = DocumentManager.seed_multiple(
+    cc_pair_2.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_2,
         document_ids=doc_ids,
         api_key=api_key,
     )
 
     # verify vespa document exists and that it is not in any document sets or groups
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[],
         group_names=[],
         doc_creating_user=admin_user,
     )
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[],
@@ -305,13 +305,13 @@ def test_connector_deletion_for_overlapping_connectors(
     print("Document set 1 created and synced")
 
     # verify vespa document is in the document set
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name],
         doc_creating_user=admin_user,
     )
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_creating_user=admin_user,
@@ -347,13 +347,13 @@ def test_connector_deletion_for_overlapping_connectors(
         print("User group 2 created and synced")
 
         # verify vespa document is in the user group
-        DocumentManager.verify(
+        DocumentIngestionManager.verify(
             vespa_client=vespa_client,
             cc_pair=cc_pair_1,
             group_names=[user_group_1.name, user_group_2.name],
             doc_creating_user=admin_user,
         )
-        DocumentManager.verify(
+        DocumentIngestionManager.verify(
             vespa_client=vespa_client,
             cc_pair=cc_pair_2,
             group_names=[user_group_1.name, user_group_2.name],
@@ -397,7 +397,7 @@ def test_connector_deletion_for_overlapping_connectors(
             user_group_2.name  # ty: ignore[possibly-unresolved-reference]
         ]
 
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[],

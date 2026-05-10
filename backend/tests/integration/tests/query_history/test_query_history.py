@@ -12,7 +12,7 @@ from onyx.configs.constants import SessionType
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.query_history import QueryHistoryManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -30,7 +30,7 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:  # noqa: ARG001
     # Seed a document
     cc_pair.documents = []
     cc_pair.documents.append(
-        DocumentManager.seed(
+        DocumentIngestionManager.ingest(
             cc_pair=cc_pair,
             content="The company's revenue in Q1 was $1M",
             api_key=api_key,

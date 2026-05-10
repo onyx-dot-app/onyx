@@ -4,7 +4,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import IngestionManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
@@ -31,7 +31,7 @@ def test_ingestion_api_crud(
     api_key.headers.update(admin_user.headers)
 
     # CREATE
-    doc = IngestionManager.seed(
+    doc = DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content="Test document",
         document_id="test-doc-1",
@@ -47,11 +47,11 @@ def test_ingestion_api_crud(
     assert len(vespa_docs) == 1
 
     # LIST
-    docs_list = IngestionManager.list_all_ingestion_docs(api_key=api_key)
+    docs_list = DocumentIngestionManager.list_all(api_key=api_key)
     assert any(d["document_id"] == doc.id for d in docs_list)
 
     # DELETE
-    IngestionManager.delete(document_id=doc.id, api_key=api_key)
+    DocumentIngestionManager.delete(document_id=doc.id, api_key=api_key)
 
     with get_session_with_current_tenant() as db_session:
         doc_db = db_session.query(Document).filter(Document.id == doc.id).first()

@@ -14,7 +14,7 @@ from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.image_generation import (
     ImageGenerationConfigManager,
 )
@@ -211,7 +211,7 @@ def document_builder(admin_user: DATestUser) -> DocumentBuilderType:
     def _document_builder(contents: list[str]) -> list[SimpleTestDocument]:
         # seed documents
         docs: list[SimpleTestDocument] = [
-            DocumentManager.seed(
+            DocumentIngestionManager.ingest(
                 cc_pair=cc_pair_1,
                 content=content,
                 api_key=api_key,

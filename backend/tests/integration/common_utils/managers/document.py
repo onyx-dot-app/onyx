@@ -81,9 +81,11 @@ def _build_ingestion_payload(
     }
 
 
-class DocumentManager:
+class DocumentIngestionManager:
+    """Manager for ingesting test documents via the ingestion API."""
+
     @staticmethod
-    def seed(
+    def ingest(
         cc_pair: DATestCCPair,
         api_key: DATestAPIKey,
         content: str | None = None,
@@ -112,7 +114,7 @@ class DocumentManager:
         )
 
     @staticmethod
-    def seed_multiple(
+    def ingest_multiple(
         cc_pair: DATestCCPair,
         api_key: DATestAPIKey,
         num_docs: int = NUM_DOCS,
@@ -122,7 +124,7 @@ class DocumentManager:
         if document_ids is None:
             document_ids = [f"test-doc-{uuid4()}" for _ in range(num_docs)]
         return [
-            DocumentManager.seed(
+            DocumentIngestionManager.ingest(
                 cc_pair=cc_pair,
                 api_key=api_key,
                 document_id=doc_id,
@@ -203,12 +205,11 @@ class DocumentManager:
 
         return final_docs
 
-
-class IngestionManager(DocumentManager):
     @staticmethod
-    def list_all_ingestion_docs(
+    def list_all(
         api_key: DATestAPIKey,
     ) -> list[dict]:
+        """List all documents seeded via the ingestion API."""
         response = requests.get(
             f"{API_SERVER_URL}/onyx-api/ingestion",
             headers=api_key.headers,

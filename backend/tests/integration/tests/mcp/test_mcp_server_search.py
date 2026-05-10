@@ -20,7 +20,7 @@ from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
@@ -113,7 +113,7 @@ def test_mcp_document_search_flow(
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     doc_text = "MCP happy path search document"
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content=doc_text,
         api_key=api_key,
@@ -194,7 +194,7 @@ def test_mcp_search_respects_acl_filters(
     )
 
     restricted_doc_content = "MCP restricted knowledge base document"
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=restricted_cc_pair,
         content=restricted_doc_content,
         api_key=api_key,
@@ -238,12 +238,12 @@ def test_mcp_search_filters_by_document_set(
     in_set_content = f"{shared_phrase} inside curated set"
     out_of_set_content = f"{shared_phrase} outside curated set"
 
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=cc_pair_in_set,
         content=in_set_content,
         api_key=api_key,
     )
-    DocumentManager.seed(
+    DocumentIngestionManager.ingest(
         cc_pair=cc_pair_out_of_set,
         content=out_of_set_content,
         api_key=api_key,

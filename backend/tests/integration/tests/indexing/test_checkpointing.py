@@ -15,7 +15,7 @@ from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
 from tests.integration.common_utils.test_document_utils import (
@@ -84,7 +84,7 @@ def test_mock_connector_basic_flow(
 
     # Verify results
     with get_session_with_current_tenant() as db_session:
-        chunks = DocumentManager.fetch_documents_for_cc_pair(
+        chunks = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -157,7 +157,7 @@ def test_mock_connector_with_failures(
 
     # Verify results: doc1 should be indexed and doc2 should have an error entry
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -248,7 +248,7 @@ def test_mock_connector_failure_recovery(
 
     # Verify initial state: doc1 indexed, doc2 failed
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -312,7 +312,7 @@ def test_mock_connector_failure_recovery(
 
     # Verify both documents are now indexed
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -434,7 +434,7 @@ def test_mock_connector_checkpoint_recovery(
 
     # Verify initial state: both docs should be indexed
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -509,7 +509,7 @@ def test_mock_connector_checkpoint_recovery(
 
     # Verify results
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,

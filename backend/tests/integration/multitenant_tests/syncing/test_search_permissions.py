@@ -5,7 +5,7 @@ from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -52,12 +52,12 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG0
 
     # Seed documents for Tenant 1
     cc_pair_1.documents = []
-    doc1_tenant1 = DocumentManager.seed(
+    doc1_tenant1 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair_1,
         content="Tenant 1 Document Content",
         api_key=api_key_1,
     )
-    doc2_tenant1 = DocumentManager.seed(
+    doc2_tenant1 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair_1,
         content="Tenant 1 Document Content",
         api_key=api_key_1,
@@ -66,12 +66,12 @@ def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:  # noqa: ARG0
 
     # Seed documents for Tenant 2
     cc_pair_2.documents = []
-    doc1_tenant2 = DocumentManager.seed(
+    doc1_tenant2 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair_2,
         content="Tenant 2 Document Content",
         api_key=api_key_2,
     )
-    doc2_tenant2 = DocumentManager.seed(
+    doc2_tenant2 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair_2,
         content="Tenant 2 Document Content",
         api_key=api_key_2,

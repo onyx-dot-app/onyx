@@ -4,7 +4,7 @@ from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -31,7 +31,7 @@ def test_multiple_document_sets_syncing_same_connnector(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_multiple(
+    cc_pair_1.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -61,7 +61,7 @@ def test_multiple_document_sets_syncing_same_connnector(
     )
 
     # make sure documents are as expected
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name, doc_set_2.name],
@@ -92,13 +92,13 @@ def test_removing_connector(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_multiple(
+    cc_pair_1.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
 
-    cc_pair_2.documents = DocumentManager.seed_multiple(
+    cc_pair_2.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -120,7 +120,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_1 docs are doc_set_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name],
@@ -128,7 +128,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_2 docs are doc_set_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[doc_set_1.name],
@@ -147,7 +147,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_1 docs are doc_set_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         doc_set_names=[doc_set_1.name],
@@ -155,7 +155,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_2 docs have no doc set
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[],
@@ -178,7 +178,7 @@ def test_renaming_document_set(
         user_performing_action=admin_user,
     )
 
-    cc_pair.documents = DocumentManager.seed_multiple(
+    cc_pair.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -210,7 +210,7 @@ def test_renaming_document_set(
         user_performing_action=admin_user,
     )
 
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair,
         doc_set_names=[new_name],

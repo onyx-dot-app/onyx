@@ -5,7 +5,7 @@ from onyx.db.models import Document
 from onyx.db.tag import get_structured_tags_for_document
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -44,7 +44,7 @@ def test_tag_creation_and_update(reset: None) -> None:  # noqa: ARG001
         ("multiple_list", "c", True),
         ("single_list", "x", True),
     }
-    doc1 = DocumentManager.seed(
+    doc1 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -87,7 +87,7 @@ def test_tag_creation_and_update(reset: None) -> None:  # noqa: ARG001
         ("multiple_list", "d", True),
         ("new_value", "new_val", False),
     }
-    doc1_new = DocumentManager.seed(
+    doc1_new = DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -152,7 +152,7 @@ def test_tag_sharing(reset: None) -> None:  # noqa: ARG001
         ("list", "b", True),
         ("same_key", "x", False),
     }
-    doc1 = DocumentManager.seed(
+    doc1 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc1",
@@ -171,7 +171,7 @@ def test_tag_sharing(reset: None) -> None:  # noqa: ARG001
         ("list", "c", True),
         ("same_key", "x", True),
     }
-    doc2 = DocumentManager.seed(
+    doc2 = DocumentIngestionManager.ingest(
         cc_pair=cc_pair,
         content="Dummy content",
         document_id="doc2",

@@ -22,7 +22,7 @@ from onyx.db.models import DocPermissionSyncAttempt
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
 from tests.integration.common_utils.test_models import DATestCCPair
@@ -99,7 +99,7 @@ def test_mock_connector_initial_permission_sync(
     cc_pair, test_doc = _setup_mock_connector(mock_server_client, admin_user)
 
     with get_session_with_current_tenant() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,

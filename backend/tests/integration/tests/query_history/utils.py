@@ -5,7 +5,7 @@ from onyx.configs.constants import QAFeedbackType
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DAQueryHistoryEntry
@@ -85,7 +85,7 @@ def setup_chat_sessions_with_different_feedback() -> (
     # Seed a document
     cc_pair.documents = []
     cc_pair.documents.append(
-        DocumentManager.seed(
+        DocumentIngestionManager.ingest(
             cc_pair=cc_pair,
             content="The company's revenue in Q1 was $1M",
             api_key=api_key,

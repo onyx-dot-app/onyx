@@ -11,7 +11,7 @@ from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
@@ -102,7 +102,7 @@ def test_image_indexing(
     with get_session_with_current_tenant() as db_session:
         # really gets the chunks from Vespa, which is why there are two;
         # one for the raw text and one for the summarized image.
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
@@ -197,7 +197,7 @@ def test_docx_image_indexing(
 
     with get_session_with_current_tenant() as db_session:
         # Fetch documents from Vespa - expect text content plus 3 images
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        documents = DocumentIngestionManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,

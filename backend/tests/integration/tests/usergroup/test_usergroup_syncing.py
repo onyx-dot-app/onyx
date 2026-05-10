@@ -6,7 +6,7 @@ from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import DocumentIngestionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -42,13 +42,13 @@ def test_removing_connector(
     )
 
     # seed documents
-    cc_pair_1.documents = DocumentManager.seed_multiple(
+    cc_pair_1.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_1,
         num_docs=NUM_DOCS,
         api_key=api_key,
     )
 
-    cc_pair_2.documents = DocumentManager.seed_multiple(
+    cc_pair_2.documents = DocumentIngestionManager.ingest_multiple(
         cc_pair=cc_pair_2,
         num_docs=NUM_DOCS,
         api_key=api_key,
@@ -70,7 +70,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_1 docs are user_group_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         group_names=[user_group_1.name],
@@ -78,7 +78,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_2 docs are user_group_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         group_names=[user_group_1.name],
@@ -97,7 +97,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_1 docs are user_group_1 only
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_1,
         group_names=[user_group_1.name],
@@ -105,7 +105,7 @@ def test_removing_connector(
     )
 
     # make sure cc_pair_2 docs have no user group
-    DocumentManager.verify(
+    DocumentIngestionManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         group_names=[],
