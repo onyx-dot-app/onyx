@@ -15,7 +15,8 @@ import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -64,7 +65,7 @@ function Main() {
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
 
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const canScopePerUserOrGroup = useTierAtLeast(Tier.ENTERPRISE);
 
   const updateTable = (target_scope: Scope) => {
     if (target_scope === Scope.GLOBAL) {
@@ -115,7 +116,7 @@ function Main() {
             spend.
           </Text>
         </li>
-        {isPaidEnterpriseFeaturesEnabled && (
+        {canScopePerUserOrGroup && (
           <>
             <li>
               <Text as="p">
@@ -144,7 +145,7 @@ function Main() {
         Create a Token Rate Limit
       </Button>
 
-      {isPaidEnterpriseFeaturesEnabled ? (
+      {canScopePerUserOrGroup ? (
         <SimpleTabs
           tabs={{
             "0": {
@@ -205,7 +206,7 @@ function Main() {
         setIsOpen={() => setModalIsOpen(false)}
         onSubmit={handleSubmit}
         forSpecificScope={
-          isPaidEnterpriseFeaturesEnabled ? undefined : Scope.GLOBAL
+          canScopePerUserOrGroup ? undefined : Scope.GLOBAL
         }
       />
     </Section>
