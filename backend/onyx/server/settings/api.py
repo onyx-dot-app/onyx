@@ -30,20 +30,30 @@ from onyx.server.settings.models import (
 from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
 from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Tier
 from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
+from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
-from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
+
+
+def get_effective_tier() -> Tier:
+    """MIT version: always COMMUNITY.
+
+    EE deployments override this to return the resolved per-tenant tier
+    via `ee.onyx.utils.tier.get_tier`.
+    """
+    return Tier.COMMUNITY
 
 
 @admin_router.put("")
@@ -61,7 +71,13 @@ def admin_put_settings(
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
 
-    if not global_version.is_ee_version():
+    get_tier_fn = fetch_versioned_implementation_with_fallback(
+        "onyx.server.settings.api",
+        "get_effective_tier",
+        get_effective_tier,
+    )
+    current_tier = get_tier_fn()
+    if not tier_at_least(current_tier, Tier.ENTERPRISE):
         existing = load_settings()
         if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
             raise OnyxError(
