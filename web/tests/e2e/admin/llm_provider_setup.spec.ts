@@ -392,7 +392,16 @@ test.describe("LLM Provider Setup @exclusive", () => {
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      await dialog.locator("[data-interactive-state]").first().click();
+      // Use a text filter so the click implicitly waits for React to process
+      // the search-query state update before selecting — prevents clicking the
+      // first (unfiltered) option before the list narrows to secondModelName.
+      await dialog
+        .locator("[data-interactive-state]")
+        .filter({
+          hasText: new RegExp(secondModelName.replace(/-/g, "."), "i"),
+        })
+        .first()
+        .click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider

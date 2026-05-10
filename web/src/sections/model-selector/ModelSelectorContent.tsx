@@ -43,8 +43,10 @@ export default function ModelSelectorContent({
   personaId,
   providers,
 }: ModelSelectorContentProps) {
-  const { llmProviders: fetched, isLoading } = useLLMProviders(personaId);
+  const { llmProviders: fetched, isLoading: isFetchedLoading } =
+    useLLMProviders(personaId);
   const llmProviders = providers ?? fetched;
+  const isLoading = providers === undefined && isFetchedLoading;
   const [searchQuery, setSearchQuery] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 

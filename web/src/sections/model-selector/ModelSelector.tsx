@@ -53,7 +53,7 @@ export default function ModelSelector({
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const { user } = useUser();
-  const { llmProviders: fetched, isLoading } = useLLMProviders(personaId);
+  const { llmProviders: fetched } = useLLMProviders(personaId);
   const llmProviders = providers ?? fetched;
 
   const [localTemperature, setLocalTemperature] = useState(temperature ?? 0.5);
