@@ -17,6 +17,13 @@ class LicenseSource(str, Enum):
     MANUAL_UPLOAD = "manual_upload"
 
 
+class CustomerTier(str, Enum):
+    """Paid-tier wire format from the control plane (no COMMUNITY)."""
+
+    BUSINESS = "business"
+    ENTERPRISE = "enterprise"
+
+
 class LicensePayload(BaseModel):
     """The payload portion of a signed license."""
 

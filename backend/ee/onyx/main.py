@@ -24,6 +24,7 @@ from ee.onyx.server.middleware.license_enforcement import (
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
+from ee.onyx.server.middleware.tier_enforcement import add_tier_enforcement_middleware
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query_router
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
@@ -87,6 +88,7 @@ def get_application() -> FastAPI:
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
+        add_tier_enforcement_middleware(application, logger)
     else:
         # License enforcement middleware for self-hosted deployments only
         # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)

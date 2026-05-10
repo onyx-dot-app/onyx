@@ -30,6 +30,12 @@ class ApplicationStatus(str, Enum):
     SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded"
 
 
+class Tier(str, Enum):
+    COMMUNITY = "community"
+    BUSINESS = "business"
+    ENTERPRISE = "enterprise"
+
+
 class Notification(BaseModel):
     id: int
     notif_type: NotificationType
