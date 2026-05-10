@@ -29,9 +29,9 @@ export function AccessTypeForm({
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
 
-  // Private requires User Groups (ENTERPRISE-only); Auto Sync is BUSINESS+.
+  // Private requires User Groups, Auto Sync requires permission-sync —
+  // both are Business+ features.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
   const showAutoSync = businessTier && isValidAutoSyncSource(connector);
 
   const selectedAuthMethod = currentCredential?.credential_json?.[
@@ -49,11 +49,11 @@ export function AccessTypeForm({
     return method?.disablePermSync === true;
   }, [connector, selectedAuthMethod]);
 
-  // Prefer Auto Sync when available, then Private (needs User Groups),
-  // else Public. Mirrors the option-availability rules below.
+  // Prefer Auto Sync when available, else Private (User Groups), else
+  // Public. Mirrors the option-availability rules below.
   const defaultAccess: AccessType = showAutoSync
     ? "sync"
-    : enterpriseTier
+    : businessTier
       ? "private"
       : "public";
 
@@ -76,7 +76,7 @@ export function AccessTypeForm({
     disabledReason: string;
   }[] = [];
 
-  if (enterpriseTier) {
+  if (businessTier) {
     options.push({
       name: "Private",
       value: "private",
