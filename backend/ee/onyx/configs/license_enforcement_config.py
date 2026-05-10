@@ -1,10 +1,13 @@
 """Constants for license enforcement.
 
-This file is the single source of truth for:
-1. Paths that bypass license enforcement (always accessible)
-2. Paths that require an EE license (EE-only features)
+Single source of truth for paths that bypass license enforcement
+(always-accessible paths needed for auth, billing, health checks, etc.).
 
-Import these constants in both production code and tests to ensure consistency.
+Per-feature tier gating lives in `tier_gate_config.PATH_PREFIX_MIN_TIER`
+and is enforced by the `tier_gate` middleware.
+
+Import these constants in both production code and tests to ensure
+consistency.
 """
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
@@ -48,28 +51,3 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
     }
 )
 
-# EE-only paths that require a valid license.
-# Users without a license (community edition) cannot access these.
-# These are blocked even when user has never subscribed (no license).
-EE_ONLY_PATH_PREFIXES: frozenset[str] = frozenset(
-    {
-        # User groups and access control
-        "/manage/admin/user-group",
-        # Analytics and reporting
-        "/analytics",
-        # Query history (admin chat session endpoints)
-        "/admin/chat-sessions",
-        "/admin/chat-session-history",
-        "/admin/query-history",
-        # Usage reporting/export
-        "/admin/usage-report",
-        # Standard answers (canned responses)
-        "/manage/admin/standard-answer",
-        # Token rate limits
-        "/admin/token-rate-limits",
-        # Evals
-        "/evals",
-        # Hook extensions
-        "/admin/hooks",
-    }
-)
