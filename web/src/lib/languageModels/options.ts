@@ -53,7 +53,12 @@ export function buildLlmOptions(
     llmProvider.model_configurations
       .filter((mc) => mc.is_visible || mc.name === currentModelName)
       .forEach((mc) => {
-        const key = `${llmProvider.provider}:${mc.name}`;
+        // When a model config has a persisted DB id it is globally unique —
+        // use it as the key so models from two different providers of the same
+        // type (e.g. two OpenAI deployments) are never collapsed together.
+        // Fall back to provider:model for locally-constructed configs without ids.
+        const key =
+          mc.id != null ? `id:${mc.id}` : `${llmProvider.provider}:${mc.name}`;
         if (seenKeys.has(key)) return;
         seenKeys.add(key);
 

@@ -356,8 +356,13 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
-    const firstModelName = "gpt-4o";
-    const secondModelName = "gpt-4o-mini";
+    // Use unique suffixes so these model names never collide with pre-existing
+    // providers in the test environment — collision causes buildLlmOptions to
+    // deduplicate the second provider's model away (keyed by provider:modelName),
+    // making the picker select the wrong provider and sending provider_id=1.
+    const modelSuffix = Math.random().toString(36).slice(2, 8);
+    const firstModelName = `gpt-4o-pw-${modelSuffix}`;
+    const secondModelName = `gpt-4o-mini-pw-${modelSuffix}`;
 
     const firstProviderId = await createPublicProvider(
       page,
