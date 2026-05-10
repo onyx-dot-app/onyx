@@ -82,6 +82,9 @@ class Settings(BaseModel):
     # This controls UI visibility of EE features (user groups, analytics, RBAC, etc.).
     ee_features_enabled: bool = False
 
+    # Resolved per-tenant tier for ENTERPRISE-only feature gating in the FE.
+    tier: Tier = Tier.COMMUNITY
+
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
