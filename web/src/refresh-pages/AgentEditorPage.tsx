@@ -95,7 +95,8 @@ import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 interface AgentIconEditorProps {
   existingAgent?: FullPersona | null;
@@ -493,7 +494,7 @@ export default function AgentEditorPage({
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -1155,7 +1156,7 @@ export default function AgentEditorPage({
                           userIds,
                           groupIds,
                           isPublic,
-                          isPaidEnterpriseFeaturesEnabled,
+                          businessTier,
                           labelIds
                         );
                       } catch (error) {

@@ -10,11 +10,12 @@ import { useSlackChannelConfigs } from "@/app/admin/bots/[bot-id]/hooks";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/hooks/useAgents";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 function EditSlackChannelConfigContent({ id }: { id: string }) {
-  const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const canUseStandardAnswers = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
     data: slackChannelConfigs,
@@ -44,7 +45,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     isChannelsLoading ||
     isDocSetsLoading ||
     isAgentsLoading ||
-    (isPaidEnterprise && isStdAnswerLoading);
+    (canUseStandardAnswers && isStdAnswerLoading);
 
   const slackChannelConfig = slackChannelConfigs?.find(
     (config) => config.id === Number(id)
@@ -97,7 +98,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
             documentSets={documentSets}
             personas={agents}
             standardAnswerCategoryResponse={
-              isPaidEnterprise
+              canUseStandardAnswers
                 ? {
                     paidEnterpriseFeaturesEnabled: true,
                     categories: standardAnswerCategories ?? [],

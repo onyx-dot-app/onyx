@@ -107,19 +107,21 @@ export async function deleteAgent(agentId: number): Promise<string | null> {
 /**
  * Updates agent sharing settings.
  *
- * For MIT versions, group_ids should not be sent since group-based sharing
- * is an EE-only feature.
+ * Group-based sharing requires the BUSINESS tier or higher (User
+ * Groups is a Business+ feature). On Community callers must pass
+ * `businessTier=false` and the function strips any `groupIds` from
+ * the request.
  *
  * @param agentId - The ID of the agent to update
  * @param userIds - Array of user IDs to share with
- * @param groupIds - Array of group IDs to share with (ignored when isPaidEnterpriseFeaturesEnabled is false)
+ * @param groupIds - Array of group IDs to share with (ignored when `businessTier` is false)
  * @param isPublic - Whether the agent should be public
- * @param isPaidEnterpriseFeaturesEnabled - Whether enterprise features are enabled
+ * @param businessTier - Whether the current tenant is on the BUSINESS tier or higher
  * @returns null on success, or an error message string on failure
  *
  * @example
- * const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
- * const error = await updateAgentSharedStatus(agentId, userIds, groupIds, isPublic, isPaidEnterpriseFeaturesEnabled);
+ * const businessTier = useTierAtLeast(Tier.BUSINESS);
+ * const error = await updateAgentSharedStatus(agentId, userIds, groupIds, isPublic, businessTier);
  * if (error) console.error(error);
  */
 export async function updateAgentSharedStatus(
@@ -127,14 +129,15 @@ export async function updateAgentSharedStatus(
   userIds: string[],
   groupIds: number[],
   isPublic: boolean | undefined,
-  isPaidEnterpriseFeaturesEnabled: boolean,
+  businessTier: boolean,
   labelIds?: number[]
 ): Promise<null | string> {
-  // MIT versions should not send group_ids - warn if caller provided non-empty groups
-  if (!isPaidEnterpriseFeaturesEnabled && groupIds.length > 0) {
+  // Community tenants don't have user groups; warn if caller still
+  // passed non-empty groupIds and discard them.
+  if (!businessTier && groupIds.length > 0) {
     console.error(
-      "updateAgentSharedStatus: groupIds provided but enterprise features are disabled. " +
-        "Group sharing is an EE-only feature. Discarding groupIds."
+      "updateAgentSharedStatus: groupIds provided but tenant is below the BUSINESS tier. " +
+        "Group sharing requires Business or Enterprise. Discarding groupIds."
     );
   }
 
@@ -146,8 +149,8 @@ export async function updateAgentSharedStatus(
       },
       body: JSON.stringify({
         user_ids: userIds,
-        // Only include group_ids for enterprise versions
-        group_ids: isPaidEnterpriseFeaturesEnabled ? groupIds : undefined,
+        // Only include group_ids for BUSINESS+ tenants
+        group_ids: businessTier ? groupIds : undefined,
         is_public: isPublic,
         label_ids: labelIds,
       }),

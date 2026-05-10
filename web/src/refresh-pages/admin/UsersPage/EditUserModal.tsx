@@ -14,7 +14,8 @@ import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -49,7 +50,7 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +88,7 @@ export default function EditUserModal({
     );
   }, [memberGroupIds, initialMemberGroupIds]);
 
-  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+  const visibleRoles = businessTier
     ? ASSIGNABLE_ROLES
     : ASSIGNABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
 

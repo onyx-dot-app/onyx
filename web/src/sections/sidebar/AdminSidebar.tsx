@@ -131,9 +131,9 @@ function buildItems(
   // 5. Permissions
   if (!isCurator) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.ENTERPRISE);
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
     addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, Tier.ENTERPRISE);
-  } else if (enterpriseTier) {
+  } else if (tierAtLeast(tier, Tier.BUSINESS)) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 

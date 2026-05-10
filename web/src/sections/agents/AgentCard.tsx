@@ -11,7 +11,8 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import {
   checkUserOwnsAgent,
   updateAgentSharedStatus,
@@ -50,7 +51,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
     [agent.id, pinnedAgents]
   );
   const { user, isAdmin, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
   const shareAgentModal = useCreateModal();
@@ -78,7 +79,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         userIds,
         groupIds,
         isPublic,
-        isPaidEnterpriseFeaturesEnabled,
+        businessTier,
         labelIds
       );
 
@@ -105,7 +106,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
     [
       agent.id,
       canUpdateFeaturedStatus,
-      isPaidEnterpriseFeaturesEnabled,
+      businessTier,
       refreshAgent,
     ]
   );
@@ -145,7 +146,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                  {isOwnedByUser && businessTier && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}

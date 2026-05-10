@@ -65,7 +65,8 @@ import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -377,7 +378,9 @@ export default function ChatPreferencesPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const s = settings.settings;
-  const enterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
+  // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
+  const canToggleSearchMode = useTierAtLeast(Tier.BUSINESS);
+  const canChangeChatRetention = useTierAtLeast(Tier.ENTERPRISE);
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -561,37 +564,37 @@ export default function ChatPreferencesPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <Disabled
-                disabled={!enterpriseEnabled || uniqueSources.length === 0}
-                allowClick={enterpriseEnabled}
+                disabled={!canToggleSearchMode || uniqueSources.length === 0}
+                allowClick={canToggleSearchMode}
                 tooltip={
-                  !enterpriseEnabled
-                    ? "Search Mode is an Enterprise Plan feature."
+                  !canToggleSearchMode
+                    ? "Search Mode requires the Business or Enterprise plan."
                     : "Set up connectors to use Search Mode"
                 }
               >
                 <InputHorizontal
                   title="Search Mode"
                   tag={
-                    !enterpriseEnabled
+                    !canToggleSearchMode
                       ? {
-                          title: "Enterprise Plan",
+                          title: "Business Plan",
                           color: "amber",
                           icon: SvgOrganization,
                         }
                       : { title: "beta", color: "blue" }
                   }
                   description="UI mode for quick document search across your organization."
-                  disabled={!enterpriseEnabled || uniqueSources.length === 0}
+                  disabled={!canToggleSearchMode || uniqueSources.length === 0}
                   withLabel
                 >
                   <Switch
                     checked={
-                      enterpriseEnabled ? s.search_ui_enabled ?? true : false
+                      canToggleSearchMode ? s.search_ui_enabled ?? true : false
                     }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
                     }}
-                    disabled={!enterpriseEnabled || uniqueSources.length === 0}
+                    disabled={!canToggleSearchMode || uniqueSources.length === 0}
                   />
                 </InputHorizontal>
               </Disabled>
@@ -936,14 +939,14 @@ export default function ChatPreferencesPage() {
                 <Card border="solid" rounding="lg">
                   <Section>
                     <Disabled
-                      disabled={!enterpriseEnabled}
+                      disabled={!canChangeChatRetention}
                       tooltip="Chat history retention is an Enterprise Plan feature."
                     >
                       <InputHorizontal
                         title="Keep Chat History"
                         description="Specify how long Onyx should retain chats in your organization."
                         tag={
-                          !enterpriseEnabled
+                          !canChangeChatRetention
                             ? {
                                 title: "Enterprise Plan",
                                 color: "amber",
@@ -951,7 +954,7 @@ export default function ChatPreferencesPage() {
                               }
                             : undefined
                         }
-                        disabled={!enterpriseEnabled}
+                        disabled={!canChangeChatRetention}
                         withLabel
                       >
                         <InputSelect
@@ -967,7 +970,7 @@ export default function ChatPreferencesPage() {
                                   : parseInt(value, 10),
                             });
                           }}
-                          disabled={!enterpriseEnabled}
+                          disabled={!canChangeChatRetention}
                         >
                           <InputSelect.Trigger />
                           <InputSelect.Content>

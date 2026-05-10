@@ -43,13 +43,13 @@ import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import ModelSelector from "@/refresh-components/popovers/ModelSelector";
 import { Section } from "@/layouts/general-layouts";
 
-const SearchUI = eeGated(EESearchUI);
+const SearchUI = paidTierGated(EESearchUI);
 
 interface NRFPageProps {
   isSidePanel?: boolean;

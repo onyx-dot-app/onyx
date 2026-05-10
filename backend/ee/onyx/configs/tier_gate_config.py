@@ -28,13 +28,15 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     # Custom theming / branding (admin writes — public read is allowed
     # via /enterprise-settings, which is outside this map)
     "/admin/enterprise-settings": Tier.BUSINESS,
+    # User Groups + RBAC (Curator / Global Curator roles, group-scoped
+    # access in connectors / agents / credentials / document sets).
+    # All group-related UI on the FE depends on this backend gate.
+    "/manage/admin/user-group": Tier.BUSINESS,
     # NOTE: Permission sync trigger lives at
     # /manage/admin/cc-pair/{id}/sync-permissions which can't be
     # cleanly prefix-matched (variable in the middle). Frontend hides
     # the option in AccessTypeForm; backend sync triggers remain open.
     # ----- ENTERPRISE -----
-    # User Groups + RBAC
-    "/manage/admin/user-group": Tier.ENTERPRISE,
     # Custom analytics (JS injection script)
     "/admin/custom-analytics": Tier.ENTERPRISE,
     # Standard answers (canned responses)
