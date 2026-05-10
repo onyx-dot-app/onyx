@@ -37,6 +37,25 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
+def tier_from_license_metadata(metadata: object | None) -> Tier:
+    """Map a cached LicenseMetadata to a Tier.
+
+    Shared by `_self_hosted_tier()` and `apply_license_status_to_settings`
+    so they don't both have to read Redis when one already has the metadata
+    in hand.
+    """
+    if metadata is None:
+        return Tier.COMMUNITY
+    status = getattr(metadata, "status", None)
+    if status == ApplicationStatus.GATED_ACCESS:
+        return Tier.COMMUNITY
+    customer_tier = getattr(metadata, "customer_tier", None)
+    if not isinstance(customer_tier, CustomerTier):
+        # None (legacy license) or unrecognized -> ENTERPRISE for back-compat.
+        return Tier.ENTERPRISE
+    return _CUSTOMER_TIER_TO_TIER[customer_tier]
+
+
 def _self_hosted_tier() -> Tier:
     if not LICENSE_ENFORCEMENT_ENABLED:
         # Legacy mode: no per-tier resolution; preserve binary.
@@ -51,14 +70,7 @@ def _self_hosted_tier() -> Tier:
             logger.warning("Self-hosted tier: license DB read failed: %s", e)
             return Tier.COMMUNITY
 
-    if metadata is None:
-        return Tier.COMMUNITY
-    if metadata.status == ApplicationStatus.GATED_ACCESS:
-        return Tier.COMMUNITY
-    if metadata.customer_tier is None:
-        # Pre-tier license: was CLI-issued enterprise by construction.
-        return Tier.ENTERPRISE
-    return _CUSTOMER_TIER_TO_TIER[metadata.customer_tier]
+    return tier_from_license_metadata(metadata)
 
 
 def _extract_customer_tier(
