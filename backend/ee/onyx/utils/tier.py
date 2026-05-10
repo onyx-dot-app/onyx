@@ -1,21 +1,27 @@
 """Per-tenant tier resolution.
 
 Cloud: Redis HGET → CP lazy-refresh on miss → BUSINESS fallback.
-Self-hosted: ENTERPRISE if EE compiled in, else COMMUNITY (binary; step 2
-will replace with license-payload customer_tier).
+Self-hosted: license_payload.customer_tier (legacy licenses lacking the
+field default to ENTERPRISE).
 """
 
 from __future__ import annotations
 
 import requests
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
+from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
+from ee.onyx.db.license import get_cached_license_metadata
+from ee.onyx.db.license import refresh_license_cache
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.tier_management import get_cached_tier
 from ee.onyx.server.tenants.tier_management import update_tenant_tier
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Tier
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -32,7 +38,27 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 
 
 def _self_hosted_tier() -> Tier:
-    return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        # Legacy mode: no per-tier resolution; preserve binary.
+        return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
+
+    metadata = get_cached_license_metadata()
+    if metadata is None:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                metadata = refresh_license_cache(db_session)
+        except SQLAlchemyError as e:
+            logger.warning("Self-hosted tier: license DB read failed: %s", e)
+            return Tier.COMMUNITY
+
+    if metadata is None:
+        return Tier.COMMUNITY
+    if metadata.status == ApplicationStatus.GATED_ACCESS:
+        return Tier.COMMUNITY
+    if metadata.customer_tier is None:
+        # Pre-tier license: was CLI-issued enterprise by construction.
+        return Tier.ENTERPRISE
+    return _CUSTOMER_TIER_TO_TIER[metadata.customer_tier]
 
 
 def _extract_customer_tier(
