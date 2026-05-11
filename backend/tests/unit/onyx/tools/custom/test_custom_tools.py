@@ -467,6 +467,25 @@ class TestSanitizeToolName(unittest.TestCase):
         with pytest.raises(ValueError, match="sanitize to 'foo_bar'"):
             openapi_to_method_specs(schema)
 
+    def test_duplicate_operation_id_raises(self) -> None:
+        # The OpenAPI spec requires operationIds to be unique; a repeated
+        # operationId would also collide in tools_by_name.
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/a": {
+                    "get": {"summary": "a", "operationId": "doThing"},
+                },
+                "/b": {
+                    "get": {"summary": "b", "operationId": "doThing"},
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="Duplicate operation ID 'doThing'"):
+            openapi_to_method_specs(schema)
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

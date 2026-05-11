@@ -146,10 +146,15 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
                 )
 
             sanitized_name = sanitize_tool_name(raw_name)
-            if sanitized_name in seen_names and seen_names[sanitized_name] != raw_name:
+            if sanitized_name in seen_names:
+                prior_raw = seen_names[sanitized_name]
+                if prior_raw == raw_name:
+                    raise ValueError(
+                        f"Duplicate operation ID '{raw_name}'. Each operation must have a unique operationId."
+                    )
                 raise ValueError(
-                    f"Operation IDs '{seen_names[sanitized_name]}' and '{raw_name}' both "
-                    f"sanitize to '{sanitized_name}'. Rename one so the LLM-facing names stay distinct."
+                    f"Operation IDs '{prior_raw}' and '{raw_name}' both sanitize to "
+                    f"'{sanitized_name}'. Rename one so the LLM-facing names stay distinct."
                 )
             seen_names[sanitized_name] = raw_name
 
