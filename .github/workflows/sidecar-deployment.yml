@@ -57,7 +57,16 @@ jobs:
         id: version
         if: steps.check.outputs.sidecar-changed == 'true'
         run: |
-          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox-sidecar/tags?page_size=100" \
+          # Fail loudly on Docker Hub errors so we don't silently reset the
+          # version counter to 0.1.1 and clobber an existing release tag.
+          API_RESPONSE=$(curl -fsS \
+            "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox-sidecar/tags?page_size=100" \
+          ) || {
+            echo "Docker Hub API query failed; refusing to guess at next version." >&2
+            exit 1
+          }
+
+          LATEST_TAG=$(echo "$API_RESPONSE" \
             | jq -r '.results[].name' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V \

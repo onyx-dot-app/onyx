@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from pathlib import Path
 
@@ -73,9 +74,9 @@ async def read_file(path: str) -> ReadResponse:
     limit = get_settings().max_read_bytes
     # Bounded read: cap memory at limit+1 bytes so a concurrent grow on the
     # underlying file from the sandbox container (which is untrusted from the
-    # sidecar's perspective) can't bypass the size cap via TOCTOU.
-    with target.open("rb") as fh:
-        data = fh.read(limit + 1)
+    # sidecar's perspective) can't bypass the size cap via TOCTOU. Wrapped in
+    # asyncio.to_thread so a 100MiB read doesn't block the event loop.
+    data = await asyncio.to_thread(_read_bounded, target, limit + 1)
     if len(data) > limit:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -87,6 +88,11 @@ async def read_file(path: str) -> ReadResponse:
         size_bytes=len(data),
         content_b64=base64.b64encode(data).decode("ascii"),
     )
+
+
+def _read_bounded(path: Path, max_bytes: int) -> bytes:
+    with path.open("rb") as fh:
+        return fh.read(max_bytes)
 
 
 @router.post("/write", response_model=WriteResponse)
@@ -107,16 +113,21 @@ async def write_file(req: WriteRequest) -> WriteResponse:
         )
 
     target = _resolve_within_workspace(req.path)
-    if req.create_parents:
-        target.parent.mkdir(parents=True, exist_ok=True)
-    elif not target.parent.is_dir():
+    if not req.create_parents and not target.parent.is_dir():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Parent directory does not exist: {target.parent}",
         )
 
-    target.write_bytes(data)
+    # Defer the blocking write to a thread so the event loop stays responsive.
+    await asyncio.to_thread(_write_file, target, data, req.create_parents)
     return WriteResponse(path=req.path, size_bytes=len(data))
+
+
+def _write_file(path: Path, data: bytes, create_parents: bool) -> None:
+    if create_parents:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
 
 
 @router.get("/list", response_model=ListResponse)
@@ -128,8 +139,13 @@ async def list_dir(path: str) -> ListResponse:
             detail=f"Directory not found: {path}",
         )
 
+    entries = await asyncio.to_thread(_scan_directory, target)
+    return ListResponse(path=path, entries=entries)
+
+
+def _scan_directory(path: Path) -> list[ListEntry]:
     entries: list[ListEntry] = []
-    for entry in sorted(target.iterdir(), key=lambda p: p.name):
+    for entry in sorted(path.iterdir(), key=lambda p: p.name):
         is_dir = entry.is_dir()
         entries.append(
             ListEntry(
@@ -138,4 +154,4 @@ async def list_dir(path: str) -> ListResponse:
                 size_bytes=None if is_dir else entry.stat().st_size,
             )
         )
-    return ListResponse(path=path, entries=entries)
+    return entries

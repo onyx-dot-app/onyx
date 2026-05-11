@@ -40,14 +40,17 @@ class Settings(BaseSettings):
             return self.auth_token
         if self.auth_token_file:
             # No exists() guard: the file can vanish between check and read
-            # (secret rotation, projected-volume remount). Catch OSError and
-            # fall through so misconfiguration surfaces as RuntimeError, not 500.
+            # (secret rotation, projected-volume remount). Chain the OSError
+            # into the RuntimeError so the original cause shows up in the
+            # server log when auth.py converts this to a 503.
             try:
                 token = self.auth_token_file.read_text().strip()
                 if token:
                     return token
-            except OSError:
-                pass
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Auth token file {self.auth_token_file} is unreadable: {exc}",
+                ) from exc
         raise RuntimeError(
             "Sidecar auth token is not configured. "
             "Set SIDECAR_AUTH_TOKEN or mount a token file at SIDECAR_AUTH_TOKEN_FILE.",
