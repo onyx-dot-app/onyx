@@ -97,7 +97,7 @@ def add_license_enforcement_middleware(
             return await call_next(request)
 
         path = request.url.path
-        if path.startswith("/api"):
+        if path.startswith("/api/"):
             path = path[4:]
 
         if _is_path_allowed(path):

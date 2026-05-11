@@ -71,7 +71,7 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
             return await call_next(request)
 
         path = request.url.path
-        if path.startswith("/api"):
+        if path.startswith("/api/"):
             path = path[4:]
 
         if _is_allowed_path(path):

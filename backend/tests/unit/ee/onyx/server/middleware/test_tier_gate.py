@@ -133,6 +133,15 @@ async def test_scim_under_enterprise_settings_resolves_to_enterprise(
 
 
 @pytest.mark.asyncio
+async def test_path_starting_with_api_but_not_api_slash_not_stripped(
+    middleware_harness: MiddlewareHarness,
+) -> None:
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/apifoo/bar"), call_next)
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 @patch("ee.onyx.server.middleware.tier_gate.get_tier")
 async def test_402_payload_includes_required_tier(
     mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
