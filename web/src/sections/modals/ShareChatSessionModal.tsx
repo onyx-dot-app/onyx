@@ -118,14 +118,16 @@ export default function ShareChatSessionModal({
 
   const isShared = shareLink && selectedPrivacy === "public";
 
-  let submitButtonText = "Done";
-  if (wantsPublic && !isCurrentlyPublic && !shareLink) {
-    submitButtonText = "Create Share Link";
-  } else if (!wantsPublic && isCurrentlyPublic) {
-    submitButtonText = "Make Private";
-  } else if (isShared) {
+  let submitButtonText: string;
+  if (isShared) {
     submitButtonText = "Copy Link";
+  } else if (isCurrentlyPublic && !wantsPublic) {
+    submitButtonText = "Make Private";
+  } else {
+    submitButtonText = "Create Share Link";
   }
+
+  const submitDisabled = isLoading || (!isCurrentlyPublic && !wantsPublic);
 
   async function handleSubmit() {
     setIsLoading(true);
@@ -227,7 +229,7 @@ export default function ShareChatSessionModal({
             </Button>
           )}
           <Button
-            disabled={isLoading}
+            disabled={submitDisabled}
             onClick={handleSubmit}
             icon={isShared ? SvgLink : undefined}
             width={isShared ? "full" : undefined}
