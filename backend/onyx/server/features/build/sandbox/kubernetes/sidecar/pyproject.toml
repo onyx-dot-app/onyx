@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "craft-sandbox-sidecar"
+version = "0.1.0"
+description = "HTTP sidecar for Craft sandbox pods: file I/O, exec, idle tracking, snapshot trigger."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "Onyx" }]
+dependencies = [
+  "fastapi==0.115.0",
+  "uvicorn==0.30.6",
+  "pydantic>=2.9.0",
+  "pydantic-settings>=2.6.0",
+]
+
+[project.scripts]
+sandbox-sidecar = "app.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+pretty = true
+color_output = true
+# This package shares a path with the broader onyx backend tree, which mypy would
+# otherwise mistake for a duplicate import. Treat the sidecar directory as its own
+# package root and ignore anything outside it.
+explicit_package_bases = true
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+namespace_packages = true
+files = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN", "S"]
+# S603: subprocess call with untrusted input — exec router validates inputs.
+# S607: starting subprocess with partial path — we use absolute paths.
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "ANN"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+# Prevent pytest from walking up into the broader onyx backend tree (which has
+# its own conftest and packages with unrelated optional deps).
+norecursedirs = [".venv", "__pycache__", "*.egg-info"]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.1",
+  "mypy>=1.18.2",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=0.24.0",
+  "ruff>=0.13.1",
+]
