@@ -163,55 +163,70 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P3.005` Call `register_craft_builtins(BuiltinSkillRegistry.instance())` from `backend/onyx/main.py` startup (after DB init, before `app.include_router`)  (deps: P3.003, P3.004)
 - `[TODO]` `P3.006` Startup integration test: `assert registry.get("pptx") is not None`; `list_satisfied` excludes `image-generation` when no provider is configured  (deps: P3.005)
 
-### 3.2 Materialization adapter
+### 3.2 Render-context helper
 
 - `[TODO]` `P3.010` Implement `render_accessible_cc_pairs(user, db)` helper — confirm/reuse from `search.md`; if new, implement using existing `get_connector_credential_pairs_for_user`
-- `[TODO]` `P3.011` Create `backend/onyx/server/features/build/skills/materialize_adapter.py` with `materialize_for_session(session, user, db) -> (Path, SkillsManifest)`  (deps: P3.010, P1.051)
 
-### 3.3 Sandbox delivery — K8s
+### 3.3 Internal sandbox-tarball endpoint  (spec §9)
 
-- `[TODO]` `P3.020` Implement `_stream_skills_into_pod(pod_name, staging_dir, session_path)` in `KubernetesSandboxManager` (use existing `_kubectl_exec_stdin` pattern from snapshot restore)
-- `[TODO]` `P3.021` Replace `ln -sf /workspace/skills` block at `kubernetes_sandbox_manager.py:1338-1340` with: call `materialize_for_session`, then `_stream_skills_into_pod`, then `rmtree(staging_dir)`  (deps: P3.011, P3.020)
-- `[TODO]` `P3.022` Gate the new path behind `SKILLS_MATERIALIZATION_V2_ENABLED` (defined in P5.001)  (deps: P3.021, P5.001)
+- `[TODO]` `P3.020` Add `GET /api/internal/sandbox/{sandbox_id}/skills-tarball` to `backend/onyx/server/features/skills/api.py` — runs `materialize_skills(...)` into a temp dir, streams `application/x-tar`  (deps: P1.051, P3.010)
+- `[TODO]` `P3.021` Implement pod-token auth for `/api/internal/sandbox/*` — bearer token minted at sandbox provisioning, validated against active-sandbox table. If Onyx already has a pod→api_server auth path, reuse it.
+- `[TODO]` `P3.022` Inject `SANDBOX_TOKEN` + `SANDBOX_ID` + `ONYX_API_URL` env vars into the sandbox pod spec at provisioning (`kubernetes_sandbox_manager.py` — pod creation).
 
-### 3.4 Sandbox delivery — local
+### 3.4 In-pod refresh script + loop  (spec §9)
 
-- `[TODO]` `P3.030` Implement `_setup_skills_local(staging_dir, session_path)` in local sandbox manager (shutil.copytree + cleanup)
-- `[TODO]` `P3.031` Replace `directory_manager.setup_skills(...)` call sites with `_setup_skills_local`; drop `_skills_path` constructor arg from `DirectoryManager`  (deps: P3.011, P3.030)
-- `[TODO]` `P3.032` Update callers of `DirectoryManager` to drop the `skills_path` argument (look at `directory_manager.py:78` and `:309`)  (deps: P3.031)
+- `[TODO]` `P3.030` Create `backend/onyx/server/features/build/sandbox/kubernetes/docker/refresh-skills` — POSIX-sh script: curl tarball → extract to `/skills.next/` → atomic rename to `/skills/`. No external deps beyond `curl` + `tar` (both standard in the sandbox base image).
+- `[TODO]` `P3.031` Create `refresh-loop` — `while true; do refresh-skills; sleep 300; done` wrapper for the background loop.
+- `[TODO]` `P3.032` Add initContainer to the sandbox pod spec that runs `refresh-skills` synchronously before the sandbox container starts (guarantees `/skills/` exists before sessions can use it).
+- `[TODO]` `P3.033` Update sandbox entrypoint to background `refresh-loop &`.
+- `[TODO]` `P3.034` Mount a pod-level emptyDir volume at `/skills/` in the pod spec (writable only by the refresh-skills initContainer + the entrypoint; read-only mount into the sandbox container is fine too).
 
-### 3.5 Sandbox helper
+### 3.5 Per-session symlink  (spec §9)
 
-- `[TODO]` `P3.040` Add `read_file_from_session(session, path) -> str` to `SandboxManagerBase`
-- `[TODO]` `P3.041` Implement `read_file_from_session` in `KubernetesSandboxManager` (kubectl exec cat)  (deps: P3.040)
-- `[TODO]` `P3.042` Implement `read_file_from_session` in local sandbox manager (direct FS read)  (deps: P3.040)
+- `[TODO]` `P3.040` Implement `_setup_session_skills_symlink(session_path)` helper — creates/recreates `.agents/skills` symlink → `/skills/`. Used by both K8s and local backends.
+- `[TODO]` `P3.041` Call `_setup_session_skills_symlink(...)` from `setup_session_workspace` (replaces the legacy `ln -sf /workspace/skills` block at `kubernetes_sandbox_manager.py:1338-1340`).
+- `[TODO]` `P3.042` Call `_setup_session_skills_symlink(...)` from `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (so resumed sessions get the symlink too).
+- `[TODO]` `P3.043` Remove `directory_manager.setup_skills(...)` and its `_skills_path` constructor argument. Update callers at `directory_manager.py:78` and `:309`.
 
-### 3.6 Panel data source
+### 3.6 Local backend refresh path  (spec §9)
 
-- `[TODO]` `P3.050` Create `backend/onyx/server/features/build/skills/api.py` with router scaffolding
-- `[TODO]` `P3.051` Implement `GET /api/build/sessions/{id}/skills` — reads `.skills_manifest.json` from session, returns `SkillsManifest`  (deps: P3.050, P3.040)
-- `[TODO]` `P3.052` Implement `GET /api/build/sessions/{id}/skills/{slug}/content` — returns rendered SKILL.md text  (deps: P3.050, P3.040)
-- `[TODO]` `P3.053` Wire build-feature router into Onyx app  (deps: P3.050-P3.052)
+- `[TODO]` `P3.050` For dev/local: implement a subprocess equivalent of `refresh-skills` that calls `materialize_skills` directly into a host path; bind-mount that path into the sandbox container at `/skills/`. Alternative: dev can run an entirely in-process refresh loop.
+- `[TODO]` `P3.051` Verify the local backend's session-setup uses `_setup_session_skills_symlink(...)`.
 
-### 3.7 AGENTS.md generation
+### 3.7 Panel data source  (spec §11)
 
-- `[TODO]` `P3.060` Rewrite `build_skills_section(skills_dir)` at `agent_instructions.py:267` — read `.skills_manifest.json`, inline every entry, no threshold
-- `[TODO]` `P3.061` Delete `_skills_cache` and `_skills_cache_lock` (top of `agent_instructions.py`)  (deps: P3.060)
-- `[TODO]` `P3.062` Delete `_scan_skills_directory` if unused after rewrite  (deps: P3.060)
-- `[TODO]` `P3.063` Confirm callsite at `agent_instructions.py:481` still works (signature unchanged)  (deps: P3.060)
-- `[TODO]` `P3.064` Confirm `build_skills_section` is called with materialized dir path, not source dir  (deps: P3.060)
+- `[TODO]` `P3.060` Create `backend/onyx/server/features/build/skills/api.py` with router scaffolding
+- `[TODO]` `P3.061` Implement `GET /api/build/sessions/{id}/skills` — reads `.skills_manifest.json` from session (`.agents/skills/.skills_manifest.json` → `/skills/.skills_manifest.json` via symlink), returns `SkillsManifest`  (deps: P3.060, P3.070 sandbox-helper)
+- `[TODO]` `P3.062` Implement `GET /api/build/sessions/{id}/skills/{slug}/content` — returns rendered SKILL.md text  (deps: P3.060)
+- `[TODO]` `P3.063` Wire build-feature router into Onyx app  (deps: P3.060-P3.062)
 
-### 3.8 Dockerfile
+### 3.8 Sandbox file-read helper
 
-- `[TODO]` `P3.070` Remove `COPY skills/ /workspace/skills/` from `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile:99`
-- `[TODO]` `P3.071` Remove `RUN mkdir -p /workspace/skills` from same Dockerfile
-- `[TODO]` `P3.072` Update sandbox image build pipeline to rebuild without skills dir (the dir on disk in the Onyx repo stays)
+- `[TODO]` `P3.070` Add `read_file_from_session(session, path) -> str` to `SandboxManagerBase`
+- `[TODO]` `P3.071` Implement `read_file_from_session` in `KubernetesSandboxManager` (kubectl exec cat)  (deps: P3.070)
+- `[TODO]` `P3.072` Implement `read_file_from_session` in local sandbox manager (direct FS read)  (deps: P3.070)
 
-### 3.9 Integration tests
+### 3.9 AGENTS.md generation
 
-- `[TODO]` `P3.080` Create `backend/tests/integration/tests/skills/` directory
-- `[TODO]` `P3.081` Integration test `test_skill_materialization.py`: session with 1 granted + 1 not-granted custom → verify `.agents/skills/<slug>/SKILL.md`, manifest contents, AGENTS.md inline list  (deps: P3.022 OR P3.031, P3.060)
-- `[TODO]` `P3.082` Integration test: built-in `SKILL.md.template` renders with placeholders expanded inside the session  (deps: P3.081)
+- `[TODO]` `P3.080` Rewrite `build_skills_section(skills_dir)` at `agent_instructions.py:267` — read `.skills_manifest.json` from `/skills/`, inline every entry, no threshold
+- `[TODO]` `P3.081` Delete `_skills_cache` and `_skills_cache_lock` (top of `agent_instructions.py`)  (deps: P3.080)
+- `[TODO]` `P3.082` Delete `_scan_skills_directory` if unused after rewrite  (deps: P3.080)
+- `[TODO]` `P3.083` Confirm callsite at `agent_instructions.py:481` still works (signature unchanged)  (deps: P3.080)
+- `[TODO]` `P3.084` Confirm `build_skills_section` is called with the symlinked dir (`/skills/` via session's `.agents/skills`), not the old source dir  (deps: P3.080)
+
+### 3.10 Dockerfile
+
+- `[TODO]` `P3.090` Remove `COPY skills/ /workspace/skills/` from `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile:99`
+- `[TODO]` `P3.091` Remove `RUN mkdir -p /workspace/skills` from same Dockerfile
+- `[TODO]` `P3.092` Add `COPY refresh-skills /usr/local/bin/refresh-skills` + `COPY refresh-loop /usr/local/bin/refresh-loop` + `chmod +x` + `RUN mkdir -p /skills`
+- `[TODO]` `P3.093` Update sandbox image build pipeline (the on-disk skills dir in the Onyx repo stays — read at runtime by api_server materializer)
+
+### 3.11 Integration tests
+
+- `[TODO]` `P3.100` Create `backend/tests/integration/tests/skills/` directory
+- `[TODO]` `P3.101` Integration test `test_skill_materialization.py`: session with 1 granted + 1 not-granted custom → verify `.agents/skills/<slug>/SKILL.md`, manifest contents, AGENTS.md inline list  (deps: P3.041, P3.080)
+- `[TODO]` `P3.102` Integration test: built-in `SKILL.md.template` renders with placeholders expanded inside the session  (deps: P3.101)
+- `[TODO]` `P3.103` Integration test `test_live_skill_propagation.py`: start session A, agent reads SKILL.md for X; admin replaces X bundle; trigger refresh; re-read → new content; AGENTS.md still shows pre-replace inventory in the same conversation  (deps: P3.030, P3.020)
 
 ---
 
@@ -329,12 +344,12 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 **Goal:** actually flip the switch and verify it works in prod.
 **Effort:** S–M  ·  **Depends:** Phase 3 + Phase 5
 
-### 6.1 Snapshot fidelity verification  (spec §12)
+### 6.1 Snapshot semantics verification  (spec §12)
 
-- `[TODO]` `P6.001` Confirm `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py` includes `.agents/skills/` in the tarball (likely already does — it's part of workspace)
-- `[TODO]` `P6.002` Verify resume path does NOT call materializer — restore is purely tarball expansion
-- `[TODO]` `P6.003` Add invariant docstring "Sessions are skill-immutable after start" to `backend/onyx/skills/__init__.py`
-- `[TODO]` `P6.004` Integration test `test_snapshot_fidelity.py`: pause session, change skill state, resume → snapshot contents unchanged
+- `[TODO]` `P6.001` Confirm snapshot tarball **excludes** `/skills/` (it's a separate pod-level mount, not part of `/workspace/sessions/`). Verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
+- `[TODO]` `P6.002` Verify resume path does NOT re-materialize per-session. The pod's `/skills/` is kept fresh by the background refresh loop; resume just needs the symlink (P3.042).
+- `[TODO]` `P6.003` Add invariant docstring to `backend/onyx/skills/__init__.py`: `"Skill content is live (≤5 min propagation); AGENTS.md skill list is stable within a session."`
+- `[TODO]` `P6.004` Integration test `test_snapshot_excludes_skills.py`: pause session A → inspect snapshot tar, confirm no `/skills/` content; resume → `.agents/skills` is a symlink to `/skills/` resolving to current admin state
 
 ### 6.2 Multi-tenant test  (spec §14)
 
