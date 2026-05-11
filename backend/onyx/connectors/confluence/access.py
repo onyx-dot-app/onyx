@@ -13,28 +13,22 @@ def get_page_restrictions(
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
+    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
     Get page access restrictions for a Confluence page.
     This functionality requires Enterprise Edition.
 
-    Note: This wrapper is only called from permission sync path. Group IDs are
-    left unprefixed here because upsert_document_external_perms handles prefixing.
+    add_prefix: True for the indexing path (Document.external_access) so group
+    ids carry the source-type prefix the search filter expects. False for the
+    permission-sync path, where upsert_document_external_perms adds the prefix.
 
-    Args:
-        confluence_client: OnyxConfluence client instance
-        page_id: The ID of the page
-        page_restrictions: Dictionary containing page restriction data
-        ancestors: List of ancestor pages with their restriction data
-
-    Returns:
-        ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
+    Returns ExternalAccess for the page, or None if EE is not enabled or no
+    restrictions are found.
     """
-    # Check if EE is enabled
     if not global_version.is_ee_version():
         return None
 
-    # Fetch the EE implementation
     ee_get_all_page_restrictions = cast(
         Callable[
             [OnyxConfluence, str, dict[str, Any], list[dict[str, Any]], bool],
@@ -45,35 +39,30 @@ def get_page_restrictions(
         ),
     )
 
-    # add_prefix=False: permission sync path - upsert_document_external_perms handles prefixing
     return ee_get_all_page_restrictions(
-        confluence_client, page_id, page_restrictions, ancestors, False
+        confluence_client, page_id, page_restrictions, ancestors, add_prefix
     )
 
 
 def get_all_space_permissions(
     confluence_client: OnyxConfluence,
     is_cloud: bool,
+    add_prefix: bool = False,
 ) -> dict[str, ExternalAccess]:
     """
     Get access permissions for all spaces in Confluence.
     This functionality requires Enterprise Edition.
 
-    Note: This wrapper is only called from permission sync path. Group IDs are
-    left unprefixed here because upsert_document_external_perms handles prefixing.
+    add_prefix: True for the indexing path (Document.external_access) so group
+    ids carry the source-type prefix the search filter expects. False for the
+    permission-sync path, where upsert_document_external_perms adds the prefix.
 
-    Args:
-        confluence_client: OnyxConfluence client instance
-        is_cloud: Whether this is a Confluence Cloud instance
-
-    Returns:
-        Dictionary mapping space keys to ExternalAccess objects. Empty dict if EE is not enabled.
+    Returns a mapping of space key to ExternalAccess. Empty dict if EE is not
+    enabled.
     """
-    # Check if EE is enabled
     if not global_version.is_ee_version():
         return {}
 
-    # Fetch the EE implementation
     ee_get_all_space_permissions = cast(
         Callable[
             [OnyxConfluence, bool, bool],
@@ -85,5 +74,4 @@ def get_all_space_permissions(
         ),
     )
 
-    # add_prefix=False: permission sync path - upsert_document_external_perms handles prefixing
-    return ee_get_all_space_permissions(confluence_client, is_cloud, False)
+    return ee_get_all_space_permissions(confluence_client, is_cloud, add_prefix)

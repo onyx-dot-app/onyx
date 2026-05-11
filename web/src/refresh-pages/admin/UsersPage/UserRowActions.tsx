@@ -13,7 +13,7 @@ import {
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";

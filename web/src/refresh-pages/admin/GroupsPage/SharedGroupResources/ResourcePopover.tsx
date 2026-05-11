@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SvgEmpty } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { Divider } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Text from "@/refresh-components/texts/Text";

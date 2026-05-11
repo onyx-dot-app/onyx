@@ -3,10 +3,10 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
-import Separator from "@/refresh-components/Separator";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { Separator } from "@opal/components/separator/components";
+import { ShadowDiv } from "@opal/components/shadow-div/components";
 import type { WithoutStyles } from "@opal/types";
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts/general/components";
 
 /**
  * Popover Root Component
@@ -154,7 +154,7 @@ function PopoverContent({
   );
 }
 
-export default Object.assign(PopoverRoot, {
+const Popover = Object.assign(PopoverRoot, {
   Trigger: PopoverTrigger,
   Anchor: PopoverAnchor,
   Content: PopoverContent,
@@ -205,14 +205,14 @@ function SeparatorHelper() {
  * </Popover.Menu>
  * ```
  */
-export interface PopoverMenuProps {
+interface PopoverMenuProps {
   children?: React.ReactNode[];
   footer?: React.ReactNode;
 
   // Ref for the scrollable container (useful for programmatic scrolling)
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
-export function PopoverMenu({
+function PopoverMenu({
   children,
   footer,
   scrollContainerRef,
@@ -255,3 +255,5 @@ export function PopoverMenu({
     </Section>
   );
 }
+
+export { Popover, PopoverMenu, type PopoverMenuProps };

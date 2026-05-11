@@ -3,7 +3,6 @@ from typing import cast
 from uuid import uuid4
 
 from celery import Celery
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -16,6 +15,7 @@ from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.document import construct_document_id_select_by_needs_sync
 from onyx.db.document import count_documents_by_needs_sync
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 # Redis keys for document sync tracking
@@ -28,12 +28,12 @@ TASKSET_TTL = FENCE_TTL
 logger = setup_logger()
 
 
-def is_document_sync_fenced(r: Redis) -> bool:
+def is_document_sync_fenced(r: TenantRedisClient) -> bool:
     """Check if document sync tasks are currently in progress."""
     return bool(r.exists(DOCUMENT_SYNC_FENCE_KEY))
 
 
-def get_document_sync_payload(r: Redis) -> int | None:
+def get_document_sync_payload(r: TenantRedisClient) -> int | None:
     """Get the initial number of tasks that were created."""
     bytes_result = r.get(DOCUMENT_SYNC_FENCE_KEY)
     if bytes_result is None:
@@ -41,12 +41,12 @@ def get_document_sync_payload(r: Redis) -> int | None:
     return int(cast(int, bytes_result))
 
 
-def get_document_sync_remaining(r: Redis) -> int:
+def get_document_sync_remaining(r: TenantRedisClient) -> int:
     """Get the number of tasks still pending completion."""
-    return cast(int, r.scard(DOCUMENT_SYNC_TASKSET_KEY))
+    return r.scard(DOCUMENT_SYNC_TASKSET_KEY)
 
 
-def set_document_sync_fence(r: Redis, payload: int | None) -> None:
+def set_document_sync_fence(r: TenantRedisClient, payload: int | None) -> None:
     """Set up the fence and register with active fences."""
     if payload is None:
         r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
@@ -57,12 +57,12 @@ def set_document_sync_fence(r: Redis, payload: int | None) -> None:
     r.sadd(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
 
 
-def delete_document_sync_taskset(r: Redis) -> None:
+def delete_document_sync_taskset(r: TenantRedisClient) -> None:
     """Clear the document sync taskset."""
     r.delete(DOCUMENT_SYNC_TASKSET_KEY)
 
 
-def reset_document_sync(r: Redis) -> None:
+def reset_document_sync(r: TenantRedisClient) -> None:
     """Reset all document sync tracking data."""
     r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
     r.delete(DOCUMENT_SYNC_TASKSET_KEY)
@@ -70,7 +70,7 @@ def reset_document_sync(r: Redis) -> None:
 
 
 def generate_document_sync_tasks(
-    r: Redis,
+    r: TenantRedisClient,
     max_tasks: int,
     celery_app: Celery,
     db_session: Session,
@@ -137,7 +137,7 @@ def try_generate_stale_document_sync_tasks(
     celery_app: Celery,
     max_tasks: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:

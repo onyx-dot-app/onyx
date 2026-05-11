@@ -14,13 +14,13 @@ task with the pre-allocated task UUID.
 import datetime
 from typing import Any
 
-from celery import current_app as celery_app
 from fastapi import APIRouter
 from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -130,7 +130,7 @@ def submit_targeted_reindex(
         # indexing scheduler. Per-cc-pair fan-out (connector fetch +
         # docprocessing) hands off to the existing docfetching/
         # docprocessing queues from inside the task body.
-        celery_app.send_task(
+        client_app.send_task(
             OnyxCeleryTask.TARGETED_REINDEX_TASK,
             kwargs={
                 "targeted_reindex_job_id": result.targeted_reindex_job_id,

@@ -149,12 +149,8 @@ def get_cached_query_embeddings(
             continue
 
         hits += 1
-        # Refresh TTL by re-setting the value. ``backend.expire`` would be a
-        # cheaper round trip but ``TenantRedis`` doesn't currently prefix
-        # ``EXPIRE`` calls, so the EXPIRE would target the wrong key. Re-set is
-        # one byte heavier on the wire and entirely safe.
         try:
-            cache_backend.set(key, raw, ex=ttl_seconds)
+            cache_backend.expire(key, ttl_seconds)
         except CACHE_TRANSIENT_ERRORS:
             logger.debug("Failed to refresh TTL for %s.", key, exc_info=True)
 

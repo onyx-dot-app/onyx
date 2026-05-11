@@ -1,6 +1,6 @@
 from typing import cast
 
-import redis
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 # Safety-net TTL against leaked keys if cleanup() fails silently. Long enough
 # that no legitimate sync will hit it; keys are normally deleted by cleanup().
@@ -68,7 +68,7 @@ class RedisDocprocessing:
     PENDING_PREFIX = "docprocessing_pending"
     IN_FLIGHT_PREFIX = "docprocessing_in_flight"
 
-    def __init__(self, index_attempt_id: int, r: redis.Redis) -> None:
+    def __init__(self, index_attempt_id: int, r: TenantRedisClient) -> None:
         self.index_attempt_id = index_attempt_id
         self.redis = r
 
@@ -84,14 +84,12 @@ class RedisDocprocessing:
     def decr_pending_incr_in_flight(self) -> None:
         self.redis.eval(
             _PICKUP_SCRIPT,
-            2,
-            self.pending_key,
-            self.in_flight_key,
-            str(_COUNTER_TTL_SECONDS),
+            keys=[self.pending_key, self.in_flight_key],
+            args=[str(_COUNTER_TTL_SECONDS)],
         )
 
     def decr_in_flight(self) -> None:
-        self.redis.eval(_DECR_IN_FLIGHT_SCRIPT, 1, self.in_flight_key)
+        self.redis.eval(_DECR_IN_FLIGHT_SCRIPT, keys=[self.in_flight_key])
 
     def pending(self) -> int:
         return max(0, int(cast(bytes, self.redis.get(self.pending_key)) or 0))

@@ -9,7 +9,6 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 from tenacity import RetryError
@@ -57,6 +56,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_usergroup import RedisUserGroup
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import (
@@ -212,7 +212,7 @@ def try_generate_document_set_sync_tasks(
     celery_app: Celery,
     document_set_id: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
@@ -288,7 +288,7 @@ def try_generate_user_group_sync_tasks(
     celery_app: Celery,
     usergroup_id: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
@@ -360,7 +360,7 @@ def try_generate_user_group_sync_tasks(
     return tasks_generated
 
 
-def monitor_document_sync_taskset(r: Redis) -> None:
+def monitor_document_sync_taskset(r: TenantRedisClient) -> None:
     initial_count = get_document_sync_payload(r)
     if initial_count is None:
         return
@@ -375,7 +375,7 @@ def monitor_document_sync_taskset(r: Redis) -> None:
 
 
 def monitor_document_set_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: TenantRedisClient, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     document_set_id_str = RedisDocumentSet.get_id_from_fence_key(fence_key)
@@ -393,7 +393,7 @@ def monitor_document_set_taskset(
     if initial_count is None:
         return
 
-    count = cast(int, r.scard(rds.taskset_key))
+    count = r.scard(rds.taskset_key)
     task_logger.info(
         f"Document set sync progress: document_set={document_set_id} remaining={count} initial={initial_count}"
     )

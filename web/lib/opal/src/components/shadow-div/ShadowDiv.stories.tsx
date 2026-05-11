@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import ShadowDiv from "./ShadowDiv";
+import { ShadowDiv } from "@opal/components";
 
 const meta: Meta<typeof ShadowDiv> = {
-  title: "refresh-components/ShadowDiv",
+  title: "opal/components/ShadowDiv",
   component: ShadowDiv,
   tags: ["autodocs"],
   parameters: {

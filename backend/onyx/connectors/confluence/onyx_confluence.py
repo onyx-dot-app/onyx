@@ -28,7 +28,6 @@ from urllib.parse import quote
 import bs4
 import requests
 from atlassian import Confluence
-from redis import Redis
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
@@ -48,6 +47,7 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -141,7 +141,7 @@ class OnyxConfluence:
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
         self.scoped_token = scoped_token
-        self.redis_client: Redis | None = None
+        self.redis_client: TenantRedisClient | None = None
         self.static_credentials: dict[str, Any] | None = None
         if self._credentials_provider.is_dynamic():
             self.redis_client = get_redis_client(
@@ -197,9 +197,8 @@ class OnyxConfluence:
 
         # dynamic credentials need locking
         # check redis first, then fallback to the DB
-        credential_raw = self.redis_client.get(self.credential_key)
-        if credential_raw is not None:
-            credential_bytes = cast(bytes, credential_raw)
+        credential_bytes = self.redis_client.get(self.credential_key)
+        if credential_bytes is not None:
             credential_str = credential_bytes.decode("utf-8")
             credential_json: dict[str, Any] = json.loads(credential_str)
         else:

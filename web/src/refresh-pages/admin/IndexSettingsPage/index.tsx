@@ -85,7 +85,7 @@ import {
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
 import Spacer from "@/refresh-components/Spacer";
 import useFilter from "@/hooks/useFilter";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
 import type { LLMOption } from "@/refresh-components/popovers/interfaces";
 import type { RichStr } from "@opal/types";
@@ -172,9 +172,14 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
 // ---------------------------------------------------------------------------
 
 interface LlmPickerProps {
-  modelName: string | null;
-  providerName: string | null;
-  onChange: (next: { modelName: string; providerName: string }) => void;
+  modelConfigurationId?: number | null;
+  modelName?: string | null;
+  providerName?: string | null;
+  onChange: (next: {
+    modelConfigurationId: number | null;
+    modelName: string;
+    providerName: string | null;
+  }) => void;
   disabled?: boolean;
   /**
    * When true, restricts the popover to vision-capable models (those with
@@ -190,11 +195,17 @@ interface LlmPickerProps {
  * default chat model on select. Reuses the same popover primitives
  * (`Popover`, `OpenButton`, `ModelListContent`) for visual parity.
  *
- * Emits `providerName = LLMOption.name` (the LLM provider's instance name like
- * "OpenAI"), which is what the backend's `validate_contextual_rag_model` looks
- * up via `fetch_existing_llm_provider(name=...)`.
+ * Supports two selection modes:
+ * - By ID: pass `modelConfigurationId` — preferred when the FK integer is
+ *   available (e.g. contextual RAG, where the backend now stores the integer).
+ * - By name: pass `modelName` + `providerName` — used for the captioning LLM
+ *   which is keyed by the global vision default rather than a stored FK.
+ *
+ * `onChange` always emits all three fields so callers can destructure what
+ * they need.
  */
 function LlmPicker({
+  modelConfigurationId,
   modelName,
   providerName,
   onChange,
@@ -205,22 +216,47 @@ function LlmPicker({
   const { llmProviders, isLoading } = useLlmDefaults();
 
   const isSelected = useCallback(
-    (option: LLMOption) =>
-      option.modelName === modelName && option.name === providerName,
-    [modelName, providerName]
+    (option: LLMOption) => {
+      if (modelConfigurationId != null) {
+        return option.modelConfigurationId === modelConfigurationId;
+      }
+      return option.modelName === modelName && option.name === providerName;
+    },
+    [modelConfigurationId, modelName, providerName]
   );
 
   const handleSelect = useCallback(
     (option: LLMOption) => {
-      onChange({ modelName: option.modelName, providerName: option.name });
+      onChange({
+        modelConfigurationId: option.modelConfigurationId ?? null,
+        modelName: option.modelName,
+        providerName: option.name ?? null,
+      });
       setOpen(false);
     },
     [onChange]
   );
 
   const { displayName, providerType } = useMemo(() => {
-    if (!modelName || !providerName || !llmProviders) {
+    if (!llmProviders) {
       return { displayName: null as string | null, providerType: null };
+    }
+    if (modelConfigurationId != null) {
+      for (const p of llmProviders) {
+        const cfg = p.model_configurations.find(
+          (m) => m.id === modelConfigurationId
+        );
+        if (cfg) {
+          return {
+            displayName: cfg.display_name || cfg.name,
+            providerType: p.provider,
+          };
+        }
+      }
+      return { displayName: null, providerType: null };
+    }
+    if (!modelName || !providerName) {
+      return { displayName: null, providerType: null };
     }
     for (const p of llmProviders) {
       if (p.name !== providerName) continue;
@@ -233,7 +269,7 @@ function LlmPicker({
       }
     }
     return { displayName: modelName, providerType: null };
-  }, [llmProviders, modelName, providerName]);
+  }, [llmProviders, modelConfigurationId, modelName, providerName]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -638,8 +674,7 @@ interface IndexSettingsFormValues {
    */
   custom_model: EmbeddingModel | null;
   enable_contextual_rag: boolean;
-  contextual_rag_llm_name: string | null;
-  contextual_rag_llm_provider: string | null;
+  contextual_rag_model_configuration_id: number | null;
 }
 
 export default function IndexSettingsPage() {
@@ -769,7 +804,7 @@ export default function IndexSettingsPage() {
       providerName,
     }: {
       modelName: string;
-      providerName: string;
+      providerName: string | null;
     }) => {
       const provider = llmProviders?.find((p) => p.name === providerName);
       if (!provider) {
@@ -806,16 +841,10 @@ export default function IndexSettingsPage() {
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
-      contextual_rag_llm_name:
-        searchSettings?.contextual_rag_llm_name ??
-        defaultLlm?.modelName ??
-        null,
-      contextual_rag_llm_provider:
-        searchSettings?.contextual_rag_llm_provider ??
-        defaultLlm?.providerName ??
-        null,
+      contextual_rag_model_configuration_id:
+        searchSettings?.contextual_rag_model_configuration_id ?? null,
     }),
-    [currentEmbeddingModel, searchSettings, defaultLlm]
+    [currentEmbeddingModel, searchSettings]
   );
 
   const handleCancelReindex = useCallback(async () => {
@@ -915,11 +944,8 @@ export default function IndexSettingsPage() {
                 providerName,
                 switchoverType,
                 enableContextualRag: values.enable_contextual_rag,
-                contextualRagLlmName: values.enable_contextual_rag
-                  ? values.contextual_rag_llm_name
-                  : null,
-                contextualRagLlmProvider: values.enable_contextual_rag
-                  ? values.contextual_rag_llm_provider
+                contextualRagModelConfigurationId: values.enable_contextual_rag
+                  ? values.contextual_rag_model_configuration_id
                   : null,
               });
 
@@ -1478,19 +1504,14 @@ export default function IndexSettingsPage() {
                               withLabel
                             >
                               <LlmPicker
-                                modelName={values.contextual_rag_llm_name}
-                                providerName={
-                                  values.contextual_rag_llm_provider
+                                modelConfigurationId={
+                                  values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
-                                onChange={({ modelName, providerName }) => {
+                                onChange={({ modelConfigurationId }) => {
                                   void setFieldValue(
-                                    "contextual_rag_llm_name",
-                                    modelName
-                                  );
-                                  void setFieldValue(
-                                    "contextual_rag_llm_provider",
-                                    providerName
+                                    "contextual_rag_model_configuration_id",
+                                    modelConfigurationId
                                   );
                                 }}
                               />

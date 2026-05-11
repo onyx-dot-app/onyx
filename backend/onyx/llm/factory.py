@@ -12,7 +12,6 @@ from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_models
-from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -333,15 +332,19 @@ def llm_from_provider(
     )
 
 
-def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
+def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
+    from onyx.db.models import ModelConfiguration
+
     with get_session_with_current_tenant() as db_session:
-        llm_provider = fetch_llm_provider_view(db_session, model_provider)
-    if not llm_provider:
-        raise ValueError("No LLM provider with name {} found".format(model_provider))
-    return llm_from_provider(
-        model_name=model_name,
-        llm_provider=llm_provider,
-    )
+        mc = db_session.get(ModelConfiguration, model_configuration_id)
+        if not mc:
+            raise ValueError(
+                f"model_configuration id={model_configuration_id} not found"
+            )
+        return llm_from_provider(
+            model_name=mc.name,
+            llm_provider=LLMProviderView.from_model(mc.llm_provider),
+        )
 
 
 def get_default_llm(
