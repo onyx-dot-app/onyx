@@ -3,9 +3,20 @@
 Cloud: Redis HGET → CP lazy-refresh on miss → BUSINESS fallback.
 Self-hosted: license_payload.customer_tier (legacy licenses lacking the
 field default to ENTERPRISE).
+
+Promotion rule (cloud-only): a tenant whose contractual `customer_tier`
+is BUSINESS but whose subscription is still inside its trial window
+(`trial_end > now`) resolves to `Tier.ENTERPRISE` — they're being shown
+a preview of the Enterprise feature set during the trial. The contractual
+`customer_tier` on the tenant row is left unchanged; promotion is applied
+purely at read time so the moment `trial_end` passes, the cached entry
+naturally resolves back to BUSINESS without waiting on a webhook.
 """
 
 from __future__ import annotations
+
+from datetime import datetime
+from datetime import timezone
 
 import requests
 from redis.exceptions import RedisError
@@ -35,6 +46,24 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
     CustomerTier.BUSINESS: Tier.BUSINESS,
     CustomerTier.ENTERPRISE: Tier.ENTERPRISE,
 }
+
+
+def _effective_tier(
+    customer_tier: CustomerTier, trial_end: datetime | None
+) -> Tier:
+    """Apply the cloud trial-business → enterprise promotion.
+
+    A BUSINESS tenant whose `trial_end` is still in the future is resolved
+    to ENTERPRISE for the duration of the trial. Once `trial_end` is in the
+    past (or absent), the unpromoted mapping is used.
+    """
+    if (
+        customer_tier == CustomerTier.BUSINESS
+        and trial_end is not None
+        and trial_end > datetime.now(timezone.utc)
+    ):
+        return Tier.ENTERPRISE
+    return _CUSTOMER_TIER_TO_TIER[customer_tier]
 
 
 def tier_from_license_metadata(metadata: object | None) -> Tier:
@@ -73,13 +102,21 @@ def _self_hosted_tier() -> Tier:
     return tier_from_license_metadata(metadata)
 
 
-def _extract_customer_tier(
+def _extract_billing_state(
     billing: BillingInformation | SubscriptionStatusResponse,
-) -> CustomerTier | None:
-    return getattr(billing, "customer_tier", None)
+) -> tuple[CustomerTier, datetime | None] | None:
+    customer_tier = getattr(billing, "customer_tier", None)
+    if customer_tier is None:
+        return None
+    trial_end = getattr(billing, "trial_end", None)
+    if not isinstance(trial_end, datetime):
+        trial_end = None
+    return customer_tier, trial_end
 
 
-def _lazy_refresh_from_cp(tenant_id: str) -> CustomerTier | None:
+def _lazy_refresh_from_cp(
+    tenant_id: str,
+) -> tuple[CustomerTier, datetime | None] | None:
     try:
         billing = fetch_billing_information(tenant_id)
     except (requests.RequestException, ValueError) as e:
@@ -90,7 +127,7 @@ def _lazy_refresh_from_cp(tenant_id: str) -> CustomerTier | None:
         )
         return None
 
-    return _extract_customer_tier(billing)
+    return _extract_billing_state(billing)
 
 
 def get_tier(tenant_id: str | None = None) -> Tier:
@@ -111,19 +148,20 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         return Tier.BUSINESS
 
     if cached is not None:
-        return _CUSTOMER_TIER_TO_TIER[cached]
+        return _effective_tier(cached.customer_tier, cached.trial_end)
 
     fresh = _lazy_refresh_from_cp(tid)
     if fresh is not None:
+        fresh_tier, fresh_trial_end = fresh
         try:
-            update_tenant_tier(tid, fresh)
+            update_tenant_tier(tid, fresh_tier, fresh_trial_end)
         except RedisError as e:
             logger.warning(
                 "Tier Redis write failed for tenant %s after CP refresh: %s",
                 tid,
                 e,
             )
-        return _CUSTOMER_TIER_TO_TIER[fresh]
+        return _effective_tier(fresh_tier, fresh_trial_end)
 
     # Don't cache the fallback — next call retries the refresh.
     return Tier.BUSINESS

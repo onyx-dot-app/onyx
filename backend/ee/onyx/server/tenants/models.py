@@ -28,6 +28,7 @@ class ProductGatingFullSyncRequest(BaseModel):
 class TierUpdateRequest(BaseModel):
     tenant_id: str
     customer_tier: CustomerTier
+    trial_end: datetime | None = None
 
 
 class TierUpdateResponse(BaseModel):
