@@ -333,7 +333,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
                 {canUpdateFeaturedStatus && (
                   <>
-                    <div className="border-t border-border-02" />
+                    <Divider paddingParallel="fit" />
 
                     <InputHorizontal
                       title="Feature This Agent"
