@@ -4168,6 +4168,53 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class Skill(Base):
+    """A custom (admin-uploaded) skill. One bundle per skill; re-upload replaces."""
+
+    __tablename__ = "skill"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+
+    # Admin-controlled metadata (editable post-creation via PATCH).
+    slug: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Bundle bytes (single, replaced on re-upload).
+    bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
+    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        secondary="skill__user_group",
+        viewonly=True,
+    )
+
+    __table_args__ = (Index("ux_skill_slug", "slug", unique=True),)
+
+
 """
 ************************************************************************
 Enterprise Edition Models
@@ -4293,6 +4340,21 @@ class Persona__UserGroup(Base):
     )
 
 
+class Skill__UserGroup(Base):
+    __tablename__ = "skill__user_group"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
 class LLMProvider__Persona(Base):
     """Association table restricting LLM providers to specific personas.
 
@@ -4383,6 +4445,11 @@ class UserGroup(Base):
     personas: Mapped[list[Persona]] = relationship(
         "Persona",
         secondary=Persona__UserGroup.__table__,
+        viewonly=True,
+    )
+    skills: Mapped[list[Skill]] = relationship(
+        "Skill",
+        secondary=Skill__UserGroup.__table__,
         viewonly=True,
     )
     document_sets: Mapped[list[DocumentSet]] = relationship(

@@ -383,6 +383,7 @@ class FileOrigin(str, Enum):
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
+    SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
 
 
