@@ -3,7 +3,7 @@ from typing import cast
 
 from pydantic import BaseModel
 
-from onyx.tools.utils import sanitize_tool_name
+from onyx.tools.tool_name import sanitize_tool_name
 
 REQUEST_BODY = "requestBody"
 
@@ -14,7 +14,10 @@ class PathSpec(BaseModel):
 
 
 class MethodSpec(BaseModel):
+    # Sanitized, LLM-safe name; used in tool definitions and dispatch.
     name: str
+    # Original operationId, retained for user-visible display only.
+    raw_name: str
     summary: str
     path: str
     method: str
@@ -127,10 +130,11 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
     path_specs = openapi_to_path_specs(openapi_spec)
 
     method_specs = []
+    seen_names: dict[str, str] = {}
     for path_spec in path_specs:
         for method_name, method in path_spec.methods.items():
-            name = method.get("operationId")
-            if not name:
+            raw_name = method.get("operationId")
+            if not raw_name:
                 raise ValueError(
                     f"Operation ID is not specified for {method_name.upper()} {path_spec.path}"
                 )
@@ -141,9 +145,18 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
                     f"Summary is not specified for {method_name.upper()} {path_spec.path}"
                 )
 
+            sanitized_name = sanitize_tool_name(raw_name)
+            if sanitized_name in seen_names and seen_names[sanitized_name] != raw_name:
+                raise ValueError(
+                    f"Operation IDs '{seen_names[sanitized_name]}' and '{raw_name}' both "
+                    f"sanitize to '{sanitized_name}'. Rename one so the LLM-facing names stay distinct."
+                )
+            seen_names[sanitized_name] = raw_name
+
             method_specs.append(
                 MethodSpec(
-                    name=sanitize_tool_name(name),
+                    name=sanitized_name,
+                    raw_name=raw_name,
                     summary=summary,
                     path=path_spec.path,
                     method=method_name,

@@ -16,7 +16,7 @@ from onyx.tools.tool_implementations.custom.custom_tool import validate_openapi_
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
-from onyx.tools.utils import sanitize_tool_name
+from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -440,10 +440,32 @@ class TestSanitizeToolName(unittest.TestCase):
         }
         specs = openapi_to_method_specs(schema)
         self.assertEqual(specs[0].name, "ServiceNow_list_incidents")
+        # raw_name preserves the original operationId so the UI keeps showing
+        # what the user wrote, even though the LLM sees the sanitized form.
+        self.assertEqual(specs[0].raw_name, "ServiceNow.list incidents")
         self.assertEqual(
             specs[0].to_tool_definition()["function"]["name"],
             "ServiceNow_list_incidents",
         )
+
+    def test_colliding_sanitized_names_raise(self) -> None:
+        # Two distinct operationIds that sanitize to the same value would
+        # silently overwrite each other in tools_by_name; surface a clear error.
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/a": {
+                    "get": {"summary": "a", "operationId": "foo.bar"},
+                },
+                "/b": {
+                    "get": {"summary": "b", "operationId": "foo_bar"},
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="sanitize to 'foo_bar'"):
+            openapi_to_method_specs(schema)
 
 
 if __name__ == "__main__":
