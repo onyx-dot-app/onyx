@@ -82,7 +82,7 @@ func (m Model) handleConfigureSubmit(text string) (Model, tea.Cmd) {
 			key = m.configState.apiKey
 		}
 		if key == "" {
-			m.viewport.addWarning("API key is required.")
+			m.viewport.addWarning("Personal access token is required.")
 			return m, nil
 		}
 		m.configState.apiKey = key
@@ -175,7 +175,7 @@ func configURLPrompt() string {
 }
 
 func configAPIKeyPrompt(hasExisting bool) string {
-	prompt := infoStyle.Render("(2/2) API key ")
+	prompt := infoStyle.Render("(2/2) Personal access token ")
 	if hasExisting {
 		prompt += dimInfoStyle.Render("[keep existing] ")
 	}
