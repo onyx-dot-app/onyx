@@ -1408,7 +1408,8 @@ sandboxJobs:
       key: app.kubernetes.io/component
       value: sandbox
     # Ingress: allow from pods with the given label in the given namespace.
-    allowFromNamespace: danswer
+    # Empty defaults to the release namespace; override per-cluster via values overlay.
+    allowFromNamespace: ""
     allowFromPodLabel:
       key: app
       value: api-server
@@ -1427,11 +1428,11 @@ sandboxJobs:
       - 172.16.0.0/12
       - 192.168.0.0/16
 
-  # Voluntary-disruption budget. With per-session pods, at most this fraction can be
-  # voluntarily evicted at once — protects against node-pool rolling upgrades wiping
-  # all active sandboxes simultaneously.
+  # Voluntary-disruption budget. Default of 1 works at any pod count — percentage values
+  # like 25% round down via floor(p × n) and silently become 0 with fewer than 4 pods,
+  # which would block every node drain. At scale, overlays can switch to a percentage.
   podDisruptionBudget:
-    maxUnavailable: 25%
+    maxUnavailable: 1
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line

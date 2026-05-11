@@ -6,7 +6,7 @@
 {{- $subjects = append $subjects (dict "name" $chartSaName "namespace" $chartSaNs "bindingName" "chart-sa") -}}
 {{- end -}}
 {{- range .Values.sandboxJobs.jobManager.additionalSubjects -}}
-{{- $subjects = append $subjects (merge (dict "bindingName" .name) .) -}}
+{{- $subjects = append $subjects (merge (dict "bindingName" (printf "%s-%s" .namespace .name)) .) -}}
 {{- end -}}
 {{- range $i, $subject := $subjects }}
 {{- if $i }}

@@ -31,7 +31,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.sandboxJobs.networkPolicy.allowFromNamespace }}
+              kubernetes.io/metadata.name: {{ default .Release.Namespace .Values.sandboxJobs.networkPolicy.allowFromNamespace }}
           podSelector:
             matchLabels:
               {{ .Values.sandboxJobs.networkPolicy.allowFromPodLabel.key }}: {{ .Values.sandboxJobs.networkPolicy.allowFromPodLabel.value }}
@@ -52,7 +52,9 @@ spec:
     - Egress
   egress:
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
           podSelector:
             matchLabels:
               k8s-app: kube-dns
