@@ -20,11 +20,7 @@ const (
 	EventReasoningDelta       = "reasoning_delta"
 	EventReasoningDone        = "reasoning_done"
 	EventCitationInfo         = "citation_info"
-	EventOpenURLStart         = "open_url_start"
-	EventImageGenStart        = "image_generation_start"
-	EventPythonToolStart      = "python_tool_start"
 	EventCustomToolStart      = "custom_tool_start"
-	EventFileReaderStart      = "file_reader_start"
 	EventDeepResearchPlan     = "deep_research_plan_start"
 	EventDeepResearchDelta    = "deep_research_plan_delta"
 	EventResearchAgentStart   = "research_agent_start"
@@ -43,7 +39,7 @@ func (e SessionCreatedEvent) EventType() string { return EventSessionCreated }
 // MessageIDEvent carries the user and agent message IDs.
 type MessageIDEvent struct {
 	UserMessageID          *int `json:"user_message_id,omitempty"`
-	ReservedAgentMessageID int  `json:"reserved_agent_message_id"`
+	ReservedAgentMessageID int  `json:"reserved_assistant_message_id"`
 }
 
 func (e MessageIDEvent) EventType() string { return EventMessageIDInfo }

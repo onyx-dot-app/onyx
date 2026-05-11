@@ -25,15 +25,16 @@ Run the interactive setup:
 onyx-cli configure
 ```
 
-This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
+This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
 
 Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
-| `ONYX_API_KEY` | Yes | API key for authentication |
+| `ONYX_API_KEY` | No | API key for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
+| `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 | `ONYX_SSH_HOST_KEY` | No | Path to SSH host key for `serve` command |
 
 ## Usage
@@ -103,14 +104,14 @@ Useful hardening flags:
 
 | Command | Mode | Description |
 |---------|------|-------------|
-| `chat` | Interactive | Launch the interactive chat TUI (default with terminal) |
+| `chat` | Interactive | Launch the interactive chat TUI (requires terminal) |
 | `ask` | Agent / Script | Ask a question and print the answer to stdout |
 | `agents` | Agent / Script | List available agents (ID, name, description) |
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
-| `install-skill` | Agent / Script | Install the agent skill file into a project |
+| `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
-| `configure` | Interactive | Configure server URL and API key |
-| `serve` | Interactive | Serve the interactive chat TUI over SSH |
+| `configure` | Interactive | Configure server URL and API key (requires terminal) |
+| `serve` | Interactive | Serve the Onyx TUI over SSH |
 
 ### Global Flags
 

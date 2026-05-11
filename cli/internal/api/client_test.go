@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -203,22 +204,9 @@ func TestTestConnection_AWSELB403(t *testing.T) {
 	if !errors.As(err, &authErr) {
 		t.Fatalf("expected AuthError for AWS ELB 403, got %T: %v", err, err)
 	}
-	if got := authErr.Error(); !contains(got, "AWS load balancer") {
+	if got := authErr.Error(); !strings.Contains(got, "AWS load balancer") {
 		t.Fatalf("expected AWS load balancer message, got: %s", got)
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsSubstring(s, sub))
-}
-
-func containsSubstring(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 // --- ListChatSessions tests ---
@@ -437,7 +425,7 @@ func TestUploadFile_Success(t *testing.T) {
 			return
 		}
 		ct := r.Header.Get("Content-Type")
-		if !contains(ct, "multipart/form-data") {
+		if !strings.Contains(ct, "multipart/form-data") {
 			t.Errorf("expected multipart/form-data content type, got %q", ct)
 			w.WriteHeader(400)
 			return
@@ -508,10 +496,3 @@ func TestUploadFile_HTTPError(t *testing.T) {
 	}
 }
 
-func TestClientAPI_InterfaceCompiles(t *testing.T) {
-	// This test just verifies the interface is satisfied at compile time.
-	// The actual compile-time check is in client.go via: var _ ClientAPI = (*Client)(nil)
-	srv := testutil.OnyxServer(200)
-	defer srv.Close()
-	var _ api.ClientAPI = testutil.NewClient(srv.URL) //nolint:staticcheck // compile-time interface check
-}

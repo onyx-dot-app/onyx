@@ -1,8 +1,6 @@
 // Package models defines API request/response types for the Onyx CLI.
 package models
 
-import "time"
-
 // AgentSummary represents an agent from the API.
 type AgentSummary struct {
 	ID               int    `json:"id"`
@@ -10,14 +8,6 @@ type AgentSummary struct {
 	Description      string `json:"description"`
 	IsDefaultPersona bool   `json:"is_default_persona"`
 	IsVisible        bool   `json:"is_visible"`
-}
-
-// ChatSessionSummary is a brief session listing.
-type ChatSessionSummary struct {
-	ID        string    `json:"id"`
-	Name      *string   `json:"name"`
-	AgentID *int      `json:"persona_id"`
-	Created   time.Time `json:"time_created"`
 }
 
 // ChatSessionDetails is a session with timestamps as strings.
