@@ -760,6 +760,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
@@ -779,7 +780,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
-            include_hidden=False,
+            include_hidden=include_hidden,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
@@ -1000,8 +1001,11 @@ class OpenSearchIndexPair(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
-        return self._primary.keyword_retrieval(query, filters, num_to_retrieve)
+        return self._primary.keyword_retrieval(
+            query, filters, num_to_retrieve, include_hidden=include_hidden
+        )
 
     def semantic_retrieval(
         self,

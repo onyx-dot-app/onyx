@@ -948,13 +948,16 @@ class VespaDocumentIndex(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
         # Ported from the legacy Vespa admin_retrieval: pure-keyword search over
         # weakAnd(userInput) plus a content_summary userInput pass for
         # highlighting (n-gram highlighting is broken / not behaving as
-        # desired). Hidden documents are included so admin search can surface
-        # them.
-        vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
+        # desired). The caller decides whether hidden documents are surfaced;
+        # admin search passes include_hidden=True.
+        vespa_where_clauses = build_vespa_filters(
+            filters, include_hidden=include_hidden
+        )
         yql = (
             YQL_BASE.format(index_name=self._index_name)
             + vespa_where_clauses
@@ -1317,8 +1320,11 @@ class VespaIndexPair(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
-        return self._primary.keyword_retrieval(query, filters, num_to_retrieve)
+        return self._primary.keyword_retrieval(
+            query, filters, num_to_retrieve, include_hidden=include_hidden
+        )
 
     def semantic_retrieval(
         self,

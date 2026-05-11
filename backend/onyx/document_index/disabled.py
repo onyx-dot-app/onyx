@@ -85,6 +85,7 @@ class DisabledDocumentIndex(DocumentIndex):
         query: str,  # noqa: ARG002
         filters: IndexFilters,  # noqa: ARG002
         num_to_retrieve: int,  # noqa: ARG002
+        include_hidden: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 

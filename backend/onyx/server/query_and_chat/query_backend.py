@@ -62,6 +62,9 @@ def admin_search(
             query=query,
             filters=final_filters,
             num_to_retrieve=NUM_RETURNED_HITS,
+            # Admin search should expose hidden documents so admins can
+            # inspect / unhide them.
+            include_hidden=True,
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
