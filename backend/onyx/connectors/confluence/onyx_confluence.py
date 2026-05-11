@@ -94,6 +94,14 @@ _JSONRPC_ERROR_BODY_SNIPPET_CHARS = 1000
 # and is branched on `is_cloud` upstream of any version check.
 _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS: tuple[int, int] = (9, 1)
 
+# Atlassian's documented Confluence DC endpoint for build information,
+# under the "Server Information" REST API group. Returns a JSON object
+# whose top-level `version` field is the upstream Confluence version
+# (e.g. "10.2.10"). Confirmed present in the v8.4, v9.3, and v10.x
+# DC REST API references; we previously probed the Jira-style
+# `/rest/api/serverInfo` slug, which 404s on Confluence DC 10.x.
+_DC_SERVER_INFORMATION_PATH = "rest/api/server-information"
+
 
 class ConfluenceRateLimitError(Exception):
     pass
@@ -172,10 +180,10 @@ class OnyxConfluence:
             else None
         )
 
-        # Cached result of /rest/api/serverInfo, populated on first
-        # `get_server_version()` call. _server_version_probed=True with
-        # _server_version=None means "we tried and the probe failed", so
-        # we don't keep retrying every space-permissions sync.
+        # Cached result of the server-information probe, populated on
+        # first `get_server_version()` call. _server_version_probed=True
+        # with _server_version=None means "we tried and the probe
+        # failed", so we don't keep retrying every space-permissions sync.
         self._server_version: tuple[int, int] | None = None
         self._server_version_probed: bool = False
 
@@ -1066,15 +1074,21 @@ class OnyxConfluence:
         """Returns the (major, minor) version of the upstream Confluence
         Data Center instance, or None for Cloud or when the probe fails.
 
-        Probed once per OnyxConfluence instance via /rest/api/serverInfo
-        (the result is cached on the instance, including the negative
-        result, so a one-off network blip doesn't cause us to re-probe on
-        every space-permissions sync).
+        Probed once per OnyxConfluence instance via Atlassian's
+        documented "Server Information" endpoint
+        (/rest/api/server-information). The result is cached on the
+        instance, including the negative result, so a one-off network
+        blip doesn't cause us to re-probe on every space-permissions
+        sync.
 
         Used to gate features that only exist on newer DC versions, such
         as the REST space-permissions API introduced in DC 9.1.0
-        (CONFSERVER-78176). Most callers should prefer the higher-level
-        feature predicates (e.g. supports_rest_space_permissions) over
+        (CONFSERVER-78176). When the probe fails (returns None), callers
+        intentionally fall back to the legacy JSON-RPC path, on the
+        assumption that probe failure most often correlates with older
+        DC builds where the REST permissions API isn't available
+        anyway. Most callers should prefer the higher-level feature
+        predicates (e.g. supports_rest_space_permissions) over
         comparing the version tuple directly.
         """
         if self._is_cloud:
@@ -1094,7 +1108,7 @@ class OnyxConfluence:
 
     def _probe_server_version(self) -> tuple[int, int] | None:
         try:
-            info = self.get("rest/api/serverInfo")
+            info = self.get(_DC_SERVER_INFORMATION_PATH)
         except Exception as e:
             logger.warning("Failed to probe Confluence server version: %s", e)
             return None

@@ -148,9 +148,9 @@ def test_dispatcher_falls_back_to_jsonrpc_for_pre_91() -> None:
 
 
 def test_dispatcher_falls_back_to_jsonrpc_when_rest_signals_unavailable() -> None:
-    """If serverInfo lies (or a custom build doesn't have the REST plugin),
-    the REST call raises the typed unavailability signal and the dispatcher
-    must fall back rather than blow up.
+    """If the version probe lies (or a custom build doesn't have the REST
+    plugin), the REST call raises the typed unavailability signal and
+    the dispatcher must fall back rather than blow up.
     """
     client = _make_client(
         supports_rest=True,
