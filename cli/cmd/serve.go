@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
@@ -35,9 +34,7 @@ const (
 	defaultServeRateLimitPerMinute = 20
 	defaultServeRateLimitBurst     = 40
 	defaultServeRateLimitCacheSize = 4096
-	maxAPIKeyLength                = 512
 	apiKeyValidationTimeout        = 15 * time.Second
-	maxAPIKeyRetries               = 5
 )
 
 func sessionEnv(s ssh.Session, key string) string {
@@ -52,8 +49,8 @@ func sessionEnv(s ssh.Session, key string) string {
 
 func validateAPIKey(serverURL string, apiKey string) error {
 	trimmedKey := strings.TrimSpace(apiKey)
-	if len(trimmedKey) > maxAPIKeyLength {
-		return fmt.Errorf("API key is too long (max %d characters)", maxAPIKeyLength)
+	if len(trimmedKey) > tui.MaxAPIKeyLength {
+		return fmt.Errorf("API key is too long (max %d characters)", tui.MaxAPIKeyLength)
 	}
 
 	cfg := config.OnyxCliConfig{
@@ -67,208 +64,6 @@ func validateAPIKey(serverURL string, apiKey string) error {
 		return apiErrorToExit(err, "API key validation failed")
 	}
 	return nil
-}
-
-// --- auth prompt (bubbletea model) ---
-
-type authState int
-
-const (
-	authInput authState = iota
-	authValidating
-	authDone
-)
-
-type authValidatedMsg struct {
-	key string
-	err error
-}
-
-type authModel struct {
-	input     textinput.Model
-	serverURL string
-	state     authState
-	apiKey    string // set on successful validation
-	errMsg    string
-	retries   int
-	aborted   bool
-}
-
-func newAuthModel(serverURL, initialErr string) authModel {
-	ti := textinput.New()
-	ti.Prompt = "  API Key: "
-	ti.EchoMode = textinput.EchoPassword
-	ti.EchoCharacter = '•'
-	ti.CharLimit = maxAPIKeyLength
-	ti.Width = 80
-	ti.Focus()
-
-	return authModel{
-		input:     ti,
-		serverURL: serverURL,
-		errMsg:    initialErr,
-	}
-}
-
-func (m authModel) Update(msg tea.Msg) (authModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.input.Width = max(msg.Width-14, 20) // account for prompt width
-		return m, nil
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyCtrlD:
-			m.aborted = true
-			return m, nil
-		default:
-			if m.state == authValidating {
-				return m, nil
-			}
-		}
-		switch msg.Type {
-		case tea.KeyEnter:
-			key := strings.TrimSpace(m.input.Value())
-			if key == "" {
-				m.errMsg = "No key entered."
-				m.retries++
-				if m.retries >= maxAPIKeyRetries {
-					m.errMsg = "Too many failed attempts. Disconnecting."
-					m.aborted = true
-					return m, nil
-				}
-				m.input.SetValue("")
-				return m, nil
-			}
-			m.state = authValidating
-			m.errMsg = ""
-			serverURL := m.serverURL
-			return m, func() tea.Msg {
-				return authValidatedMsg{key: key, err: validateAPIKey(serverURL, key)}
-			}
-		}
-
-	case authValidatedMsg:
-		if msg.err != nil {
-			m.state = authInput
-			m.errMsg = msg.err.Error()
-			m.retries++
-			if m.retries >= maxAPIKeyRetries {
-				m.errMsg = "Too many failed attempts. Disconnecting."
-				m.aborted = true
-				return m, nil
-			}
-			m.input.SetValue("")
-			return m, m.input.Focus()
-		}
-		m.apiKey = msg.key
-		m.state = authDone
-		return m, nil
-	}
-
-	if m.state == authInput {
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
-	}
-	return m, nil
-}
-
-func (m authModel) View() string {
-	settingsURL := strings.TrimRight(m.serverURL, "/") + "/app/settings/accounts-access"
-
-	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString("  \x1b[1;35mOnyx CLI\x1b[0m\n")
-	b.WriteString("  \x1b[90m" + m.serverURL + "\x1b[0m\n")
-	b.WriteString("\n")
-	b.WriteString("  Generate an API key at:\n")
-	b.WriteString("  \x1b[4;34m" + settingsURL + "\x1b[0m\n")
-	b.WriteString("\n")
-	b.WriteString("  \x1b[90mTip: skip this prompt by passing your key via SSH:\x1b[0m\n")
-	b.WriteString("  \x1b[90m  export ONYX_API_KEY=<key>\x1b[0m\n")
-	b.WriteString("  \x1b[90m  ssh -o SendEnv=ONYX_API_KEY <host> -p <port>\x1b[0m\n")
-	b.WriteString("\n")
-
-	if m.errMsg != "" {
-		b.WriteString("  \x1b[1;31m" + m.errMsg + "\x1b[0m\n\n")
-	}
-
-	switch m.state {
-	case authDone:
-		b.WriteString("  \x1b[32mAuthenticated.\x1b[0m\n")
-	case authValidating:
-		b.WriteString("  \x1b[90mValidating…\x1b[0m\n")
-	default:
-		b.WriteString(m.input.View() + "\n")
-	}
-
-	return b.String()
-}
-
-// --- serve model (wraps auth → TUI in a single bubbletea program) ---
-
-type serveModel struct {
-	auth      authModel
-	tui       tea.Model
-	authed    bool
-	serverCfg config.OnyxCliConfig
-	width     int
-	height    int
-}
-
-func newServeModel(serverCfg config.OnyxCliConfig, initialErr string) serveModel {
-	return serveModel{
-		auth:      newAuthModel(serverCfg.ServerURL, initialErr),
-		serverCfg: serverCfg,
-	}
-}
-
-func (m serveModel) Init() tea.Cmd {
-	return textinput.Blink
-}
-
-func (m serveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if !m.authed {
-		if ws, ok := msg.(tea.WindowSizeMsg); ok {
-			m.width = ws.Width
-			m.height = ws.Height
-		}
-
-		var cmd tea.Cmd
-		m.auth, cmd = m.auth.Update(msg)
-
-		if m.auth.aborted {
-			return m, tea.Quit
-		}
-		if m.auth.apiKey != "" {
-			cfg := config.OnyxCliConfig{
-				ServerURL:      m.serverCfg.ServerURL,
-				APIKey:         m.auth.apiKey,
-				DefaultAgentID: m.serverCfg.DefaultAgentID,
-			}
-			m.tui = tui.NewModel(cfg)
-			m.authed = true
-			w, h := m.width, m.height
-			return m, tea.Batch(
-				tea.EnterAltScreen,
-				tea.EnableMouseCellMotion,
-				m.tui.Init(),
-				func() tea.Msg { return tea.WindowSizeMsg{Width: w, Height: h} },
-			)
-		}
-		return m, cmd
-	}
-
-	var cmd tea.Cmd
-	m.tui, cmd = m.tui.Update(msg)
-	return m, cmd
-}
-
-func (m serveModel) View() string {
-	if !m.authed {
-		return m.auth.View()
-	}
-	return m.tui.View()
 }
 
 // --- serve command ---
@@ -349,7 +144,7 @@ environment variable (the --host-key flag takes precedence).`,
 						APIKey:         apiKey,
 						DefaultAgentID: serverCfg.DefaultAgentID,
 					}
-					return tui.NewModel(cfg), []tea.ProgramOption{
+					return tui.NewModel(cfg, api.NewClient(cfg)), []tea.ProgramOption{
 						tea.WithAltScreen(),
 						tea.WithMouseCellMotion(),
 					}
@@ -357,7 +152,7 @@ environment variable (the --host-key flag takes precedence).`,
 
 				// No valid env key — show auth prompt, then transition
 				// to the TUI within the same bubbletea program.
-				return newServeModel(serverCfg, envErr), []tea.ProgramOption{
+				return tui.NewServeModel(serverCfg, envErr, validateAPIKey), []tea.ProgramOption{
 					tea.WithMouseCellMotion(),
 				}
 			}

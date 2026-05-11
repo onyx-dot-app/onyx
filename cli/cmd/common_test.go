@@ -14,7 +14,7 @@ func TestApiErrorToExit(t *testing.T) {
 	tests := []struct {
 		name     string
 		err      error
-		wantCode int
+		wantCode exitcodes.Code
 	}{
 		{"auth_error", &api.AuthError{Message: "denied"}, exitcodes.AuthFailure},
 		{"api_429", &api.OnyxAPIError{StatusCode: 429, Detail: "slow down"}, exitcodes.RateLimited},

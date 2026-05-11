@@ -40,6 +40,21 @@ func TestParse_Invalid(t *testing.T) {
 	}
 }
 
+func TestParse_NegativeComponents(t *testing.T) {
+	// Negative components are rejected because the pre-release/build-metadata
+	// stripping step (IndexAny "-+") treats the leading minus as a suffix
+	// delimiter and truncates the version string before it reaches Atoi.
+	tests := []string{
+		"-1.0.0", // '-' at index 0 truncates to ""
+		"1.-2.3", // '-' at index 2 truncates to "1."
+	}
+	for _, input := range tests {
+		if _, ok := Parse(input); ok {
+			t.Errorf("Parse(%q) should return ok=false for negative components", input)
+		}
+	}
+}
+
 func TestParse_PreRelease(t *testing.T) {
 	tests := []struct {
 		input string

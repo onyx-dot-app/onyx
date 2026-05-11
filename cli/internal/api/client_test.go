@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -216,6 +219,293 @@ func containsSubstring(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// --- ListChatSessions tests ---
+
+func TestListChatSessions_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat/get-user-chat-sessions" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"sessions": [{"id": "s1", "name": "Test", "persona_id": 1, "time_created": "2025-01-01", "time_updated": "2025-01-02"}]}`)
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	sessions, err := client.ListChatSessions(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+	if sessions[0].ID != "s1" {
+		t.Fatalf("expected session ID 's1', got %q", sessions[0].ID)
+	}
+	if sessions[0].Name == nil || *sessions[0].Name != "Test" {
+		t.Fatalf("expected session name 'Test', got %v", sessions[0].Name)
+	}
+}
+
+func TestListChatSessions_HTTPError(t *testing.T) {
+	srv := testutil.StatusServer(500)
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.ListChatSessions(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Fatalf("expected status 500, got %d", apiErr.StatusCode)
+	}
+}
+
+// --- GetChatSession tests ---
+
+func TestGetChatSession_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat/get-chat-session/s1" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"chat_session_id": "s1",
+			"description": "A test session",
+			"persona_id": 1,
+			"persona_name": "TestAgent",
+			"messages": [
+				{
+					"message_id": 1,
+					"parent_message": null,
+					"latest_child_message": 2,
+					"message": "Hello",
+					"message_type": "user",
+					"time_sent": "2025-01-01T00:00:00Z",
+					"error": null
+				}
+			]
+		}`)
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	resp, err := client.GetChatSession(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.ChatSessionID != "s1" {
+		t.Fatalf("expected session ID 's1', got %q", resp.ChatSessionID)
+	}
+	if resp.AgentName == nil || *resp.AgentName != "TestAgent" {
+		t.Fatalf("expected agent name 'TestAgent', got %v", resp.AgentName)
+	}
+	if len(resp.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(resp.Messages))
+	}
+	if resp.Messages[0].Message != "Hello" {
+		t.Fatalf("expected message 'Hello', got %q", resp.Messages[0].Message)
+	}
+}
+
+func TestGetChatSession_HTTPError(t *testing.T) {
+	srv := testutil.StatusServer(500)
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GetChatSession(context.Background(), "s1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Fatalf("expected status 500, got %d", apiErr.StatusCode)
+	}
+}
+
+// --- RenameChatSession tests ---
+
+func TestRenameChatSession_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat/rename-chat-session" || r.Method != http.MethodPut {
+			w.WriteHeader(404)
+			return
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		if payload["chat_session_id"] != "s1" {
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"detail":"wrong session id"}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"new_name": "renamed"}`)
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	name := "renamed"
+	newName, err := client.RenameChatSession(context.Background(), "s1", &name)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newName != "renamed" {
+		t.Fatalf("expected new name 'renamed', got %q", newName)
+	}
+}
+
+func TestRenameChatSession_HTTPError(t *testing.T) {
+	srv := testutil.StatusServer(500)
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	name := "new-name"
+	_, err := client.RenameChatSession(context.Background(), "s1", &name)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Fatalf("expected status 500, got %d", apiErr.StatusCode)
+	}
+}
+
+// --- GetBackendVersion tests ---
+
+func TestGetBackendVersion_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/version" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"backend_version": "1.2.3"}`)
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	version, err := client.GetBackendVersion(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if version != "1.2.3" {
+		t.Fatalf("expected version '1.2.3', got %q", version)
+	}
+}
+
+func TestGetBackendVersion_HTTPError(t *testing.T) {
+	srv := testutil.StatusServer(500)
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.GetBackendVersion(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Fatalf("expected status 500, got %d", apiErr.StatusCode)
+	}
+}
+
+// --- UploadFile tests ---
+
+func TestUploadFile_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/projects/file/upload" || r.Method != http.MethodPost {
+			w.WriteHeader(404)
+			return
+		}
+		ct := r.Header.Get("Content-Type")
+		if !contains(ct, "multipart/form-data") {
+			t.Errorf("expected multipart/form-data content type, got %q", ct)
+			w.WriteHeader(400)
+			return
+		}
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			t.Errorf("failed to parse multipart form: %v", err)
+			w.WriteHeader(400)
+			return
+		}
+		file, header, err := r.FormFile("files")
+		if err != nil {
+			t.Errorf("failed to get form file: %v", err)
+			w.WriteHeader(400)
+			return
+		}
+		defer func() { _ = file.Close() }()
+		if header.Filename != "test-upload.txt" {
+			t.Errorf("expected filename 'test-upload.txt', got %q", header.Filename)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"user_files": [{"id": "uf1", "name": "test-upload.txt", "file_id": "f123", "chat_file_type": "plain_text"}]}`)
+	}))
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
+	if err := os.WriteFile(tmpFile, []byte("hello world"), 0o644); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	client := testutil.NewClient(srv.URL)
+	desc, err := client.UploadFile(context.Background(), tmpFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if desc.ID != "f123" {
+		t.Fatalf("expected file ID 'f123', got %q", desc.ID)
+	}
+	if desc.Type != models.ChatFilePlainText {
+		t.Fatalf("expected type 'plain_text', got %q", desc.Type)
+	}
+	if desc.Name != "test-upload.txt" {
+		t.Fatalf("expected name 'test-upload.txt', got %q", desc.Name)
+	}
+}
+
+func TestUploadFile_HTTPError(t *testing.T) {
+	srv := testutil.StatusServer(500)
+	defer srv.Close()
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
+	if err := os.WriteFile(tmpFile, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+
+	client := testutil.NewClient(srv.URL)
+	_, err := client.UploadFile(context.Background(), tmpFile)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var apiErr *api.OnyxAPIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected OnyxAPIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Fatalf("expected status 500, got %d", apiErr.StatusCode)
+	}
 }
 
 func TestClientAPI_InterfaceCompiles(t *testing.T) {

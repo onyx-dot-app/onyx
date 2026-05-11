@@ -22,7 +22,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		var exitErr *exitcodes.ExitError
 		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.Code)
+			os.Exit(int(exitErr.Code))
 		}
 		os.Exit(1)
 	}

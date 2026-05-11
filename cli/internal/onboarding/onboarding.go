@@ -15,7 +15,6 @@ import (
 	"golang.org/x/term"
 )
 
-// Aliases for shared styles.
 var (
 	boldStyle   = tui.BoldStyle
 	dimStyle    = tui.DimStyle

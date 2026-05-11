@@ -47,11 +47,12 @@ minimum required.`,
 			defer vCancel()
 
 			backendVersion, err := client.GetBackendVersion(vCtx)
-			if err != nil {
+			switch {
+			case err != nil:
 				log.WithError(err).Debug("could not fetch backend version")
-			} else if backendVersion == "" {
+			case backendVersion == "":
 				log.Debug("server returned empty version string")
-			} else {
+			default:
 				fmt.Fprintf(ios.Out, "Version: %s\n", backendVersion)
 				min := version.MinServer()
 				if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(min) {

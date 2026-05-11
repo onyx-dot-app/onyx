@@ -60,7 +60,7 @@ func TestExitError_Unwrap(t *testing.T) {
 func TestForHTTPStatus(t *testing.T) {
 	tests := []struct {
 		status int
-		want   int
+		want   Code
 	}{
 		{200, Success},
 		{400, BadRequest},
@@ -73,6 +73,7 @@ func TestForHTTPStatus(t *testing.T) {
 		{502, ServerError},
 		{503, ServerError},
 		{504, Timeout},
+		{418, General}, // unmapped status code hits default branch
 	}
 	for _, tt := range tests {
 		got := ForHTTPStatus(tt.status)

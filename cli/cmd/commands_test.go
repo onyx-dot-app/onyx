@@ -31,7 +31,7 @@ func execCmd(cmd *cobra.Command, args ...string) error {
 	return cmd.Execute()
 }
 
-func assertExitCode(t *testing.T, err error, wantCode int) {
+func assertExitCode(t *testing.T, err error, wantCode exitcodes.Code) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("expected error with exit code %d, got nil", wantCode)
@@ -51,7 +51,7 @@ func TestAgentsCmd_ExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string
 		status   int
-		wantCode int
+		wantCode exitcodes.Code
 	}{
 		{"401_auth_failure", 401, exitcodes.AuthFailure},
 		{"403_auth_failure", 403, exitcodes.AuthFailure},
@@ -121,7 +121,7 @@ func TestValidateConfigCmd_ExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string
 		status   int
-		wantCode int
+		wantCode exitcodes.Code
 	}{
 		{"401_auth_failure", 401, exitcodes.AuthFailure},
 		{"429_rate_limited", 429, exitcodes.RateLimited},
@@ -182,7 +182,7 @@ func TestAskCmd_ExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string
 		status   int
-		wantCode int
+		wantCode exitcodes.Code
 	}{
 		{"401_auth_failure", 401, exitcodes.AuthFailure},
 		{"429_rate_limited", 429, exitcodes.RateLimited},
@@ -239,11 +239,21 @@ func TestAskCmd_Success(t *testing.T) {
 	defer srv.Close()
 	testutil.IsolateConfig(t, srv.URL)
 
-	ios, _, _ := testutil.TestIOStreams()
+	ios, out, _ := testutil.TestIOStreams()
 	ios.IsStdinTTY = true
 	cmd := newAskCmd(ios)
 	err := execCmd(cmd, "--json", "test question")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	output := out.String()
+	if !strings.Contains(output, "Hello world") {
+		t.Errorf("expected output to contain message_delta content 'Hello world', got: %s", output)
+	}
+	if !strings.Contains(output, `"type":"message_delta"`) {
+		t.Errorf("expected output to contain message_delta event type, got: %s", output)
+	}
+	if !strings.Contains(output, `"type":"stop"`) {
+		t.Errorf("expected output to contain stop event, got: %s", output)
 	}
 }

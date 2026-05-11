@@ -56,9 +56,13 @@ func TestWriter_OverLimit(t *testing.T) {
 	if w.tmpFile == nil {
 		t.Fatal("temp file should have been created")
 	}
+	tmpName := w.tmpFile.Name()
+	t.Cleanup(func() {
+		_ = w.tmpFile.Close()
+		_ = os.Remove(tmpName)
+	})
 	_ = w.tmpFile.Close()
-	data, _ := os.ReadFile(w.tmpFile.Name())
-	_ = os.Remove(w.tmpFile.Name())
+	data, _ := os.ReadFile(tmpName)
 	if string(data) != "hello world" {
 		t.Fatalf("temp file should contain full content, got %q", string(data))
 	}
@@ -87,9 +91,13 @@ func TestWriter_MultipleChunks(t *testing.T) {
 	if w.tmpFile == nil {
 		t.Fatal("temp file should have been created")
 	}
+	tmpName := w.tmpFile.Name()
+	t.Cleanup(func() {
+		_ = w.tmpFile.Close()
+		_ = os.Remove(tmpName)
+	})
 	_ = w.tmpFile.Close()
-	data, _ := os.ReadFile(w.tmpFile.Name())
-	_ = os.Remove(w.tmpFile.Name())
+	data, _ := os.ReadFile(tmpName)
 	if string(data) != "hello world!" {
 		t.Fatalf("temp file should contain full content, got %q", string(data))
 	}

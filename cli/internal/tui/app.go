@@ -18,7 +18,7 @@ import (
 // Model is the root Bubble Tea model.
 type Model struct {
 	config config.OnyxCliConfig
-	client *api.Client
+	client api.ClientAPI
 
 	viewport *viewport
 	input    inputModel
@@ -48,8 +48,7 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model.
-func NewModel(cfg config.OnyxCliConfig) Model {
-	client := api.NewClient(cfg)
+func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 	parentID := -1
 
 	return Model{

@@ -23,7 +23,7 @@ pip install onyx-cli
 
 ### 3. Check if configured
 
-If a human has already run `onyx-cli configure`, the CLI is ready — no additional setup needed. The config file at `~/.config/onyx-cli/config.json` is read automatically.
+If a human has already run `onyx-cli configure`, the CLI is ready — no additional setup needed. The config file at `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set) is read automatically.
 
 Environment variables override the config file and can be used as an alternative when no config file exists:
 
@@ -37,6 +37,7 @@ export ONYX_API_KEY="your-api-key"
 | `ONYX_SERVER_URL` | No       | Onyx server base URL (default: `https://cloud.onyx.app`) |
 | `ONYX_API_KEY`    | Yes      | API key for authentication (unless config file exists)   |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
+| `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 
 If neither a config file nor environment variables are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
 - Run `onyx-cli configure` interactively, or
@@ -74,7 +75,7 @@ onyx-cli ask --json "List all active API integrations"
 | Flag           | Type | Description                                                  |
 | -------------- | ---- | ------------------------------------------------------------ |
 | `--agent-id`   | int  | Agent ID to use (overrides default)                          |
-| `--json`       | bool | Output NDJSON stream events instead of plain text            |
+| `--json`       | bool | Output NDJSON stream events instead of plain text (bypasses truncation) |
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
 | `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY) |

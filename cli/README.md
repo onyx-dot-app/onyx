@@ -42,7 +42,12 @@ Environment variables override config file values:
 
 ```shell
 onyx-cli
+onyx-cli chat --no-stream-markdown
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--no-stream-markdown` | Disable progressive markdown rendering during streaming |
 
 ### One-shot question
 
@@ -154,7 +159,15 @@ Install the bundled SKILL.md so AI coding agents can discover the CLI:
 ```shell
 onyx-cli install-skill
 onyx-cli install-skill --global
+onyx-cli install-skill --copy
+onyx-cli install-skill --agent claude-code
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--global`, `-g` | Install to home directory instead of project |
+| `--copy` | Copy files instead of symlinking |
+| `--agent`, `-a` | Target specific agents (e.g. `claude-code`; can be repeated) |
 
 ## Slash Commands (in TUI)
 

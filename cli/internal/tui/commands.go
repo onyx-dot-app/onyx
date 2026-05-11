@@ -68,7 +68,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/experiments":
-		m.viewport.addInfo(m.experimentsText())
+		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
 		return m, nil
 
 	case "/quit":
@@ -196,7 +196,7 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 }
 
 // loadAgentsCmd returns a tea.Cmd that loads agents from the API.
-func loadAgentsCmd(client *api.Client) tea.Cmd {
+func loadAgentsCmd(client api.ClientAPI) tea.Cmd {
 	return func() tea.Msg {
 		agents, err := client.ListAgents(context.Background())
 		return InitDoneMsg{Agents: agents, Err: err}

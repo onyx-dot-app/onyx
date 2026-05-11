@@ -2,6 +2,7 @@ package cmd
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/onboarding"
 	"github.com/onyx-dot-app/onyx/cli/internal/starprompt"
@@ -40,7 +41,7 @@ an interactive setup wizard will guide you through configuration.`,
 
 			starprompt.MaybePrompt()
 
-			m := tui.NewModel(cfg)
+			m := tui.NewModel(cfg, api.NewClient(cfg))
 			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err

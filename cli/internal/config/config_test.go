@@ -11,9 +11,6 @@ func clearEnvVars(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{EnvServerURL, EnvAPIKey, EnvAgentID, EnvStreamMarkdown} {
 		t.Setenv(key, "")
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 

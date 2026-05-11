@@ -56,9 +56,8 @@ func newInputModel() inputModel {
 }
 
 func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return m.handleKey(msg)
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		return m.handleKey(keyMsg)
 	}
 
 	var cmd tea.Cmd
