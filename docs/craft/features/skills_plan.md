@@ -87,7 +87,7 @@ Where does each piece live, what depends on what, and how does the universal/con
 │   __init__.py     public surface re-exports                         │
 │                                                                     │
 │   DB:  backend/onyx/db/skill.py                                     │
-│        Tables: skill, skill__user_group, skill__user                │
+│        Tables: skill, skill__user_group                             │
 │                                                                     │
 │   API: backend/onyx/server/features/skills/api.py                   │
 │        /api/admin/skills   (admin CRUD + grants)                    │
@@ -186,9 +186,6 @@ class Skill(Base):
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup", secondary="skill__user_group", viewonly=True,
     )
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary="skill__user", viewonly=True,
-    )
 
     __table_args__ = (
         Index("ux_skill_slug",            "slug", unique=True),
@@ -202,14 +199,6 @@ class Skill__UserGroup(Base):
         ForeignKey("skill.id",     ondelete="CASCADE"), primary_key=True)
     user_group_id: Mapped[int]  = mapped_column(Integer,
         ForeignKey("user_group.id", ondelete="CASCADE"), primary_key=True)
-
-
-class Skill__User(Base):
-    __tablename__ = "skill__user"
-    skill_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"), primary_key=True)
-    user_id:  Mapped[UUID] = mapped_column(PGUUID(as_uuid=True),
-        ForeignKey("user.id",  ondelete="CASCADE"), primary_key=True)
 ```
 
 ```python
@@ -238,23 +227,22 @@ Slug rules:
 - **Slug mutability is safe under snapshot fidelity.** Existing sessions reference the old slug via their snapshot; new sessions get the new slug. No data migration on rename.
 
 ### Todos
-- [ ] Add `Skill`, `Skill__UserGroup`, `Skill__User` to `backend/onyx/db/models.py`.
+- [ ] Add `Skill`, `Skill__UserGroup` to `backend/onyx/db/models.py`.
 - [ ] Add `SKILL_BUNDLE` and `SKILL_ICON` to `FileOrigin` in `backend/onyx/configs/constants.py:373`.
 - [ ] Create Alembic migration `backend/alembic/versions/<hash>_skills.py`:
   - [ ] `CREATE TABLE skill` with all columns + indexes.
   - [ ] `CREATE TABLE skill__user_group` with FKs.
-  - [ ] `CREATE TABLE skill__user` with FKs.
   - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'` and `'skill_icon'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
-  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant OR direct-user-grant (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`).
+  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch).
   - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None`.
   - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — no access filter.
   - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter.
   - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, icon_file_id, is_public, owner_user_id, db) -> Skill`.
   - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, new_icon_file_id, db) -> Skill` (returns old_bundle_file_id + old_icon_file_id so caller can delete blobs after commit).
   - [ ] `patch_skill(skill_id, slug=None, name=None, description=None, is_public=None, enabled=None, db) -> Skill` (partial update).
-  - [ ] `replace_skill_grants(skill_id, group_ids, user_ids, db) -> None` (atomic: delete + insert in one transaction).
+  - [ ] `replace_skill_grants(skill_id, group_ids, db) -> None` (atomic: delete + insert in one transaction).
   - [ ] `delete_skill(skill_id, db) -> tuple[str, str | None]` — soft-delete; returns `(bundle_file_id, icon_file_id)` for blob deletion.
 
 ---
@@ -540,10 +528,10 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 | Method | Path | Body / Params | Purpose |
 |---|---|---|---|
 | `GET` | `/api/admin/skills` | — | List all skills: `{builtin: [...], custom: [...]}` |
-| `POST` | `/api/admin/skills/custom` | multipart: bundle, slug, name, description, is_public, group_ids?, user_ids? | Create custom skill atomically (bundle + metadata + grants) |
+| `POST` | `/api/admin/skills/custom` | multipart: bundle, slug, name, description, is_public, group_ids? | Create custom skill atomically (bundle + metadata + grants) |
 | `PATCH` | `/api/admin/skills/custom/{id}` | JSON: `{slug?, name?, description?, is_public?, enabled?}` | Partial update; doesn't touch bundle or grants |
 | `PUT` | `/api/admin/skills/custom/{id}/bundle` | multipart: bundle | Replace bundle bytes; re-extract icon |
-| `PUT` | `/api/admin/skills/custom/{id}/grants` | JSON: `{group_ids, user_ids}` | Atomic grant replacement |
+| `PUT` | `/api/admin/skills/custom/{id}/grants` | JSON: `{group_ids}` | Atomic grant replacement |
 | `DELETE` | `/api/admin/skills/custom/{id}` | — | Soft-delete (`deleted=true`) |
 | `GET` | `/api/admin/skills/custom/{id}/icon` | — | Stream custom icon image |
 | `GET` | `/api/admin/skills/builtin/{slug}/icon` | — | Stream built-in icon from disk |
@@ -589,7 +577,6 @@ class CustomSkillAdmin(BaseModel):
     bundle_sha256: str
     bundle_size_bytes: int
     granted_group_ids: list[int]
-    granted_user_ids: list[UUID]
     owner_user_id: UUID | None
     created_at: datetime
     updated_at: datetime
@@ -616,7 +603,7 @@ class SkillSummary(BaseModel):
 6. If bundle contains an icon: extract it; `file_store.save_file(icon_bytes, origin=SKILL_ICON, ...)` → `icon_file_id`.
 7. `file_store.save_file(bundle_bytes, origin=SKILL_BUNDLE, ...)` → `bundle_file_id`.
 8. `create_skill(...)` inserts row.
-9. `replace_skill_grants(skill_id, group_ids, user_ids, db)` (no-op if `is_public=True` or both lists empty).
+9. `replace_skill_grants(skill_id, group_ids, db)` (no-op if `is_public=True` or list is empty).
 10. Return `CustomSkillAdmin`.
 
 If any step fails after files are saved to the FileStore, the route handler must delete those orphaned blobs before re-raising. (The orphan sweep in §16 is a safety net, not the primary cleanup path.)
@@ -999,8 +986,8 @@ Triggered by "Upload skill" button at the top.
 | Slug | yes | Regex-validated client-side. Pre-filled from frontmatter `name` if present. |
 | Name | yes | Pre-filled from frontmatter if present. Editable. |
 | Description | yes | Pre-filled from frontmatter if present. Editable. |
-| Visibility | yes | Radio: Private / Org-wide / Specific groups & users. No default. |
-| Groups + users picker | conditional | Multi-select pickers, only shown if "Specific" selected. |
+| Visibility | yes | Radio: Private / Org-wide / Specific groups. No default. |
+| Groups picker | conditional | Multi-select group picker, only shown if "Specific" selected. (Individual-user grants are not in V1 — admins can create a single-member group if they need to share with one teammate.) |
 
 Submit → `POST /api/admin/skills/custom` (multipart). Success: modal closes, skill appears in list. Validation failure: inline error under offending field with reason from `OnyxError`.
 
@@ -1088,7 +1075,7 @@ The skills system changes both the api_server (new endpoints, new materializer, 
 4. Wait one release cycle for confidence.
 5. Remove the flag and the legacy `ln -sf` code.
 
-**Migration**: single Alembic revision creating `skill`, `skill__user_group`, `skill__user`, and the two new `FileOrigin` enum values. Run with `alembic -n schema_private upgrade head` for EE.
+**Migration**: single Alembic revision creating `skill`, `skill__user_group`, and the two new `FileOrigin` enum values. Run with `alembic -n schema_private upgrade head` for EE.
 
 ### Considerations / Tradeoffs / Decisions
 - **Why feature-flag rather than coordinated deploy.** Coordinated deploys are fragile (rolling restarts cross boundaries). The flag lets us roll images at our convenience and flip atomically.
@@ -1223,6 +1210,7 @@ Items knowingly punted; each is reversible without breaking V1.
 | Deferred | When | How to add later |
 |---|---|---|
 | Shared/bundled `SkillRequirement` modules | When 5+ skills depend on the same configuration surface | Today each skill declares its requirements independently — fine when most skills need different things, but if e.g. five skills all need a configured Gemini provider, factor a shared `requirements.py` module that exports `IMAGE_GEN_PROVIDER`, `LLM_PROVIDER`, etc. The data model stays the same; only the registration code dedupes. |
+| Per-user skill grants (`Skill__User` table) | When customers report friction with "share with one teammate" via a single-member group workaround | Add a `skill__user (skill_id, user_id)` join table, an `Individual users` picker in the admin grants editor, an OR branch in `list_skills_for_user`'s access query, and `user_ids` to the POST/PUT bodies + `granted_user_ids` to `CustomSkillAdmin`. Migration is additive; no V1 schema disruption. |
 | Per-org built-in toggle (`org_enabled`) | When first customer asks | Add `builtin_skill_org_state (slug, enabled)` table in private schema. Admin UI gains a toggle on built-in rows. Materializer filters by it. |
 | Per-session user opt-out / pinning | When skill counts grow | Add `build_session__skill_opt_out (session_id, slug)` table. Materializer subtracts these at session start. Panel gains toggles. |
 | AGENTS.md threshold + discovery fallback | When skill counts hit ~50+ | Restore the `BUILD_SKILLS_INLINE_LIMIT` mechanism from `skills.md`. |
@@ -1263,14 +1251,13 @@ from .render        import render_template_placeholders
 **Tables added (private schema):**
 - `skill`
 - `skill__user_group`
-- `skill__user`
 
 **FileOrigin values added:**
 - `SKILL_BUNDLE`
 - `SKILL_ICON`
 
 **Files modified (key sites):**
-- `backend/onyx/db/models.py` — three new tables.
+- `backend/onyx/db/models.py` — two new tables.
 - `backend/onyx/configs/constants.py:373` — `FileOrigin` enum.
 - `backend/onyx/main.py` — registration call.
 - `backend/onyx/server/features/build/sandbox/manager/directory_manager.py:325` — drop `setup_skills`, drop `_skills_path`.
