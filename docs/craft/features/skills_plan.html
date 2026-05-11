@@ -1342,6 +1342,7 @@
         <li><a href="#s17">Testing</a></li>
         <li><a href="#s18">Security model</a></li>
         <li><a href="#s19">Out-of-scope / deferred</a></li>
+        <li><a href="#s20">Additional domain reviews</a></li>
       </ol>
     </div>
 
@@ -5057,6 +5058,77 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
         </tr>
       </tbody>
     </table>
+
+    <!-- =================================================================== -->
+    <h2 id="s20">
+      20. Additional domain reviews (acknowledged, not actioned in V1)
+    </h2>
+
+    <p>
+      These lenses were considered during planning and intentionally not written
+      up in detail. Each could surface real issues; none rise to "must address
+      before V1." Listed so they're not forgotten — and so a future reviewer can
+      challenge the deferral if their context differs.
+    </p>
+
+    <ul>
+      <li>
+        <strong>Reliability &amp; failure modes.</strong>
+        Partial-materialization (one bundle's FileStore read fails
+        mid-session-start), concurrent admin edits without optimistic locking,
+        bundle-replace racing session start, built-in
+        <code>is_available</code> raising vs returning False. Spec covers happy
+        paths well; the intermediate states are left to implementation-time
+        judgement.
+      </li>
+      <li>
+        <strong>Observability.</strong> Logs, metrics, and traces around
+        materialization are not specified. Materialization runs on every session
+        start, so the right signals
+        (<code>skill_materialization_duration_seconds</code>, validation failure
+        counters, etc.) will matter in prod. Plan to add them in the
+        implementation PR rather than the design.
+      </li>
+      <li>
+        <strong>Performance at scale.</strong> Per-session FileStore reads grow
+        with custom-skill count; snapshots grow proportionally. Probably fine
+        for V1 expected scale (≤20 customs per tenant). Worth a back-of-envelope
+        check during load testing rather than a design constraint.
+      </li>
+      <li>
+        <strong>Accessibility.</strong> Admin UI mockups inherit Onyx tokens but
+        haven't been audited for WCAG AA contrast, modal focus management,
+        screen-reader semantics, or keyboard navigation through the visibility
+        radio + chip pickers. Should be a checklist item during frontend
+        implementation, not a design-time concern.
+      </li>
+      <li>
+        <strong>DX for built-in authors.</strong> Adding a built-in is "drop a
+        directory + add a <code>register()</code> call + redeploy." Clean, but
+        the local iteration loop (rendering <code>SKILL.md.template</code> with
+        a fake render context, smoke-testing scripts) is undocumented. Address
+        in a contributor doc when the second built-in lands.
+      </li>
+      <li>
+        <strong>Compliance / data handling.</strong> Retention of soft-deleted
+        skill rows is indefinite (only blobs are swept). GDPR user-deletion sets
+        <code>owner_user_id</code> to NULL but keeps the skill (org-owned,
+        intentional). SOC 2 audit trail for upload/replace/delete events should
+        land in Onyx's existing audit log infra rather than a parallel store —
+        confirm during implementation.
+      </li>
+      <li>
+        <strong>Cross-feature naming hygiene.</strong> Skills are not Tools (the
+        persona-attached <code>Tool</code> model). Worth one doc-comment in the
+        universal layer pointing this out so future contributors don't conflate
+        them.
+      </li>
+    </ul>
+
+    <p>
+      If any of these turn out to actually block V1, lift them into a numbered
+      section. Until then, they're tracked here for posterity.
+    </p>
 
     <hr />
 
