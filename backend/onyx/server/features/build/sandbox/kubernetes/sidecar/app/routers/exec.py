@@ -60,13 +60,21 @@ async def run_exec(req: ExecRequest) -> ExecResponse:
             ) from exc
 
     logger.info("Exec: argv=%r cwd=%r timeout=%ds", req.argv, req.cwd, timeout)
-    proc = await asyncio.create_subprocess_exec(
-        *req.argv,
-        stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=req.cwd,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *req.argv,
+            stdin=asyncio.subprocess.PIPE if stdin_bytes is not None else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=req.cwd,
+        )
+    except (FileNotFoundError, NotADirectoryError, PermissionError) as exc:
+        # argv[0] missing / not executable, or cwd missing / not a directory.
+        # Surface as 400 so callers see a useful error instead of an opaque 500.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot start subprocess: {exc}",
+        ) from exc
 
     timed_out = False
     try:

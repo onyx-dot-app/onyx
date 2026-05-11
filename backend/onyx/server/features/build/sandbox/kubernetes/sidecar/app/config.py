@@ -38,10 +38,16 @@ class Settings(BaseSettings):
         """
         if self.auth_token:
             return self.auth_token
-        if self.auth_token_file and self.auth_token_file.exists():
-            token = self.auth_token_file.read_text().strip()
-            if token:
-                return token
+        if self.auth_token_file:
+            # No exists() guard: the file can vanish between check and read
+            # (secret rotation, projected-volume remount). Catch OSError and
+            # fall through so misconfiguration surfaces as RuntimeError, not 500.
+            try:
+                token = self.auth_token_file.read_text().strip()
+                if token:
+                    return token
+            except OSError:
+                pass
         raise RuntimeError(
             "Sidecar auth token is not configured. "
             "Set SIDECAR_AUTH_TOKEN or mount a token file at SIDECAR_AUTH_TOKEN_FILE.",

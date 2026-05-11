@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.config import get_settings
 from app.idle import IdleTracker, cancel_idle_task, idle_middleware_factory
@@ -57,10 +57,6 @@ def create_app() -> FastAPI:
 
     # Idle-tracking middleware must wrap all routes so authenticated activity bumps the timer.
     # The IdleTracker is constructed in lifespan, so we look it up off app.state at request time.
-    from collections.abc import Awaitable, Callable
-
-    from fastapi import Request, Response
-
     @app.middleware("http")
     async def _idle_middleware(
         request: Request,
