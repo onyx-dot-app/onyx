@@ -409,7 +409,7 @@ jobs:
 
       - name: Build CLI binary (for CLI integration tests)
         if: contains(matrix.test-dir.path, 'tests/cli')
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
         with:
           go-version: "1.26"
           cache-dependency-path: "cli/go.sum"
