@@ -21,12 +21,24 @@ class JSMClient:
 
     def get_service_desk_id(self, project_key: str) -> str | None:
         url = f"{self.api_url}/servicedesk"
-        response = self.session.get(url)
-        response.raise_for_status()
-        service_desks = response.json().get("values", [])
-        for sd in service_desks:
-            if sd.get("projectKey") == project_key:
-                return str(sd.get("id"))
+        # Iterate through pages to find the service desk
+        start = 0
+        limit = 50
+        while True:
+            params = {"start": start, "limit": limit}
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            service_desks = data.get("values", [])
+            
+            for sd in service_desks:
+                if sd.get("projectKey") == project_key:
+                    return str(sd.get("id"))
+            
+            if data.get("isLastPage", True):
+                break
+            start += limit
+            
         return None
 
     def get_requests(self, service_desk_id: str | None = None, start: int = 0, limit: int = 50) -> dict[str, Any]:
