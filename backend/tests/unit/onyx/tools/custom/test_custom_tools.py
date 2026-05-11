@@ -13,6 +13,10 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.tools.tool_implementations.custom.custom_tool import validate_openapi_schema
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
+from onyx.tools.utils import sanitize_tool_name
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -395,6 +399,50 @@ class TestCustomTool(unittest.TestCase):
             final_result,
             {"id": "789", "name": "Final Assistant"},
             "Final result does not match expected output",
+        )
+
+
+class TestSanitizeToolName(unittest.TestCase):
+    """Tool names sent to Bedrock as toolUse.name must match [a-zA-Z0-9_-]+.
+    User-supplied Tool.name and OpenAPI operationId can contain spaces or dots,
+    so anything outside that set must be replaced with an underscore before the
+    name reaches the LLM (in tool definitions or in message-history replay)."""
+
+    def test_replaces_dots_and_spaces(self) -> None:
+        self.assertEqual(
+            sanitize_tool_name("ServiceNow.GetIncident"),
+            "ServiceNow_GetIncident",
+        )
+        self.assertEqual(
+            sanitize_tool_name("ServiceNow API"),
+            "ServiceNow_API",
+        )
+
+    def test_preserves_valid_characters(self) -> None:
+        self.assertEqual(
+            sanitize_tool_name("get_assistant-v2"),
+            "get_assistant-v2",
+        )
+
+    def test_operation_id_with_invalid_chars_is_sanitized(self) -> None:
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/incidents": {
+                    "get": {
+                        "summary": "get incidents",
+                        "operationId": "ServiceNow.list incidents",
+                    }
+                }
+            },
+        }
+        specs = openapi_to_method_specs(schema)
+        self.assertEqual(specs[0].name, "ServiceNow_list_incidents")
+        self.assertEqual(
+            specs[0].to_tool_definition()["function"]["name"],
+            "ServiceNow_list_incidents",
         )
 
 

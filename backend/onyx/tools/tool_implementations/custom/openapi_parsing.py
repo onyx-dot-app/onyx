@@ -3,6 +3,8 @@ from typing import cast
 
 from pydantic import BaseModel
 
+from onyx.tools.utils import sanitize_tool_name
+
 REQUEST_BODY = "requestBody"
 
 
@@ -141,7 +143,7 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
 
             method_specs.append(
                 MethodSpec(
-                    name=name,
+                    name=sanitize_tool_name(name),
                     summary=summary,
                     path=path_spec.path,
                     method=method_name,

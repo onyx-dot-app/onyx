@@ -1,4 +1,5 @@
 import json
+import re
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,17 @@ from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.interface import Tool
+
+_INVALID_TOOL_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def sanitize_tool_name(name: str) -> str:
+    # Bedrock rejects toolUse.name values that don't match [a-zA-Z0-9_-]+, and
+    # OpenAI imposes the same constraint on function names. User-supplied
+    # Tool.name and OpenAPI operationId can contain spaces, dots, etc. — replace
+    # anything outside the allowed set with an underscore so the value is safe
+    # to send in tool definitions and in message-history toolUse blocks.
+    return _INVALID_TOOL_NAME_CHARS.sub("_", name)
 
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
