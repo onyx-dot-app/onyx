@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import {
+  SvgCheck,
   SvgLink,
   SvgOrganization,
   SvgShare,
@@ -15,9 +16,8 @@ import InputChipField from "@/refresh-components/inputs/InputChipField";
 import Tabs from "@/refresh-components/Tabs";
 import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import { InputHorizontal } from "@opal/layouts";
+import { ContentAction, InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";
@@ -257,24 +257,27 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                       const isCurrentUser = currentUser?.id === user.id;
 
                       return (
-                        <LineItem
+                        <ContentAction
                           key={`user-${user.id}`}
+                          sizePreset="main-ui"
+                          variant="section"
                           icon={SvgUser}
+                          title={user.email}
                           description={isCurrentUser ? "You" : undefined}
+                          padding="sm"
+                          center
                           rightChildren={
                             isOwner || (isCurrentUser && !agentId) ? (
                               // Owner will always have the agent "shared" with it.
-                              // Therefore, we never render any `IconButton SvgX` to remove it.
+                              // Therefore, we never render any SvgX button to remove it.
                               //
                               // Note:
                               // This user, during creation, is assumed to be the "owner".
-                              // That is why the `(isCurrentUser && !agent)` condition exists.
-                              <Text secondaryBody text03>
-                                Owner
-                              </Text>
+                              // That is why the `(isCurrentUser && !agentId)` condition exists.
+                              <SvgCheck size={16} className="text-text-03" />
                             ) : (
                               // For all other cases (including for "self-unsharing"),
-                              // we render an `IconButton SvgX` to remove a person from the list.
+                              // we render a Button with SvgX to remove a person from the list.
                               <Button
                                 prominence="tertiary"
                                 size="sm"
@@ -283,17 +286,20 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                               />
                             )
                           }
-                        >
-                          {user.email}
-                        </LineItem>
+                        />
                       );
                     })}
 
                     {/* Shared Groups */}
                     {displayedGroups.map((group) => (
-                      <LineItem
+                      <ContentAction
                         key={`group-${group.id}`}
+                        sizePreset="main-ui"
+                        variant="section"
                         icon={SvgUsers}
+                        title={group.name}
+                        padding="sm"
+                        center
                         rightChildren={
                           <Button
                             prominence="tertiary"
@@ -302,9 +308,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             onClick={() => handleRemoveGroup(group.id)}
                           />
                         }
-                      >
-                        {group.name}
-                      </LineItem>
+                      />
                     ))}
                   </Section>
                 )}
