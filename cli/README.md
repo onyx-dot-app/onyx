@@ -114,7 +114,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 
 ### Configuration
 
-Agents should use environment variables — no config file or interactive setup needed:
+If a human has already run `onyx-cli configure`, the CLI works out of the box — no additional setup needed. Environment variables can override the config file or serve as an alternative when no config file exists:
 
 ```shell
 export ONYX_SERVER_URL="https://your-onyx-server.com"

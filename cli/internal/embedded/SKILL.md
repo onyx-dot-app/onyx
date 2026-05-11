@@ -21,7 +21,11 @@ which onyx-cli
 pip install onyx-cli
 ```
 
-### 3. Configure (environment variables)
+### 3. Check if configured
+
+If a human has already run `onyx-cli configure`, the CLI is ready — no additional setup needed. The config file at `~/.config/onyx-cli/config.json` is read automatically.
+
+Environment variables override the config file and can be used as an alternative when no config file exists:
 
 ```bash
 export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: https://cloud.onyx.app
@@ -31,12 +35,12 @@ export ONYX_API_KEY="your-api-key"
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
 | `ONYX_SERVER_URL` | No       | Onyx server base URL (default: `https://cloud.onyx.app`) |
-| `ONYX_API_KEY`    | Yes      | API key for authentication                               |
+| `ONYX_API_KEY`    | Yes      | API key for authentication (unless config file exists)   |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 
-If neither environment variables nor a config file are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
-- Set `ONYX_SERVER_URL` and `ONYX_API_KEY` environment variables, or
-- Run `onyx-cli configure` interactively
+If neither a config file nor environment variables are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
+- Run `onyx-cli configure` interactively, or
+- Set `ONYX_SERVER_URL` and `ONYX_API_KEY` environment variables
 
 ### 4. Verify configuration
 

@@ -23,19 +23,17 @@ is valid. Also reports the server version and warns if it is below the
 minimum required.`,
 		Example: `  onyx-cli validate-config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Check config file
-			if !config.ConfigExists() {
-				return exitcodes.Newf(exitcodes.NotConfigured, "config file not found at %s\n  Run: onyx-cli configure", config.ConfigFilePath())
-			}
-
 			cfg := config.Load()
 
-			// Check API key
 			if !cfg.IsConfigured() {
-				return exitcodes.New(exitcodes.NotConfigured, "API key is missing\n  Run: onyx-cli configure")
+				return exitcodes.New(exitcodes.NotConfigured, "API key is missing\n  Set ONYX_API_KEY or run: onyx-cli configure")
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Config:  %s\n", config.ConfigFilePath())
+			if config.ConfigExists() {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Config:  %s\n", config.ConfigFilePath())
+			} else {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Config:  environment variables")
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server:  %s\n", cfg.ServerURL)
 
 			// Test connection
