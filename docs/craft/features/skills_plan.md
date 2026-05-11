@@ -1350,6 +1350,22 @@ Items knowingly punted; each is reversible without breaking V1.
 
 ---
 
+## 20. Additional domain reviews (acknowledged, not actioned in V1)
+
+These lenses were considered during planning and intentionally not written up in detail. Each could surface real issues; none rise to "must address before V1." Listed so they're not forgotten — and so a future reviewer can challenge the deferral if their context differs.
+
+- **Reliability & failure modes.** Partial-materialization (one bundle's FileStore read fails mid-session-start), concurrent admin edits without optimistic locking, bundle-replace racing session start, built-in `is_available` raising vs returning False. Spec covers happy paths well; the intermediate states are left to implementation-time judgement.
+- **Observability.** Logs, metrics, and traces around materialization are not specified. Materialization runs on every session start, so the right signals (`skill_materialization_duration_seconds`, validation failure counters, etc.) will matter in prod. Plan to add them in the implementation PR rather than the design.
+- **Performance at scale.** Per-session FileStore reads grow with custom-skill count; snapshots grow proportionally. Probably fine for V1 expected scale (≤20 customs per tenant). Worth a back-of-envelope check during load testing rather than a design constraint.
+- **Accessibility.** Admin UI mockups inherit Onyx tokens but haven't been audited for WCAG AA contrast, modal focus management, screen-reader semantics, or keyboard navigation through the visibility radio + chip pickers. Should be a checklist item during frontend implementation, not a design-time concern.
+- **DX for built-in authors.** Adding a built-in is "drop a directory + add a `register()` call + redeploy." Clean, but the local iteration loop (rendering `SKILL.md.template` with a fake render context, smoke-testing scripts) is undocumented. Address in a contributor doc when the second built-in lands.
+- **Compliance / data handling.** Retention of soft-deleted skill rows is indefinite (only blobs are swept). GDPR user-deletion sets `owner_user_id` to NULL but keeps the skill (org-owned, intentional). SOC 2 audit trail for upload/replace/delete events should land in Onyx's existing audit log infra rather than a parallel store — confirm during implementation.
+- **Cross-feature naming hygiene.** Skills are not Tools (the persona-attached `Tool` model). Worth one doc-comment in the universal layer pointing this out so future contributors don't conflate them.
+
+If any of these turn out to actually block V1, lift them into a numbered section. Until then, they're tracked here for posterity.
+
+---
+
 ## Quick reference
 
 **Public Python surface (`backend/onyx/skills/__init__.py`):**
