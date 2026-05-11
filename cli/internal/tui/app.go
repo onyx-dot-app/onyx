@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -144,7 +145,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSessionResumed(msg)
 
 	case ConfigTestResultMsg:
-		return handleConfigTestResult(m, msg)
+		return m.handleConfigTestResult(msg)
+
+	case spinner.TickMsg:
+		return m.handleConfigureSpinnerTick(msg)
 
 	case FileUploadedMsg:
 		return m.handleFileUploaded(msg)
@@ -222,7 +226,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.configState != nil {
-			return cancelConfigure(m)
+			return m.cancelConfigure()
 		}
 		if m.isStreaming {
 			return m.cancelStream()
@@ -234,7 +238,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyCtrlD:
-		// If streaming, cancel first; require a fresh Ctrl+D pair to quit
+		if m.configState != nil {
+			return m.cancelConfigure()
+		}
 		if m.isStreaming {
 			return m.cancelStream()
 		}
@@ -255,7 +261,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.configState != nil {
 			text := strings.TrimSpace(m.input.textInput.Value())
 			m.input.textInput.SetValue("")
-			return handleConfigureSubmit(m, text)
+			return m.handleConfigureSubmit(text)
 		}
 		if m.viewport.pickerActive {
 			if len(m.viewport.pickerItems) > 0 {

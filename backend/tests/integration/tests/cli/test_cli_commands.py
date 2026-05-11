@@ -14,13 +14,15 @@ Test Suite:
 6.  test_ask_quiet - Buffered output contains answer
 7.  test_ask_stdin_pipe - Piped context is used in the answer
 8.  test_ask_truncation - Output truncated with temp file path
-9.  test_ask_not_configured - Missing PAT returns exit code 3
-10. test_agents_list - Seeded persona appears in table output
-11. test_agents_json - Seeded persona appears in JSON output
-12. test_agents_json_structure - JSON has expected fields
-13. test_help_non_tty - No subcommand prints help, exits 0
-14. test_version_flag - Prints client and server version
-15. test_experiments - Lists feature flags
+9.  test_ask_agent_id - Routes question to a specific persona
+10. test_ask_no_truncation - --max-output 0 disables truncation
+11. test_ask_not_configured - Missing PAT returns exit code 3
+12. test_configure_non_tty - Non-TTY returns exit code 2
+13. test_agents_list - Seeded persona appears in table output
+14. test_agents_json - Seeded persona appears in JSON output
+15. test_help_non_tty - No subcommand prints help, exits 0
+16. test_version_flag - Prints client and server version
+17. test_experiments - Lists feature flags
 """
 
 import json
@@ -229,6 +231,38 @@ def test_ask_truncation(
     assert "Full response:" in result.stdout
 
 
+def test_ask_agent_id(
+    cli_binary: Path,
+    pat_token: str,
+    seeded_persona: DATestPersona,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    """--agent-id routes the question to a specific persona."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--agent-id", str(seeded_persona.id), "Say hi"],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert len(result.stdout.strip()) > 0
+
+
+def test_ask_no_truncation(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """--max-output 0 disables truncation entirely."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--max-output", "0", "Write a paragraph about anything"],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "response truncated" not in result.stdout
+    assert len(result.stdout.strip()) > 0
+
+
 def test_ask_not_configured(
     cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
 ) -> None:
@@ -236,6 +270,19 @@ def test_ask_not_configured(
     result = run_cli(cli_binary, ["ask", "test"])
 
     assert result.returncode == 3
+
+
+# --- configure ---
+
+
+def test_configure_non_tty(
+    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+) -> None:
+    """configure without TTY returns BadRequest (exit code 2)."""
+    result = run_cli(cli_binary, ["configure"])
+
+    assert result.returncode == 2
+    assert "interactive terminal" in result.stderr.lower()
 
 
 # --- agents ---

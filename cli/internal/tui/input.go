@@ -173,6 +173,26 @@ func (m *inputModel) clearFiles() {
 	m.attachedFiles = nil
 }
 
+func (m *inputModel) setForConfigure(prompt string, placeholder string, echo textinput.EchoMode) {
+	m.customPrompt = prompt
+	m.suppressMenu = true
+	m.textInput.Placeholder = placeholder
+	m.textInput.EchoMode = echo
+	m.textInput.SetValue("")
+}
+
+func (m *inputModel) setCustomPrompt(prompt string) {
+	m.customPrompt = prompt
+}
+
+func (m *inputModel) resetForChat() {
+	m.customPrompt = ""
+	m.suppressMenu = false
+	m.textInput.EchoMode = textinput.EchoNormal
+	m.textInput.Placeholder = "Send a message…"
+	m.textInput.SetValue("")
+}
+
 // submitMsg is sent when user submits text.
 type submitMsg struct {
 	text string
