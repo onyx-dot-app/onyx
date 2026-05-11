@@ -1,3 +1,14 @@
+"""Onyx Search UI backend (/api/search/send-search-message et al.).
+
+These endpoints power the "Onyx Search" UI.  They call search_pipeline()
+directly with optional LLM query expansion and document selection.  Supports
+streaming (SSE) and search history.
+
+For the Search API that runs the full SearchTool.run() pipeline (the same
+multi-stage retrieval used by chat mode), see
+onyx/server/features/search/api.py (POST /api/search).
+"""
+
 from collections.abc import Generator
 
 from fastapi import APIRouter

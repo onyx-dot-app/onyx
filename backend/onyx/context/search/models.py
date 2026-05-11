@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
@@ -349,6 +350,14 @@ class SearchDocsResponse(BaseModel):
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately
     displayed_docs: list[SearchDoc] | None = None
+
+    @field_validator("displayed_docs", mode="before")
+    @classmethod
+    def normalize_empty_displayed_docs(
+        cls,
+        value: list[SearchDoc] | None,
+    ) -> list[SearchDoc] | None:
+        return value or None
 
 
 class SavedSearchDoc(SearchDoc):
