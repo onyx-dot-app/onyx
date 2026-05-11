@@ -18,6 +18,7 @@ orthogonal `license_enforcement` middleware (self-hosted only) still
 handles GATED_ACCESS, seat limits, and the billing/auth allowlist.
 """
 
+import asyncio
 import logging
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -35,6 +36,7 @@ from ee.onyx.utils.tier import get_tier
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
+from shared_configs.contextvars import get_current_tenant_id
 
 # Sorted longest-first so `/admin/enterprise-settings/scim` matches
 # before `/admin/enterprise-settings`.
@@ -79,7 +81,12 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
         if required is None:
             return await call_next(request)
 
-        if tier_at_least(get_tier(), required):
+        # `get_tier` is sync: Redis read on every request, plus a blocking
+        # CP round-trip on cache miss. Offload to a worker so the event loop
+        # is not held while serving other requests.
+        tenant_id = get_current_tenant_id()
+        current_tier = await asyncio.to_thread(get_tier, tenant_id)
+        if tier_at_least(current_tier, required):
             return await call_next(request)
 
         logger.info(
