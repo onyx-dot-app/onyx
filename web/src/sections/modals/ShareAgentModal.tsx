@@ -13,19 +13,17 @@ import {
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import Tabs from "@/refresh-components/Tabs";
-import { Card } from "@/refresh-components/cards";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups from "@/hooks/useShareableGroups";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent } from "@/lib/agents/hooks";
-import { Button, MessageCard } from "@opal/components";
+import { Button, Card, Divider, MessageCard, Text } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { useLabels } from "@/lib/hooks";
 import { AgentLabel } from "@/lib/agents/types";
@@ -204,7 +202,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
       <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
 
       <Modal.Body padding={0.5}>
-        <Card variant="borderless" padding={0.5}>
+        <Card padding="sm">
           <Tabs
             defaultValue={
               values.isPublic ? YOUR_ORGANIZATION_TAB : USERS_AND_GROUPS_TAB
@@ -264,7 +262,6 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                           title={user.email}
                           description={isCurrentUser ? "You" : undefined}
                           padding="sm"
-                          center
                           rightChildren={
                             isOwner || (isCurrentUser && !agentId) ? (
                               // Owner will always have the agent "shared" with it.
@@ -273,7 +270,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                               // Note:
                               // This user, during creation, is assumed to be the "owner".
                               // That is why the `(isCurrentUser && !agentId)` condition exists.
-                              <Text secondaryBody text03>
+                              <Text font="secondary-body" color="text-03">
                                 Owner
                               </Text>
                             ) : (
@@ -300,7 +297,6 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                         icon={SvgUsers}
                         title={group.name}
                         padding="sm"
-                        center
                         rightChildren={
                           <Button
                             prominence="tertiary"
@@ -358,7 +354,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   placeholder="Add labels..."
                   icon={SvgTag}
                 />
-                <Text secondaryBody text04>
+                <Text font="secondary-body" color="text-04">
                   Add labels and categories to help people better discover this
                   agent.
                 </Text>
