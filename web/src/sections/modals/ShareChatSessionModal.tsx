@@ -7,14 +7,12 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
-import { Interactive } from "@opal/core";
-import { ContentAction } from "@opal/layouts";
 
 import type { IconProps } from "@opal/types";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -65,30 +63,24 @@ function PrivacyOption({
   ariaLabel,
 }: PrivacyOptionProps) {
   return (
-    <Interactive.Stateful
-      state={selected ? "selected" : "empty"}
-      variant="select-heavy"
-      onClick={onClick}
-      aria-label={ariaLabel}
-    >
-      <div className="w-full rounded-08">
-        <ContentAction
-          sizePreset="main-ui"
-          variant="section"
-          icon={Icon}
-          title={title}
-          description={description}
-          padding="sm"
-          center
-          color="interactive"
-          rightChildren={
-            selected ? (
-              <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
-            ) : undefined
-          }
-        />
-      </div>
-    </Interactive.Stateful>
+    <div aria-label={ariaLabel}>
+      <LineItemButton
+        selectVariant="select-heavy"
+        state={selected ? "selected" : "empty"}
+        rounding="sm"
+        onClick={onClick}
+        sizePreset="main-ui"
+        variant="section"
+        icon={Icon}
+        title={title}
+        description={description}
+        rightChildren={
+          selected ? (
+            <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
+          ) : undefined
+        }
+      />
+    </div>
   );
 }
 
