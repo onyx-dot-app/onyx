@@ -42,9 +42,7 @@ def test_basic_search_returns_results(
 ) -> None:
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     doc_content = "search api integration test unique document"
-    doc = DocumentManager.seed_and_index(
-        cc_pair, doc_content, api_key, user_performing_action=admin_user
-    )
+    doc = DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
 
     resp = _search(doc_content, admin_user)
     assert resp.status_code == 200
@@ -72,17 +70,15 @@ def test_document_set_filtering(
     cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     shared_phrase = "docset-filter-unique-phrase"
-    doc_in = DocumentManager.seed_and_index(
+    doc_in = DocumentManager.seed_doc_with_content(
         cc_pair_in,
         f"{shared_phrase} included",
         api_key,
-        user_performing_action=admin_user,
     )
-    doc_out = DocumentManager.seed_and_index(
+    doc_out = DocumentManager.seed_doc_with_content(
         cc_pair_out,
         f"{shared_phrase} excluded",
         api_key,
-        user_performing_action=admin_user,
     )
 
     doc_set = DocumentSetManager.create(
@@ -131,8 +127,8 @@ def test_acl_enforcement(
     )
 
     doc_content = "restricted acl search document"
-    doc = DocumentManager.seed_and_index(
-        restricted_cc_pair, doc_content, api_key, user_performing_action=admin_user
+    doc = DocumentManager.seed_doc_with_content(
+        restricted_cc_pair, doc_content, api_key
     )
 
     allowed_resp = _search(doc_content, privileged_user)
@@ -155,17 +151,15 @@ def test_persona_scoped_search(
     cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     shared_phrase = "persona-scope-unique-phrase"
-    doc_in = DocumentManager.seed_and_index(
+    doc_in = DocumentManager.seed_doc_with_content(
         cc_pair_in,
         f"{shared_phrase} in scope",
         api_key,
-        user_performing_action=admin_user,
     )
-    doc_out = DocumentManager.seed_and_index(
+    doc_out = DocumentManager.seed_doc_with_content(
         cc_pair_out,
         f"{shared_phrase} out of scope",
         api_key,
-        user_performing_action=admin_user,
     )
 
     doc_set = DocumentSetManager.create(
@@ -207,4 +201,4 @@ def test_unauthenticated_returns_401(
         SEARCH_URL,
         json={"query": "test"},
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 403

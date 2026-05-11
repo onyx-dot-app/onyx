@@ -1,5 +1,3 @@
-from datetime import datetime
-from datetime import timezone
 from uuid import uuid4
 
 import requests
@@ -14,7 +12,6 @@ from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
-from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import SimpleTestDocument
@@ -165,29 +162,6 @@ class DocumentManager:
             id=document["document"]["id"],
             content=document["document"]["sections"][0]["text"],
         )
-
-    @staticmethod
-    def seed_and_index(
-        cc_pair: DATestCCPair,
-        content: str,
-        api_key: DATestAPIKey,
-        user_performing_action: DATestUser,
-        document_id: str | None = None,
-    ) -> SimpleTestDocument:
-        """Seed a document and wait for indexing to complete."""
-        before = datetime.now(timezone.utc)
-        doc = DocumentManager.seed_doc_with_content(
-            cc_pair=cc_pair,
-            content=content,
-            api_key=api_key,
-            document_id=document_id,
-        )
-        CCPairManager.wait_for_indexing_completion(
-            cc_pair=cc_pair,
-            after=before,
-            user_performing_action=user_performing_action,
-        )
-        return doc
 
     @staticmethod
     def verify(
