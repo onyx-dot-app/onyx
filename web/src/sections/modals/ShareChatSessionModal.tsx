@@ -68,7 +68,7 @@ function PrivacyOption({
       state={selected ? "filled" : "empty"}
       padding="sm"
       rounding="sm"
-      border={false}
+      border="none"
       onClick={onClick}
       aria-label={ariaLabel}
     >

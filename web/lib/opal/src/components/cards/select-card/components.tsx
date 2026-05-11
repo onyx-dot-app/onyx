@@ -3,6 +3,7 @@ import type { PaddingVariants, RoundingVariants } from "@opal/types";
 import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
+import type { BorderVariant } from "../card/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,12 +41,16 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   rounding?: RoundingVariants;
 
   /**
-   * Whether to render a border. When `true`, a 1px border is applied and
-   * changes to `border-action-link-05` in the selected state.
+   * Border style.
+   * - `"none"`: no border.
+   * - `"dashed"`: dashed border.
+   * - `"solid"`: solid border.
    *
-   * @default true
+   * In the selected state, the border color changes to `border-action-link-05`.
+   *
+   * @default "solid"
    */
-  border?: boolean;
+  border?: BorderVariant;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -82,7 +87,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
 function SelectCard({
   padding: paddingProp = "md",
   rounding: roundingProp = "md",
-  border = true,
+  border = "solid",
   ref,
   children,
   ...statefulProps
@@ -95,7 +100,7 @@ function SelectCard({
       <div
         ref={ref}
         className={cn("opal-select-card", padding, rounding)}
-        data-border={border ? "true" : undefined}
+        data-border={border}
       >
         {children}
       </div>
