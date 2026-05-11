@@ -7,7 +7,7 @@ type AgentSummary struct {
 	Name             string `json:"name"`
 	Description      string `json:"description"`
 	IsDefaultPersona bool   `json:"is_default_persona"`
-	IsVisible        bool   `json:"is_visible"`
+	IsVisible        bool   `json:"is_listed"`
 }
 
 // ChatSessionDetails is a session with timestamps as strings.
