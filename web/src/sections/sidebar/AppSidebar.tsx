@@ -61,6 +61,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
+  SvgBlocks,
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
@@ -530,6 +531,22 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     [folded, posthog]
   );
 
+  const skillsButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/skills">
+        <SidebarTab
+          icon={SvgBlocks}
+          folded={folded}
+          href="/app/skills"
+          selected={activeSidebarTab.isSkills()}
+        >
+          Skills
+        </SidebarTab>
+      </div>
+    ),
+    [folded, activeSidebarTab]
+  );
+
   const searchChatsButton = useMemo(
     () => (
       <ChatSearchCommandMenu
@@ -674,6 +691,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
           {newSessionButton}
           {searchChatsButton}
           {isOnyxCraftEnabled && buildButton}
+          {isOnyxCraftEnabled && skillsButton}
           {folded && moreAgentsButton}
           {folded && newProjectButton}
         </div>
