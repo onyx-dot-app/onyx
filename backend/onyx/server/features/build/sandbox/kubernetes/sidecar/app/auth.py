@@ -12,10 +12,19 @@ async def require_bearer_token(
 ) -> None:
     """Constant-time bearer-token check.
 
-    Raises 401 on missing/malformed/incorrect headers. Constant-time comparison
-    avoids timing-based token leakage.
+    Raises 401 on missing/malformed/incorrect headers. Raises 503 if the
+    configured token source is transiently unavailable (e.g. mounted Secret file
+    disappears during a rotation) so callers see a retryable error instead of an
+    opaque 500. Constant-time comparison avoids timing-based token leakage.
     """
-    expected = get_settings().load_auth_token()
+    try:
+        expected = get_settings().load_auth_token()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth token source is temporarily unavailable",
+            headers={"Retry-After": "1"},
+        ) from exc
 
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(

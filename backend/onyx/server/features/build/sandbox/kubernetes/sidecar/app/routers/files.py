@@ -20,6 +20,11 @@ class WriteRequest(BaseModel):
     create_parents: bool = True
 
 
+class WriteResponse(BaseModel):
+    path: str
+    size_bytes: int
+
+
 class ReadResponse(BaseModel):
     path: str
     size_bytes: int
@@ -81,8 +86,8 @@ async def read_file(path: str) -> ReadResponse:
     )
 
 
-@router.post("/write")
-async def write_file(req: WriteRequest) -> dict[str, str | int]:
+@router.post("/write", response_model=WriteResponse)
+async def write_file(req: WriteRequest) -> WriteResponse:
     try:
         data = base64.b64decode(req.content_b64, validate=True)
     except ValueError as exc:
@@ -108,7 +113,7 @@ async def write_file(req: WriteRequest) -> dict[str, str | int]:
         )
 
     target.write_bytes(data)
-    return {"path": req.path, "size_bytes": len(data)}
+    return WriteResponse(path=req.path, size_bytes=len(data))
 
 
 @router.get("/list", response_model=ListResponse)

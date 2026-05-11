@@ -9,7 +9,7 @@ import uvicorn
 from fastapi import FastAPI, Request, Response
 
 from app.config import get_settings
-from app.idle import IdleTracker, cancel_idle_task, idle_middleware_factory
+from app.idle import NON_INTERACTIVE_PATHS, IdleTracker, cancel_idle_task
 from app.lifecycle import run_shutdown_routine
 from app.routers import exec as exec_router
 from app.routers import files, health, snapshot
@@ -63,9 +63,14 @@ def create_app() -> FastAPI:
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         tracker: IdleTracker | None = getattr(request.app.state, "idle", None)
-        if tracker is None:
-            return await call_next(request)
-        return await idle_middleware_factory(tracker)(request, call_next)
+        response = await call_next(request)
+        if (
+            tracker is not None
+            and request.url.path not in NON_INTERACTIVE_PATHS
+            and 200 <= response.status_code < 400
+        ):
+            tracker.touch()
+        return response
 
     app.include_router(health.router)
     app.include_router(files.router)

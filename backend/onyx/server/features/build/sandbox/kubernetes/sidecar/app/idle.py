@@ -5,12 +5,12 @@ import logging
 import os
 import signal
 import time
-from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
-from fastapi import Request, Response
-
 logger = logging.getLogger(__name__)
+
+# Paths that should NOT bump the idle timer. Probes are not "user activity."
+NON_INTERACTIVE_PATHS = frozenset({"/healthz", "/readyz"})
 
 
 class IdleTracker:
@@ -57,28 +57,6 @@ class IdleTracker:
         except asyncio.CancelledError:
             # Normal during shutdown.
             raise
-
-
-# Paths that should NOT bump the idle timer. Probes are not "user activity."
-_NON_INTERACTIVE_PATHS = frozenset({"/healthz", "/readyz"})
-
-
-def idle_middleware_factory(
-    tracker: IdleTracker,
-) -> Callable[[Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]]:
-    async def middleware(
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        response = await call_next(request)
-        if (
-            request.url.path not in _NON_INTERACTIVE_PATHS
-            and 200 <= response.status_code < 400
-        ):
-            tracker.touch()
-        return response
-
-    return middleware
 
 
 async def cancel_idle_task(task: asyncio.Task[None]) -> None:
