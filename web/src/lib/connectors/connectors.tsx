@@ -747,7 +747,7 @@ export const connectorConfigs: Record<
   },
   jira_service_management: {
     description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management content to index. You can specify a particular project or JQL query.`,
+    subtext: `Configure which Jira Service Management content to index. You can specify a particular project or index everything.`,
     values: [
       {
         type: "text",
