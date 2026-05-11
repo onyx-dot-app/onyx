@@ -1332,6 +1332,107 @@ configMap:
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
 
+# Sandbox Jobs — foundation for the Craft sandbox redesign (per-session Kubernetes
+# Jobs in a dedicated namespace). When enabled, creates the namespace plus its RBAC,
+# NetworkPolicies, ResourceQuota, LimitRange, and PDB. No workloads are deployed here;
+# Job templates and the backend Job CRUD path land in subsequent PRs.
+sandboxJobs:
+  enabled: false
+  namespace: onyx-sandboxes-jobs
+
+  # ServiceAccount for the sandbox container itself. No IRSA — the agent process must
+  # have zero AWS credentials. K8s API token is not auto-mounted as defense-in-depth.
+  runtimeServiceAccount:
+    name: sandbox-runtime
+    automountServiceAccountToken: false
+
+  # ServiceAccount for the file-sync init container. Holds IRSA for S3 access.
+  # The IAM role's trust policy must list this SA before the backend's SANDBOX_BACKEND
+  # flag is flipped — set irsaRoleArn per-cluster via values overlay.
+  fileSyncServiceAccount:
+    name: sandbox-file-sync
+    automountServiceAccountToken: true
+    irsaRoleArn: ""
+
+  # Identities that should be granted Job-management permissions on the sandbox namespace.
+  # In Helm-deployed clusters the api-server and celery-worker pods share a single
+  # ServiceAccount computed via `onyx.serviceAccountName`, so by default we bind that.
+  # Set `bindChartServiceAccount: false` and use `additionalSubjects` for clusters where
+  # api-server / celery use distinct externally-managed SAs (e.g. the managed-services
+  # kustomize tree's `api-server-sa` / `celery-worker-sandbox-sa` in the `danswer` namespace).
+  jobManager:
+    bindChartServiceAccount: true
+    # Namespace where the chart's SA lives. Empty defaults to the release namespace.
+    chartServiceAccountNamespace: ""
+    additionalSubjects: []
+    # Example for managed-services cluster overlay:
+    # additionalSubjects:
+    #   - name: api-server-sa
+    #     namespace: danswer
+    #   - name: celery-worker-sandbox-sa
+    #     namespace: danswer
+
+  # Hard caps on namespace resource consumption. Sized generously for craft-dev; tighten
+  # per cluster via values overlay.
+  resourceQuota:
+    pods: "200"
+    requestsCpu: "100"
+    requestsMemory: "400Gi"
+    limitsCpu: "200"
+    limitsMemory: "800Gi"
+    persistentVolumeClaims: "500"
+    services: "200"
+    jobsBatch: "200"
+
+  # Per-container defaults applied to anything without explicit requests/limits.
+  # Prevents BestEffort pods and bounds per-container resource use.
+  limitRange:
+    default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "500m"
+      memory: "1Gi"
+    max:
+      cpu: "4"
+      memory: "16Gi"
+    min:
+      cpu: "100m"
+      memory: "128Mi"
+
+  # NetworkPolicy: default-deny baseline + selective allow rules.
+  networkPolicy:
+    # Pod label used to identify "sandbox" workloads — the Job spec in a later PR will
+    # set this label on its pod template so these policies match.
+    podSelectorLabel:
+      key: app.kubernetes.io/component
+      value: sandbox
+    # Ingress: allow from pods with the given label in the given namespace.
+    allowFromNamespace: danswer
+    allowFromPodLabel:
+      key: app
+      value: api-server
+    # Ports the sandbox pod listens on (sidecar HTTP for I/O + Next.js preview).
+    ingressPorts:
+      - protocol: TCP
+        port: 8080
+      - protocol: TCP
+        port: 3000
+    # Egress: allow public HTTPS/HTTP for S3 / package fetches; block IMDS and VPC ranges
+    # to prevent metadata-service exfiltration and cross-tenant lateral movement.
+    egressBlockedCidrs:
+      - 169.254.169.254/32
+      - 169.254.170.2/32
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+
+  # Voluntary-disruption budget. With per-session pods, at most this fraction can be
+  # voluntarily evicted at once — protects against node-pool rolling upgrades wiping
+  # all active sandboxes simultaneously.
+  podDisruptionBudget:
+    maxUnavailable: 25%
+
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line
 # string that will be passed through `tpl` so it can reference release values.

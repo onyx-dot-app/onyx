@@ -1,0 +1,32 @@
+{{- if .Values.sandboxJobs.enabled }}
+{{- $subjects := list -}}
+{{- if .Values.sandboxJobs.jobManager.bindChartServiceAccount -}}
+{{- $chartSaName := include "onyx.serviceAccountName" . -}}
+{{- $chartSaNs := default .Release.Namespace .Values.sandboxJobs.jobManager.chartServiceAccountNamespace -}}
+{{- $subjects = append $subjects (dict "name" $chartSaName "namespace" $chartSaNs "bindingName" "chart-sa") -}}
+{{- end -}}
+{{- range .Values.sandboxJobs.jobManager.additionalSubjects -}}
+{{- $subjects = append $subjects (merge (dict "bindingName" .name) .) -}}
+{{- end -}}
+{{- range $i, $subject := $subjects }}
+{{- if $i }}
+---
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sandbox-job-manager-{{ $subject.bindingName }}
+  namespace: {{ $.Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: sandbox-rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sandbox-job-manager
+subjects:
+  - kind: ServiceAccount
+    name: {{ $subject.name }}
+    namespace: {{ $subject.namespace }}
+{{- end }}
+{{- end }}

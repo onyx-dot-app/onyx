@@ -1,0 +1,25 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sandbox-jobs-limits
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-policy
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: {{ .Values.sandboxJobs.limitRange.default.cpu | quote }}
+        memory: {{ .Values.sandboxJobs.limitRange.default.memory | quote }}
+      defaultRequest:
+        cpu: {{ .Values.sandboxJobs.limitRange.defaultRequest.cpu | quote }}
+        memory: {{ .Values.sandboxJobs.limitRange.defaultRequest.memory | quote }}
+      max:
+        cpu: {{ .Values.sandboxJobs.limitRange.max.cpu | quote }}
+        memory: {{ .Values.sandboxJobs.limitRange.max.memory | quote }}
+      min:
+        cpu: {{ .Values.sandboxJobs.limitRange.min.cpu | quote }}
+        memory: {{ .Values.sandboxJobs.limitRange.min.memory | quote }}
+{{- end }}

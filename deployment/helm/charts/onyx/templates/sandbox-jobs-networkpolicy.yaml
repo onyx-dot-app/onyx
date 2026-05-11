@@ -1,0 +1,74 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-jobs-default-deny
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-network
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-jobs-allow-from-api-server
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-network
+spec:
+  podSelector:
+    matchLabels:
+      {{ .Values.sandboxJobs.networkPolicy.podSelectorLabel.key }}: {{ .Values.sandboxJobs.networkPolicy.podSelectorLabel.value }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.sandboxJobs.networkPolicy.allowFromNamespace }}
+          podSelector:
+            matchLabels:
+              {{ .Values.sandboxJobs.networkPolicy.allowFromPodLabel.key }}: {{ .Values.sandboxJobs.networkPolicy.allowFromPodLabel.value }}
+      ports:
+        {{- toYaml .Values.sandboxJobs.networkPolicy.ingressPorts | nindent 8 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-jobs-allow-egress
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-network
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.sandboxJobs.networkPolicy.egressBlockedCidrs | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+{{- end }}

@@ -1,0 +1,9 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-execution
+{{- end }}
