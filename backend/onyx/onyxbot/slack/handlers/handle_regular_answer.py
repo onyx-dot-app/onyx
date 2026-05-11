@@ -246,10 +246,15 @@ def handle_regular_answer(
         slack_context_str: str | None,
         onyx_user: User,
     ) -> ChatBasicResponse:
+        # Document sets here come from the channel's persona configuration
+        # (system-supplied, set by an admin), not from the end user, so the per-user
+        # document-set ACL check would incorrectly reject anonymous channel calls.
+        # Slack-side privacy is handled separately by passing get_anonymous_user()
+        # for non-DM/non-ephemeral messages so only public docs are searched.
         packets = handle_stream_message_objects(
             new_msg_req=new_message_request,
             user=onyx_user,
-            bypass_acl=False,
+            bypass_acl=True,
             additional_context=slack_context_str,
             slack_context=message_info.slack_context,
         )
