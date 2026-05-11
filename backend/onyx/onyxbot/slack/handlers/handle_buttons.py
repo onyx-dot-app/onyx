@@ -280,7 +280,7 @@ def handle_publish_ephemeral_message_button(
             logger.error("Failed to send webhook: %s", e)
 
         # remove handling of empheremal block and add AI feedback.
-        all_blocks = build_slack_response_blocks(
+        all_blocks, _ = build_slack_response_blocks(
             answer=onyx_bot_answer,
             message_info=slack_message_info,
             channel_conf=channel_conf,
@@ -309,7 +309,7 @@ def handle_publish_ephemeral_message_button(
     elif action_id == KEEP_TO_YOURSELF_ACTION_ID:
         # Keep as ephemeral message in channel or thread, but remove the publish button and add feedback button
 
-        changed_blocks = build_slack_response_blocks(
+        changed_blocks, _ = build_slack_response_blocks(
             answer=onyx_bot_answer,
             message_info=slack_message_info,
             channel_conf=channel_conf,
