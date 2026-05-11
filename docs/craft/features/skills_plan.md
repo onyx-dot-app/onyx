@@ -116,9 +116,28 @@ The Craft consumer:
 - Calls `materialize_skills(...)` from sandbox session setup.
 - Exposes `/api/build/sessions/{id}/skills` for the frontend panel (reads the manifest from the running session — snapshot-accurate).
 
+### Design decision: built-ins live in code, not the DB
+
+> _Why two storage paths instead of one unified table._
+
+A natural-looking simplification is to unify built-ins and custom skills under one storage model — seed built-in bundles into FileStore on install, store rows in the `skill` table alongside customs, drop the two-path API merge. We considered it and chose the split. The reason is **lifecycle, not aesthetics.**
+
+**Built-ins are deploy artifacts.** They version with the codebase, get tested in CI alongside the code that uses them, and ship with the release. An engineer commits `pptx/SKILL.md`, 30 minutes later it's in prod for every tenant.
+
+**Customs are user data.** They version per upload, persist across deploys, belong to the tenant. A customer drops a zip and 5 seconds later it's available to their org.
+
+Unifying them forces one of those lifecycles to bend:
+
+- If built-ins inherit the user-data lifecycle, every deploy needs a reconciliation step: compare the on-disk bundle's sha256 against the DB row, decide whether to clobber an admin's edits, tombstone removed built-ins, backfill new tenants, serialize `SkillRequirement.check` callables into rule expressions. None of these are unsolvable; all of them are real code, real tests, real ops complexity.
+- If customs inherit the deploy-artifact lifecycle, they have to live in the repo — not viable, by definition.
+
+The current split costs ~30 lines (a route-handler merge in `api.py`) plus ~10 lines (a second loop in `materialize_skills`). The unified path would cost an upgrade-detection seeder, multi-tenant backfill, reconciliation logic on every deploy, and per-tenant FileStore growth for redundant bundle copies. Lopsided.
+
+**Revisit when:** a customer requests per-org enable/disable of built-ins. Even then, the cheaper move is a separate `builtin_skill_org_state` table (one row per tenant per built-in, ~50 lines) — the bundles still stay on disk. Listed in §19 deferred.
+
 ### Considerations / Tradeoffs / Decisions
 - **Why a separate `backend/onyx/server/features/skills/api.py` rather than inlining endpoints into the build feature.** Customers will integrate against `/api/admin/skills`. Moving that path later (when Persona/Chat adopts) is a breaking change. Putting it at the universal layer on day one is cheap.
-- **Why `BuiltinSkillRegistry` is a singleton, not DB-backed.** Built-ins are code-defined; their identity moves with the deploy. Persisting them adds a seeder, hash tracking, and a registry-vs-DB-drift failure mode for zero benefit.
+- **Why `BuiltinSkillRegistry` is a singleton, not DB-backed.** See the "built-ins live in code" decision above. One-liner: deploy lifecycle ≠ user-data lifecycle.
 - **Why the panel data source is a Craft-specific endpoint, not the universal `/api/skills`.** Because of snapshot fidelity (§12), a resumed session's skills can diverge from the user's current grants. The panel must reflect what's *actually in the session*, which lives in `.skills_manifest.json` — read via a session-scoped endpoint that the build feature owns.
 
 ### Todos
