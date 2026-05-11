@@ -11,7 +11,7 @@ This document is structured so implementation can begin section-by-section with 
 
 > **Three invariants the whole design respects:**
 >
-> 1. **Sessions are skill-immutable after start.** Mutations affect new sessions only.
+> 1. **Skill content is live; AGENTS.md inventory is per-conversation.** Admin uploads propagate to all sessions (new + existing) within ~5 min. The agent's *list* of available skills (AGENTS.md) is stable within a conversation — regenerated at session start and on snapshot restore.
 > 2. **Bundle is content; DB row is metadata.** Slug, name, description, grants are admin-controlled in DB. The bundle is just the agent-facing instructions and supporting files.
 > 3. **Universal layer is consumer-blind.** `backend/onyx/skills/` knows nothing about sessions, sandboxes, or `.agents/skills`. Consumers translate their state into the materializer's inputs and choose the destination path.
 
@@ -539,6 +539,12 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 |---|---|---|
 | `GET` | `/api/skills` | Skills accessible to current user (forward-looking, for fresh sessions) |
 
+**Internal endpoints** (sandbox-to-api_server, pod-token auth):
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/internal/sandbox/{sandbox_id}/skills-tarball` | Stream tarball of materialized skills for the sandbox's user. Called by the in-pod refresh loop every ~5 min and on resume. Runs `materialize_skills(...)` into a temp dir, streams `application/x-tar`. See §9. |
+
 **Response models** (FastAPI returns these directly via typed function signatures):
 
 ```python
@@ -715,93 +721,172 @@ def get_session_skills(session_id: UUID, ...) -> SkillsManifest:
 
 ---
 
-## 9. Sandbox delivery (local + Kubernetes)
+## 9. Sandbox delivery — pod-level `/skills/` with periodic refresh
 
 ### Context
-After the materializer writes a staging dir, the sandbox manager needs to put those files at `.agents/skills/` inside the session. The two backends (local/docker and Kubernetes) have different mechanisms.
+Skills are not per-session user data — they're shared infrastructure that should reflect the **current admin state**, not whatever was current when a session started. Earlier drafts put skill content into each session's workspace (and therefore into snapshots), which froze skills at session start and made admin uploads fail to reach existing sessions. The right model: **skills live at a pod-level path mounted into the sandbox, refreshed periodically from api_server, and symlinked into each session.**
+
+(One pod = one sandbox = one user. Sessions are conversations within a sandbox. `sandbox_id ≠ session_id` — confirmed against `kubernetes_sandbox_manager.py:367`.)
 
 ### Proposed Solution
 
-**Kubernetes:** tar the staging dir, stream into pod via `kubectl exec ... tar xf -`.
+#### 9.1 Layout
 
-```python
-def _stream_skills_into_pod(self, pod_name: str, staging_dir: Path, session_path: str) -> None:
-    target = f"{session_path}/.agents/skills"
-    self._kubectl_exec(pod_name, ["mkdir", "-p", target])
-
-    tar_buf = io.BytesIO()
-    with tarfile.open(fileobj=tar_buf, mode="w") as tar:
-        tar.add(staging_dir, arcname=".")
-    tar_buf.seek(0)
-
-    self._kubectl_exec_stdin(
-        pod_name,
-        ["tar", "xf", "-", "-C", target],
-        stdin=tar_buf.read(),
-    )
+```
+┌─────────────────────── pod (sandbox, one user) ──────────────────────┐
+│                                                                       │
+│   /skills/                  ← pod-level mount, refreshed every 5 min  │
+│      pptx/                                                            │
+│         SKILL.md                                                      │
+│         scripts/...                                                   │
+│      image-generation/                                                │
+│      company-search/                                                  │
+│      deal-summary/                                                    │
+│      .skills_manifest.json                                            │
+│                                                                       │
+│   /workspace/sessions/                                                │
+│      <session-A>/                                                     │
+│         .agents/skills  →  /skills/    (symlink)                      │
+│         AGENTS.md       ← regen at session start + on snapshot restore│
+│         (user files, attachments, outputs, ...)                       │
+│      <session-B>/                                                     │
+│         .agents/skills  →  /skills/    (symlink)                      │
+│         AGENTS.md                                                     │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-This replaces the existing block at `kubernetes_sandbox_manager.py:1338-1340`:
+Snapshots only carry user files + AGENTS.md + the bare symlink. **Skill content is never in a snapshot.** On resume, the symlink is reconstructed; skills come from current admin state.
+
+#### 9.2 The materializer runs on the api_server side
+
+A new internal endpoint streams a current snapshot of materialized skills for a given sandbox:
 
 ```python
-# REMOVE (legacy code currently in the file):
-if [ -d /workspace/skills ]; then
-    mkdir -p {session_path}/.opencode
-    ln -sf /workspace/skills {session_path}/.opencode/skills
-fi
+# backend/onyx/server/features/skills/api.py (internal router)
 
-# REPLACED BY (after the rest of the setup_script runs):
-self._stream_skills_into_pod(pod_name, staging_dir, session_path)
-shutil.rmtree(staging_dir, ignore_errors=True)
+@router.get("/api/internal/sandbox/{sandbox_id}/skills-tarball", response_class=StreamingResponse)
+def get_skills_tarball(sandbox_id: UUID, ...) -> StreamingResponse:
+    """Stream a tarball of materialized skills for this sandbox's user.
+
+    Called by the sandbox refresh loop every ~5 min, and by snapshot
+    restore. Auth: pod-issued token (one per sandbox at provisioning).
+    """
+    user = _user_for_sandbox(sandbox_id, db)
+    render_ctx = SkillRenderContext(user_name=user.name, ...,
+                                    extra={"accessible_sources": render_accessible_cc_pairs(user, db)})
+
+    with tempfile.TemporaryDirectory() as staging:
+        materialize_skills(Path(staging), user, db, render_ctx)
+        return StreamingResponse(_tar_stream(staging), media_type="application/x-tar")
 ```
 
-The `_kubectl_exec_stdin` helper already exists (used by snapshot restore — same pattern).
+This is the same `materialize_skills(...)` from §6 — just running on api_server, with output streamed to the pod.
 
-**Local / Docker:** copy directly into the mounted workspace.
+#### 9.3 Pod-side refresh script
+
+Baked into the sandbox image at `/usr/local/bin/refresh-skills`:
+
+```sh
+#!/bin/sh
+set -eu
+NEXT=/skills.next
+PREV=/skills.prev
+DEST=/skills
+
+mkdir -p "$NEXT"
+curl -fsS -H "Authorization: Bearer $SANDBOX_TOKEN" \
+     "$ONYX_API_URL/api/internal/sandbox/$SANDBOX_ID/skills-tarball" \
+   | tar -xz -C "$NEXT"
+
+# Atomic swap: rename DEST → PREV, NEXT → DEST. POSIX rename is atomic
+# within a filesystem. Readers mid-stat get either old or new, never a torn dir.
+[ -e "$DEST" ] && mv "$DEST" "$PREV"
+mv "$NEXT" "$DEST"
+rm -rf "$PREV" || true
+```
+
+Driven by a tiny background loop in the sandbox entrypoint:
+
+```sh
+# in /usr/local/bin/refresh-loop, started by the container entrypoint
+while true; do
+  /usr/local/bin/refresh-skills 2>&1 | logger -t skills-refresh || true
+  sleep 300
+done &
+```
+
+First refresh runs synchronously as an initContainer (or as the first iteration before sessions can start), so `/skills/` exists by the time any session symlinks into it.
+
+#### 9.4 Per-session setup — just a symlink
+
+Both backends collapse to:
 
 ```python
-def _setup_skills_local(self, staging_dir: Path, session_path: Path) -> None:
-    skills_dest = session_path / ".agents" / "skills"
-    skills_dest.parent.mkdir(parents=True, exist_ok=True)
-    if skills_dest.exists():
-        shutil.rmtree(skills_dest)
-    shutil.copytree(staging_dir, skills_dest)
-    shutil.rmtree(staging_dir, ignore_errors=True)
+def _setup_session_skills_symlink(self, session_path: Path) -> None:
+    """Point .agents/skills at the pod-level /skills/ mount."""
+    target = session_path / ".agents" / "skills"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_symlink() or target.exists():
+        target.unlink() if target.is_symlink() else shutil.rmtree(target)
+    target.symlink_to("/skills", target_is_directory=True)
 ```
 
-This replaces the existing `directory_manager.setup_skills(...)` call sequence.
+Called from `setup_session_workspace` **and** from `_regenerate_session_config` (the snapshot-restore helper at `kubernetes_sandbox_manager.py:1736`). Each is one line added.
 
-**Dockerfile change:**
+No more tarball-into-pod for session setup. No more `materialize_for_session` invoked on the api_server during session creation — `materialize_skills` runs only when the refresh endpoint is called.
+
+#### 9.5 Dockerfile changes
+
 ```dockerfile
-# REMOVE (Dockerfile:99):
+# REMOVE (legacy):
 COPY skills/ /workspace/skills/
-
-# REMOVE (around the same area):
 RUN mkdir -p /workspace/skills
+
+# ADD:
+COPY refresh-skills /usr/local/bin/refresh-skills
+COPY refresh-loop /usr/local/bin/refresh-loop
+RUN chmod +x /usr/local/bin/refresh-skills /usr/local/bin/refresh-loop
+RUN mkdir -p /skills
 ```
 
-The on-disk source at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/` **stays** — it's now read at runtime from the api_server / Celery host FS, not baked into the sandbox image.
+The on-disk source at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/` **stays** — still read at runtime by the api_server during the materialization step.
 
-**Why `.agents/skills/` and not `.opencode/skills/`?** OpenCode's skill-discovery walks the project tree and reads SKILL.md from multiple conventional locations: `.opencode/skills/`, `.agents/skills/`, and `.claude/skills/` (per [OpenCode docs](https://opencode.ai/docs/skills/)). Using `.agents/skills/` makes our contract agent-runtime-agnostic — if Onyx ever swaps OpenCode for Codex or a multi-runtime setup, the materialized path doesn't need to change. The current `.opencode/skills/` symlink in `kubernetes_sandbox_manager.py:1338` is being removed (legacy code shown above).
+#### 9.6 Pod auth for the refresh endpoint
+
+The pod needs to identify itself to api_server. Simplest model: a short-lived bearer token minted at sandbox provisioning, injected as an env var (`SANDBOX_TOKEN`). The token claims `(sandbox_id, exp)` and api_server validates against the active-sandbox table.
+
+If Onyx already has a pod→api_server auth path (likely — pods do call back to api_server today), reuse it. Worth confirming during implementation.
+
+**Why `.agents/skills/` and not `.opencode/skills/`?** Unchanged from before — OpenCode's discovery walks `.agents/skills/`, `.opencode/skills/`, and `.claude/skills/` (per [OpenCode docs](https://opencode.ai/docs/skills/)). `.agents/` is the agent-runtime-agnostic choice.
 
 ### Considerations / Tradeoffs / Decisions
-- **Tarball-into-pod vs `kubectl cp`.** The existing snapshot-restore code already uses the tar-over-exec pattern. Reusing it gives us the same robustness profile.
-- **Why copy vs symlink for local backend.** The new model materializes per-session content (with user-specific template rendering). Symlinks can't deliver per-session content. Copy is the only option.
-- **`staging_dir` cleanup.** Always delete after delivery (success or failure). Don't leak temp directories.
-- **What if the sandbox manager can't deliver (e.g. pod isn't ready)?** This is a session-setup failure — propagate the exception. The session won't start; the user sees an error. Same failure mode as snapshot-restore today.
+
+- **Why pod-level `/skills/` instead of per-session materialization.** Lets admin uploads/grants/deletes propagate to all sessions (new and existing) within ~5 min, without per-session work. Sessions don't carry skill content into snapshots → snapshots stay small. Per-user template rendering still works because one pod = one user.
+- **5-minute polling, not pub/sub.** Sub-second propagation isn't a V1 need; admin uploads aren't usually emergencies. A sleep-loop is zero new infrastructure. Upgrade to event-driven push (Option B in earlier brainstorm) is a half-day of work if latency complaints arrive.
+- **Materializer runs on api_server, not in the pod.** The pod only needs to extract a tarball — no FileStore access, no DB queries, no bundle validation. The sandbox image stays minimal. Bundle blobs never traverse a fan-out path.
+- **Atomic rename pattern.** `mv NEXT DEST` is atomic within a filesystem (POSIX guarantee). Mid-rename, a reader's `cat /skills/X/SKILL.md` either resolves to the old version (if the dentry walk happened before rename) or the new (if after) — never a torn read. This is the standard "live-update a directory under concurrent reads" pattern.
+- **AGENTS.md regen on resume is already wired up.** `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736-1809` already regenerates AGENTS.md on snapshot restore — we add one line to also (re)create the `.agents/skills` symlink. AGENTS.md picks up the current skill inventory from `/skills/.skills_manifest.json` automatically.
+- **First-refresh bootstrap via initContainer.** Pod can't start serving sessions until `/skills/` exists. The synchronous first refresh in an initContainer makes pod startup predictable (one extra HTTP call + tar extract — ~500 ms total).
+- **Local backend.** For dev, the local sandbox manager runs the refresh as a subprocess of the same Python process — same script, no kubectl needed. Or even simpler: dev-mode skips refresh and reads `/skills/` directly from the api_server's host FS via a bind mount.
+- **What if api_server is briefly unavailable mid-refresh?** Script exits non-zero, loop sleeps, retries on next tick. Pod keeps serving the previous `/skills/`. Self-healing.
+- **Manual refresh escape hatch.** For "I need this update NOW" cases, admin UI can have an "Apply changes now" button that posts to `/api/admin/skills/refresh-now` → api_server `kubectl exec`s `/usr/local/bin/refresh-skills` into each pod for the affected tenant. Single helper, no new long-running components. Optional — defer to V1.5 if not urgent.
 
 ### Todos
-- [ ] Implement `_stream_skills_into_pod(pod_name, staging_dir, session_path)` in `KubernetesSandboxManager`. Place it near the existing snapshot-restore helpers.
-- [ ] Replace the `ln -sf /workspace/skills` block in `kubernetes_sandbox_manager.py:1338-1340` with a call to `_stream_skills_into_pod(...)` after the setup script runs. Pass `staging_dir` from the new materialization step.
-- [ ] Implement `_setup_skills_local(staging_dir, session_path)` in the local sandbox manager.
-- [ ] Replace `directory_manager.setup_skills(...)` callsites with `_setup_skills_local(...)`.
-- [ ] Update the Kubernetes session-setup flow to call `materialize_for_session(...)` early, before the setup script, and pass `staging_dir` through.
-- [ ] Update the local session-setup flow similarly.
-- [ ] Edit `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile`:
-  - [ ] Remove `COPY skills/ /workspace/skills/` (line ~99).
-  - [ ] Remove `mkdir -p /workspace/skills`.
+- [ ] Add `GET /api/internal/sandbox/{sandbox_id}/skills-tarball` to `backend/onyx/server/features/skills/api.py` — runs `materialize_skills(...)` into a temp dir, streams tarball. Auth via pod token.
+- [ ] Implement pod token minting at sandbox provisioning (or reuse existing pod→api_server auth path if one exists).
+- [ ] Add `refresh-skills` and `refresh-loop` scripts to `backend/onyx/server/features/build/sandbox/kubernetes/docker/`.
+- [ ] Edit Dockerfile: drop `COPY skills/`, drop `mkdir -p /workspace/skills`, add `COPY refresh-skills` + `COPY refresh-loop`, add `mkdir -p /skills`.
+- [ ] Add an initContainer to the pod spec that runs `refresh-skills` synchronously before the sandbox container starts.
+- [ ] Update sandbox entrypoint to background `refresh-loop`.
+- [ ] Implement `_setup_session_skills_symlink(session_path)` (one helper for both K8s and local backends).
+- [ ] Call `_setup_session_skills_symlink(...)` from `setup_session_workspace` (replaces the old skill-materialization step).
+- [ ] Call `_setup_session_skills_symlink(...)` from `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` so resumed sessions also get the symlink. AGENTS.md regen is already there.
+- [ ] Verify snapshot tarball **excludes** `/skills/` (it's a separate mount; should be naturally excluded, but confirm).
+- [ ] Remove `directory_manager.setup_skills(...)` and its callers (we no longer materialize per-session).
+- [ ] Local backend: implement an equivalent refresh path — a subprocess that calls `materialize_skills` directly to a host path that the sandbox bind-mounts.
 - [ ] Add a feature flag `SKILLS_MATERIALIZATION_V2_ENABLED` for staged rollout (see §15).
-- [ ] Update existing integration tests for sandbox setup that may reference the old skills path.
+- [ ] Update existing integration tests for sandbox setup that referenced the old skills path.
 
 ---
 
@@ -898,39 +983,61 @@ No toggles. To suppress a skill in the current turn, the user tells the agent in
 
 ---
 
-## 12. Snapshot fidelity
+## 12. Skill propagation (live content, boundary inventory)
 
 ### Context
-Craft sessions can be paused and resumed days later. The question is: when a session resumes, should it see its original skills (snapshot-frozen) or current skills (re-materialized from current grants)? The decision affects materializer behavior, snapshot bundle contents, and admin UX.
+Earlier drafts had skills frozen in each session's snapshot. That made admin uploads invisible to running sessions, weakened revocation, and bloated snapshots. With the pod-level `/skills/` model from §9, skill content is **live** — admin uploads propagate within ~5 minutes — but the agent's *awareness* of what skills exist (the inline list in AGENTS.md) stays stable within a conversation.
 
 ### Proposed Solution
 
-**Sessions are skill-immutable after start.** The session's snapshot includes `.agents/skills/` verbatim — bundles, manifest, AGENTS.md fragment, everything. On resume, the snapshot is restored as-is; the materializer is not re-run.
+**Two levels, two cadences.** Cleanly separated:
 
-Behavioral implications:
-- Admin uploads a new skill → existing/paused sessions don't see it.
-- Admin revokes a grant → existing session still has the skill.
-- Admin renames a slug → existing sessions retain the old slug.
-- Admin deletes a skill → existing sessions still have it.
-- Capability changes (e.g. env var unset) don't affect resumed sessions; agent may hit a runtime failure if it tries to use a now-broken skill.
+| Layer | What it represents | Cadence | Where it's regenerated |
+|---|---|---|---|
+| **`/skills/` content** | The actual SKILL.md + scripts + supporting files | Live — refreshed every ~5 min from current admin state | Pod refresh loop (§9) |
+| **AGENTS.md skill section** | The agent's inventory awareness ("you have these skills available") | Stable per conversation — regenerated at session start and on snapshot restore | `setup_session_workspace` + `_regenerate_session_config` (existing code paths, already wired up at `kubernetes_sandbox_manager.py:1736`) |
 
-Admin UI must surface this on every mutation. Confirmation modals on delete / replace bundle / rename / revoke grant must say:
+This gives a clean conversational model:
+- The agent's *list* of skills doesn't shift mid-conversation. It learns the inventory at turn 1, that list stays consistent through turn N.
+- The agent's *implementation* of any listed skill is always current. If admin fixes a bug in `deal-summary`'s SKILL.md, the agent's next read of `.agents/skills/deal-summary/SKILL.md` (via the symlink to `/skills/`) sees the fix.
 
-> "This change applies to **new sessions only**. Existing and paused sessions continue with the current version until they end."
+### Behavioral implications
+
+| Admin event | Mid-conversation user | Next turn in same session | New session / resume |
+|---|---|---|---|
+| Upload new skill `X` | Doesn't see `X` in AGENTS.md, can't invoke | Same | AGENTS.md regenerated → `X` appears |
+| Replace `X`'s bundle | Already-read SKILL.md content stays in agent's context; subsequent reads see new content | Same | AGENTS.md regenerated; agent reads new `X` content |
+| Delete / revoke grant for `X` | Already-read content can still be acted on; new reads to `/skills/X/` fail (dir gone after refresh) | Same | `X` absent from AGENTS.md; symlinks resolve nowhere |
+| Rename `X`'s slug | Old slug `/skills/X/` is gone after refresh; agent's in-context reference to `X` will fail on next file op | Same | New slug appears in AGENTS.md |
+| Capability flip (e.g. `image-generation` provider removed) | Skill silently disappears from `/skills/` on next refresh | Agent's prior knowledge of the skill is stale; next attempt to use it sees missing dir | AGENTS.md regenerated; skill absent |
+
+The Admin UI mutation copy changes from the old "applies to new sessions only" framing to:
+
+> "This change takes effect within a few minutes. Conversations currently in progress will see the new state on their next turn."
+
+For deletes, an additional line:
+
+> "Files this skill wrote to user workspaces remain there until the sessions end."
+*(workspace persistence still applies to outputs the skill produced — `pptx`-generated decks, etc. Only the skill's own code stops being available.)*
 
 ### Considerations / Tradeoffs / Decisions
-- **Snapshot fidelity vs re-materialize-on-resume.** Considered both. Re-materialize is more "always current" but breaks the "session is your workspace" mental model — admin changes can silently alter resumed work. Frozen is more predictable.
-- **Snapshot size impact.** Each snapshot now includes the materialized skills (~few MB per custom skill bundle). V1 expects ≤10 customs per tenant; impact is bounded. If snapshot sizes become a problem, V2 can deduplicate skills across snapshots (content-addressed storage in the snapshot mechanism) — but that's not a V1 concern.
-- **Capability flips and resumed sessions.** If `GEMINI_API_KEY` is unset and a paused session has `image-generation` materialized, the agent will try and fail. Acceptable for V1 — rare scenario, recoverable error.
-- **No kill switch.** If an admin uploads a buggy/malicious skill and revokes the grant, running sessions keep using it. V1 accepts this; a kill switch is a separate feature (per-session blocklist applied at read-time inside the sandbox).
+
+- **Why live content + boundary inventory.** Live content fixes the worst current pain: "I uploaded a fix, sessions still broken." Boundary inventory avoids a worse pain: agent's behavior changing mid-conversation in surprising ways. The split is the right place to draw the line.
+- **5-minute propagation latency.** Matches §9's polling cadence. Most admin uploads aren't emergencies; for the rare urgent case, the optional "Apply changes now" admin button (also §9) short-circuits the wait.
+- **No more skill-immutability invariant.** The earlier invariant "Sessions are skill-immutable after start" is **explicitly reversed.** Sessions now reflect current admin state for skill content, with AGENTS.md as the only stable surface within a conversation.
+- **Snapshot size impact.** Snapshots no longer carry skill content. Customs at 10+ MiB each × 20 per tenant × every session snapshot — that storage cost is gone.
+- **Mid-conversation user-visible behavior.** A user's agent might respond confidently in turn 5 using a skill that gets deleted by turn 6. Turn 7 the agent attempts the skill and fails. Acceptable — admins can communicate planned skill removals out of band; rare for skills to be deleted while in active use.
+- **Workspace persistence (separate concern).** Files a skill *generated and wrote into the session workspace* persist across snapshot/resume. The skill *itself* doesn't. The admin delete modal calls both out.
+- **No "kill switch."** Same as before — a malicious skill, once revoked, stops being readable on next refresh. Running agents that already read its instructions might still act on them in flight. Sub-5-minute kill needs a different mechanism (deferred).
 
 ### Todos
-- [ ] Confirm snapshot manager (`SnapshotManager` / s5cmd flow) already includes `.agents/skills/` in the tarball — likely yes since it's just part of the workspace, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
-- [ ] If not, ensure `.agents/skills/` is included in snapshot tar.
-- [ ] On resume path: verify materializer is **not** called. The skills should arrive purely via snapshot restore.
-- [ ] Add "applies to new sessions only" copy to all mutation confirmation modals in the admin UI.
-- [ ] Add a top-level invariant note in `backend/onyx/skills/__init__.py` module docstring: "Sessions are skill-immutable after start."
-- [ ] Integration test: pause a session, change skill state, resume → verify snapshot contents unchanged.
+- [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` — it's reversed.
+- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content is live (≤5 min propagation); AGENTS.md skill list is stable within a session."`
+- [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few minutes" instead of "new sessions only."
+- [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
+- [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. The AGENTS.md regen there already covers inventory refresh.
+- [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait ≤5 min, verify the new skill is readable inside `/skills/` from the running session. Verify AGENTS.md does NOT yet contain the new skill in the current session (boundary inventory).
+- [ ] Integration test `test_snapshot_excludes_skills.py`: pause a session, inspect the snapshot tar, confirm `/skills/` is absent. Resume and confirm `.agents/skills` is a symlink to `/skills/`, populated from current admin state.
 
 ---
 
@@ -983,7 +1090,7 @@ On a custom skill row:
 - **Replace bundle** → drag-and-drop new zip in a modal with confirmation copy → `PUT /api/admin/skills/custom/{id}/bundle`.
 - **Manage grants** → reuses the visibility picker → `PUT /api/admin/skills/custom/{id}/grants`.
 
-All mutation modals include the "applies to new sessions only" callout.
+All mutation modals include the "takes effect within a few minutes" callout (see §12).
 
 #### 13.4 Delete
 Soft-delete confirmation modal:
@@ -1013,7 +1120,7 @@ Visibility picker (radio + group + user multi-select) is reused across upload mo
   - [ ] Client-side frontmatter pre-fill from selected zip (use a zip-reading lib like `jszip`).
 - [ ] Edit / replace / grants:
   - [ ] `web/src/app/admin/skills/EditSkillModal.tsx`.
-  - [ ] `web/src/app/admin/skills/ReplaceBundleModal.tsx` with "new sessions only" copy.
+  - [ ] `web/src/app/admin/skills/ReplaceBundleModal.tsx` with "takes effect within a few minutes" copy (per §12).
   - [ ] `web/src/app/admin/skills/VisibilityPicker.tsx` — shared component.
 - [ ] Delete confirmation modal with the standard copy.
 - [ ] Hook the page into the admin nav.
@@ -1149,11 +1256,16 @@ Per `CLAUDE.md`: prefer external-dependency unit tests when mocking is needed; p
     - `.agents/skills/<builtin-with-template>/SKILL.md` has placeholders rendered.
     - `.skills_manifest.json` lists materialized skills with `source` discriminator.
     - `AGENTS.md` `{{AVAILABLE_SKILLS_SECTION}}` includes granted skills.
-- `test_snapshot_fidelity.py`:
-  - Start session A with custom skill X. Snapshot.
+- `test_live_skill_propagation.py`:
+  - Start session A, agent reads `.agents/skills/<custom-X>/SKILL.md` (recorded for diff).
   - Admin replaces X's bundle.
-  - Resume session A → `.agents/skills/X/SKILL.md` matches **original** bundle.
-  - Start fresh session B → B has new bundle.
+  - Wait for next refresh tick (≤ 5 min; in test, trigger refresh manually).
+  - Re-read `.agents/skills/<custom-X>/SKILL.md` from session A → matches **new** bundle.
+  - In the same conversation, AGENTS.md still reflects the original inventory.
+  - Resume session A (snapshot + restore) → AGENTS.md regenerated → new inventory visible.
+- `test_snapshot_excludes_skills.py`:
+  - Pause session A. Inspect snapshot tarball — confirm no `/skills/` content.
+  - Resume → `.agents/skills` is a symlink to `/skills/` and resolves to current admin state.
 - `test_multi_tenant_isolation.py`:
   - Two tenants both create custom skill `deal-summary` → both succeed, isolated.
 
@@ -1248,7 +1360,7 @@ These two together collapse the realistic exfil surface to side channels (timing
 
 1. **Prompt injection via SKILL.md.** The agent reads SKILL.md as instructions. A malicious bundle can override agent behavior across every session materializing the skill. Mitigated only by approval gates on writes + admin review of SKILL.md content (visible in the detail drawer). Not fully fixable at V1.
 2. **Confused-deputy via legitimate grants.** A skill calling `api.linear.app` *as the user* can read everything that user can read in Linear. Even with the "writes require approval" tightening, the read scope of allowed services is the user's full scope. Mitigation is fine-grained per-skill scope declarations — deferred to V2.
-3. **Workspace persistence after skill delete.** Files a skill writes to `/workspace` survive in session snapshots even after the skill is soft-deleted. The admin delete modal must call this out.
+3. **Workspace persistence after skill delete.** The skill itself stops being readable on next refresh (≤ 5 min), but files the skill *wrote* into the session workspace (e.g. `pptx`-generated decks) persist across snapshot/resume. Admin delete modal must call this out.
 4. **Side-channel exfil through allowed reads.** Timing, query patterns, request sizes. Not addressable without significant infrastructure.
 5. **Sandbox escape (defense in depth gap).** If a container-escape vuln exists, all network controls are bypassed. Why sandbox hardening is non-negotiable regardless of network posture.
 
@@ -1371,7 +1483,7 @@ Six phases. Each has a **goal**, **dependencies**, and rough **effort** sizing (
 | **3. Craft consumer wiring** | Skills materialize into real sandboxes. End-to-end works for any user, even without admin UI. K8s + local backends. AGENTS.md rewrite. Dockerfile updated. | M | Phase 1 | §4, §8, §9, §10 |
 | **4. Admin UI** | `/admin/skills` page with list, upload, grants, replace bundle, delete, built-in detail drawer. | L | Phase 2 endpoints stable | §13 |
 | **5. Security & operations** | Feature flag, sandbox hardening verification, interception-team coordination, orphan-blob sweep, per-session skills UI in Craft. | M | — (parallel with 3/4) | §11, §15, §16, §18 |
-| **6. Polish, rollout, ship** | Snapshot fidelity verification, multi-tenant isolation test, manual smoke, deploy sequence + flag flip. | S–M | Phase 3 + Phase 5 | §12, §14, §17, §15 |
+| **6. Polish, rollout, ship** | Snapshot-excludes-skills verification, multi-tenant isolation test, manual smoke, deploy sequence + flag flip. | S–M | Phase 3 + Phase 5 | §12, §14, §17, §15 |
 
 For task-level state — what's `[TODO]` vs `[WIP]` vs `[REVIEW]` vs `[DONE]`, who owns what, what's blocked — see **[`TODOS.md`](./TODOS.md)**.
 
