@@ -1368,137 +1368,26 @@ If any of these turn out to actually block V1, lift them into a numbered section
 
 ## 21. Implementation plan — prioritized phases
 
-The 104 todos in this spec aren't equal weight, and most don't have to ship together. This is the recommended execution order. Each phase has a **goal**, a **critical-path checklist** (must do), a **stretch list** (defer if you're behind), **dependencies**, and a rough **effort** sizing (S = <1 day, M = 2–5 days, L = 1+ week).
+> **The live task board lives in [`TODOS.md`](./TODOS.md)** — claim/status/owner per task, agent-coordination conventions, decisions log. This section is the strategic rollup: critical path, dependencies, calendar, what to cut if behind. Don't track day-to-day status here.
 
-**Critical path:** Phase 1 → 2 → 3 → 6. Phase 4 (Admin UI) and Phase 5 (Security ops) run in parallel after Phase 2. If you ship Phases 1–3 only, you have a CLI-operable skills system already — engineers can upload via `curl`, users get skills in sessions. Phase 4 makes it admin-usable; Phase 5 makes it productionizable.
+Six phases. Each has a **goal**, **dependencies**, and rough **effort** sizing (S = <1 day, M = 2–5 days, L = 1+ week).
 
----
-
-### Phase 1 — Foundation (universal primitive)        [Effort: M] [Blocks: everything]
-
-Goal: the universal layer compiles and is unit-testable. No HTTP routes yet, no sandbox wiring.
-
-- [ ] **DB + migration** (§3)
-  - [ ] Add `Skill`, `Skill__UserGroup` to `backend/onyx/db/models.py`.
-  - [ ] Add `SKILL_BUNDLE`, `SKILL_ICON` to `FileOrigin`.
-  - [ ] Alembic revision + verify on a fresh EE tenant.
-- [ ] **Module skeletons** (§2)
-  - [ ] `backend/onyx/skills/{__init__,registry,bundle,materialize,render}.py`.
-  - [ ] `backend/onyx/db/skill.py`.
-- [ ] **`BuiltinSkillRegistry`** (§4)
-  - [ ] Singleton, `register(slug, source_dir, requirements=[])`, `list_all`, `list_satisfied`, `evaluate_for_admin`, `reserved_slugs`.
-  - [ ] Frontmatter parse at registration; raise on duplicate or missing SKILL.md.
-- [ ] **Bundle validator** (§5)
-  - [ ] `validate_custom_bundle` with every rule in the §5 table; streaming uncompressed-size check.
-  - [ ] `_safe_unzip` for defensive re-check at materialization.
-  - [ ] `compute_bundle_sha256`.
-  - [ ] Unit tests against each failure mode + a known-good fixture.
-- [ ] **Materializer** (§6)
-  - [ ] `materialize_skills(dest, user, db, render_ctx)` + Pydantic models.
-  - [ ] Extract `render_template_placeholders` from `agent_instructions.py`.
-  - [ ] External-dep unit test: fixture user, 1 granted + 1 not-granted custom + 2 built-ins.
-- [ ] **DB ops** (§3)
-  - [ ] `list_skills_for_user`, `fetch_skill_for_user/admin`, `list_skills_for_admin`, `create_skill`, `replace_skill_bundle`, `patch_skill`, `replace_skill_grants`, `delete_skill`.
+**Critical path:** Phase 1 → 2 → 3 → 6. Phase 4 (Admin UI) and Phase 5 (Security ops) run in parallel after Phase 2. Ship Phases 1–3 alone and you have a CLI-operable skills system — engineers can upload via `curl`, users get skills in sessions. Phase 4 makes it admin-usable; Phase 5 makes it productionizable.
 
 ---
 
-### Phase 2 — Operability (API surface)               [Effort: M] [Depends: Phase 1]
+### Phase summaries
 
-Goal: skills system fully operable via HTTP. No sandbox wiring, no admin UI — but `curl` works end-to-end.
+| Phase | Goal | Effort | Depends | Spec sections |
+|---|---|---|---|---|
+| **1. Foundation** — universal primitive | DB + registry + validator + materializer + DB ops compile and unit-test cleanly. No HTTP, no sandbox wiring. | M | — | §2, §3, §4, §5, §6 |
+| **2. Operability** — API surface | Full CRUD via `curl`. `GET /api/admin/skills` returns `available + requirements`. No admin UI, no sandbox wiring yet. | M | Phase 1 | §7 |
+| **3. Craft consumer wiring** | Skills materialize into real sandboxes. End-to-end works for any user, even without admin UI. K8s + local backends. AGENTS.md rewrite. Dockerfile updated. | M | Phase 1 | §4, §8, §9, §10 |
+| **4. Admin UI** | `/admin/skills` page with list, upload, grants, replace bundle, delete, built-in detail drawer. | L | Phase 2 endpoints stable | §13 |
+| **5. Security & operations** | Feature flag, sandbox hardening verification, interception-team coordination, orphan-blob sweep, per-session skills UI in Craft. | M | — (parallel with 3/4) | §11, §15, §16, §18 |
+| **6. Polish, rollout, ship** | Snapshot fidelity verification, multi-tenant isolation test, manual smoke, deploy sequence + flag flip. | S–M | Phase 3 + Phase 5 | §12, §14, §17, §15 |
 
-- [ ] **Universal admin router** (§7) at `backend/onyx/server/features/skills/api.py`:
-  - [ ] `GET /api/admin/skills` (with `BuiltinSkillAdmin.available + requirements`).
-  - [ ] `POST /api/admin/skills/custom` (full create flow: validate → save blobs → row → grants).
-  - [ ] `PATCH /api/admin/skills/custom/{id}`.
-  - [ ] `PUT /api/admin/skills/custom/{id}/bundle` (replace flow + delete old blobs after commit).
-  - [ ] `PUT /api/admin/skills/custom/{id}/grants`.
-  - [ ] `DELETE /api/admin/skills/custom/{id}` (soft-delete).
-  - [ ] `GET /api/admin/skills/custom/{id}/icon`, `GET /api/admin/skills/builtin/{slug}/icon`.
-- [ ] **User router**:
-  - [ ] `GET /api/skills`, `GET /api/skills/{id}/icon`.
-- [ ] **Pydantic response models** in same file.
-- [ ] **External-dep unit tests** for happy + every validation failure.
-- [ ] Wire router into `backend/onyx/main.py`.
-
----
-
-### Phase 3 — Craft consumer wiring                   [Effort: M] [Depends: Phase 1] [Blocks: Phase 6]
-
-Goal: skills actually materialize into running sandboxes. End-to-end works without any admin UI.
-
-- [ ] **Craft built-ins registration** (§4 + §8)
-  - [ ] `backend/onyx/server/features/build/skills/builtins_registration.py` with `pptx` + `image-generation` (with its `SkillRequirement`).
-  - [ ] Call `register_craft_builtins(...)` from `backend/onyx/main.py` startup.
-- [ ] **Materialization adapter** (§8)
-  - [ ] `materialize_for_session(session, user, db) -> (Path, SkillsManifest)`.
-  - [ ] `render_accessible_cc_pairs(user, db)` helper (confirm/reuse from `search.md`).
-- [ ] **Sandbox delivery** (§9)
-  - [ ] K8s: `_stream_skills_into_pod` tarball-into-pod helper. Replace `ln -sf /workspace/skills` at `kubernetes_sandbox_manager.py:1338`.
-  - [ ] Local: `_setup_skills_local` via `shutil.copytree`. Replace `directory_manager.setup_skills` calls.
-  - [ ] Both backends call `materialize_for_session` early in session setup; pass staging dir through.
-  - [ ] Add `read_file_from_session(session, path)` to `SandboxManagerBase` + both impls.
-- [ ] **Panel data source** (§8 + §11)
-  - [ ] `GET /api/build/sessions/{id}/skills`.
-  - [ ] `GET /api/build/sessions/{id}/skills/{slug}/content`.
-- [ ] **AGENTS.md generation** (§10)
-  - [ ] Rewrite `build_skills_section` at `agent_instructions.py:267` to read `.skills_manifest.json` and inline all.
-  - [ ] Delete `_skills_cache`, `_skills_cache_lock`, unused `_scan_skills_directory`.
-- [ ] **Dockerfile** (§9)
-  - [ ] Remove `COPY skills/` and `mkdir -p /workspace/skills` at `Dockerfile:99`.
-- [ ] **Integration test**: provision session with 1 granted + 1 not-granted custom, verify directory layout + manifest + AGENTS.md inclusion.
-
----
-
-### Phase 4 — Admin UI                                 [Effort: L] [Depends: Phase 2] [Parallel with Phase 3]
-
-Goal: admins manage skills without `curl`. Frontend work; can start as soon as Phase 2 endpoints stabilize.
-
-- [ ] **Page shell** at `web/src/app/admin/skills/page.tsx` (SettingsLayouts).
-- [ ] **List view** (§13)
-  - [ ] `SkillsList.tsx`, `SkillRow.tsx`, `SourceBadge.tsx`.
-  - [ ] Access column: `Available` vs `Needs setup · Configure →` (deep-link from `requirements[].configure_url`).
-  - [ ] Search + filters (source, availability).
-- [ ] **Upload modal** with bundle pre-fill from frontmatter (use `jszip`); Trust-check banner.
-- [ ] **Visibility picker** (shared component): Private / Org-wide / Specific groups.
-- [ ] **Built-in detail drawer** with Requirements section (status + Configure CTA per requirement).
-- [ ] **Edit / Replace bundle / Grants / Delete** modals with "new sessions only" + workspace-persistence copy.
-- [ ] Frontend type definitions matching backend Pydantic models.
-- [ ] Hook into admin nav (`lib/admin-routes.ts`).
-- [ ] Loading / error / empty states.
-
-**Stretch (defer if behind):**
-
-- [ ] Row action menu polish (icons, hover states).
-- [ ] Validation error inline display polish.
-- [ ] Frontend tests beyond smoke.
-
----
-
-### Phase 5 — Security & operations                  [Effort: M] [Parallel with Phase 3/4]
-
-Goal: production-ready security and observability posture. Some of this is coordination with other teams, not code.
-
-- [ ] **Sandbox hardening verification** (§18) — confirm checklist items against current pod spec; fix any gaps.
-- [ ] **Interception team coordination** — file ticket for the two policy asks (deny non-classified writes; approval for non-destructive writes within classified services).
-- [ ] **Feature flag** `SKILLS_MATERIALIZATION_V2_ENABLED` (§15) gating the new sandbox-setup path; legacy `ln -sf` fallback preserved during rollout.
-- [ ] **Orphan blob sweep** (§16) — `cleanup_orphaned_skill_blobs` weekly Celery task with `expires=3600`. Unit + integration tests.
-- [ ] **Per-session skills UI** (§11) — read-only panel + inline OpenCode-event pattern match. Mostly frontend.
-
-**Stretch (V1.5):**
-
-- [ ] **Invocation audit log** (§18) — `skill_invocation_log` table + emitter on SKILL.md read + admin UI surface.
-
----
-
-### Phase 6 — Polish, rollout, ship                  [Effort: S–M] [Depends: Phase 3 + 5]
-
-Goal: actually flip the switch and verify it works in prod.
-
-- [ ] **Snapshot fidelity verification** (§12) — confirm `snapshot_manager.py` includes `.agents/skills/`; resume path does NOT call materializer; integration test.
-- [ ] **Multi-tenant isolation test** (§14) — two tenants with same slug, isolated.
-- [ ] **Inline-limit test** — N/A in V1 (no threshold).
-- [ ] **Manual smoke** (§17) — full admin journey + user journey, including capability-flip for `image-generation`.
-- [ ] **Deploy sequence** (§15) — api_server first (flag off) → sandbox image → flip flag → bake one release → remove legacy code + flag.
+For task-level state — what's `[TODO]` vs `[WIP]` vs `[REVIEW]` vs `[DONE]`, who owns what, what's blocked — see **[`TODOS.md`](./TODOS.md)**.
 
 ---
 
