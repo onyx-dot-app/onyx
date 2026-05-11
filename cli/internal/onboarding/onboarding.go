@@ -9,19 +9,19 @@ import (
 	"strings"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
+	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
-	"github.com/onyx-dot-app/onyx/cli/internal/util"
 	"golang.org/x/term"
 )
 
 // Aliases for shared styles.
 var (
-	boldStyle   = util.BoldStyle
-	dimStyle    = util.DimStyle
-	greenStyle  = util.GreenStyle
-	redStyle    = util.RedStyle
-	yellowStyle = util.YellowStyle
+	boldStyle   = tui.BoldStyle
+	dimStyle    = tui.DimStyle
+	greenStyle  = tui.GreenStyle
+	redStyle    = tui.RedStyle
+	yellowStyle = tui.YellowStyle
 )
 
 func getTermSize() (int, int) {
@@ -71,7 +71,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 		// Open browser to API key page
 		url := strings.TrimRight(serverURL, "/") + "/app/settings/accounts-access"
 		fmt.Printf("\n  Opening %s ...\n", url)
-		util.OpenBrowser(url)
+		browser.OpenBrowser(url)
 		fmt.Println("  " + dimStyle.Render("Copy your API key, then paste it here."))
 		fmt.Println()
 

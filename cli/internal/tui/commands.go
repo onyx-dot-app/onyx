@@ -8,9 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
+	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
-	"github.com/onyx-dot-app/onyx/cli/internal/util"
 )
 
 // handleSlashCommand dispatches slash commands and returns updated model + cmd.
@@ -51,7 +51,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/connectors":
 		url := m.config.ServerURL + "/admin/indexing/status"
-		if util.OpenBrowser(url) {
+		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
 			m.viewport.addWarning("Failed to open browser. Visit: " + url)
@@ -60,7 +60,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/settings":
 		url := m.config.ServerURL + "/app/settings/general"
-		if util.OpenBrowser(url) {
+		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
 			m.viewport.addWarning("Failed to open browser. Visit: " + url)

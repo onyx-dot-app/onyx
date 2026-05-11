@@ -39,20 +39,40 @@ func TestExitError_ErrorsAs(t *testing.T) {
 	}
 }
 
+func TestExitError_Unwrap(t *testing.T) {
+	sentinel := fmt.Errorf("sentinel")
+	e := &ExitError{Code: General, Err: sentinel}
+	wrapped := fmt.Errorf("outer: %w", e)
+
+	if !errors.Is(wrapped, sentinel) {
+		t.Fatal("errors.Is should find the sentinel error through Unwrap")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(wrapped, &exitErr) {
+		t.Fatal("errors.As should find ExitError")
+	}
+	if exitErr.Code != General {
+		t.Fatalf("expected code %d, got %d", General, exitErr.Code)
+	}
+}
+
 func TestForHTTPStatus(t *testing.T) {
 	tests := []struct {
 		status int
 		want   int
 	}{
-		{200, General},
-		{400, General},
+		{200, Success},
+		{400, BadRequest},
 		{401, AuthFailure},
 		{403, AuthFailure},
 		{404, NotAvailable},
 		{429, RateLimited},
+		{408, Timeout},
 		{500, ServerError},
 		{502, ServerError},
 		{503, ServerError},
+		{504, Timeout},
 	}
 	for _, tt := range tests {
 		got := ForHTTPStatus(tt.status)

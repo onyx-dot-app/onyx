@@ -19,12 +19,18 @@ const (
 // ForHTTPStatus maps an HTTP status code to a CLI exit code.
 func ForHTTPStatus(statusCode int) int {
 	switch {
+	case statusCode >= 200 && statusCode < 300:
+		return Success
+	case statusCode == 400:
+		return BadRequest
 	case statusCode == 401 || statusCode == 403:
 		return AuthFailure
 	case statusCode == 404:
 		return NotAvailable
 	case statusCode == 429:
 		return RateLimited
+	case statusCode == 408 || statusCode == 504:
+		return Timeout
 	case statusCode >= 500:
 		return ServerError
 	default:
@@ -41,6 +47,8 @@ type ExitError struct {
 func (e *ExitError) Error() string {
 	return e.Err.Error()
 }
+
+func (e *ExitError) Unwrap() error { return e.Err }
 
 // New creates an ExitError with the given code and message.
 func New(code int, msg string) *ExitError {

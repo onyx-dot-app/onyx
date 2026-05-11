@@ -63,7 +63,10 @@ func validateAPIKey(serverURL string, apiKey string) error {
 	client := api.NewClient(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), apiKeyValidationTimeout)
 	defer cancel()
-	return client.TestConnection(ctx)
+	if err := client.TestConnection(ctx); err != nil {
+		return apiErrorToExit(err, "API key validation failed")
+	}
+	return nil
 }
 
 // --- auth prompt (bubbletea model) ---
@@ -312,13 +315,13 @@ environment variable (the --host-key flag takes precedence).`,
 				}
 			}
 			if rateLimitPerMin <= 0 {
-				return fmt.Errorf("--rate-limit-per-minute must be > 0")
+				return exitcodes.New(exitcodes.BadRequest, "--rate-limit-per-minute must be > 0")
 			}
 			if rateLimitBurst <= 0 {
-				return fmt.Errorf("--rate-limit-burst must be > 0")
+				return exitcodes.New(exitcodes.BadRequest, "--rate-limit-burst must be > 0")
 			}
 			if rateLimitCache <= 0 {
-				return fmt.Errorf("--rate-limit-cache must be > 0")
+				return exitcodes.New(exitcodes.BadRequest, "--rate-limit-cache must be > 0")
 			}
 
 			addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))

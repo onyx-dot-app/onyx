@@ -2,19 +2,18 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
-	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func newValidateConfigCmd() *cobra.Command {
+func newValidateConfigCmd(ios *iostreams.IOStreams) *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate-config",
 		Short: "Check CLI configuration and server connectivity",
@@ -23,30 +22,25 @@ is valid. Also reports the server version and warns if it is below the
 minimum required.`,
 		Example: `  onyx-cli validate-config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.Load()
-
-			if !cfg.IsConfigured() {
-				return exitcodes.New(exitcodes.NotConfigured, "API key is missing\n  Set ONYX_API_KEY or run: onyx-cli configure")
+			cfg, err := requireConfig()
+			if err != nil {
+				return err
 			}
 
 			if config.ConfigExists() {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Config:  %s\n", config.ConfigFilePath())
+				fmt.Fprintf(ios.Out, "Config:  %s\n", config.ConfigFilePath())
 			} else {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Config:  environment variables")
+				fmt.Fprintln(ios.Out, "Config:  environment variables")
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server:  %s\n", cfg.ServerURL)
+			fmt.Fprintf(ios.Out, "Server:  %s\n", cfg.ServerURL)
 
 			// Test connection
 			client := api.NewClient(cfg)
 			if err := client.TestConnection(cmd.Context()); err != nil {
-				var authErr *api.AuthError
-				if errors.As(err, &authErr) {
-					return exitcodes.Newf(exitcodes.AuthFailure, "authentication failed: %v\n  Reconfigure with: onyx-cli configure", err)
-				}
-				return exitcodes.Newf(exitcodes.Unreachable, "connection failed: %v\n  Reconfigure with: onyx-cli configure", err)
+				return apiErrorToExit(err, "connection check failed")
 			}
 
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Status:  connected and authenticated")
+			fmt.Fprintln(ios.Out, "Status:  connected and authenticated")
 
 			// Check backend version compatibility
 			vCtx, vCancel := context.WithTimeout(cmd.Context(), 5*time.Second)
@@ -58,7 +52,7 @@ minimum required.`,
 			} else if backendVersion == "" {
 				log.Debug("server returned empty version string")
 			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Version: %s\n", backendVersion)
+				fmt.Fprintf(ios.Out, "Version: %s\n", backendVersion)
 				min := version.MinServer()
 				if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(min) {
 					log.Warnf("Server version %s is below minimum required %d.%d, please upgrade",

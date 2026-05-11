@@ -5,6 +5,7 @@ package overflow
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -18,11 +19,27 @@ import (
 type Writer struct {
 	Limit      int
 	Quiet      bool
+	Out        io.Writer // defaults to os.Stdout
+	ErrOut     io.Writer // defaults to os.Stderr
 	written    int
 	totalBytes int
 	truncated  bool
 	buf        strings.Builder // used only in quiet mode
 	tmpFile    *os.File        // used only in truncation mode (Limit > 0)
+}
+
+func (w *Writer) out() io.Writer {
+	if w.Out != nil {
+		return w.Out
+	}
+	return os.Stdout
+}
+
+func (w *Writer) errOut() io.Writer {
+	if w.ErrOut != nil {
+		return w.ErrOut
+	}
+	return os.Stderr
 }
 
 // Write sends a chunk of content through the writer.
@@ -36,7 +53,7 @@ func (w *Writer) Write(s string) {
 	}
 
 	if w.Limit <= 0 {
-		fmt.Print(s)
+		fmt.Fprint(w.out(), s)
 		return
 	}
 
@@ -45,20 +62,20 @@ func (w *Writer) Write(s string) {
 		f, err := os.CreateTemp("", "onyx-ask-*.txt")
 		if err != nil {
 			// Fall back to no-truncation if we can't create the file
-			fmt.Fprintf(os.Stderr, "warning: could not create temp file: %v\n", err)
+			fmt.Fprintf(w.errOut(), "warning: could not create temp file: %v\n", err)
 			w.Limit = 0
-			fmt.Print(s)
+			fmt.Fprint(w.out(), s)
 			return
 		}
 		w.tmpFile = f
 	}
 	if _, err := w.tmpFile.WriteString(s); err != nil {
 		// Disk write failed — abandon truncation, stream directly to stdout
-		fmt.Fprintf(os.Stderr, "warning: temp file write failed: %v\n", err)
+		fmt.Fprintf(w.errOut(), "warning: temp file write failed: %v\n", err)
 		w.closeTmpFile(true)
 		w.Limit = 0
 		w.truncated = false
-		fmt.Print(s)
+		fmt.Fprint(w.out(), s)
 		return
 	}
 
@@ -68,11 +85,11 @@ func (w *Writer) Write(s string) {
 
 	remaining := w.Limit - w.written
 	if len(s) <= remaining {
-		fmt.Print(s)
+		fmt.Fprint(w.out(), s)
 		w.written += len(s)
 	} else {
 		if remaining > 0 {
-			fmt.Print(s[:remaining])
+			fmt.Fprint(w.out(), s[:remaining])
 			w.written += remaining
 		}
 		w.truncated = true
@@ -83,13 +100,13 @@ func (w *Writer) Write(s string) {
 func (w *Writer) Finish() {
 	// Quiet mode: print buffered content at once
 	if w.Quiet {
-		fmt.Println(w.buf.String())
+		fmt.Fprintln(w.out(), w.buf.String())
 		return
 	}
 
 	if !w.truncated {
 		w.closeTmpFile(true) // clean up unused temp file
-		fmt.Println()
+		fmt.Fprintln(w.out())
 		return
 	}
 
@@ -97,11 +114,11 @@ func (w *Writer) Finish() {
 	tmpPath := w.tmpFile.Name()
 	w.closeTmpFile(false) // close but keep the file
 
-	fmt.Printf("\n\n--- response truncated (%d bytes total) ---\n", w.totalBytes)
-	fmt.Printf("Full response: %s\n", tmpPath)
-	fmt.Printf("Explore:\n")
-	fmt.Printf("  cat %s | grep \"<pattern>\"\n", tmpPath)
-	fmt.Printf("  cat %s | tail -50\n", tmpPath)
+	fmt.Fprintf(w.out(), "\n\n--- response truncated (%d bytes total) ---\n", w.totalBytes)
+	fmt.Fprintf(w.out(), "Full response: %s\n", tmpPath)
+	fmt.Fprintf(w.out(), "Explore:\n")
+	fmt.Fprintf(w.out(), "  cat %s | grep \"<pattern>\"\n", tmpPath)
+	fmt.Fprintf(w.out(), "  cat %s | tail -50\n", tmpPath)
 }
 
 // closeTmpFile closes and optionally removes the temp file.

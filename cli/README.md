@@ -34,6 +34,7 @@ Environment variables override config file values:
 | `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
 | `ONYX_API_KEY` | Yes | API key for authentication |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
+| `ONYX_SSH_HOST_KEY` | No | Path to SSH host key for `serve` command |
 
 ## Usage
 
@@ -54,7 +55,8 @@ onyx-cli ask --json "Hello"
 | Flag | Description |
 |------|-------------|
 | `--agent-id <int>` | Agent ID to use (overrides default) |
-| `--json` | Output raw NDJSON events instead of plain text |
+| `--json` | Output NDJSON stream events instead of plain text |
+| `--prompt <string>` | Question text (use with piped stdin context) |
 | `--quiet` | Buffer output and print once at end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
 
@@ -85,10 +87,12 @@ ssh -o SendEnv=ONYX_API_KEY your-host -p 2222
 ```
 
 Useful hardening flags:
+- `--host-key` (default `~/.config/onyx-cli/host_ed25519`)
 - `--idle-timeout` (default `15m`)
 - `--max-session-timeout` (default `8h`)
 - `--rate-limit-per-minute` (default `20`)
 - `--rate-limit-burst` (default `40`)
+- `--rate-limit-cache` (default `4096`)
 
 ## Commands
 
@@ -102,6 +106,13 @@ Useful hardening flags:
 | `experiments` | Agent / Script | List experimental features and their status |
 | `configure` | Interactive | Configure server URL and API key |
 | `serve` | Interactive | Serve the interactive chat TUI over SSH |
+
+### Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--version`, `-v` | Print client and server version information |
+| `--debug` | Run in debug mode (verbose logging) |
 
 ## Agent / Non-Interactive Use
 
@@ -189,7 +200,7 @@ go test ./...
 go build -o onyx-cli .
 
 # Lint
-staticcheck ./...
+golangci-lint run ./...
 ```
 
 ## Publishing to PyPI

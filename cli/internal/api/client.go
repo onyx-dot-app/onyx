@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -48,12 +50,6 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 	}
 }
 
-// UpdateConfig replaces the client's config.
-func (c *Client) UpdateConfig(cfg config.OnyxCliConfig) {
-	c.baseURL = strings.TrimRight(cfg.ServerURL, "/")
-	c.apiKey = cfg.APIKey
-}
-
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
@@ -65,6 +61,22 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 		req.Header.Set("X-Onyx-Authorization", bearer)
 	}
 	return req, nil
+}
+
+func checkResponse(resp *http.Response) error {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	body, _ := io.ReadAll(resp.Body)
+	return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+}
+
+func wrapTimeoutError(err error) error {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return &OnyxAPIError{StatusCode: 408, Detail: fmt.Sprintf("request timed out: %v", err)}
+	}
+	return err
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
@@ -87,13 +99,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return wrapTimeoutError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(respBody)}
+	if err := checkResponse(resp); err != nil {
+		return err
 	}
 
 	if result != nil {
@@ -121,9 +132,9 @@ func (c *Client) TestConnection(ctx context.Context) error {
 
 	if resp.StatusCode == 403 {
 		if strings.Contains(serverHeader, "awselb") || strings.Contains(serverHeader, "amazons3") {
-			return fmt.Errorf("blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist")
+			return &AuthError{Message: "blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist"}
 		}
-		return fmt.Errorf("HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction")
+		return &AuthError{Message: "HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction"}
 	}
 
 	// Step 2: Authenticated check
@@ -161,7 +172,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	if body != "" {
 		detail += fmt.Sprintf("\n  Response: %s", body)
 	}
-	return fmt.Errorf("%s", detail)
+	return &OnyxAPIError{StatusCode: resp2.StatusCode, Detail: detail}
 }
 
 // ListAgents returns visible agents.
@@ -244,13 +255,12 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 
 	resp, err := c.longHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, wrapTimeoutError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+	if err := checkResponse(resp); err != nil {
+		return nil, err
 	}
 
 	var snapshot models.CategorizedFilesSnapshot
@@ -293,3 +303,18 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 	}
 	_ = resp.Body.Close()
 }
+
+// ClientAPI is the interface satisfied by Client.
+type ClientAPI interface {
+	TestConnection(ctx context.Context) error
+	ListAgents(ctx context.Context) ([]models.AgentSummary, error)
+	ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error)
+	GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error)
+	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
+	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
+	GetBackendVersion(ctx context.Context) (string, error)
+	StopChatSession(ctx context.Context, sessionID string)
+	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+}
+
+var _ ClientAPI = (*Client)(nil)

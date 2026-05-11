@@ -126,10 +126,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InitDoneMsg:
 		return m.handleInitDone(msg)
 
-	case api.StreamEventMsg:
+	case StreamEventMsg:
 		return m.handleStreamEvent(msg)
 
-	case api.StreamDoneMsg:
+	case StreamDoneMsg:
 		return m.handleStreamDone(msg)
 
 	case AgentsLoadedMsg:
@@ -358,10 +358,10 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	)
 	m.streamCh = ch
 
-	return m, api.WaitForStreamEvent(ch)
+	return m, WaitForStreamEvent(ch)
 }
 
-func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	// Ignore stale events after cancellation
 	if !m.isStreaming {
 		return m, nil
@@ -442,10 +442,10 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 		return m.finishStream(nil)
 	}
 
-	return m, api.WaitForStreamEvent(m.streamCh)
+	return m, WaitForStreamEvent(m.streamCh)
 }
 
-func (m Model) handleStreamDone(msg api.StreamDoneMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
 	// Ignore if already cancelled
 	if !m.isStreaming {
 		return m, nil

@@ -4,15 +4,14 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // Version and Commit are set via ldflags at build time.
@@ -28,12 +27,12 @@ func fullVersion() string {
 	return Version
 }
 
-func printVersion(cmd *cobra.Command) {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Client version: %s\n", fullVersion())
+func printVersion(ios *iostreams.IOStreams, cmd *cobra.Command) {
+	fmt.Fprintf(ios.Out, "Client version: %s\n", fullVersion())
 
 	cfg := config.Load()
 	if !cfg.IsConfigured() {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (not configured)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (not configured)\n")
 		return
 	}
 
@@ -45,16 +44,16 @@ func printVersion(cmd *cobra.Command) {
 	backendVersion, err := client.GetBackendVersion(ctx)
 	if err != nil {
 		log.WithError(err).Debug("could not fetch backend version")
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (could not reach server)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (could not reach server)\n")
 		return
 	}
 
 	if backendVersion == "" {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (empty response)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (empty response)\n")
 		return
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: %s\n", backendVersion)
+	fmt.Fprintf(ios.Out, "Server version: %s\n", backendVersion)
 
 	min := version.MinServer()
 	if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(min) {
@@ -65,6 +64,8 @@ func printVersion(cmd *cobra.Command) {
 
 // Execute creates and runs the root command.
 func Execute() error {
+	ios := iostreams.System()
+
 	opts := struct {
 		Debug bool
 	}{}
@@ -94,21 +95,21 @@ func Execute() error {
 	// Register subcommands
 	chatCmd := newChatCmd()
 	rootCmd.AddCommand(chatCmd)
-	rootCmd.AddCommand(newAskCmd())
-	rootCmd.AddCommand(newAgentsCmd())
-	rootCmd.AddCommand(newConfigureCmd())
-	rootCmd.AddCommand(newValidateConfigCmd())
+	rootCmd.AddCommand(newAskCmd(ios))
+	rootCmd.AddCommand(newAgentsCmd(ios))
+	rootCmd.AddCommand(newConfigureCmd(ios))
+	rootCmd.AddCommand(newValidateConfigCmd(ios))
 	rootCmd.AddCommand(newServeCmd())
-	rootCmd.AddCommand(newInstallSkillCmd())
-	rootCmd.AddCommand(newExperimentsCmd())
+	rootCmd.AddCommand(newInstallSkillCmd(ios))
+	rootCmd.AddCommand(newExperimentsCmd(ios))
 
 	// Default command: --version first, then TTY check, then chat TUI
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if showVersion {
-			printVersion(cmd)
+			printVersion(ios, cmd)
 			return nil
 		}
-		if !term.IsTerminal(int(os.Stdout.Fd())) {
+		if !ios.IsInteractive() {
 			return cmd.Help()
 		}
 		return chatCmd.RunE(cmd, args)
