@@ -254,37 +254,38 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                       const isCurrentUser = currentUser?.id === user.id;
 
                       return (
-                        <ContentAction
-                          key={`user-${user.id}`}
-                          sizePreset="main-ui"
-                          variant="section"
-                          icon={SvgUser}
-                          title={user.email}
-                          description={isCurrentUser ? "You" : undefined}
-                          padding="sm"
-                          rightChildren={
-                            isOwner || (isCurrentUser && !agentId) ? (
-                              // Owner will always have the agent "shared" with it.
-                              // Therefore, we never render any SvgX button to remove it.
-                              //
-                              // Note:
-                              // This user, during creation, is assumed to be the "owner".
-                              // That is why the `(isCurrentUser && !agentId)` condition exists.
-                              <Text font="secondary-body" color="text-03">
-                                Owner
-                              </Text>
-                            ) : (
-                              // For all other cases (including for "self-unsharing"),
-                              // we render a Button with SvgX to remove a person from the list.
-                              <Button
-                                prominence="tertiary"
-                                size="sm"
-                                icon={SvgX}
-                                onClick={() => handleRemoveUser(user.id)}
-                              />
-                            )
-                          }
-                        />
+                        <div key={`user-${user.id}`} className="p-1">
+                          <ContentAction
+                            sizePreset="main-ui"
+                            variant="section"
+                            icon={SvgUser}
+                            title={user.email}
+                            description={isCurrentUser ? "You" : undefined}
+                            padding="fit"
+                            rightChildren={
+                              isOwner || (isCurrentUser && !agentId) ? (
+                                // Owner will always have the agent "shared" with it.
+                                // Therefore, we never render any SvgX button to remove it.
+                                //
+                                // Note:
+                                // This user, during creation, is assumed to be the "owner".
+                                // That is why the `(isCurrentUser && !agentId)` condition exists.
+                                <Text font="secondary-body" color="text-03">
+                                  Owner
+                                </Text>
+                              ) : (
+                                // For all other cases (including for "self-unsharing"),
+                                // we render a Button with SvgX to remove a person from the list.
+                                <Button
+                                  prominence="tertiary"
+                                  size="sm"
+                                  icon={SvgX}
+                                  onClick={() => handleRemoveUser(user.id)}
+                                />
+                              )
+                            }
+                          />
+                        </div>
                       );
                     })}
 
@@ -333,7 +334,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
                 {canUpdateFeaturedStatus && (
                   <>
-                    <Divider paddingParallel="fit" />
+                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                     <InputHorizontal
                       title="Feature This Agent"
@@ -345,19 +346,21 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   </>
                 )}
 
-                <InputChipField
-                  chips={chipItems}
-                  onRemoveChip={(id) => handleRemoveLabel(Number(id))}
-                  onAdd={addLabel}
-                  value={labelInputValue}
-                  onChange={setLabelInputValue}
-                  placeholder="Add labels..."
-                  icon={SvgTag}
-                />
-                <Text font="secondary-body" color="text-04">
-                  Add labels and categories to help people better discover this
-                  agent.
-                </Text>
+                <Section gap={0.25} alignItems="stretch">
+                  <InputChipField
+                    chips={chipItems}
+                    onRemoveChip={(id) => handleRemoveLabel(Number(id))}
+                    onAdd={addLabel}
+                    value={labelInputValue}
+                    onChange={setLabelInputValue}
+                    placeholder="Add labels..."
+                    icon={SvgTag}
+                  />
+                  <Text font="secondary-body" color="text-03">
+                    Add labels and categories to help people better discover
+                    this agent.
+                  </Text>
+                </Section>
               </Section>
             </Tabs.Content>
           </Tabs>
