@@ -1426,6 +1426,89 @@ sandboxJobs:
   podDisruptionBudget:
     maxUnavailable: 1
 
+  # Job manifest template stored as a ConfigMap. The backend reads this at startup
+  # and renders per-session Jobs by substituting ${placeholders} via string.Template.
+  # No Job is created at chart install time — this just provides the static template.
+  jobTemplate:
+    configMapName: sandbox-job-templates
+
+    # Image references for the two containers in each sandbox Pod.
+    sandboxImage: "onyxdotapp/sandbox:latest"
+    sidecarImage: "onyxdotapp/sandbox-sidecar:latest"
+    imagePullPolicy: IfNotPresent
+
+    # Pod-level placement.
+    nodeSelector:
+      onyx.app/workload: sandbox
+    tolerations:
+      - key: onyx.app/workload
+        operator: Equal
+        value: sandbox
+        effect: NoSchedule
+
+    # Lifecycle knobs — hybrid termination: pod-internal idle exit (primary,
+    # via SIDECAR_IDLE_TIMEOUT_SECONDS) plus activeDeadlineSeconds as a 24h
+    # backstop. backoffLimit=0 because we don't auto-retry crashed sandboxes —
+    # the user should restore from snapshot rather than blindly restart.
+    activeDeadlineSeconds: 86400
+    terminationGracePeriodSeconds: 120
+    ttlSecondsAfterFinished: 300
+    idleTimeoutSeconds: 3600
+
+    # Per-container resource requests/limits. Container max must stay within
+    # the namespace LimitRange (4 CPU / 16Gi mem) configured above.
+    sandboxContainer:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "4"
+        memory: "10Gi"
+    sidecarContainer:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+    # Ports exposed by the sandbox Pod. sidecarPort is the HTTP API; previewPort
+    # is the Next.js dev server the backend proxies to for browser previews.
+    sidecarPort: 8080
+    previewPort: 3000
+
+  # Per-session workspace + per-user knowledge PVC config. Defaults assume the
+  # cluster has a sensible default StorageClass; override storageClassName to
+  # pin a specific one (e.g. sandbox-gp3 below).
+  storage:
+    storageClassName: ""
+    snapshotClassName: ""
+    workspaceSize: 50Gi
+    knowledgeSize: 5Gi
+
+    # Optionally create a gp3 StorageClass managed by this chart. Off by default
+    # because StorageClass is cluster-scoped; opt in per cluster via overlay if
+    # the cluster doesn't already have one wired to the EBS CSI driver.
+    createStorageClass: false
+    storageClass:
+      name: sandbox-gp3
+      provisioner: ebs.csi.aws.com
+      reclaimPolicy: Delete
+      volumeBindingMode: WaitForFirstConsumer
+      allowVolumeExpansion: true
+      parameters:
+        type: gp3
+        fsType: ext4
+        encrypted: "true"
+
+    # Optionally create a VolumeSnapshotClass. Same reasoning. Required for the
+    # resume-from-snapshot path landing in a later PR.
+    createVolumeSnapshotClass: false
+    volumeSnapshotClass:
+      name: sandbox-ebs
+      driver: ebs.csi.aws.com
+      deletionPolicy: Delete
+
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line
 # string that will be passed through `tpl` so it can reference release values.
