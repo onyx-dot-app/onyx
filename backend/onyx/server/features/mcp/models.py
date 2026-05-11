@@ -103,9 +103,8 @@ class MCPAuthTemplate(BaseModel):
     @staticmethod
     def derive_required_fields(headers: dict[str, str]) -> list[str]:
         """Extract the set of `{placeholder}` field names referenced by
-        ``headers`` values, preserving the order they're first encountered
-        and excluding placeholders the backend fills in automatically (see
-        ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
+        ``headers`` values, excluding placeholders the backend fills in
+        automatically (see ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
         """
         seen: set[str] = set()
         for value in headers.values():
