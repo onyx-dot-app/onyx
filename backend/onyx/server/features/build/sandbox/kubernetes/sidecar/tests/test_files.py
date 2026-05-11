@@ -65,3 +65,33 @@ def test_write_invalid_base64_returns_400(client, auth_headers) -> None:
         json={"path": "x.txt", "content_b64": "not-valid-base64!!!"},
     )
     assert resp.status_code == 400
+
+
+def test_read_rejects_file_over_max_bytes(
+    client, auth_headers, workspace, monkeypatch
+) -> None:
+    """Bounded read enforces max_read_bytes even when stat() would have lied
+    or the file grew under the sidecar's feet (TOCTOU defense)."""
+    from app.config import get_settings
+
+    big = workspace / "big.txt"
+    big.write_bytes(b"x" * 1024)
+    monkeypatch.setattr(get_settings(), "max_read_bytes", 100)
+
+    resp = client.get("/files/read?path=big.txt", headers=auth_headers)
+    assert resp.status_code == 413
+    assert "max_read_bytes" in resp.json()["detail"]
+
+
+def test_read_at_exact_limit_succeeds(
+    client, auth_headers, workspace, monkeypatch
+) -> None:
+    from app.config import get_settings
+
+    exact = workspace / "exact.txt"
+    exact.write_bytes(b"x" * 100)
+    monkeypatch.setattr(get_settings(), "max_read_bytes", 100)
+
+    resp = client.get("/files/read?path=exact.txt", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["size_bytes"] == 100

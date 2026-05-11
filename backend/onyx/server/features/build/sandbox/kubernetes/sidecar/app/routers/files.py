@@ -70,18 +70,21 @@ async def read_file(path: str) -> ReadResponse:
             detail=f"File not found: {path}",
         )
 
-    settings = get_settings()
-    size = target.stat().st_size
-    if size > settings.max_read_bytes:
+    limit = get_settings().max_read_bytes
+    # Bounded read: cap memory at limit+1 bytes so a concurrent grow on the
+    # underlying file from the sandbox container (which is untrusted from the
+    # sidecar's perspective) can't bypass the size cap via TOCTOU.
+    with target.open("rb") as fh:
+        data = fh.read(limit + 1)
+    if len(data) > limit:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size {size} exceeds max_read_bytes {settings.max_read_bytes}",
+            detail=f"File size exceeds max_read_bytes {limit}",
         )
 
-    data = target.read_bytes()
     return ReadResponse(
         path=path,
-        size_bytes=size,
+        size_bytes=len(data),
         content_b64=base64.b64encode(data).decode("ascii"),
     )
 

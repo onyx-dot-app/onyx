@@ -1,18 +1,20 @@
 # Craft sandbox sidecar — HTTP server for file I/O, exec, snapshot triggers, and idle tracking.
 # Runs as a separate container in the sandbox pod alongside the main sandbox container.
 
+# Copy uv from the pinned official image. Avoids the supply-chain risk of
+# `curl https://astral.sh/uv/install.sh | sh` and gives reproducible builds.
+FROM ghcr.io/astral-sh/uv:0.9.26 AS uv-bin
+
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# uv: deterministic, fast dependency installs from pyproject.toml + uv.lock.
-RUN set -eux \
-    && apt-get update \
+# curl is still needed at runtime for the HEALTHCHECK below.
+RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/root/.local/bin:${PATH}"
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
 COPY pyproject.toml uv.lock README.md ./
 COPY app ./app
