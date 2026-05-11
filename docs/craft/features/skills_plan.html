@@ -5134,16 +5134,23 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
     <!-- =================================================================== -->
     <h2 id="s21">21. Implementation plan — prioritized phases</h2>
 
+    <div class="callout">
+      <span class="callout-label">Live task board → TODOS.md</span>
+      The day-to-day execution state — what's <code>[TODO]</code> vs
+      <code>[WIP]</code> vs <code>[REVIEW]</code> vs <code>[DONE]</code>, who
+      owns what, what's blocked — lives in
+      <span class="file-ref">docs/craft/features/TODOS.md</span>. This section
+      is the strategic rollup: critical path, dependencies, calendar, what to
+      cut if behind. Don't track day-to-day status here.
+    </div>
+
     <p>
-      The 104 todos in this spec aren't equal weight, and most don't have to
-      ship together. This is the recommended execution order. Each phase has a
-      <strong>goal</strong>, a <strong>critical-path checklist</strong> (must
-      do), a <strong>stretch list</strong> (defer if behind),
-      <strong>dependencies</strong>, and a rough <strong>effort</strong> sizing
-      (S = &lt;1 day, M = 2–5 days, L = 1+ week).
+      Six phases. Each has a <strong>goal</strong>,
+      <strong>dependencies</strong>, and rough <strong>effort</strong> sizing (S
+      = &lt;1 day, M = 2–5 days, L = 1+ week).
     </p>
 
-    <div class="callout">
+    <div class="callout warn">
       <span class="callout-label">Critical path</span>
       Phase 1 → 2 → 3 → 6. Phase 4 (Admin UI) and Phase 5 (Security ops) run in
       parallel after Phase 2. Ship Phases 1–3 alone and you have a CLI-operable
@@ -5152,331 +5159,85 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
       productionizable.
     </div>
 
-    <h3>
-      Phase 1 — Foundation (universal primitive) <span class="pill">M</span>
-      <span class="pill warn">Blocks: everything</span>
-    </h3>
-    <p>
-      Goal: the universal layer compiles and is unit-testable. No HTTP routes
-      yet, no sandbox wiring.
-    </p>
-    <ul class="todos">
-      <li>
-        <strong>DB + migration</strong> (§3):
-        <ul>
-          <li>
-            Add <code>Skill</code>, <code>Skill__UserGroup</code> to
-            <span class="file-ref">backend/onyx/db/models.py</span>.
-          </li>
-          <li>
-            Add <code>SKILL_BUNDLE</code>, <code>SKILL_ICON</code> to
-            <code>FileOrigin</code>.
-          </li>
-          <li>Alembic revision + verify on a fresh EE tenant.</li>
-        </ul>
-      </li>
-      <li>
-        <strong>Module skeletons</strong> (§2):
-        <span class="file-ref"
-          >backend/onyx/skills/{__init__,registry,bundle,materialize,render}.py</span
-        >; <span class="file-ref">backend/onyx/db/skill.py</span>.
-      </li>
-      <li>
-        <strong><code>BuiltinSkillRegistry</code></strong> (§4):
-        <ul>
-          <li>
-            Singleton, <code>register(slug, source_dir, requirements=[])</code>,
-            <code>list_all</code>, <code>list_satisfied</code>,
-            <code>evaluate_for_admin</code>, <code>reserved_slugs</code>.
-          </li>
-          <li>
-            Frontmatter parse at registration; raise on duplicate or missing
-            SKILL.md.
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Bundle validator</strong> (§5):
-        <ul>
-          <li>
-            <code>validate_custom_bundle</code> with every rule in the §5 table;
-            streaming uncompressed-size check.
-          </li>
-          <li>
-            <code>_safe_unzip</code> for defensive re-check at materialization.
-          </li>
-          <li><code>compute_bundle_sha256</code>.</li>
-          <li>Unit tests against each failure mode + known-good fixture.</li>
-        </ul>
-      </li>
-      <li>
-        <strong>Materializer</strong> (§6):
-        <ul>
-          <li>
-            <code>materialize_skills(dest, user, db, render_ctx)</code> +
-            Pydantic models.
-          </li>
-          <li>
-            Extract <code>render_template_placeholders</code> from
-            <span class="file-ref">agent_instructions.py</span>.
-          </li>
-          <li>
-            External-dep unit test: fixture user, 1 granted + 1 not-granted
-            custom + 2 built-ins.
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>DB ops</strong> (§3): <code>list_skills_for_user/admin</code>,
-        <code>fetch_*</code>, <code>create_skill</code>,
-        <code>replace_skill_bundle</code>, <code>patch_skill</code>,
-        <code>replace_skill_grants</code>, <code>delete_skill</code>.
-      </li>
-    </ul>
+    <h3>Phase summaries</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Phase</th>
+          <th>Goal</th>
+          <th>Effort</th>
+          <th>Depends</th>
+          <th>Spec sections</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Foundation</strong> — universal primitive</td>
+          <td>
+            DB + registry + validator + materializer + DB ops compile and
+            unit-test cleanly. No HTTP, no sandbox wiring.
+          </td>
+          <td>M</td>
+          <td>—</td>
+          <td>§2, §3, §4, §5, §6</td>
+        </tr>
+        <tr>
+          <td><strong>2. Operability</strong> — API surface</td>
+          <td>
+            Full CRUD via <code>curl</code>.
+            <code>GET /api/admin/skills</code> returns
+            <code>available + requirements</code>. No admin UI, no sandbox
+            wiring yet.
+          </td>
+          <td>M</td>
+          <td>Phase 1</td>
+          <td>§7</td>
+        </tr>
+        <tr>
+          <td><strong>3. Craft consumer wiring</strong></td>
+          <td>
+            Skills materialize into real sandboxes. End-to-end works for any
+            user, even without admin UI. K8s + local backends. AGENTS.md
+            rewrite. Dockerfile updated.
+          </td>
+          <td>M</td>
+          <td>Phase 1</td>
+          <td>§4, §8, §9, §10</td>
+        </tr>
+        <tr>
+          <td><strong>4. Admin UI</strong></td>
+          <td>
+            <code>/admin/skills</code> page with list, upload, grants, replace
+            bundle, delete, built-in detail drawer.
+          </td>
+          <td>L</td>
+          <td>Phase 2 endpoints stable</td>
+          <td>§13</td>
+        </tr>
+        <tr>
+          <td><strong>5. Security &amp; operations</strong></td>
+          <td>
+            Feature flag, sandbox hardening verification, interception-team
+            coordination, orphan-blob sweep, per-session skills UI in Craft.
+          </td>
+          <td>M</td>
+          <td>— (parallel with 3/4)</td>
+          <td>§11, §15, §16, §18</td>
+        </tr>
+        <tr>
+          <td><strong>6. Polish, rollout, ship</strong></td>
+          <td>
+            Snapshot fidelity verification, multi-tenant isolation test, manual
+            smoke, deploy sequence + flag flip.
+          </td>
+          <td>S–M</td>
+          <td>Phase 3 + Phase 5</td>
+          <td>§12, §14, §17, §15</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <h3>
-      Phase 2 — Operability (API surface) <span class="pill">M</span>
-      <span class="pill warn">Depends: Phase 1</span>
-    </h3>
-    <p>
-      Goal: fully operable via HTTP. No sandbox wiring, no admin UI — but
-      <code>curl</code> works end-to-end.
-    </p>
-    <ul class="todos">
-      <li>
-        <strong>Universal admin router</strong> at
-        <span class="file-ref">backend/onyx/server/features/skills/api.py</span
-        >:
-        <ul>
-          <li>
-            <code>GET /api/admin/skills</code> (with <code>available</code> +
-            <code>requirements</code>).
-          </li>
-          <li>
-            <code>POST /api/admin/skills/custom</code> (validate → save blobs →
-            row → grants).
-          </li>
-          <li>
-            <code>PATCH</code>, <code>PUT .../bundle</code>,
-            <code>PUT .../grants</code>, <code>DELETE</code>.
-          </li>
-          <li>Icon streaming endpoints.</li>
-        </ul>
-      </li>
-      <li>
-        <strong>User router</strong>: <code>GET /api/skills</code>, icon
-        endpoint.
-      </li>
-      <li>Pydantic response models in same file.</li>
-      <li>External-dep unit tests covering happy + each failure.</li>
-      <li>
-        Wire router into <span class="file-ref">backend/onyx/main.py</span>.
-      </li>
-    </ul>
-
-    <h3>
-      Phase 3 — Craft consumer wiring <span class="pill">M</span>
-      <span class="pill warn">Depends: Phase 1</span>
-      <span class="pill warn">Blocks: Phase 6</span>
-    </h3>
-    <p>
-      Goal: skills actually materialize into running sandboxes. End-to-end works
-      without any admin UI.
-    </p>
-    <ul class="todos">
-      <li>
-        <strong>Craft built-ins registration</strong>:
-        <ul>
-          <li>
-            <span class="file-ref">builtins_registration.py</span> with
-            <code>pptx</code> + <code>image-generation</code> (with its
-            <code>SkillRequirement</code>).
-          </li>
-          <li>
-            Call from
-            <span class="file-ref">backend/onyx/main.py</span> startup.
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Materialization adapter</strong>:
-        <ul>
-          <li><code>materialize_for_session(session, user, db)</code>.</li>
-          <li>
-            <code>render_accessible_cc_pairs(user, db)</code> helper
-            (confirm/reuse from <span class="file-ref">search.md</span>).
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Sandbox delivery</strong>:
-        <ul>
-          <li>
-            K8s: <code>_stream_skills_into_pod</code> tarball helper; replace
-            <code>ln -sf</code> at
-            <span class="file-ref">kubernetes_sandbox_manager.py:1338</span>.
-          </li>
-          <li>
-            Local: <code>_setup_skills_local</code>; replace
-            <code>directory_manager.setup_skills</code>.
-          </li>
-          <li>
-            Both: call <code>materialize_for_session</code> early; pass staging
-            dir through.
-          </li>
-          <li>
-            <code>read_file_from_session</code> on
-            <code>SandboxManagerBase</code> + both impls.
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Panel data source</strong>:
-        <code>GET /api/build/sessions/{id}/skills</code> +
-        <code>.../skills/{slug}/content</code>.
-      </li>
-      <li>
-        <strong>AGENTS.md generation</strong>:
-        <ul>
-          <li>
-            Rewrite <code>build_skills_section</code> at
-            <span class="file-ref">agent_instructions.py:267</span>; read
-            manifest, inline all.
-          </li>
-          <li>
-            Delete <code>_skills_cache</code>, unused
-            <code>_scan_skills_directory</code>.
-          </li>
-        </ul>
-      </li>
-      <li>
-        <strong>Dockerfile</strong>: remove <code>COPY skills/</code> +
-        <code>mkdir -p /workspace/skills</code> at
-        <span class="file-ref">Dockerfile:99</span>.
-      </li>
-      <li>
-        <strong>Integration test</strong>: provision session with 1 granted + 1
-        not-granted custom; verify layout + manifest + AGENTS.md.
-      </li>
-    </ul>
-
-    <h3>
-      Phase 4 — Admin UI <span class="pill">L</span>
-      <span class="pill warn">Depends: Phase 2</span>
-      <span class="pill new">Parallel with Phase 3</span>
-    </h3>
-    <p>
-      Goal: admins manage skills without <code>curl</code>. Frontend work; can
-      start as soon as Phase 2 endpoints stabilize.
-    </p>
-    <ul class="todos">
-      <li>
-        Page shell at
-        <span class="file-ref">web/src/app/admin/skills/page.tsx</span>
-        (SettingsLayouts).
-      </li>
-      <li>
-        <strong>List view</strong>:
-        <span class="file-ref">SkillsList.tsx</span>,
-        <span class="file-ref">SkillRow.tsx</span>,
-        <span class="file-ref">SourceBadge.tsx</span>; Access column with
-        <code>Available</code> vs
-        <code>Needs setup · Configure →</code> deep-link; search + filters.
-      </li>
-      <li>
-        <strong>Upload modal</strong> with frontmatter pre-fill
-        (<code>jszip</code>); Trust-check banner.
-      </li>
-      <li>
-        <strong>Visibility picker</strong> (shared): Private / Org-wide /
-        Specific groups.
-      </li>
-      <li>
-        <strong>Built-in detail drawer</strong> with Requirements section
-        (status + Configure CTA per requirement).
-      </li>
-      <li>
-        <strong>Edit / Replace / Grants / Delete</strong> modals with mandatory
-        copy.
-      </li>
-      <li>Frontend type definitions matching backend Pydantic models.</li>
-      <li>
-        Hook into admin nav (<span class="file-ref">lib/admin-routes.ts</span>).
-      </li>
-      <li>Loading / error / empty states.</li>
-    </ul>
-    <p><strong>Stretch (defer if behind):</strong></p>
-    <ul class="todos">
-      <li>Row action menu polish (icons, hover states).</li>
-      <li>Validation error inline display polish.</li>
-      <li>Frontend tests beyond smoke.</li>
-    </ul>
-
-    <h3>
-      Phase 5 — Security &amp; operations <span class="pill">M</span>
-      <span class="pill new">Parallel with Phase 3/4</span>
-    </h3>
-    <p>
-      Goal: production-ready security and observability posture. Some of this is
-      coordination, not code.
-    </p>
-    <ul class="todos">
-      <li>
-        <strong>Sandbox hardening verification</strong> (§18) — confirm
-        checklist against current pod spec; fix any gaps.
-      </li>
-      <li>
-        <strong>Interception team coordination</strong> — file ticket for the
-        two policy asks (deny non-classified writes; approval for
-        non-destructive writes within classified services).
-      </li>
-      <li>
-        <strong>Feature flag</strong>
-        <code>SKILLS_MATERIALIZATION_V2_ENABLED</code> (§15) gating the new
-        sandbox path; legacy fallback preserved.
-      </li>
-      <li>
-        <strong>Orphan blob sweep</strong> (§16) —
-        <code>cleanup_orphaned_skill_blobs</code> weekly Celery task; unit +
-        integration tests.
-      </li>
-      <li>
-        <strong>Per-session skills UI</strong> (§11) — read-only panel + inline
-        OpenCode-event pattern match.
-      </li>
-    </ul>
-    <p><strong>Stretch (V1.5):</strong></p>
-    <ul class="todos">
-      <li>
-        <strong>Invocation audit log</strong> (§18) —
-        <code>skill_invocation_log</code> table + emitter on SKILL.md read +
-        admin UI surface.
-      </li>
-    </ul>
-
-    <h3>
-      Phase 6 — Polish, rollout, ship <span class="pill">S–M</span>
-      <span class="pill warn">Depends: Phase 3 + 5</span>
-    </h3>
-    <p>Goal: actually flip the switch and verify it works in prod.</p>
-    <ul class="todos">
-      <li>
-        <strong>Snapshot fidelity verification</strong> (§12) — confirm
-        <span class="file-ref">snapshot_manager.py</span> includes
-        <code>.agents/skills/</code>; resume path skips materializer;
-        integration test.
-      </li>
-      <li><strong>Multi-tenant isolation test</strong> (§14).</li>
-      <li>
-        <strong>Manual smoke</strong> (§17) — full admin + user journeys
-        including capability-flip for <code>image-generation</code>.
-      </li>
-      <li>
-        <strong>Deploy sequence</strong> (§15) — api_server first (flag off) →
-        sandbox image → flip flag → bake one release → remove legacy code +
-        flag.
-      </li>
-    </ul>
+    <p>For task-level state, see <span class="file-ref">TODOS.md</span>.</p>
 
     <h3>Suggested calendar</h3>
 
