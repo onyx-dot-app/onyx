@@ -107,13 +107,13 @@ class MCPAuthTemplate(BaseModel):
         and excluding placeholders the backend fills in automatically (see
         ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
         """
-        seen: dict[str, None] = {}
+        seen: set[str] = set()
         for value in headers.values():
             for match in _PLACEHOLDER_RE.findall(value):
                 if match in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
                     continue
-                seen.setdefault(match, None)
-        return list(seen.keys())
+                seen.add(match)
+        return list(seen)
 
 
 class MCPToolCreateRequest(BaseModel):
