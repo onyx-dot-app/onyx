@@ -1451,7 +1451,7 @@
 │   __init__.py     public surface re-exports                         │
 │                                                                     │
 │   DB:  backend/onyx/db/skill.py                                     │
-│        Tables: skill, skill__user_group, skill__user                │
+│        Tables: skill, skill__user_group                             │
 │                                                                     │
 │   API: backend/onyx/server/features/skills/api.py                   │
 │        /api/admin/skills   (admin CRUD + grants)                    │
@@ -1574,15 +1574,13 @@
     created_at, updated_at: ...
 
     groups = relationship("UserGroup", secondary="skill__user_group", viewonly=True)
-    users  = relationship("User",      secondary="skill__user",       viewonly=True)
 
     __table_args__ = (
         Index("ux_skill_slug",            "slug", unique=True),
         Index("ix_skill_enabled_deleted", "enabled", "deleted"),
     )
 
-class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)
-class Skill__User(Base):      ... # skill_id, user_id      (composite PK)</code></pre>
+class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code></pre>
 
     <p>
       And in
@@ -1642,8 +1640,7 @@ class Skill__User(Base):      ... # skill_id, user_id      (composite PK)</code>
     <div class="subhead todos">Todos</div>
     <ul class="todos">
       <li>
-        Add <code>Skill</code>, <code>Skill__UserGroup</code>,
-        <code>Skill__User</code> to
+        Add <code>Skill</code>, <code>Skill__UserGroup</code> to
         <span class="file-ref">backend/onyx/db/models.py</span>.
       </li>
       <li>
@@ -1658,10 +1655,7 @@ class Skill__User(Base):      ... # skill_id, user_id      (composite PK)</code>
         >:
         <ul>
           <li><code>CREATE TABLE skill</code> with all columns + indexes.</li>
-          <li>
-            <code>CREATE TABLE skill__user_group</code>,
-            <code>skill__user</code> with FKs.
-          </li>
+          <li><code>CREATE TABLE skill__user_group</code> with FKs.</li>
           <li>
             <code>ALTER TYPE fileorigin ADD VALUE 'skill_bundle'</code> and
             <code>'skill_icon'</code>.
@@ -2319,8 +2313,7 @@ slug:        str         (required, regex-validated)
 name:        str         (required)
 description: str         (required)
 is_public:   bool        (required)
-group_ids:   list[int]   (optional)
-user_ids:    list[UUID]  (optional)</code></pre>
+group_ids:   list[int]   (optional, ignored unless is_public=false)</code></pre>
 
     <h4>Create-skill flow</h4>
     <ol>
@@ -2343,8 +2336,8 @@ user_ids:    list[UUID]  (optional)</code></pre>
       </li>
       <li><code>create_skill(...)</code> inserts row.</li>
       <li>
-        <code>replace_skill_grants(...)</code> (no-op if public or both lists
-        empty).
+        <code>replace_skill_grants(skill_id, group_ids, db)</code> (no-op if
+        public or list empty).
       </li>
       <li>Return <code>CustomSkillAdmin</code>.</li>
     </ol>
@@ -3333,7 +3326,7 @@ RUN mkdir -p /workspace/skills</code></pre>
                 <div class="radio-option">
                   <div class="radio-dot"></div>
                   <div class="radio-content">
-                    <div class="radio-title">Specific groups &amp; users</div>
+                    <div class="radio-title">Specific groups</div>
                     <div class="radio-desc">Pick who can use this skill.</div>
                   </div>
                 </div>
@@ -3388,7 +3381,7 @@ RUN mkdir -p /workspace/skills</code></pre>
                 <div class="radio-option selected">
                   <div class="radio-dot"></div>
                   <div class="radio-content">
-                    <div class="radio-title">Specific groups &amp; users</div>
+                    <div class="radio-title">Specific groups</div>
                   </div>
                 </div>
               </div>
@@ -3409,19 +3402,13 @@ RUN mkdir -p /workspace/skills</code></pre>
                   >Add group…</span
                 >
               </div>
-            </div>
-
-            <div class="form-field">
-              <label>Individual users</label>
-              <div
-                class="fake-input"
-                style="flex-wrap: wrap; gap: 4px; min-height: 40px"
-              >
-                <span class="chip">jane@onyx.app <span class="x">×</span></span>
-                <span
-                  style="color: var(--muted); font-size: 12px; margin-left: 6px"
-                  >Add user…</span
-                >
+              <div class="help">
+                To share with one teammate, create a single-member group in
+                <a
+                  href="/admin/groups"
+                  style="color: var(--text-05); text-decoration: underline"
+                  >Groups</a
+                >.
               </div>
             </div>
 
@@ -4632,6 +4619,21 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
           </td>
         </tr>
         <tr>
+          <td>Per-user skill grants (<code>Skill__User</code>)</td>
+          <td>
+            When customers report friction with the single-member-group
+            workaround
+          </td>
+          <td>
+            Add a <code>skill__user (skill_id, user_id)</code> join table, an
+            "Individual users" picker in the admin grants editor, an OR branch
+            in <code>list_skills_for_user</code>'s access query, and
+            <code>user_ids</code> to the POST/PUT bodies +
+            <code>granted_user_ids</code> to <code>CustomSkillAdmin</code>.
+            Migration is additive; no V1 schema disruption.
+          </td>
+        </tr>
+        <tr>
           <td>Per-org built-in toggle (<code>org_enabled</code>)</td>
           <td>First customer asks</td>
           <td>
@@ -4736,7 +4738,7 @@ from .render      import render_template_placeholders</code></pre>
 
     <p>
       <strong>Tables added</strong> (private schema): <code>skill</code>,
-      <code>skill__user_group</code>, <code>skill__user</code>.
+      <code>skill__user_group</code>.
     </p>
 
     <p>
