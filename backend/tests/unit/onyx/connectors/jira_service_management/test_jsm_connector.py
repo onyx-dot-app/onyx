@@ -15,6 +15,8 @@ from unittest.mock import MagicMock
 from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import process_jira_issue
+from onyx.connectors.models import Document
 from onyx.connectors.jira_service_management.connector import (
     _build_jsm_issue_type_clause,
 )
@@ -183,6 +185,67 @@ def test_process_jsm_issue_tags_source_as_jsm() -> None:
     # Sanity: title and id still reflect the underlying issue.
     assert "ITSM-42" in doc.semantic_identifier
     assert doc.id.endswith("/browse/ITSM-42")
+
+
+def test_load_from_checkpoint_signature_matches_parent() -> None:
+    """Regression guard: `_load_from_checkpoint` must match `JiraConnector`'s
+    signature exactly. The public entry points (`load_from_checkpoint` etc.)
+    dispatch with positional args (jql, checkpoint, include_permissions), so a
+    drifted signature would TypeError on every indexing attempt before
+    yielding a single document.
+    """
+    import inspect
+
+    from onyx.connectors.jira.connector import JiraConnector
+
+    parent_sig = inspect.signature(JiraConnector._load_from_checkpoint)
+    child_sig = inspect.signature(JsmConnector._load_from_checkpoint)
+    # Parameter names + ordering must align so positional dispatch from the
+    # parent's `load_from_checkpoint` reaches the override correctly.
+    assert list(parent_sig.parameters.keys()) == list(child_sig.parameters.keys())
+
+
+def test_load_from_checkpoint_retags_source(monkeypatch: Any) -> None:
+    """End-to-end shape: when the parent yields Documents, the override
+    re-tags each one's `source` as JIRA_SERVICE_MANAGEMENT.
+    """
+    from onyx.connectors.jira.connector import JiraConnector
+
+    # Build a Document with the regular JIRA source as if the parent yielded it.
+    issue = _make_issue("ITSM-7")
+    base = process_jira_issue(
+        jira_base_url="https://example.atlassian.net",
+        issue=issue,
+    )
+    assert base is not None
+    assert base.source == DocumentSource.JIRA
+
+    # Stub the parent's _load_from_checkpoint to yield that pre-tagged Document.
+    def fake_parent_load(
+        self: JiraConnector,
+        jql: str,
+        checkpoint: Any,
+        include_permissions: bool,
+    ) -> Any:
+        yield base
+
+    monkeypatch.setattr(
+        JiraConnector,
+        "_load_from_checkpoint",
+        fake_parent_load,
+    )
+
+    conn = JsmConnector(jira_base_url="https://example.atlassian.net")
+    results = list(
+        conn._load_from_checkpoint(
+            jql='issuetype in ("Incident")',
+            checkpoint=MagicMock(),
+            include_permissions=False,
+        )
+    )
+    assert len(results) == 1
+    assert isinstance(results[0], Document)
+    assert results[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT
 
 
 def test_process_jsm_issue_passes_through_skip_logic() -> None:

@@ -17,32 +17,17 @@ connector — JSM is part of the same Atlassian Cloud tenant and uses the same
 API tokens / scoped tokens.
 """
 
-from collections.abc import Callable
-from collections.abc import Generator
-from typing import Any
-
 from jira.resources import Issue
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.jira.connector import bulk_fetch_issues
-from onyx.connectors.jira.connector import enhanced_search_ids
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.jira.connector import process_jira_issue
-from onyx.connectors.jira.utils import build_jira_url
-from onyx.connectors.jira.utils import extract_text_from_adf
-from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -154,8 +139,7 @@ class JsmConnector(JiraConnector):
     @override
     def _load_from_checkpoint(
         self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        jql: str,
         checkpoint: JiraConnectorCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
@@ -166,10 +150,14 @@ class JsmConnector(JiraConnector):
         machinery — the checkpoint shape, JQL search, bulk fetch, and error
         handling are all identical to the regular Jira connector. Only the
         document `source` tag differs.
+
+        Signature exactly mirrors `JiraConnector._load_from_checkpoint`:
+        `(jql, checkpoint, include_permissions)`. The public entry points
+        (`load_from_checkpoint`, `load_from_checkpoint_with_perm_sync`) build
+        the JQL via `_get_jql_query(start, end)` and dispatch here.
         """
         for item in super()._load_from_checkpoint(
-            start=start,
-            end=end,
+            jql=jql,
             checkpoint=checkpoint,
             include_permissions=include_permissions,
         ):
