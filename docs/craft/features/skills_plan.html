@@ -1340,7 +1340,8 @@
         <li><a href="#s15">Migration &amp; deploy ordering</a></li>
         <li><a href="#s16">Orphan cleanup</a></li>
         <li><a href="#s17">Testing</a></li>
-        <li><a href="#s18">Out-of-scope / deferred</a></li>
+        <li><a href="#s18">Security model</a></li>
+        <li><a href="#s19">Out-of-scope / deferred</a></li>
       </ol>
     </div>
 
@@ -3251,6 +3252,12 @@ RUN mkdir -p /workspace/skills</code></pre>
             <span class="modal-close">✕</span>
           </div>
           <div class="modal-body">
+            <div class="callout warn" style="margin: 0 0 18px; font-size: 12px">
+              <span class="callout-label">Trust check</span>
+              Skills run inside your users' Craft sessions with the integrations
+              they have approved. Only upload skills from sources you trust.
+            </div>
+
             <div class="form-field">
               <label>Bundle <span class="required">*</span></label>
               <div class="file-drop filled">
@@ -3825,13 +3832,19 @@ RUN mkdir -p /workspace/skills</code></pre>
               This removes the skill from new sessions and revokes access for
               all granted users and groups.
             </p>
-            <div class="callout warn" style="font-size: 12px; margin: 0">
+            <div class="callout warn" style="font-size: 12px; margin: 0 0 10px">
               <span class="callout-label"
                 >Existing sessions are unaffected</span
               >
               Sessions currently using <code>renewal-analysis</code> will
               continue with the skill until they end. There is no way to
               retroactively remove a skill from a running session in V1.
+            </div>
+            <div class="callout warn" style="font-size: 12px; margin: 0">
+              <span class="callout-label">Workspace persistence</span>
+              Files this skill wrote to user workspaces remain there until the
+              sessions end. The skill code itself will no longer run in new
+              sessions.
             </div>
             <p style="font-size: 11px; color: var(--muted); margin: 14px 0 0">
               This action can be reversed by an engineer in the database (skills
@@ -4596,7 +4609,346 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
     </ul>
 
     <!-- =================================================================== -->
-    <h2 id="s18">18. Out-of-scope / deferred</h2>
+    <!-- =================================================================== -->
+    <h2 id="s18">18. Security model</h2>
+
+    <div class="subhead">Context</div>
+    <p>
+      A skill bundle ships arbitrary files into
+      <code>.agents/skills/&lt;slug&gt;/</code> and the agent invokes scripts in
+      <code>scripts/</code> when it follows <code>SKILL.md</code>.
+      <strong
+        >A malicious bundle can run arbitrary code inside every user's Craft
+        session that has access to the skill, every time, automatically, until
+        the grant is revoked.</strong
+      >
+      Bounded by who can upload (admins only), but worth being explicit about
+      the trust model rather than discovering it in an incident review.
+    </p>
+
+    <div class="subhead solution">Threat model</div>
+    <p>
+      Skill upload is a privileged action. Threat actors in rough order of
+      likelihood:
+    </p>
+    <ol>
+      <li>
+        <strong>Compromised admin account</strong> — credentials phished or
+        session hijacked. Most realistic.
+      </li>
+      <li>
+        <strong>Confused admin</strong> — uploads a bundle from an untrusted
+        source ("someone DM'd me <code>deal-summary.zip</code>"). Historically
+        common in plugin ecosystems.
+      </li>
+      <li><strong>Insider with grants permission</strong> — rare but real.</li>
+      <li>
+        <strong>Supply-chain via shared / community skills</strong> — out of
+        scope V1.
+      </li>
+    </ol>
+
+    <h3>Trust boundaries</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Boundary</th>
+          <th>Enforced by</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Upload</td>
+          <td>Admin RBAC on <code>/api/admin/skills/custom</code></td>
+          <td>Only admins can introduce code</td>
+        </tr>
+        <tr>
+          <td>Network + secrets</td>
+          <td>
+            <strong>Interception layer</strong> (see
+            <code>interception.md</code>)
+          </td>
+          <td>
+            Default-deny external egress; secrets injected server-side; writes
+            to upstream services require approval
+          </td>
+        </tr>
+        <tr>
+          <td>Process / host</td>
+          <td>Sandbox pod (Kubernetes)</td>
+          <td>Containment if a script attempts escape</td>
+        </tr>
+        <tr>
+          <td>Tenant data</td>
+          <td>Schema-per-tenant + FileStore tenant-prefix</td>
+          <td>Cross-customer isolation</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Controls in place</h3>
+    <p>
+      <strong>From the interception layer</strong> (cross-reference:
+      <span class="file-ref">docs/craft/features/interception.md</span>):
+    </p>
+    <ul>
+      <li>
+        Sandbox egress goes through Onyx proxy; direct external egress blocked.
+      </li>
+      <li>Sandbox image trusts Onyx CA; non-proxy egress fails TLS.</li>
+      <li>
+        Per-request classification (read / write / destructive / unknown)
+        against <code>CraftEgressPolicy</code>.
+      </li>
+      <li>Secrets injected server-side; sandbox never sees raw tokens.</li>
+      <li>UNKNOWN classification → approval required by default.</li>
+    </ul>
+
+    <p><strong>From the skills system itself:</strong></p>
+    <ul>
+      <li>
+        Bundle validator blocks symlinks, path traversal, oversized files,
+        <code>.template</code> files.
+      </li>
+      <li>Admin-only upload route.</li>
+      <li>Per-tenant blob isolation via FileStore prefixing.</li>
+      <li>
+        Audit trail on each <code>skill</code> row: <code>owner_user_id</code>,
+        <code>bundle_sha256</code>, <code>created_at</code>,
+        <code>updated_at</code>.
+      </li>
+    </ul>
+
+    <p>
+      <strong>From the sandbox</strong> (must be verified — see checklist
+      below):
+    </p>
+    <ul>
+      <li>Pod runs as non-root, dropped capabilities, read-only rootfs.</li>
+      <li>Resource limits set.</li>
+      <li>IMDSv2 with <code>httpPutResponseHopLimit: 1</code> (if AWS).</li>
+      <li>No service-account token mount unless required.</li>
+      <li>IRSA scoped per-session, not tenant-wide.</li>
+    </ul>
+
+    <div class="callout warn">
+      <span class="callout-label">Asks of the interception layer</span>
+      Two policy decisions in the interception design materially close the
+      residual exfil surface for skills. Both are cheap; both should be
+      confirmed before V1 ships.
+
+      <ol style="margin-top: 8px">
+        <li>
+          <strong
+            >Deny all writes (POST / PUT / PATCH / DELETE) to non-classified
+            domains.</strong
+          >
+          Current draft says "non-secret internet access defaults to
+          pass-through" — that leaves a clean exfil path through webhook
+          collectors, paste sites, and any attacker-controlled public endpoint.
+          Allow GET to non-classified domains (skills legitimately fetch docs,
+          public APIs), but deny writes by default. Exfil requires write;
+          reading the open internet does not.
+        </li>
+        <li>
+          <strong
+            >Approval required for any write within a classified service, not
+            just destructive ones.</strong
+          >
+          A skill granted the Linear integration should not be able to silently
+          post a comment containing exfiltrated data. Treat non-destructive
+          writes (comments, draft creation) the same as destructive ones for
+          approval purposes. The classifier already knows the operation kind —
+          this is a policy choice, not new infrastructure.
+        </li>
+      </ol>
+
+      Together these collapse the realistic exfil surface to side channels and
+      prompt injection — neither fully addressable, both materially harder than
+      <code>curl webhook.site</code>.
+    </div>
+
+    <h3>Known residual risks (V1 accepts these explicitly)</h3>
+    <ol>
+      <li>
+        <strong>Prompt injection via SKILL.md.</strong> The agent reads SKILL.md
+        as instructions. A malicious bundle can override agent behavior across
+        every session materializing the skill. Mitigated only by approval gates
+        on writes + admin review of SKILL.md content in the detail drawer. Not
+        fully fixable at V1.
+      </li>
+      <li>
+        <strong>Confused-deputy via legitimate grants.</strong> A skill calling
+        <code>api.linear.app</code> as the user can read everything that user
+        can read in Linear. The read scope of allowed services is the user's
+        full scope. Fine-grained per-skill scope declarations are deferred to
+        V2.
+      </li>
+      <li>
+        <strong>Workspace persistence after skill delete.</strong> Files a skill
+        writes to <code>/workspace</code> survive in session snapshots even
+        after the skill is soft-deleted. Admin delete modal must call this out.
+      </li>
+      <li>
+        <strong>Side-channel exfil through allowed reads.</strong> Timing, query
+        patterns, request sizes. Not addressable without significant
+        infrastructure.
+      </li>
+      <li>
+        <strong>Sandbox escape (defense in depth gap).</strong> If a
+        container-escape vuln exists, all network controls are bypassed. Why
+        sandbox hardening is non-negotiable regardless of network posture.
+      </li>
+    </ol>
+
+    <h3>Audit &amp; forensics</h3>
+    <p>Invocation audit log — one event per SKILL.md read by an agent:</p>
+    <pre><code>(tenant_id, session_id, user_id, skill_id_or_slug, source: "builtin"|"custom",
+ bundle_sha256, opened_at)</code></pre>
+
+    <p>Surface in admin UI:</p>
+    <ul>
+      <li>
+        Per-skill detail drawer:
+        <em>"Used N times this week across M users"</em> with drill-down.
+      </li>
+      <li>Per-session activity log flags which skills were read.</li>
+    </ul>
+
+    <p>
+      Forensics value: a malicious skill is detectable within hours of
+      activation if anyone watches the log. Exfil via approved writes leaves an
+      approval trail. Unusual read patterns show in egress logs.
+    </p>
+
+    <h3>Sandbox hardening verification checklist</h3>
+    <p>
+      To be confirmed <strong>before merging V1 implementation</strong> (not
+      before merging this design doc):
+    </p>
+    <ul class="todos">
+      <li>Pod <code>securityContext.runAsNonRoot: true</code>.</li>
+      <li>
+        Pod <code>securityContext.readOnlyRootFilesystem: true</code> (with
+        explicit writable mounts for <code>/workspace</code>,
+        <code>/tmp</code>).
+      </li>
+      <li>Container <code>capabilities.drop: [ALL]</code>.</li>
+      <li>Resource limits set on <code>cpu</code> and <code>memory</code>.</li>
+      <li>
+        AWS deployments: IMDSv2 enforced with
+        <code>httpPutResponseHopLimit: 1</code>.
+      </li>
+      <li>
+        <code>automountServiceAccountToken: false</code> unless the sandbox
+        needs Kubernetes API access (it shouldn't).
+      </li>
+      <li>
+        IRSA role on <code>file-sync</code> sidecar scoped to one S3 prefix per
+        session, not the tenant bucket. Confirmed against current IAM policy.
+      </li>
+      <li>
+        No environment variables in the sandbox carry secrets (secrets path is
+        interception, not env).
+      </li>
+      <li>
+        Pod egress only routes through the Onyx interception proxy
+        (NetworkPolicy denies direct egress).
+      </li>
+    </ul>
+
+    <h3>Admin UI implications</h3>
+    <p>
+      Upload modal gets a trust banner reflecting the interception-aware
+      framing:
+    </p>
+    <div class="callout warn" style="font-size: 13px">
+      ⚠
+      <strong
+        >Skills run inside your users' Craft sessions with the integrations they
+        have approved.</strong
+      >
+      Only upload skills from sources you trust. Anyone with access to a skill
+      executes its code when the agent uses it.
+    </div>
+
+    <p>Delete confirmation modal gains a line about workspace persistence:</p>
+    <div class="callout warn" style="font-size: 13px">
+      Files this skill wrote to user workspaces remain there until the sessions
+      end. The skill code itself will no longer run in new sessions.
+    </div>
+
+    <h3>Deferred security work</h3>
+    <p>
+      Tracked in §19 alongside other deferred items, but named here for
+      completeness:
+    </p>
+    <ul>
+      <li>
+        Two-person upload approval for sensitive skills (V1.5 / enterprise).
+      </li>
+      <li>
+        Per-skill permission declarations (network, fs, integrations). Aligns
+        with the future MCP-tool model.
+      </li>
+      <li>Skill provenance / signing — meaningful only with a marketplace.</li>
+      <li>
+        Content scanning at upload — intentionally skipped. Trivially
+        bypassable, false-confidence risk.
+      </li>
+    </ul>
+
+    <div class="subhead todos">Todos</div>
+    <ul class="todos">
+      <li>
+        Cross-reference
+        <span class="file-ref">docs/craft/features/interception.md</span> from
+        this section once that doc lands.
+      </li>
+      <li>
+        Open a tracking issue with the interception team for the two policy asks
+        (deny non-classified writes; approval for non-destructive writes within
+        classified services).
+      </li>
+      <li>
+        Implement invocation audit log:
+        <ul>
+          <li>
+            New table
+            <code
+              >skill_invocation_log (id, tenant_id, session_id, user_id,
+              skill_id, slug, source, bundle_sha256, opened_at)</code
+            >.
+          </li>
+          <li>
+            Event emitter triggered by the frontend's existing SKILL.md-read
+            pattern match (same source as inline pill).
+          </li>
+          <li>
+            Aggregation query for admin UI: usage counts by skill, by user, by
+            day.
+          </li>
+          <li>
+            Surface in built-in detail drawer and custom-skill detail view.
+          </li>
+        </ul>
+      </li>
+      <li>
+        Add workspace-persistence callout to the delete confirmation modal.
+      </li>
+      <li>
+        Update the upload modal warning copy to match the interception-aware
+        framing above.
+      </li>
+      <li>
+        Add the sandbox hardening checklist to the implementation PR
+        description; gate merge on completion.
+      </li>
+    </ul>
+
+    <!-- =================================================================== -->
+    <h2 id="s19">19. Out-of-scope / deferred</h2>
 
     <table>
       <thead>

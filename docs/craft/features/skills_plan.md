@@ -1203,7 +1203,133 @@ Per `CLAUDE.md`: prefer external-dependency unit tests when mocking is needed; p
 
 ---
 
-## 18. Out-of-scope / deferred
+## 18. Security model
+
+### Context
+
+A skill bundle ships arbitrary files into `.agents/skills/<slug>/` and the agent invokes scripts in `scripts/` when it follows `SKILL.md`. **A malicious bundle can run arbitrary code inside every user's Craft session that has access to the skill, every time, automatically, until the grant is revoked.** This is bounded by who can upload — only admins — but admin accounts get phished, admins make mistakes, and orgs sometimes have rogue insiders. Worth being explicit about the trust model rather than discovering it in an incident review.
+
+### Threat model
+
+Skill upload is a privileged action. The threat actors, in rough order of likelihood:
+
+1. **Compromised admin account** — credentials phished or session hijacked. Most realistic entry path.
+2. **Confused admin** — uploads a bundle from an untrusted source (someone Slack-DM'd them a `deal-summary.zip`). Historically common in plugin ecosystems.
+3. **Insider with grants permission** — rare but real. Same blast radius as #1.
+4. **Supply-chain via shared/community skills** — out of scope for V1; on the future-roadmap.
+
+### Trust boundaries
+
+| Boundary | Enforced by | Purpose |
+|---|---|---|
+| Upload | Admin RBAC on `/api/admin/skills/custom` | Only admins can introduce code |
+| Network + secrets | **Interception layer** (see `interception.md`) | Default-deny external egress; secrets injected server-side, never enter the sandbox; writes to upstream services require approval |
+| Process / host | Sandbox pod (Kubernetes) | Containment if the script tries to escape |
+| Tenant data | Schema-per-tenant + FileStore tenant-prefix | Isolation between customers |
+
+### Controls in place
+
+**From the interception layer** (cross-reference: `docs/craft/features/interception.md`):
+- Sandbox egress goes through Onyx proxy; direct external egress blocked.
+- Sandbox image trusts Onyx CA; non-proxy egress fails TLS.
+- Per-request classification (read / write / destructive / unknown) against `CraftEgressPolicy`.
+- Secrets injected server-side; sandbox never sees raw tokens.
+- UNKNOWN classification → approval required by default.
+
+**From the skills system itself:**
+- Bundle validator blocks symlinks, path traversal, oversized files, `.template` files.
+- Admin-only upload route.
+- Per-tenant blob isolation via FileStore prefixing.
+- Audit trail on each `skill` row: `owner_user_id`, `bundle_sha256`, `created_at`, `updated_at`.
+
+**From the sandbox (must be verified — see checklist below):**
+- Pod runs as non-root, dropped capabilities, read-only rootfs.
+- Resource limits set.
+- IMDSv2 with `httpPutResponseHopLimit: 1` (if AWS).
+- No service-account token mount unless required.
+- IRSA scoped per-session, not tenant-wide.
+
+### Asks of the interception layer
+
+Two specific decisions in the interception design materially change the residual risk for skills. Both are cheap; both close the largest remaining exfil vectors.
+
+1. **Deny all writes (POST / PUT / PATCH / DELETE) to non-classified domains.** The current draft says "non-secret internet access defaults to pass-through" — that leaves a clean exfil path through webhook collectors, paste sites, and any attacker-controlled public endpoint. Allow GET to non-classified domains (skills legitimately fetch docs, public APIs), but deny writes by default. Exfil requires write; reading the open internet does not.
+2. **Approval required for any write within a classified service, not just destructive ones.** A skill granted the Linear integration shouldn't be able to silently post a comment containing exfiltrated data. Treat non-destructive writes (comments, draft creation) the same as destructive ones for approval purposes. The classifier already knows the operation kind — this is a policy choice, not new infrastructure.
+
+These two together collapse the realistic exfil surface to side channels (timing, allowed read patterns) and prompt injection — neither of which are fully addressable, but both are far harder than `curl webhook.site`.
+
+### Known residual risks (V1 accepts these explicitly)
+
+1. **Prompt injection via SKILL.md.** The agent reads SKILL.md as instructions. A malicious bundle can override agent behavior across every session materializing the skill. Mitigated only by approval gates on writes + admin review of SKILL.md content (visible in the detail drawer). Not fully fixable at V1.
+2. **Confused-deputy via legitimate grants.** A skill calling `api.linear.app` *as the user* can read everything that user can read in Linear. Even with the "writes require approval" tightening, the read scope of allowed services is the user's full scope. Mitigation is fine-grained per-skill scope declarations — deferred to V2.
+3. **Workspace persistence after skill delete.** Files a skill writes to `/workspace` survive in session snapshots even after the skill is soft-deleted. The admin delete modal must call this out.
+4. **Side-channel exfil through allowed reads.** Timing, query patterns, request sizes. Not addressable without significant infrastructure.
+5. **Sandbox escape (defense in depth gap).** If a container-escape vuln exists, all network controls are bypassed. Why sandbox hardening is non-negotiable regardless of network posture.
+
+### Audit & forensics
+
+Invocation audit log — write one event per SKILL.md read by an agent:
+
+```
+(tenant_id, session_id, user_id, skill_id_or_slug, source: "builtin"|"custom",
+ bundle_sha256, opened_at)
+```
+
+Surface in admin UI:
+- Per-skill detail drawer: "Used N times this week across M users" with drill-down.
+- Per-session activity log (already exists for OpenCode events) flags which skills were read.
+
+Forensics value: a malicious skill is detectable within hours of activation if anyone watches the log. Anyone exfiltrating via approved writes leaves an approval trail. Anyone running scripts that hit unusual read patterns shows up in egress logs.
+
+### Sandbox hardening verification checklist
+
+To be confirmed **before merging V1 implementation** (not before merging this design doc):
+
+- [ ] Pod `securityContext.runAsNonRoot: true`.
+- [ ] Pod `securityContext.readOnlyRootFilesystem: true` (with explicit writable mounts for `/workspace`, `/tmp`).
+- [ ] Container `capabilities.drop: [ALL]`.
+- [ ] Resource limits set on `cpu` and `memory`.
+- [ ] AWS deployments: IMDSv2 enforced with `httpPutResponseHopLimit: 1`.
+- [ ] `automountServiceAccountToken: false` unless the sandbox specifically needs Kubernetes API access (it shouldn't).
+- [ ] IRSA role on `file-sync` sidecar scoped to one S3 prefix per session, not the whole tenant bucket. Confirmed against current IAM policy.
+- [ ] No environment variables in the sandbox carry secrets (secrets path is interception, not env).
+- [ ] Pod network egress only routes through the Onyx interception proxy (NetworkPolicy denies direct egress).
+
+### Admin UI implications
+
+The upload modal gets a one-line trust banner (already noted in §13 mockup updates) framing the threat correctly under the interception model:
+
+> ⚠ **Skills run inside your users' Craft sessions with the integrations they have approved.** Only upload skills from sources you trust. Anyone with access to a skill executes its code when the agent uses it.
+
+The delete confirmation modal gains a line about workspace persistence:
+
+> Files this skill wrote to user workspaces remain there until the sessions end. The skill code itself will no longer run in new sessions.
+
+### Deferred security work
+
+Tracked in §19 alongside other deferred items, but worth naming here:
+
+- **Two-person upload approval** for sensitive skills (V1.5, enterprise feature).
+- **Per-skill permission declarations** (network: none/allowlist; fs: read-only; integrations: explicit allowlist) — aligns with the future MCP-tool model.
+- **Skill provenance / signing** — only meaningful with a marketplace.
+- **Content scanning at upload** — skipped intentionally; trivially bypassable and creates false confidence.
+
+### Todos
+
+- [ ] Cross-reference `docs/craft/features/interception.md` from this section (once that doc is written).
+- [ ] Open a tracking issue with the interception team for the two policy asks (deny-non-classified-writes; approval-for-non-destructive-writes).
+- [ ] Implement invocation audit log:
+  - [ ] New table `skill_invocation_log (id, tenant_id, session_id, user_id, skill_id, slug, source, bundle_sha256, opened_at)`.
+  - [ ] Event emitter triggered by the frontend's existing SKILL.md-read pattern match (same source the inline pill uses).
+  - [ ] Aggregation query for admin UI: usage counts by skill, by user, by day.
+  - [ ] Surface in built-in detail drawer and custom skill detail view.
+- [ ] Add workspace-persistence callout to the delete confirmation modal.
+- [ ] Update the upload modal warning copy to match the interception-aware framing above.
+- [ ] Add the sandbox hardening verification checklist to the implementation PR description; gate merge on completion.
+
+---
+
+## 19. Out-of-scope / deferred
 
 Items knowingly punted; each is reversible without breaking V1.
 
