@@ -29,6 +29,38 @@ class ExecResponse(BaseModel):
     stdout_b64: str
     stderr_b64: str
     timed_out: bool
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+
+
+async def _read_capped(
+    stream: asyncio.StreamReader | None,
+    limit: int,
+) -> tuple[bytes, bool]:
+    """Read up to `limit` bytes from stream. Returns (data, truncated).
+
+    If more data is available beyond the limit, drains the rest so the
+    subprocess doesn't block writing to a full pipe.
+    """
+    if stream is None:
+        return b"", False
+    chunks: list[bytes] = []
+    remaining = limit
+    while remaining > 0:
+        chunk = await stream.read(remaining)
+        if not chunk:
+            return b"".join(chunks), False
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    extra = await stream.read(1)
+    if not extra:
+        return b"".join(chunks), False
+    # Truncated; drain the rest so the writer doesn't block on a full pipe.
+    while True:
+        chunk = await stream.read(64 * 1024)
+        if not chunk:
+            break
+    return b"".join(chunks), True
 
 
 @router.post("", response_model=ExecResponse)
@@ -76,20 +108,42 @@ async def run_exec(req: ExecRequest) -> ExecResponse:
             detail=f"Cannot start subprocess: {exc}",
         ) from exc
 
+    max_out = settings.max_exec_output_bytes
     timed_out = False
-    try:
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=stdin_bytes),
-            timeout=timeout,
+    stdout_trunc = False
+    stderr_trunc = False
+    stdout: bytes = b""
+    stderr: bytes = b""
+
+    async def _run() -> None:
+        nonlocal stdout, stderr, stdout_trunc, stderr_trunc
+        # Feed stdin (if any), then drain both output streams concurrently with
+        # per-stream caps. communicate() would buffer everything in memory and
+        # let a chatty subprocess blow up the sidecar's RSS.
+        if stdin_bytes is not None and proc.stdin is not None:
+            proc.stdin.write(stdin_bytes)
+            await proc.stdin.drain()
+            proc.stdin.close()
+        results = await asyncio.gather(
+            _read_capped(proc.stdout, max_out),
+            _read_capped(proc.stderr, max_out),
         )
+        stdout, stdout_trunc = results[0]
+        stderr, stderr_trunc = results[1]
+        await proc.wait()
+
+    try:
+        await asyncio.wait_for(_run(), timeout=timeout)
     except TimeoutError:
         timed_out = True
         proc.kill()
-        stdout, stderr = await proc.communicate()
+        await proc.wait()
 
     return ExecResponse(
         exit_code=proc.returncode if proc.returncode is not None else -1,
-        stdout_b64=base64.b64encode(stdout or b"").decode("ascii"),
-        stderr_b64=base64.b64encode(stderr or b"").decode("ascii"),
+        stdout_b64=base64.b64encode(stdout).decode("ascii"),
+        stderr_b64=base64.b64encode(stderr).decode("ascii"),
         timed_out=timed_out,
+        stdout_truncated=stdout_trunc,
+        stderr_truncated=stderr_trunc,
     )

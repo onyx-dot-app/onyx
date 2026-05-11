@@ -95,3 +95,18 @@ def test_read_at_exact_limit_succeeds(
     resp = client.get("/files/read?path=exact.txt", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["size_bytes"] == 100
+
+
+def test_list_with_broken_symlink_does_not_500(client, auth_headers, workspace) -> None:
+    """The sandbox container can create symlinks pointing at deleted files.
+    list() must still succeed and report the symlink rather than crashing."""
+    (workspace / "real.txt").write_text("data")
+    (workspace / "broken").symlink_to(workspace / "does-not-exist")
+
+    resp = client.get("/files/list?path=.", headers=auth_headers)
+    assert resp.status_code == 200
+    entries = {e["name"]: e for e in resp.json()["entries"]}
+    assert "broken" in entries
+    assert entries["broken"]["is_dir"] is False
+    assert entries["broken"]["size_bytes"] is not None
+    assert "real.txt" in entries

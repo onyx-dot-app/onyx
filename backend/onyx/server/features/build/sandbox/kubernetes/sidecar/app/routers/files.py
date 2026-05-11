@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import stat
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -146,12 +147,12 @@ async def list_dir(path: str) -> ListResponse:
 def _scan_directory(path: Path) -> list[ListEntry]:
     entries: list[ListEntry] = []
     for entry in sorted(path.iterdir(), key=lambda p: p.name):
-        is_dir = entry.is_dir()
-        entries.append(
-            ListEntry(
-                name=entry.name,
-                is_dir=is_dir,
-                size_bytes=None if is_dir else entry.stat().st_size,
-            )
-        )
+        # lstat() so a broken symlink doesn't raise FileNotFoundError. The
+        # sandbox container runs user code that can create broken symlinks;
+        # surfacing those as 500s is wrong. lstat-style metadata also matches
+        # the behaviour of `ls -l`.
+        st = entry.lstat()
+        is_dir = stat.S_ISDIR(st.st_mode)
+        size_bytes = None if is_dir else st.st_size
+        entries.append(ListEntry(name=entry.name, is_dir=is_dir, size_bytes=size_bytes))
     return entries

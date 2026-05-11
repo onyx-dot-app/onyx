@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     max_read_bytes: int = 100 * 1024 * 1024  # 100 MiB
     max_write_bytes: int = 100 * 1024 * 1024
+    max_exec_output_bytes: int = 10 * 1024 * 1024  # 10 MiB per stream (stdout, stderr)
     exec_default_timeout_seconds: int = 30
     exec_max_timeout_seconds: int = 300
 
