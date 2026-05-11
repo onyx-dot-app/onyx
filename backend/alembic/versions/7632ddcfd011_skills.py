@@ -115,6 +115,7 @@ def downgrade() -> None:
     op.drop_table("skill__user_group")
     op.drop_index("ux_skill_slug", table_name="skill")
     op.drop_table("skill")
-    # PostgreSQL enum values cannot be removed with a simple ALTER TYPE. This
-    # migration only appends to legacy native enums when they still exist, and the
-    # modern schema stores FileOrigin as a string-backed enum.
+    # Intentionally leave 'skill_bundle' in legacy native fileorigin enums.
+    # PostgreSQL cannot drop enum values directly, and recreating the enum is
+    # unsafe here because existing file_record rows may still use this value.
+    # Modern schemas store FileOrigin as a string-backed enum.
