@@ -68,6 +68,7 @@ function PrivacyOption({
       state={selected ? "filled" : "empty"}
       padding="sm"
       rounding="sm"
+      border={false}
       onClick={onClick}
       aria-label={ariaLabel}
     >
@@ -78,7 +79,6 @@ function PrivacyOption({
         title={title}
         description={description}
         padding="fit"
-        center
         color="interactive"
         rightChildren={
           selected ? (

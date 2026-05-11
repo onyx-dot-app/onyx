@@ -1,7 +1,11 @@
 /* SelectCard — structural styles; colors handled by Interactive.Stateful */
 
 .opal-select-card {
-  @apply w-full overflow-clip border;
+  @apply w-full overflow-clip;
+}
+
+.opal-select-card[data-border="true"] {
+  @apply border;
 }
 
 .opal-select-card[data-interactive-state="selected"] {

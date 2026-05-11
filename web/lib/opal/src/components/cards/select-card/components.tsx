@@ -39,6 +39,14 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    */
   rounding?: RoundingVariants;
 
+  /**
+   * Whether to render a border. When `true`, a 1px border is applied and
+   * changes to `border-action-link-05` in the selected state.
+   *
+   * @default true
+   */
+  border?: boolean;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 
@@ -74,6 +82,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
 function SelectCard({
   padding: paddingProp = "md",
   rounding: roundingProp = "md",
+  border = true,
   ref,
   children,
   ...statefulProps
@@ -83,7 +92,11 @@ function SelectCard({
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">
-      <div ref={ref} className={cn("opal-select-card", padding, rounding)}>
+      <div
+        ref={ref}
+        className={cn("opal-select-card", padding, rounding)}
+        data-border={border ? "true" : undefined}
+      >
         {children}
       </div>
     </Interactive.Stateful>
