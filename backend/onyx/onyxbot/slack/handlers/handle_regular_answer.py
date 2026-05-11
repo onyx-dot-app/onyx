@@ -247,14 +247,17 @@ def handle_regular_answer(
         onyx_user: User,
     ) -> ChatBasicResponse:
         # Document sets here come from the channel's persona configuration
-        # (system-supplied, set by an admin), not from the end user, so the per-user
-        # document-set ACL check would incorrectly reject anonymous channel calls.
-        # Slack-side privacy is handled separately by passing get_anonymous_user()
-        # for non-DM/non-ephemeral messages so only public docs are searched.
+        # (admin-supplied), not from the end user, so the per-user document-set
+        # ownership check would incorrectly reject anonymous channel calls.
+        # We skip *only* that ownership check; the per-document ACL filter built
+        # by ``build_access_filters_for_user`` still runs, so for non-DM/non-
+        # ephemeral messages ``get_anonymous_user()`` continues to restrict
+        # search results to public documents.
         packets = handle_stream_message_objects(
             new_msg_req=new_message_request,
             user=onyx_user,
-            bypass_acl=True,
+            bypass_acl=False,
+            bypass_docset_ownership_check=True,
             additional_context=slack_context_str,
             slack_context=message_info.slack_context,
         )

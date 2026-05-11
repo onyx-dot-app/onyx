@@ -1397,6 +1397,7 @@ def _stream_chat_turn(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
+    bypass_docset_ownership_check: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1422,6 +1423,11 @@ def _stream_chat_turn(
         custom_tool_additional_headers: Extra headers for custom tool HTTP calls.
         mcp_headers: Extra headers for MCP tool calls.
         bypass_acl: If ``True``, document ACL checks are skipped (used by Slack bot).
+        bypass_docset_ownership_check: If ``True``, the per-user document-set
+            ownership check is skipped while leaving the per-document ACL filter
+            in ``build_access_filters_for_user`` intact. Used by Slack channel
+            flows where the document sets come from the admin-configured channel
+            persona rather than the (possibly anonymous) caller.
         additional_context: Extra context prepended to the LLM's chat history, not
             stored in the DB (used for Slack thread hydration).
         slack_context: Federated Slack search context passed through to the search tool.
@@ -1446,6 +1452,7 @@ def _stream_chat_turn(
             try:
                 if (
                     not bypass_acl
+                    and not bypass_docset_ownership_check
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
@@ -1593,6 +1600,7 @@ def handle_stream_message_objects(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
+    bypass_docset_ownership_check: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1606,6 +1614,7 @@ def handle_stream_message_objects(
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
         bypass_acl=bypass_acl,
+        bypass_docset_ownership_check=bypass_docset_ownership_check,
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,
