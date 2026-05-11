@@ -4,6 +4,7 @@ from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
+from onyx.tools.models import ChatMinimalTextMessage
 
 
 class SearchAPIRequest(BaseModel):
@@ -22,6 +23,8 @@ class SearchAPIRequest(BaseModel):
     model: str | None = None
 
     skip_query_expansion: bool = False
+
+    message_history: list[ChatMinimalTextMessage] | None = None
 
     @model_validator(mode="after")
     def validate_provider_model_pair(self) -> "SearchAPIRequest":

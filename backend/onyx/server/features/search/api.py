@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.chat.emitter import NullEmitter
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDocsResponse
@@ -49,6 +50,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from shared_configs.contextvars import get_current_tenant_id
@@ -208,6 +210,13 @@ def search(
             original_query=request.query,
             skip_query_expansion=request.skip_query_expansion,
             num_hits=request.num_results,
+            message_history=request.message_history
+            or [
+                ChatMinimalTextMessage(
+                    message=request.query,
+                    message_type=MessageType.USER,
+                ),
+            ],
         ),
         queries=[request.query],
     )
