@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@opal/utils";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -11,10 +10,11 @@ import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/texts/Text";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
+import { Interactive } from "@opal/core";
+import { ContentAction } from "@opal/layouts";
 
 import type { IconProps } from "@opal/types";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -65,37 +65,30 @@ function PrivacyOption({
   ariaLabel,
 }: PrivacyOptionProps) {
   return (
-    <div
-      className={cn(
-        "p-1.5 rounded-08 cursor-pointer ",
-        selected ? "bg-background-tint-00" : "bg-transparent",
-        "hover:bg-background-tint-02"
-      )}
+    <Interactive.Stateful
+      state={selected ? "selected" : "empty"}
+      variant="select-heavy"
       onClick={onClick}
       aria-label={ariaLabel}
     >
-      <div className="flex flex-row gap-1 items-center">
-        <div className="flex w-5 p-[2px] self-stretch justify-center">
-          <Icon
-            size={16}
-            className={cn(selected ? "stroke-text-05" : "stroke-text-03")}
-          />
-        </div>
-        <div className="flex flex-col flex-1 px-0.5">
-          <Text mainUiBody text05={selected} text03={!selected}>
-            {title}
-          </Text>
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        </div>
-        {selected && (
-          <div className="flex w-5 self-stretch justify-center">
-            <SvgCheck size={16} className="stroke-action-link-05" />
-          </div>
-        )}
+      <div className="w-full rounded-08">
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={Icon}
+          title={title}
+          description={description}
+          padding="sm"
+          center
+          color="interactive"
+          rightChildren={
+            selected ? (
+              <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
+            ) : undefined
+          }
+        />
       </div>
-    </div>
+    </Interactive.Stateful>
   );
 }
 
