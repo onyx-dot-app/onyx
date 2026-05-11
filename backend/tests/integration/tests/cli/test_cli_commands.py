@@ -78,7 +78,10 @@ def pat_token(admin_user: DATestUser) -> str:
 
 
 @pytest.fixture
-def seeded_persona(admin_user: DATestUser) -> DATestPersona:
+def seeded_persona(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> DATestPersona:
     """Create a persona with a known name for verification."""
     return PersonaManager.create(
         user_performing_action=admin_user,
@@ -151,9 +154,11 @@ def test_validate_config_not_configured(
 
 
 def test_ask_plain_text(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
-    """Ask a question and verify the answer is non-trivial."""
+    """Ask a question using the default persona (most common usage)."""
     result = run_cli(
         cli_binary,
         ["ask", 'Respond with exactly the word "pineapple" and nothing else'],
@@ -165,7 +170,9 @@ def test_ask_plain_text(
 
 
 def test_ask_json(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """Ask in NDJSON mode and verify event types and content."""
     result = run_cli(
@@ -193,7 +200,9 @@ def test_ask_json(
 
 
 def test_ask_quiet(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """Quiet mode buffers output and prints once."""
     result = run_cli(
@@ -207,7 +216,9 @@ def test_ask_quiet(
 
 
 def test_ask_stdin_pipe(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """Piped stdin content is used as context in the answer."""
     result = run_cli(
@@ -222,7 +233,9 @@ def test_ask_stdin_pipe(
 
 
 def test_ask_truncation(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """Non-TTY output is truncated with a temp file path."""
     result = run_cli(
@@ -254,7 +267,9 @@ def test_ask_agent_id(
 
 
 def test_ask_no_truncation(
-    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+    cli_binary: Path,
+    pat_token: str,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     """--max-output 0 disables truncation entirely."""
     result = run_cli(
