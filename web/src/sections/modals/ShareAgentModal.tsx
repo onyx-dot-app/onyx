@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import {
-  SvgCheck,
   SvgLink,
   SvgOrganization,
   SvgShare,
@@ -274,7 +273,9 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                               // Note:
                               // This user, during creation, is assumed to be the "owner".
                               // That is why the `(isCurrentUser && !agentId)` condition exists.
-                              <SvgCheck size={16} className="text-text-03" />
+                              <Text secondaryBody text03>
+                                Owner
+                              </Text>
                             ) : (
                               // For all other cases (including for "self-unsharing"),
                               // we render a Button with SvgX to remove a person from the list.
