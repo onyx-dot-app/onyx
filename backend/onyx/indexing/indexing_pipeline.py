@@ -1,4 +1,3 @@
-import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -94,6 +93,7 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 
@@ -1106,18 +1106,16 @@ def _maybe_push_to_agent_wiki(
     if not AGENT_WIKI_ENABLED or MULTI_TENANT:
         return
 
-    connector_id = getattr(adapter, "connector_id", None)
-    credential_id = getattr(adapter, "credential_id", None)
-    if connector_id is None or credential_id is None:
-        return
-
     successfully_indexed = {r.document_id for r in insertion_records}
     if not successfully_indexed:
         return
 
     with get_session_with_current_tenant() as db_session:
-        cc_pair = get_connector_credential_pair(db_session, connector_id, credential_id)
+        cc_pair = get_connector_credential_pair(
+            db_session, adapter.connector_id, adapter.credential_id
+        )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
+            # TODO: support permissioned (non-public) connectors in a future version
             return
 
     doc_map = {doc.id: doc for doc in filtered_documents}
@@ -1136,27 +1134,20 @@ def _maybe_push_to_agent_wiki(
                 AGENT_WIKI_MAX_DOC_CHARS,
             )
             continue
-        threading.Thread(
-            target=push_to_agent_wiki,
-            kwargs=dict(
-                doc_id=doc_id,
-                source=str(doc.source.value) if doc.source else "unknown",
-                title=doc.title or doc.semantic_identifier,
-                content=content,
-                url=next(
-                    (
-                        s.link
-                        for s in doc.sections
-                        if isinstance(s, TextSection) and s.link
-                    ),
-                    None,
-                ),
-                doc_updated_at=(
-                    doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
-                ),
+        run_in_background(
+            push_to_agent_wiki,
+            doc_id=doc_id,
+            source=str(doc.source.value) if doc.source else "unknown",
+            title=doc.title or doc.semantic_identifier,
+            content=content,
+            url=next(
+                (s.link for s in doc.sections if isinstance(s, TextSection) and s.link),
+                None,
             ),
-            daemon=True,
-        ).start()
+            doc_updated_at=(
+                doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+            ),
+        )
 
 
 @log_function_time(debug_only=True)

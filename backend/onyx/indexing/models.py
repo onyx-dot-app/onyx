@@ -257,6 +257,9 @@ class ChunkEnrichmentContext(Protocol):
 
 
 class IndexingBatchAdapter(Protocol):
+    connector_id: int
+    credential_id: int
+
     def prepare(
         self, documents: list[Document], ignore_time_skip: bool
     ) -> Optional["DocumentBatchPrepareContext"]: ...

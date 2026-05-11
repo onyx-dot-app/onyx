@@ -306,7 +306,7 @@ def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
     ]
 
 
-_PATCH_THREAD = "onyx.indexing.indexing_pipeline.threading.Thread"
+_PATCH_RUN_IN_BACKGROUND = "onyx.indexing.indexing_pipeline.run_in_background"
 
 
 def test_agent_wiki_push_skipped_when_disabled() -> None:
@@ -316,12 +316,12 @@ def test_agent_wiki_push_skipped_when_disabled() -> None:
     with (
         patch(_PATCH_AGENT_WIKI_ENABLED, False),
         patch(_PATCH_MULTI_TENANT, False),
-        patch(_PATCH_THREAD) as mock_thread,
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
     ):
         _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_thread.assert_not_called()
+    mock_run.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_in_multi_tenant_mode() -> None:
@@ -331,12 +331,12 @@ def test_agent_wiki_push_skipped_in_multi_tenant_mode() -> None:
     with (
         patch(_PATCH_AGENT_WIKI_ENABLED, True),
         patch(_PATCH_MULTI_TENANT, True),
-        patch(_PATCH_THREAD) as mock_thread,
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
     ):
         _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_thread.assert_not_called()
+    mock_run.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
@@ -351,12 +351,12 @@ def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
-        patch(_PATCH_THREAD) as mock_thread,
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
     ):
         _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_thread.assert_not_called()
+    mock_run.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
@@ -375,12 +375,12 @@ def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
         patch(_PATCH_AGENT_WIKI_MAX_CHARS, 50),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_THREAD) as mock_thread,
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
     ):
         _maybe_push_to_agent_wiki(
             _make_adapter(), [big_doc], _make_insertion_records(["big"])
         )
-    mock_thread.assert_not_called()
+    mock_run.assert_not_called()
 
 
 def test_agent_wiki_push_enqueues_for_public_doc() -> None:
@@ -395,13 +395,13 @@ def test_agent_wiki_push_enqueues_for_public_doc() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_THREAD) as mock_thread,
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
     ):
         _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_thread.assert_called_once()
-    kwargs = mock_thread.call_args.kwargs["kwargs"]
+    mock_run.assert_called_once()
+    kwargs = mock_run.call_args.kwargs
     assert kwargs["doc_id"] == "doc1"
     assert kwargs["content"] == "Hello"
 
