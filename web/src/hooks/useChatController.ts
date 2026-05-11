@@ -70,7 +70,7 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import useAgentPreferences from "@/hooks/useAgentPreferences";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";

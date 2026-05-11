@@ -34,7 +34,7 @@ import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import useAgentController from "@/hooks/useAgentController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -893,8 +893,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         ) &&
                         liveAgent &&
                         !llmManager.isLoadingProviders && (
-                          <ModelSelector
-                            llmManager={llmManager}
+                          <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
@@ -970,8 +969,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         liveAgent &&
                         !llmManager.isLoadingProviders && (
                           <div className="pb-1">
-                            <ModelSelector
-                              llmManager={llmManager}
+                            <MultiModelSelector
                               selectedModels={multiModel.selectedModels}
                               onAdd={multiModel.addModel}
                               onRemove={multiModel.removeModel}

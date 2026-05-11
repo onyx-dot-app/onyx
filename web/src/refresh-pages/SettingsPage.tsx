@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import {
@@ -33,7 +33,8 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -779,6 +780,39 @@ function ChatPreferencesSettings() {
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
+
+  // Convert the active LlmDescriptor to a model_configuration_id for ModelSelector.
+  const currentModelConfigId = useMemo((): number | null => {
+    const { provider, modelName, name } = llmManager.currentLlm;
+    for (const p of llmManager.llmProviders ?? []) {
+      if (p.provider !== provider || p.name !== name) continue;
+      const mc = p.model_configurations.find((m) => m.name === modelName);
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [llmManager.currentLlm, llmManager.llmProviders]);
+
+  const handleModelPickerChange = useCallback(
+    (id: number | null) => {
+      if (id == null) return;
+      for (const p of llmManager.llmProviders ?? []) {
+        const mc = p.model_configurations.find((m) => m.id === id);
+        if (mc) {
+          llmManager.updateCurrentLlm({
+            name: p.name ?? p.provider,
+            provider: p.provider,
+            modelName: mc.name,
+          });
+          void updateUserDefaultModel(
+            structureValue(p.name ?? String(p.id), p.provider, mc.name)
+          );
+          break;
+        }
+      }
+    },
+    [llmManager, updateUserDefaultModel]
+  );
+
   const {
     enabled: smoothStreamingEnabled,
     setEnabled: setSmoothStreamingEnabled,
@@ -859,11 +893,12 @@ function ChatPreferencesSettings() {
             description="This model will be used by Onyx by default in your chats."
             withLabel
           >
-            <LLMPopover
-              llmManager={llmManager}
-              onSelect={(selected) => {
-                void updateUserDefaultModel(selected);
-              }}
+            <ModelSelector
+              value={currentModelConfigId}
+              onChange={handleModelPickerChange}
+              temperature={llmManager.temperature}
+              maxTemperature={llmManager.maxTemperature}
+              onTemperatureCommit={llmManager.updateTemperature}
             />
           </InputHorizontal>
 

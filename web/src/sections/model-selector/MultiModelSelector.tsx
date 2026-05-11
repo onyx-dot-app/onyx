@@ -1,15 +1,12 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
-import { Popover } from "@opal/components";
-import { LlmManager } from "@/lib/hooks";
+import { Popover, Separator, Button, SelectButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels";
-import { Button, SelectButton } from "@opal/components";
+import { LLMOption } from "@/lib/languageModels/options";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { LLMOption } from "@/refresh-components/popovers/interfaces";
-import ModelListContent from "@/refresh-components/popovers/ModelListContent";
-import { Separator } from "@opal/components";
+import ModelSelectorContent from "./ModelSelectorContent";
 
 export const MAX_MODELS = 3;
 
@@ -20,8 +17,7 @@ export interface SelectedModel {
   displayName: string;
 }
 
-export interface ModelSelectorProps {
-  llmManager: LlmManager;
+export interface MultiModelSelectorProps {
   selectedModels: SelectedModel[];
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
@@ -32,13 +28,12 @@ function modelKey(provider: string, modelName: string): string {
   return `${provider}:${modelName}`;
 }
 
-export default function ModelSelector({
-  llmManager,
+export default function MultiModelSelector({
   selectedModels,
   onAdd,
   onRemove,
   onReplace,
-}: ModelSelectorProps) {
+}: MultiModelSelectorProps) {
   const [open, setOpen] = useState(false);
   // null = add mode (via + button), number = replace mode (via pill click)
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
@@ -130,7 +125,7 @@ export default function ModelSelector({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <div
-        data-testid="model-selector"
+        data-testid="multi-model-selector"
         className="flex items-center justify-end gap-1 p-1"
       >
         {!atMax && (
@@ -216,9 +211,7 @@ export default function ModelSelector({
 
       {!(atMax && replacingIndex === null) && (
         <Popover.Content side="top" align="end" width="xl">
-          <ModelListContent
-            llmProviders={llmManager.llmProviders}
-            isLoading={llmManager.isLoadingProviders}
+          <ModelSelectorContent
             onSelect={handleSelect}
             isSelected={isSelected}
             isDisabled={isDisabled}

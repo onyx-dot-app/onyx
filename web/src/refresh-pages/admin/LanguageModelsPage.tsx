@@ -25,8 +25,8 @@ import {
   deleteLlmProvider,
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
 import { Section } from "@/layouts/general-layouts";
@@ -314,31 +314,30 @@ export default function LanguageModelsPage() {
     return 0;
   });
 
-  // Pre-filter to providers that have at least one visible model
-  const providersWithVisibleModels = existingLlmProviders
-    .map((provider) => ({
-      provider,
-      visibleModels: provider.model_configurations.filter((m) => m.is_visible),
-    }))
-    .filter(({ visibleModels }) => visibleModels.length > 0);
+  // Resolve the global default to a model_configuration.id for ModelSelector.
+  const currentDefaultConfigId =
+    defaultText != null
+      ? existingLlmProviders
+          .find((p) => p.id === defaultText.provider_id)
+          ?.model_configurations.find((m) => m.name === defaultText.model_name)
+          ?.id ?? null
+      : null;
 
-  // Default model logic — use the global default from the API response
-  const currentDefaultValue = defaultText
-    ? `${defaultText.provider_id}:${defaultText.model_name}`
-    : undefined;
-
-  async function handleDefaultModelChange(compositeValue: string) {
-    const separatorIndex = compositeValue.indexOf(":");
-    const providerId = Number(compositeValue.slice(0, separatorIndex));
-    const modelName = compositeValue.slice(separatorIndex + 1);
-
-    try {
-      await setDefaultLlmModel(providerId, modelName);
-      await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
+  async function handleDefaultModelChange(id: number | null) {
+    if (id == null) return;
+    for (const p of existingLlmProviders ?? []) {
+      const mc = p.model_configurations.find((m) => m.id === id);
+      if (mc) {
+        try {
+          await setDefaultLlmModel(p.id, mc.name);
+          await refreshLlmProviderCaches(mutate);
+          toast.success("Default model updated successfully!");
+        } catch (e) {
+          const message = e instanceof Error ? e.message : "Unknown error";
+          toast.error(`Failed to set default model: ${message}`);
+        }
+        break;
+      }
     }
   }
 
@@ -355,31 +354,11 @@ export default function LanguageModelsPage() {
               center
               withLabel
             >
-              <InputSelect
-                value={currentDefaultValue}
-                onValueChange={handleDefaultModelChange}
-              >
-                <InputSelect.Trigger placeholder="Select a default model" />
-                <InputSelect.Content>
-                  {providersWithVisibleModels.map(
-                    ({ provider, visibleModels }) => (
-                      <InputSelect.Group key={provider.id}>
-                        <InputSelect.Label>
-                          {providerDisplayName(provider)}
-                        </InputSelect.Label>
-                        {visibleModels.map((model) => (
-                          <InputSelect.Item
-                            key={`${provider.id}:${model.name}`}
-                            value={`${provider.id}:${model.name}`}
-                          >
-                            {model.display_name || model.name}
-                          </InputSelect.Item>
-                        ))}
-                      </InputSelect.Group>
-                    )
-                  )}
-                </InputSelect.Content>
-              </InputSelect>
+              <ModelSelector
+                value={currentDefaultConfigId}
+                onChange={handleDefaultModelChange}
+                providers={existingLlmProviders}
+              />
             </InputHorizontal>
           </Card>
         ) : (

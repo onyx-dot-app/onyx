@@ -6,9 +6,13 @@ import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { LLMOption } from "./interfaces";
-import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
+import {
+  LLMOption,
+  ProviderForOptions,
+  buildLlmOptions,
+  groupLlmOptions,
+} from "@/lib/languageModels/options";
 import {
   Collapsible,
   CollapsibleContent,
@@ -18,36 +22,37 @@ import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 
-export interface ModelListContentProps {
-  llmProviders: LLMProviderDescriptor[] | undefined;
-  currentModelName?: string;
+export interface ModelSelectorContentProps {
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
   isSelected: (option: LLMOption) => boolean;
   isDisabled?: (option: LLMOption) => boolean;
-  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
-  isLoading?: boolean;
   footer?: React.ReactNode;
+  /** Explicit persona ID for provider scoping; overrides auto-detection via useCurrentAgent. */
+  personaId?: number;
+  /** Pre-fetched providers (e.g. from the admin endpoint). When provided, skips useLLMProviders. */
+  providers?: ProviderForOptions[];
 }
 
-export default function ModelListContent({
-  llmProviders,
-  currentModelName,
+export default function ModelSelectorContent({
   requiresImageInput,
   onSelect,
   isSelected,
   isDisabled,
-  scrollContainerRef: externalScrollRef,
-  isLoading,
   footer,
-}: ModelListContentProps) {
+  personaId,
+  providers,
+}: ModelSelectorContentProps) {
+  const { llmProviders: fetched, isLoading: isFetchedLoading } =
+    useLLMProviders(personaId);
+  const llmProviders = providers ?? fetched;
+  const isLoading = providers === undefined && isFetchedLoading;
   const [searchQuery, setSearchQuery] = useState("");
-  const internalScrollRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = externalScrollRef ?? internalScrollRef;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName),
-    [llmProviders, currentModelName]
+    () => buildLlmOptions(llmProviders),
+    [llmProviders]
   );
 
   const filteredOptions = useMemo(() => {

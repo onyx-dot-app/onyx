@@ -59,7 +59,7 @@ export async function sendMessage(page: Page, message: string) {
 function getModelSelectorTrigger(page: Page) {
   // Target the model pill (last button), not the "+" add button (first button).
   // The pill shows the current model name and opens in replace mode on click.
-  return page.getByTestId("model-selector").locator("button").last();
+  return page.getByTestId("multi-model-selector").locator("button").last();
 }
 
 export async function verifyCurrentModel(page: Page, modelName: string) {

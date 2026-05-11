@@ -17,18 +17,17 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
-import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
+import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { RegenerationFactory } from "./AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button, SelectButton } from "@opal/components";
+import { Button, OpenButton, SelectButton } from "@opal/components";
 import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
@@ -178,6 +177,48 @@ export default function MessageToolbar({
     [currentFeedback, modal.isOpen, feedbackModalProps, messageId]
   );
 
+  // Resolve message-specific model name to model_configuration_id for ModelSelector.
+  const messageModelConfigId = useMemo((): number | null => {
+    const modelName =
+      currentModelName?.trim() || llmManager?.currentLlm.modelName;
+    if (!modelName || !llmManager?.llmProviders) return null;
+    const currentProvider = llmManager.currentLlm.provider;
+    for (const p of llmManager.llmProviders) {
+      if (p.provider !== currentProvider) continue;
+      const mc = p.model_configurations.find((m) => m.name === modelName);
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [currentModelName, llmManager]);
+
+  const handleRegenerateWithModel = useCallback(
+    (id: number | null) => {
+      if (
+        !id ||
+        !onRegenerate ||
+        messageId === undefined ||
+        !parentMessage ||
+        !llmManager
+      )
+        return;
+      for (const p of llmManager.llmProviders ?? []) {
+        const mc = p.model_configurations.find((m) => m.id === id);
+        if (mc) {
+          const llmDescriptor = {
+            name: p.name ?? p.provider,
+            provider: p.provider,
+            modelName: mc.name,
+          };
+          llmManager.updateCurrentLlm(llmDescriptor);
+          const regenerator = onRegenerate({ messageId, parentMessage });
+          regenerator(llmDescriptor);
+          break;
+        }
+      }
+    },
+    [llmManager, onRegenerate, messageId, parentMessage]
+  );
+
   // Handler for feedback button clicks with toggle logic
   const handleFeedbackClick = useCallback(
     async (clickedFeedback: "like" | "dislike") => {
@@ -297,18 +338,14 @@ export default function MessageToolbar({
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <LLMPopover
-                    llmManager={llmManager}
-                    currentModelName={currentModelName}
-                    onSelect={(modelName) => {
-                      const llmDescriptor = parseLlmDescriptor(modelName);
-                      const regenerator = onRegenerate({
-                        messageId,
-                        parentMessage,
-                      });
-                      regenerator(llmDescriptor);
-                    }}
-                    foldable
+                  <ModelSelector
+                    value={messageModelConfigId}
+                    onChange={handleRegenerateWithModel}
+                    renderTrigger={(currentOption) => (
+                      <OpenButton foldable icon={SvgRefreshCw}>
+                        {currentOption?.displayName ?? "Select a model"}
+                      </OpenButton>
+                    )}
                   />
                 </div>
               )}
