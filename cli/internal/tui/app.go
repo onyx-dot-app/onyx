@@ -41,6 +41,9 @@ type Model struct {
 	needsRename     bool
 	agentStarted bool
 
+	// Configure state
+	configState *configState
+
 	// Quit state
 	quitPending    bool
 	splashShown    bool
@@ -140,6 +143,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionResumedMsg:
 		return m.handleSessionResumed(msg)
 
+	case ConfigTestResultMsg:
+		return handleConfigTestResult(m, msg)
+
 	case FileUploadedMsg:
 		return m.handleFileUploaded(msg)
 
@@ -211,15 +217,16 @@ func (m Model) View() string {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEscape:
-		// Cancel streaming or close menu
 		if m.input.menuVisible {
 			m.input.menuVisible = false
 			return m, nil
 		}
+		if m.configState != nil {
+			return cancelConfigure(m)
+		}
 		if m.isStreaming {
 			return m.cancelStream()
 		}
-		// Dismiss picker
 		if m.viewport.pickerActive {
 			m.viewport.pickerActive = false
 			return m, nil
@@ -245,6 +252,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
+		if m.configState != nil {
+			text := strings.TrimSpace(m.input.textInput.Value())
+			m.input.textInput.SetValue("")
+			return handleConfigureSubmit(m, text)
+		}
 		if m.viewport.pickerActive {
 			if len(m.viewport.pickerItems) > 0 {
 				item := m.viewport.pickerItems[m.viewport.pickerIndex]

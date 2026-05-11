@@ -43,8 +43,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdSessions(m)
 
 	case "/configure":
-		m.viewport.addInfo("Run 'onyx-cli configure' to change connection settings.")
-		return m, nil
+		return enterConfigureMode(m)
 
 	case "/clear", "/new":
 		return cmdNew(m)

@@ -1,0 +1,307 @@
+"""
+Integration tests for the onyx-cli binary against a real Onyx backend.
+
+These tests build the Go binary, seed state via the backend API (users,
+PATs, personas, LLM providers), then invoke the CLI as a subprocess and
+verify the output reflects the seeded state.
+
+Test Suite:
+1.  test_validate_config_success - Authenticates with PAT, reports connected
+2.  test_validate_config_bad_pat - Invalid PAT returns exit code 4
+3.  test_validate_config_not_configured - Missing PAT returns exit code 3
+4.  test_ask_plain_text - Answer contains expected content
+5.  test_ask_json - NDJSON stream has correct event types
+6.  test_ask_quiet - Buffered output contains answer
+7.  test_ask_stdin_pipe - Piped context is used in the answer
+8.  test_ask_truncation - Output truncated with temp file path
+9.  test_ask_not_configured - Missing PAT returns exit code 3
+10. test_agents_list - Seeded persona appears in table output
+11. test_agents_json - Seeded persona appears in JSON output
+12. test_agents_json_structure - JSON has expected fields
+13. test_help_non_tty - No subcommand prints help, exits 0
+14. test_version_flag - Prints client and server version
+15. test_experiments - Lists feature flags
+"""
+
+import json
+import os
+import subprocess
+import tempfile
+from collections.abc import Generator
+from pathlib import Path
+
+import pytest
+
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.pat import PATManager
+from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.test_models import DATestLLMProvider
+from tests.integration.common_utils.test_models import DATestPersona
+from tests.integration.common_utils.test_models import DATestUser
+
+CLI_DIR = Path(__file__).resolve().parents[5] / "cli"
+CLI_BINARY = CLI_DIR / "onyx-cli-test"
+
+
+@pytest.fixture(scope="module")
+def cli_binary() -> Generator[Path, None, None]:
+    """Build the CLI binary once per test module."""
+    result = subprocess.run(
+        ["go", "build", "-o", str(CLI_BINARY), "."],
+        cwd=str(CLI_DIR),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"CLI build failed:\n{result.stderr}"
+    yield CLI_BINARY
+    CLI_BINARY.unlink(missing_ok=True)
+
+
+@pytest.fixture
+def pat_token(admin_user: DATestUser) -> str:
+    """Create a PAT and return the raw token string."""
+    pat = PATManager.create(
+        name="cli-integration-test",
+        expiration_days=1,
+        user_performing_action=admin_user,
+    )
+    assert pat.token is not None
+    return pat.token
+
+
+@pytest.fixture
+def seeded_persona(admin_user: DATestUser) -> DATestPersona:
+    """Create a persona with a known name for verification."""
+    return PersonaManager.create(
+        user_performing_action=admin_user,
+        name="CLI Test Agent",
+        description="An agent created for CLI integration tests",
+    )
+
+
+def run_cli(
+    binary: Path,
+    args: list[str],
+    *,
+    pat: str | None = None,
+    server_url: str = API_SERVER_URL,
+    stdin_data: str | None = None,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess[str]:
+    """Run the CLI binary with isolated config and return the result."""
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "ONYX_SERVER_URL": server_url,
+        "XDG_CONFIG_HOME": tempfile.mkdtemp(),
+    }
+    if pat is not None:
+        env["ONYX_PAT"] = pat
+
+    return subprocess.run(
+        [str(binary)] + args,
+        capture_output=True,
+        text=True,
+        env=env,
+        input=stdin_data,
+        timeout=timeout,
+    )
+
+
+# --- validate-config ---
+
+
+def test_validate_config_success(cli_binary: Path, pat_token: str) -> None:
+    """CLI authenticates and reports success with a valid PAT."""
+    result = run_cli(cli_binary, ["validate-config"], pat=pat_token)
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "connected and authenticated" in result.stdout
+    assert "environment variables" in result.stdout
+
+
+def test_validate_config_bad_pat(
+    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+) -> None:
+    """Invalid PAT returns AuthFailure (exit code 4)."""
+    result = run_cli(cli_binary, ["validate-config"], pat="bad-token")
+
+    assert result.returncode == 4
+
+
+def test_validate_config_not_configured(
+    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+) -> None:
+    """Missing PAT returns NotConfigured (exit code 3)."""
+    result = run_cli(cli_binary, ["validate-config"])
+
+    assert result.returncode == 3
+    assert "not configured" in result.stderr.lower()
+
+
+# --- ask ---
+
+
+def test_ask_plain_text(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """Ask a question and verify the answer is non-trivial."""
+    result = run_cli(
+        cli_binary,
+        ["ask", 'Respond with exactly the word "pineapple" and nothing else'],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "pineapple" in result.stdout.lower()
+
+
+def test_ask_json(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """Ask in NDJSON mode and verify event types and content."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--json", "Say hi"],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    lines = [line for line in result.stdout.strip().split("\n") if line]
+    assert len(lines) >= 3, f"expected at least 3 NDJSON lines, got {len(lines)}"
+
+    events = [json.loads(line) for line in lines]
+    event_types = [e["type"] for e in events]
+
+    assert "session_created" in event_types
+    assert "message_delta" in event_types
+    assert "stop" in event_types
+
+    # Verify message_delta events have content
+    deltas = [e for e in events if e["type"] == "message_delta"]
+    content = "".join(e["event"]["content"] for e in deltas)
+    assert len(content) > 0, "expected non-empty message content"
+
+
+def test_ask_quiet(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """Quiet mode buffers output and prints once."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--quiet", 'Respond with exactly "quiet_ok"'],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "quiet_ok" in result.stdout.lower()
+
+
+def test_ask_stdin_pipe(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """Piped stdin content is used as context in the answer."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--prompt", "What is the secret code in the context below?"],
+        pat=pat_token,
+        stdin_data="The secret code is XRAY42.",
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "XRAY42" in result.stdout
+
+
+def test_ask_truncation(
+    cli_binary: Path, pat_token: str, llm_provider: DATestLLMProvider  # noqa: ARG001
+) -> None:
+    """Non-TTY output is truncated with a temp file path."""
+    result = run_cli(
+        cli_binary,
+        ["ask", "--max-output", "50", "Write a 500-word essay about anything"],
+        pat=pat_token,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "response truncated" in result.stdout
+    assert "Full response:" in result.stdout
+
+
+def test_ask_not_configured(
+    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+) -> None:
+    """Missing PAT returns NotConfigured (exit code 3)."""
+    result = run_cli(cli_binary, ["ask", "test"])
+
+    assert result.returncode == 3
+
+
+# --- agents ---
+
+
+def test_agents_list(
+    cli_binary: Path,
+    pat_token: str,
+    seeded_persona: DATestPersona,
+) -> None:
+    """Seeded persona appears in the table output."""
+    result = run_cli(cli_binary, ["agents"], pat=pat_token)
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert seeded_persona.name in result.stdout
+    assert "CLI integration tests" in result.stdout
+
+
+def test_agents_json(
+    cli_binary: Path,
+    pat_token: str,
+    seeded_persona: DATestPersona,
+) -> None:
+    """Seeded persona appears in JSON output with correct fields."""
+    result = run_cli(cli_binary, ["agents", "--json"], pat=pat_token)
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    agents = json.loads(result.stdout)
+    assert isinstance(agents, list)
+
+    matching = [a for a in agents if a["name"] == seeded_persona.name]
+    assert len(matching) == 1, (
+        f"expected 1 agent named '{seeded_persona.name}', "
+        f"found {len(matching)} in {[a['name'] for a in agents]}"
+    )
+
+    agent = matching[0]
+    assert agent["id"] == seeded_persona.id
+    assert agent["description"] == seeded_persona.description
+
+
+# --- general ---
+
+
+def test_help_non_tty(cli_binary: Path) -> None:
+    """Running with no subcommand in non-TTY prints help and exits 0."""
+    result = run_cli(cli_binary, [])
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "Available Commands:" in result.stdout
+
+
+def test_version_flag(cli_binary: Path, pat_token: str) -> None:
+    """--version prints client and server version."""
+    result = run_cli(cli_binary, ["--version"], pat=pat_token)
+
+    assert result.returncode == 0
+    assert "Client version:" in result.stdout
+    assert "Server version:" in result.stdout
+
+
+def test_experiments(cli_binary: Path) -> None:
+    """Experiments command lists feature flags without auth."""
+    result = run_cli(cli_binary, ["experiments"])
+
+    assert result.returncode == 0
+    assert "Stream Markdown" in result.stdout

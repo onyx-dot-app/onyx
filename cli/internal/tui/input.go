@@ -35,11 +35,13 @@ var argCommands = map[string]bool{
 
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
-	textInput    textinput.Model
-	menuVisible  bool
-	menuItems    []slashCommand
-	menuIndex    int
+	textInput     textinput.Model
+	menuVisible   bool
+	menuItems     []slashCommand
+	menuIndex     int
 	attachedFiles []string
+	customPrompt  string
+	suppressMenu  bool
 }
 
 func newInputModel() inputModel {
@@ -135,6 +137,10 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 }
 
 func (m inputModel) updateMenu() inputModel {
+	if m.suppressMenu {
+		m.menuVisible = false
+		return m
+	}
 	val := strings.TrimSpace(m.textInput.Value())
 	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
 		needle := strings.ToLower(val)
@@ -236,6 +242,10 @@ func (m inputModel) viewInput() string {
 		parts = append(parts, statusMsgStyle.Render("Attached: ["+badges+"]"))
 	}
 
-	parts = append(parts, inputPrompt+m.textInput.View())
+	prompt := inputPrompt
+	if m.customPrompt != "" {
+		prompt = m.customPrompt
+	}
+	parts = append(parts, prompt+m.textInput.View())
 	return strings.Join(parts, "\n")
 }
