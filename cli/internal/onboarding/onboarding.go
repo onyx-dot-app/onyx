@@ -68,7 +68,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 
 	if apiKey == "" {
 		// Open browser to PAT page
-		url := strings.TrimRight(serverURL, "/") + "/app/settings/accounts-access"
+		url := config.WebOrigin(serverURL) + "/app/settings/accounts-access"
 		fmt.Printf("\n  Opening %s ...\n", url)
 		browser.OpenBrowser(url)
 		fmt.Println("  " + dimStyle.Render("Copy your personal access token, then paste it here."))

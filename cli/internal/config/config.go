@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -53,6 +54,18 @@ func (f Features) StreamMarkdownEnabled() bool {
 // IsConfigured returns true if the config has a personal access token (PAT).
 func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
+}
+
+// WebOrigin strips any API path suffix from a server URL, returning the web
+// app origin suitable for browser URLs (e.g., /admin/indexing/status).
+func WebOrigin(serverURL string) string {
+	u := strings.TrimRight(serverURL, "/")
+	for _, suffix := range []string{"/api/v1", "/api"} {
+		if strings.HasSuffix(u, suffix) {
+			return u[:len(u)-len(suffix)]
+		}
+	}
+	return u
 }
 
 // ConfigDir returns ~/.config/onyx-cli
