@@ -115,21 +115,27 @@ async def run_exec(req: ExecRequest) -> ExecResponse:
     stdout: bytes = b""
     stderr: bytes = b""
 
-    async def _run() -> None:
-        nonlocal stdout, stderr, stdout_trunc, stderr_trunc
-        # Feed stdin (if any), then drain both output streams concurrently with
-        # per-stream caps. communicate() would buffer everything in memory and
-        # let a chatty subprocess blow up the sidecar's RSS.
+    async def _write_stdin() -> None:
         if stdin_bytes is not None and proc.stdin is not None:
             proc.stdin.write(stdin_bytes)
             await proc.stdin.drain()
             proc.stdin.close()
-        results = await asyncio.gather(
+
+    async def _run() -> None:
+        nonlocal stdout, stderr, stdout_trunc, stderr_trunc
+        # Run stdin write concurrently with the stdout/stderr reads. Serializing
+        # would deadlock when a subprocess interleaves stdin consumption with
+        # output: the OS pipe + StreamReader buffers fill (~64 KB each way),
+        # subprocess blocks writing, stops reading stdin, drain() never returns.
+        # communicate() also buffers everything in memory — we replace it here
+        # so a chatty subprocess can't blow up the sidecar's RSS.
+        _, stdout_pair, stderr_pair = await asyncio.gather(
+            _write_stdin(),
             _read_capped(proc.stdout, max_out),
             _read_capped(proc.stderr, max_out),
         )
-        stdout, stdout_trunc = results[0]
-        stderr, stderr_trunc = results[1]
+        stdout, stdout_trunc = stdout_pair
+        stderr, stderr_trunc = stderr_pair
         await proc.wait()
 
     try:
