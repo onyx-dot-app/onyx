@@ -13,8 +13,8 @@ func newConfigureCmd(ios *iostreams.IOStreams) *cobra.Command {
 		Use:   "configure",
 		Short: "Configure server URL and personal access token (requires terminal)",
 		Long: `Launch the interactive setup wizard to configure the Onyx CLI with your
-server URL and personal access token (PAT). The saved config is shared with all CLI users on this
-machine, including AI agents calling the CLI non-interactively.
+server URL and personal access token (PAT). The saved config is stored in your
+user config directory and is also used by AI agents calling the CLI non-interactively.
 
 To override the config file or skip it entirely, set environment variables:
 
