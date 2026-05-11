@@ -276,7 +276,7 @@ export default function BedrockModal({
         (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",
       BEDROCK_AUTH_METHOD:
         (existingLlmProvider?.custom_config?.BEDROCK_AUTH_METHOD as string) ??
-        "access_key",
+        AUTH_METHOD_ACCESS_KEY,
       AWS_ACCESS_KEY_ID:
         (existingLlmProvider?.custom_config?.AWS_ACCESS_KEY_ID as string) ?? "",
       AWS_SECRET_ACCESS_KEY:
