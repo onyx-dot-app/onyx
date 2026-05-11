@@ -153,12 +153,7 @@ function BedrockModalInternals({
             title="Authentication Method"
             subDescription="Choose how Onyx should authenticate with Bedrock."
           >
-            <InputSelect
-              value={authMethod || AUTH_METHOD_ACCESS_KEY}
-              onValueChange={(value) =>
-                formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
-              }
-            >
+            <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
               <InputSelect.Trigger defaultValue={AUTH_METHOD_IAM} />
               <InputSelect.Content>
                 <InputSelect.Item
@@ -180,7 +175,7 @@ function BedrockModalInternals({
                   Long-term API Key
                 </InputSelect.Item>
               </InputSelect.Content>
-            </InputSelect>
+            </InputSelectField>
           </InputVertical>
         </Section>
       </InputPadder>
