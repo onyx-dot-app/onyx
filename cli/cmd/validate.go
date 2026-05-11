@@ -17,9 +17,9 @@ func newValidateConfigCmd(ios *iostreams.IOStreams) *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate-config",
 		Short: "Check CLI configuration and server connectivity",
-		Long: `Check that the CLI is configured, the server is reachable, and the API key
-is valid. Also reports the server version and warns if it is below the
-minimum required.`,
+		Long: `Check that the CLI is configured, the server is reachable, and the personal
+access token (PAT) is valid. Also reports the server version and warns if it
+is below the minimum required.`,
 		Example: `  onyx-cli validate-config`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := requireConfig()

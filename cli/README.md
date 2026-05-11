@@ -25,14 +25,14 @@ Run the interactive setup:
 onyx-cli configure
 ```
 
-This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
+This prompts for your Onyx server URL and personal access token (PAT), tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
 
 Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
-| `ONYX_API_KEY` | No | API key for authentication (required if no config file) |
+| `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 | `ONYX_SSH_HOST_KEY` | No | Path to SSH host key for `serve` command |
@@ -84,12 +84,12 @@ ssh your-host -p 2222
 ```
 
 Clients can either:
-- paste an API key at the login prompt, or
-- skip the prompt by sending `ONYX_API_KEY` over SSH:
+- paste a personal access token (PAT) at the login prompt, or
+- skip the prompt by sending `ONYX_PAT` over SSH:
 
 ```shell
-export ONYX_API_KEY=your-key
-ssh -o SendEnv=ONYX_API_KEY your-host -p 2222
+export ONYX_PAT=your-pat
+ssh -o SendEnv=ONYX_PAT your-host -p 2222
 ```
 
 Useful hardening flags:
@@ -110,7 +110,7 @@ Useful hardening flags:
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
 | `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
-| `configure` | Interactive | Configure server URL and API key (requires terminal) |
+| `configure` | Interactive | Configure server URL and PAT (requires terminal) |
 | `serve` | Interactive | Serve the Onyx TUI over SSH |
 
 ### Global Flags
@@ -135,7 +135,7 @@ If a human has already run `onyx-cli configure`, the CLI works out of the box â€
 
 ```shell
 export ONYX_SERVER_URL="https://your-onyx-server.com"
-export ONYX_API_KEY="your-api-key"
+export ONYX_PAT="your-pat"
 ```
 
 ### Exit Codes
@@ -145,8 +145,8 @@ export ONYX_API_KEY="your-api-key"
 | 0 | Success | Command completed |
 | 1 | General | Unknown error |
 | 2 | BadRequest | Invalid arguments |
-| 3 | NotConfigured | Missing config/API key |
-| 4 | AuthFailure | Invalid API key (401/403) |
+| 3 | NotConfigured | Missing config/PAT |
+| 4 | AuthFailure | Invalid PAT (401/403) |
 | 5 | Unreachable | Server unreachable |
 | 6 | RateLimited | Server returned 429 |
 | 7 | Timeout | Request timed out |

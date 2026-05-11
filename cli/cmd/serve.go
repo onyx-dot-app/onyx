@@ -50,7 +50,7 @@ func sessionEnv(s ssh.Session, key string) string {
 func validateAPIKey(serverURL string, apiKey string) error {
 	trimmedKey := strings.TrimSpace(apiKey)
 	if len(trimmedKey) > tui.MaxAPIKeyLength {
-		return fmt.Errorf("API key is too long (max %d characters)", tui.MaxAPIKeyLength)
+		return fmt.Errorf("PAT is too long (max %d characters)", tui.MaxAPIKeyLength)
 	}
 
 	cfg := config.OnyxCliConfig{
@@ -61,7 +61,7 @@ func validateAPIKey(serverURL string, apiKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), apiKeyValidationTimeout)
 	defer cancel()
 	if err := client.TestConnection(ctx); err != nil {
-		return apiErrorToExit(err, "API key validation failed")
+		return apiErrorToExit(err, "PAT validation failed")
 	}
 	return nil
 }
@@ -86,10 +86,10 @@ func newServeCmd() *cobra.Command {
 		Long: `Start an SSH server that presents the interactive Onyx chat TUI to
 connecting clients. Each SSH session gets its own independent TUI instance.
 
-Clients are prompted for their Onyx API key on connect. The key can also be
-provided via the ONYX_API_KEY environment variable to skip the prompt:
+Clients are prompted for their Onyx personal access token (PAT) on connect.
+The PAT can also be provided via the ONYX_PAT environment variable to skip the prompt:
 
-  ssh -o SendEnv=ONYX_API_KEY host -p port
+  ssh -o SendEnv=ONYX_PAT host -p port
 
 The server URL is taken from the server operator's config. The server
 auto-generates an Ed25519 host key on first run if the key file does not
@@ -132,7 +132,7 @@ environment variable (the --host-key flag takes precedence).`,
 
 				if apiKey != "" {
 					if err := validateAPIKey(serverCfg.ServerURL, apiKey); err != nil {
-						envErr = fmt.Sprintf("ONYX_API_KEY from SSH environment is invalid: %s", err.Error())
+						envErr = fmt.Sprintf("PAT from ONYX_PAT environment variable is invalid: %s", err.Error())
 						apiKey = ""
 					}
 				}

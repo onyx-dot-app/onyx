@@ -56,7 +56,7 @@ func IsolateConfig(t *testing.T, serverURL string) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("ONYX_SERVER_URL", serverURL)
-	t.Setenv("ONYX_API_KEY", "test-key")
+	t.Setenv("ONYX_PAT", "test-key")
 }
 
 // TestIOStreams returns an IOStreams backed by buffers for testing.

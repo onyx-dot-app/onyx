@@ -10,7 +10,7 @@ import (
 
 const (
 	EnvServerURL      = "ONYX_SERVER_URL"
-	EnvAPIKey         = "ONYX_API_KEY"
+	EnvAPIKey         = "ONYX_PAT"
 	EnvAgentID        = "ONYX_PERSONA_ID"
 	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
 	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
@@ -50,7 +50,7 @@ func (f Features) StreamMarkdownEnabled() bool {
 	return true
 }
 
-// IsConfigured returns true if the config has an API key.
+// IsConfigured returns true if the config has a personal access token (PAT).
 func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
 }

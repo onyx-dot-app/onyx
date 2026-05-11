@@ -45,7 +45,7 @@ type AuthModel struct {
 // NewAuthModel creates a new auth prompt model.
 func NewAuthModel(serverURL, initialErr string, validateFunc func(string, string) error) AuthModel {
 	ti := textinput.New()
-	ti.Prompt = "  API Key: "
+	ti.Prompt = "  Personal Access Token: "
 	ti.EchoMode = textinput.EchoPassword
 	ti.EchoCharacter = '•'
 	ti.CharLimit = MaxAPIKeyLength
@@ -133,12 +133,12 @@ func (m AuthModel) View() string {
 	b.WriteString("  \x1b[1;35mOnyx CLI\x1b[0m\n")
 	b.WriteString("  \x1b[90m" + m.serverURL + "\x1b[0m\n")
 	b.WriteString("\n")
-	b.WriteString("  Generate an API key at:\n")
+	b.WriteString("  Generate a personal access token (PAT) at:\n")
 	b.WriteString("  \x1b[4;34m" + settingsURL + "\x1b[0m\n")
 	b.WriteString("\n")
-	b.WriteString("  \x1b[90mTip: skip this prompt by passing your key via SSH:\x1b[0m\n")
-	b.WriteString("  \x1b[90m  export ONYX_API_KEY=<key>\x1b[0m\n")
-	b.WriteString("  \x1b[90m  ssh -o SendEnv=ONYX_API_KEY <host> -p <port>\x1b[0m\n")
+	b.WriteString("  \x1b[90mTip: skip this prompt by passing your PAT via SSH:\x1b[0m\n")
+	b.WriteString("  \x1b[90m  export ONYX_PAT=<key>\x1b[0m\n")
+	b.WriteString("  \x1b[90m  ssh -o SendEnv=ONYX_PAT <host> -p <port>\x1b[0m\n")
 	b.WriteString("\n")
 
 	if m.errMsg != "" {

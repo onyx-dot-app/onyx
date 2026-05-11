@@ -163,9 +163,9 @@ func (c *Client) TestConnection(ctx context.Context) error {
 			return &AuthError{Message: fmt.Sprintf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration", resp2.StatusCode)}
 		}
 		if resp2.StatusCode == 401 {
-			return &AuthError{Message: fmt.Sprintf("invalid API key or token.\n  %s", body)}
+			return &AuthError{Message: fmt.Sprintf("invalid personal access token.\n  %s", body)}
 		}
-		return &AuthError{Message: fmt.Sprintf("access denied — check that the API key is valid.\n  %s", body)}
+		return &AuthError{Message: fmt.Sprintf("access denied — check that the personal access token is valid.\n  %s", body)}
 	}
 
 	detail := fmt.Sprintf("HTTP %d", resp2.StatusCode)

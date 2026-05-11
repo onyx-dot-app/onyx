@@ -29,19 +29,19 @@ Environment variables override the config file and can be used as an alternative
 
 ```bash
 export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: https://cloud.onyx.app
-export ONYX_API_KEY="your-api-key"
+export ONYX_PAT="your-pat"
 ```
 
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
 | `ONYX_SERVER_URL` | No       | Onyx server base URL (default: `https://cloud.onyx.app`) |
-| `ONYX_API_KEY`    | Yes      | API key for authentication (unless config file exists)   |
+| `ONYX_PAT`    | Yes      | Personal access token for authentication (unless config file exists) |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 
 If neither a config file nor environment variables are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
 - Run `onyx-cli configure` interactively, or
-- Set `ONYX_SERVER_URL` and `ONYX_API_KEY` environment variables
+- Set `ONYX_SERVER_URL` and `ONYX_PAT` environment variables (ONYX_PAT holds your PAT)
 
 ### 4. Verify configuration
 
@@ -95,7 +95,7 @@ Prints a table of agent IDs, names, and descriptions. Use `--json` for structure
 onyx-cli validate-config
 ```
 
-Checks config exists, API key is present, server is reachable, and credentials are valid. Use before `ask` or `agents` to confirm the CLI is properly set up.
+Checks config exists, PAT is present, server is reachable, and credentials are valid. Use before `ask` or `agents` to confirm the CLI is properly set up.
 
 ## Output Conventions
 
@@ -111,8 +111,8 @@ Checks config exists, API key is present, server is reachable, and credentials a
 | 0    | Success        | Command completed successfully   |
 | 1    | General        | Unknown or unclassified error    |
 | 2    | BadRequest     | Invalid arguments                |
-| 3    | NotConfigured  | Missing config or API key        |
-| 4    | AuthFailure    | Invalid API key (401/403)        |
+| 3    | NotConfigured  | Missing config or PAT            |
+| 4    | AuthFailure    | Invalid PAT (401/403)            |
 | 5    | Unreachable    | Server unreachable               |
 | 6    | RateLimited    | Server returned 429              |
 | 7    | Timeout        | Request timed out                |

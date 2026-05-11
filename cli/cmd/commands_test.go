@@ -76,7 +76,7 @@ func TestAgentsCmd_ExitCodes(t *testing.T) {
 
 func TestAgentsCmd_NotConfigured(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("ONYX_API_KEY", "")
+	t.Setenv("ONYX_PAT", "")
 	t.Setenv("ONYX_SERVER_URL", "")
 
 	ios := discardIOStreams()
@@ -167,7 +167,7 @@ func TestValidateConfigCmd_Success(t *testing.T) {
 
 func TestValidateConfigCmd_NotConfigured(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("ONYX_API_KEY", "")
+	t.Setenv("ONYX_PAT", "")
 	t.Setenv("ONYX_SERVER_URL", "")
 
 	ios := discardIOStreams()
@@ -206,7 +206,7 @@ func TestAskCmd_ExitCodes(t *testing.T) {
 
 func TestAskCmd_NotConfigured(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("ONYX_API_KEY", "")
+	t.Setenv("ONYX_PAT", "")
 	t.Setenv("ONYX_SERVER_URL", "")
 
 	ios := discardIOStreams()
