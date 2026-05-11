@@ -66,7 +66,7 @@ function PrivacyOption({
     <div aria-label={ariaLabel}>
       <LineItemButton
         selectVariant="select-heavy"
-        state={selected ? "filled" : "empty"}
+        state={selected ? "selected" : "empty"}
         rounding="sm"
         onClick={onClick}
         sizePreset="main-ui"
