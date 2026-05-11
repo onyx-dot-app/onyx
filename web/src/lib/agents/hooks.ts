@@ -1,9 +1,10 @@
 "use client";
 
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  AgentLabel,
   FullAgent,
   MinimalAgent,
   Agent,
@@ -368,6 +369,87 @@ export function useAgentPreferences() {
   return {
     agentPreferences: data ?? null,
     setSpecificAgentPreferences,
+  };
+}
+
+// ── Labels ────────────────────────────────────────────────────────────────────
+
+export function useLabels() {
+  const { mutate } = useSWRConfig();
+  const { data: labels, error } = useSWR<AgentLabel[]>(
+    SWR_KEYS.personaLabels,
+    errorHandlingFetcher
+  );
+
+  const refreshLabels = async () => {
+    return mutate(SWR_KEYS.personaLabels);
+  };
+
+  const createLabel = async (name: string): Promise<AgentLabel | null> => {
+    const response = await fetch(SWR_KEYS.personaLabels, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const newLabel: AgentLabel = await response.json();
+    mutate(
+      SWR_KEYS.personaLabels,
+      (currentLabels: AgentLabel[] | undefined) => [
+        ...(currentLabels || []),
+        newLabel,
+      ],
+      false
+    );
+    return newLabel;
+  };
+
+  const updateLabel = async (id: number, name: string) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label_name: name }),
+    });
+
+    if (response.ok) {
+      mutate(
+        SWR_KEYS.personaLabels,
+        labels?.map((label) => (label.id === id ? { ...label, name } : label)),
+        false
+      );
+    }
+
+    return response;
+  };
+
+  const deleteLabel = async (id: number) => {
+    const response = await fetch(`/api/admin/persona/label/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      mutate(
+        SWR_KEYS.personaLabels,
+        labels?.filter((label) => label.id !== id),
+        false
+      );
+    }
+
+    return response;
+  };
+
+  return {
+    labels,
+    error,
+    refreshLabels,
+    createLabel,
+    updateLabel,
+    deleteLabel,
   };
 }
 

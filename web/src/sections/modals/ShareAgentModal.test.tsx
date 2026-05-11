@@ -15,9 +15,6 @@ jest.mock("@/hooks/useShareableGroups", () => ({
 
 jest.mock("@/lib/agents/hooks", () => ({
   useAgent: jest.fn(() => ({ agent: null })),
-}));
-
-jest.mock("@/lib/hooks", () => ({
   useLabels: jest.fn(() => ({
     labels: [],
     createLabel: jest.fn(),
