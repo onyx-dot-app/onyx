@@ -168,6 +168,7 @@ class JsmConnector(JiraConnector):
             else:
                 yield item
 
-    def validate_connector_settings(self) -> None:
-        """Reuse parent validation. JSM uses the same auth + project setup."""
-        return super().validate_connector_settings()
+    # `validate_connector_settings`, credential loading, and the rest of the
+    # public API are inherited unchanged from `JiraConnector` — JSM uses the
+    # same Atlassian Cloud auth, the same project layout, and the same
+    # checkpoint shape.
