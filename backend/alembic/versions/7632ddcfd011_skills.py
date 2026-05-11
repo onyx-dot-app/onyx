@@ -17,26 +17,43 @@ branch_labels = None
 depends_on = None
 
 
+def _add_skill_bundle_to_legacy_fileorigin_enum() -> None:
+    """Expand old native Postgres fileorigin enums if a deployment still has one.
+
+    FileOrigin is string-backed in the modern schema, so most deployments will not have
+    a native ``fileorigin`` type. When one does exist, keep the lookup scoped to the
+    schema currently being migrated and run the enum DDL in Alembic's autocommit block.
+    """
+
+    migration_context = op.get_context()
+    if migration_context.as_sql:
+        op.execute(
+            "-- Skipping legacy fileorigin enum expansion in offline mode; "
+            "online migration checks the active schema."
+        )
+        return
+
+    bind = op.get_bind()
+    enum_schema = bind.execute(sa.text("""
+            SELECT n.nspname
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'fileorigin'
+              AND n.nspname = current_schema()
+        """)).scalar_one_or_none()
+    if enum_schema is None:
+        return
+
+    quoted_schema = bind.dialect.identifier_preparer.quote_schema(enum_schema)
+    with migration_context.autocommit_block():
+        op.execute(
+            f"ALTER TYPE {quoted_schema}.fileorigin "
+            "ADD VALUE IF NOT EXISTS 'skill_bundle'"
+        )
+
+
 def upgrade() -> None:
-    op.execute("""
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM pg_type
-                WHERE typname = 'fileorigin'
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM pg_enum
-                      WHERE enumtypid = pg_type.oid
-                        AND enumlabel = 'skill_bundle'
-                  )
-            ) THEN
-                EXECUTE 'ALTER TYPE fileorigin ADD VALUE ''skill_bundle''';
-            END IF;
-        END
-        $$;
-    """)
+    _add_skill_bundle_to_legacy_fileorigin_enum()
 
     op.create_table(
         "skill",
@@ -98,3 +115,6 @@ def downgrade() -> None:
     op.drop_table("skill__user_group")
     op.drop_index("ux_skill_slug", table_name="skill")
     op.drop_table("skill")
+    # PostgreSQL enum values cannot be removed with a simple ALTER TYPE. This
+    # migration only appends to legacy native enums when they still exist, and the
+    # modern schema stores FileOrigin as a string-backed enum.

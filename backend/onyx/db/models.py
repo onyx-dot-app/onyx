@@ -4169,7 +4169,11 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A custom (admin-uploaded) skill. One bundle per skill; re-upload replaces."""
+    """A custom (admin-uploaded) skill.
+
+    Skills are a universal primitive. Edition-specific behavior belongs in the
+    API/consumer layers, not in this persistence model.
+    """
 
     __tablename__ = "skill"
 
