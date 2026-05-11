@@ -1,5 +1,9 @@
 # Part 2: Search API — Implementation Plan
 
+> **Status: IMPLEMENTED** — shipped and merged via PR #10966.
+> Annotations marked *[Diverged]* or *[New]* note where the final implementation
+> differs from or adds to the original plan.
+
 > Parent design doc: [search-design.md](search-design.md)
 
 ## Objective
@@ -50,16 +54,28 @@ class SearchAPIRequest(BaseModel):
 
     # LLM to use for query expansion and document selection.
     # When omitted, uses the persona's LLM (if persona_id set) or the deployment default.
-    model_provider: str | None = None
-    model_version: str | None = None
+    provider: str | None = None
+    model: str | None = None
 
     # Skip LLM query expansion — maps to SearchToolOverrideKwargs.skip_query_expansion
     skip_query_expansion: bool = False
+
+    # Conversational context for query expansion. When omitted, the handler
+    # creates a single USER message from the query.
+    message_history: list[ChatMinimalTextMessage] | None = None
+
+    @model_validator(mode="after")
+    def _provider_model_pair(self) -> Self:
+        if (self.provider is None) != (self.model is None):
+            raise ValueError("provider and model must both be set or both omitted")
+        return self
 ```
+
+*[New -- not in original plan] `message_history` was added to the request model as an enhancement for consumers that need conversational context in query expansion (e.g. an agent mid-conversation). The plan explicitly deferred this ("no V1 consumer").*
 
 Every parameter beyond `query` is optional with a default that matches chat search behavior. Filter parameters map directly to `BaseFilters`. `num_results` and `skip_query_expansion` map to existing `SearchToolOverrideKwargs` fields. `persona_id` configures the search the same way selecting a persona in the chat UI does — document set scoping, search start date, attached docs, and LLM selection all come from the persona.
 
-Parameters deliberately not exposed: query weights, hybrid alpha, RRF K, recency bias (internal tuning constants), bypass ACL (security boundary), message history (no V1 consumer).
+Parameters deliberately not exposed: query weights, hybrid alpha, RRF K, recency bias (internal tuning constants), bypass ACL (security boundary).
 
 ---
 
@@ -67,7 +83,7 @@ Parameters deliberately not exposed: query weights, hybrid alpha, RRF K, recency
 
 ```python
 class SearchAPIResult(BaseModel):
-    citation_id: int
+    citation_id: int | None   # not all docs appear in citation_mapping
     document_id: str
     chunk_ind: int
     title: str
@@ -106,7 +122,7 @@ The `llm_facing_text` is what agents consume. The `results` array is structured 
 ```python
 router = APIRouter(prefix="/search")
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_vector_db)])
 def search(
     request: SearchAPIRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -131,9 +147,12 @@ The handler does:
    ```
    If no `persona_id`, use empty `PersonaSearchInfo(document_set_names=[], search_start_date=None, attached_document_ids=[], hierarchy_node_ids=[])`.
 2. **Get LLM.** Resolution priority:
-   - If `model_provider`/`model_version` are specified: look up the provider via `fetch_existing_llm_provider(request.model_provider, db_session)`, check access via `can_user_access_llm_provider(provider_model, user_group_ids, persona, is_admin=...)`, convert via `LLMProviderView.from_model(provider_model)`, create via `llm_from_provider(model_name=request.model_version, llm_provider=provider_view)`.
+   - If `provider`/`model` are specified: look up the provider via `fetch_existing_llm_provider(request.provider, db_session)`, check access via `can_user_access_llm_provider(provider_model, user_group_ids, persona, is_admin=...)`, convert via `LLMProviderView.from_model(provider_model)`, create via `llm_from_provider(model_name=request.model, llm_provider=provider_view)`.
    - Else if `persona_id` is set: `get_llm_for_persona(persona, user)` — uses the persona's model configuration if it has one, otherwise falls back to default.
    - Else: `get_default_llm()`.
+
+   *[Diverged] The implementation also calls `check_llm_cost_limit_for_provider()` before running search. This was not in the plan but is good multi-tenant practice.*
+
 3. **Build filters:** Map request params to `BaseFilters(source_type=request.sources, document_set=request.document_sets, tags=request.tags, time_cutoff=...)`. Convert `time_cutoff_days` to `datetime.now() - timedelta(days=N)`.
 4. **Get document index:** `get_default_document_index(search_settings, None, db_session)`.
 5. **Get tool_id:** Query the `tool` table for `in_code_tool_id = "internal_search"`.
@@ -173,7 +192,7 @@ The handler does:
 
 `SearchTool` requires an `Emitter` (inherited from `Tool`). In chat, the emitter streams progress packets to the frontend. The search API has no streaming consumer.
 
-`NullEmitter` is a trivial subclass defined in `api.py` that discards all packets:
+`NullEmitter` is a trivial subclass defined in `backend/onyx/chat/emitter.py` that discards all packets:
 
 ```python
 class NullEmitter(Emitter):
@@ -225,8 +244,8 @@ Rate limiting is deferred from V1 (R2.6).
 
 | File | Purpose |
 |------|---------|
-| `backend/onyx/server/features/search/__init__.py` | Package init |
-| `backend/onyx/server/features/search/api.py` | Endpoint handler, `NullEmitter` |
+| ~~`backend/onyx/server/features/search/__init__.py`~~ | Not created — Python namespace packages handle this |
+| `backend/onyx/server/features/search/api.py` | Endpoint handler |
 | `backend/onyx/server/features/search/models.py` | `SearchAPIRequest`, `SearchAPIResponse`, `SearchAPIResult` |
 
 ### Modified Files
@@ -234,30 +253,66 @@ Rate limiting is deferred from V1 (R2.6).
 | File | Change |
 |------|--------|
 | `backend/onyx/main.py` | Register the search router via `include_router_with_global_prefix_prepended` |
+| `backend/onyx/chat/emitter.py` | `NullEmitter` subclass (see Emitter section above) |
 
-No modifications to `SearchTool`, `ToolResponse`, `SearchToolOverrideKwargs`, `Emitter`, or any other existing code.
+No modifications to `SearchTool`, `ToolResponse`, `SearchToolOverrideKwargs`, or any other existing code.
 
 ---
 
 ## Tests
 
-### External Dependency Unit Tests
+*[Diverged] The original plan specified external dependency unit tests and model unit tests. The implementation uses integration tests instead, testing against a full Onyx deployment. Validation is covered implicitly through the integration tests.*
 
-**File:** `backend/tests/external_dependency_unit/search/test_search_api.py`
+### Integration Tests
 
-Run against real Vespa + Postgres via FastAPI test client.
+**File:** `backend/tests/integration/tests/search/test_search_api.py`
 
-1. **Basic search returns results.** Index test docs, search, assert non-empty results with sequential citation IDs.
-2. **Source filtering.** Index docs from two sources. Filter to one. Assert only matching source returned.
-3. **Time cutoff.** Index docs with different timestamps. Apply cutoff. Assert only recent docs returned.
-4. **ACL enforcement.** Index a doc accessible only to user A. Search as user B. Assert not returned. (Load-bearing security assertion.)
-5. **Cross-tenant isolation.** Index a doc under tenant A. Search as tenant B user. Assert not returned.
-6. **Skip query expansion.** Search with `skip_query_expansion: true`. Assert results still returned.
-7. **Invalid source rejected.** Send unknown source. Assert 400 / `INVALID_INPUT`.
-8. **Unauthenticated rejected.** No auth header. Assert 401.
+Run against a real Onyx deployment. Six tests:
 
-### Unit Tests
+1. **Basic search returns results.** Search for indexed content, assert non-empty results with expected fields.
+2. **Document set filtering.** Filter to a specific document set, assert only matching docs returned.
+3. **ACL enforcement.** Search as a user without access, assert restricted docs not returned. *(Enterprise-only: skipped without `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES`.)*
+4. **Persona scoping.** Search with a persona that has document set filters, assert scoping is applied.
+5. **Invalid persona 404.** Request with a nonexistent `persona_id`, assert 404 response.
+6. **Unauthenticated rejected.** No auth header, assert 401/403 response.
 
-**File:** `backend/tests/unit/onyx/server/features/search/test_search_models.py`
+---
 
-1. **Request validation.** Empty query rejected, oversized query rejected, `num_results` out of range rejected.
+## Implementation Notes
+
+This section summarizes genuinely new additions or architectural decisions not covered by the original plan.
+
+### `message_history` parameter *[New]*
+
+`message_history: list[ChatMinimalTextMessage] | None = None` was added to the request. When omitted, the handler creates a single USER message from the query. This allows consumers that have conversational context (e.g. an agent mid-conversation) to pass it through for better query expansion. The plan explicitly deferred this ("no V1 consumer"), but it was added as a low-cost enhancement.
+
+### `NullEmitter` in `emitter.py` *[Diverged]*
+
+Placed in `backend/onyx/chat/emitter.py` instead of `api.py`. As a proper subclass of `Emitter`, it can be reused by any code path that needs to invoke tools without a streaming consumer.
+
+### `require_vector_db` dependency *[New]*
+
+The route includes `dependencies=[Depends(require_vector_db)]` to short-circuit with a clear error when the vector database is not configured. This matches the pattern used by other search-dependent endpoints.
+
+### LLM cost limit check *[New]*
+
+The handler calls `check_llm_cost_limit_for_provider()` before running search. This enforces per-tenant LLM cost limits, preventing a single tenant from exhausting shared LLM budget via search queries.
+
+### What matched the plan exactly
+
+- Endpoint at `POST /api/search` via `router = APIRouter(prefix="/search")`
+- Auth: `require_permission(Permission.BASIC_ACCESS)`
+- Sync `def` handler
+- Persona loading with eager load, `PersonaSearchInfo` construction
+- LLM resolution priority (explicit provider -> persona -> default)
+- Filter building (sources, document_sets, tags, time_cutoff)
+- `SearchTool` construction and `.run()` call shape
+- Output mapping from `SearchDocsResponse` to `SearchAPIResponse`
+- `Placement(turn_index=0)` for `NullEmitter`
+- Router registered in `main.py`
+
+### Items deferred or skipped
+
+- `__init__.py` for the search package was not created (Python namespace packages handle this).
+- External dependency unit tests and model unit tests were replaced by integration tests.
+- Planned tests for source filtering, time cutoff, cross-tenant isolation, skip query expansion, and invalid source rejection were not included in the integration test suite.

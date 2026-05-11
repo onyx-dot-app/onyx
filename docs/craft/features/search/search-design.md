@@ -80,6 +80,10 @@ The search API returns retrieved documents with citations — not an LLM-generat
 - **User-facing agents decide what to do with search results.** Fewer options if given a pre-digested answer.
 - The existing `ask` command already provides the "give me an LLM answer" path. `search` is the complementary primitive: retrieval without generation.
 
+### Note: LLM-Facing Output Format
+
+`search-requirements.md` describes the search output as "a single markdown blob to stdout." The actual `SearchTool` implementation (`convert_inference_sections_to_llm_string()`) produces a JSON string — `json.dumps({"results": [...]})` with fields like `document` (citation ID), `title`, `content`, `source_type`. This is what chat-flow LLM consumers already see. We use the same JSON format for consistency: the search API returns it as `llm_facing_text`, and the CLI prints it to stdout by default. The requirements doc is preserved as-is for historical reference.
+
 ### Consumer Note: Onyx MCP Server
 
 The new search API (Part 2) should also become the backend for the Onyx MCP server's search tool. The MCP server currently calls the EE `send_search_query` endpoint (Search Mode parity). Once the chat-mode search API exists, the MCP server should switch to it — giving MCP consumers the same search quality upgrade. This is out of scope for this project but is a direct beneficiary.
@@ -89,9 +93,9 @@ The new search API (Part 2) should also become the backend for the Onyx MCP serv
 ## Dependencies Between Parts
 
 ```
-Part 1 (CLI refactor)  ──────────────────────────────────────┐
+Part 1 (CLI refactor)  ✅ COMPLETE ──────────────────────────┐
                                                               │
-Part 2 (Search API)  ─────────────────────────────────────────┤
+Part 2 (Search API)  ✅ COMPLETE ─────────────────────────────┤
                                                               ▼
 Part 3 (CLI search command)  ──► depends on Part 1 + Part 2
                                                               │
@@ -103,7 +107,13 @@ Parts 1 and 2 are independent and can be developed in parallel. Part 3 requires 
 
 ---
 
-## Part 1: Agent-First CLI Refactor
+## Part 1: Agent-First CLI Refactor (COMPLETE)
+
+> **Status: Implemented.** Part 1 introduced several patterns that Parts 2-4 should be aware of:
+> - **IOStreams abstraction** — All command output flows through an `IOStreams` struct (Stdout/Stderr writers, IsInteractive flag, MaxOutput limit). New commands should accept `IOStreams` rather than writing to `os.Stdout` directly.
+> - **Relative URL paths** — API client methods use relative paths (e.g., `"/chat/send-message-simple-api"`), not absolute URLs. The base URL is joined at request time.
+> - **Shared command helpers** — Common patterns (output formatting, error handling, JSON marshaling, TTY gating) are factored into helper functions under `cli/cmd/`. New commands should reuse these rather than reimplementing.
+> - **Python integration tests** — CLI integration tests live in `cli/tests/` and are written in Python (pytest). They invoke the compiled binary as a subprocess and assert on stdout, stderr, and exit codes. Parts 2-4 should follow this pattern.
 
 ### Objective
 
@@ -137,7 +147,7 @@ Non-interactive mode output must be optimized for LLM consumption:
 Agents must not be able to configure the CLI — they cannot set the Onyx URL, API key, or any other persistent setting. Configuration is a human operation:
 
 - The `configure` command is gated behind interactive mode (requires TTY). Without a TTY, it fails with a clear error.
-- Inside Craft sandboxes, the CLI is configured entirely via environment variables (`ONYX_SERVER_URL`, `ONYX_API_KEY`). No config file is created, read, or needed.
+- Inside Craft sandboxes, the CLI is configured entirely via environment variables (`ONYX_SERVER_URL`, `ONYX_PAT`). No config file is created, read, or needed.
 - The `validate-config` command remains available in non-interactive mode (read-only, useful for health checks).
 - Outside of Craft (e.g., a developer using onyx-cli with Claude Code), the config file works as it does today.
 
@@ -154,7 +164,7 @@ Agents can see all CLI commands, but human-only commands are gated behind the TU
 
 Agents use both exit codes and error messages. Exit codes tell the agent (and scripts) that something failed; the stderr error message tells the agent *what* failed and *what to do about it*. Both matter:
 
-- The existing exit code set (`NotConfigured=1`, `BadRequest=2`, `AuthFailure=3`, `Unreachable=4`) must be extended to cover the full surface of failures an agent might encounter (rate limited, search-specific errors, etc.).
+- The exit code set is: `Success=0`, `General=1`, `BadRequest=2`, `NotConfigured=3`, `AuthFailure=4`, `Unreachable=5`, `RateLimited=6`, `Timeout=7`, `ServerError=8`, `NotAvailable=9`.
 - Every non-zero exit must print a clear, actionable error message to stderr — not just an error code or generic "request failed." The message should help an agent understand the problem and either fix it or ask the user for help (e.g., `"authentication failed: PAT expired, ask the user to generate a new one"`).
 
 #### R1.6: Version and capability discovery
@@ -177,7 +187,14 @@ The CLI's `install-skill` command installs a `SKILL.md` for agent harnesses (Cla
 
 ---
 
-## Part 2: Search API
+## Part 2: Search API (COMPLETE)
+
+> **Status: Implemented.** Key implementation details for Parts 3-4:
+> - **Endpoint** — `POST /api/search`, routed through `backend/onyx/server/features/search/api.py` with request/response models in `models.py`.
+> - **NullEmitter** — `SearchTool` requires an `Emitter`; a no-op `NullEmitter` in `backend/onyx/chat/emitter.py` satisfies this for non-chat callers.
+> - **Integration tests** — `backend/tests/integration/tests/search/test_search_api.py`.
+> - **`message_history` support** — Added beyond the original plan. Callers with conversation context can pass it in for better query expansion (resolves pronouns, follow-ups, etc.).
+> - **Field naming** — LLM override fields use `provider`/`model`, consistent with the rest of the API surface.
 
 ### Objective
 
@@ -261,7 +278,7 @@ The response includes both structured data (for programmatic consumers) and an L
       "updated_at": "2026-03-12T00:00:00Z"
     }
   ],
-  "llm_facing_text": "[1] Enterprise Sales Playbook (Google Drive, 2026-03-12)\n...",
+  "llm_facing_text": "{\"results\": [{\"document\": 1, \"title\": \"Enterprise Sales Playbook\", \"source_type\": \"google_drive\", \"content\": \"...\"}]}",
   "citation_mapping": { "1": "google_drive__abc123" },
   "query_expansion": {
     "semantic_queries": ["..."],
@@ -271,7 +288,7 @@ The response includes both structured data (for programmatic consumers) and an L
 ```
 
 - `results`: The full ranked result set with all metadata. Derived from `SearchDocsResponse.search_docs` / `displayed_docs`.
-- `llm_facing_text`: The same citation-rich markdown string that `SearchTool` produces as its `llm_facing_response`. Ready to paste into an LLM context window.
+- `llm_facing_text`: The same citation-rich JSON string that `SearchTool` produces as its `llm_facing_response` — a `{"results": [...]}` object where each result has fields like `document` (citation ID), `title`, `content`, `source_type`, etc. Ready to paste into an LLM context window.
 - `citation_mapping`: Maps citation numbers to document IDs, matching the chat tool's behavior.
 - `query_expansion`: What queries the LLM expanded the original into. Useful for debugging and transparency.
 
@@ -333,9 +350,9 @@ Whether search-results and LLM-generated-answers are exposed as two separate com
 
 The implementation plan for this part should make and justify this decision.
 
-#### R3.3: Default output is LLM-facing markdown
+#### R3.3: Default output is LLM-facing JSON
 
-When not in JSON mode, the command prints the `llm_facing_text` from the API response to stdout. This is citation-rich markdown that an agent can directly consume and cite from. Progress/status goes to stderr.
+When not in JSON mode, the command prints the `llm_facing_text` from the API response to stdout. This is a JSON string containing citation-tagged search results (with document IDs, titles, content, source types, etc.) that an agent can directly consume and cite from. Progress/status goes to stderr.
 
 In JSON mode, the command prints the full structured API response.
 
@@ -358,7 +375,7 @@ Agents need a way to list available personas with enough information to choose o
 
 - **Command structure**: The search/ask split is a UX decision that affects how agents discover and use the CLI. The implementation plan must justify the chosen structure.
 - **Flag design**: Flags must map cleanly to the API's parameters while being intuitive on the command line.
-- **Output format stability**: Agents will parse this output. The markdown format must be stable. The JSON format must be a documented, versioned contract.
+- **Output format stability**: Agents will parse this output. The LLM-facing JSON format must be stable. The full structured JSON response must be a documented, versioned contract.
 - **Consistency across commands**: All agent-usable commands should feel like they're from the same tool.
 
 ---
@@ -376,7 +393,7 @@ Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the l
 Each Craft session gets a dedicated PAT that exists only for the session's lifetime. This follows the existing pattern of internal service authentication — the Discord bot service already hits the API server directly with a "service account" API key and tenant context is handled there. Craft PATs work the same way: provisioned per session, scoped to the session's user.
 
 - **Provisioning**: At session creation, mint a new PAT scoped to the session's user. The PAT name should identify it as session-bound (e.g., `craft-session-{session_id}`). The PAT's permissions are the same as the user's — no elevation, no restriction beyond what the user already has. (PAT scopes will be addressed later by the Permissions system, not this project.)
-- **Injection**: For this version, the PAT value (the raw token, not the hash) is injected directly into the sandbox environment as `ONYX_API_KEY`. The CLI reads this env var for authentication. The backend URL is injected as `ONYX_SERVER_URL`, pointing at the internal Kube service address (not the public nginx URL, which is irrelevant inside the cluster). Long-term, the raw PAT will not be exposed to the sandbox at all — the egress interception proxy (Craft V1 project #4) will inject credentials server-side on outbound requests, so the sandbox never sees secrets. This direct env var injection is the interim approach until that proxy layer is in place.
+- **Injection**: For this version, the PAT value (the raw token, not the hash) is injected directly into the sandbox environment as `ONYX_PAT`. The CLI reads this env var for authentication. The backend URL is injected as `ONYX_SERVER_URL`, pointing at the internal Kube service address (not the public nginx URL, which is irrelevant inside the cluster). Long-term, the raw PAT will not be exposed to the sandbox at all — the egress interception proxy (Craft V1 project #4) will inject credentials server-side on outbound requests, so the sandbox never sees secrets. This direct env var injection is the interim approach until that proxy layer is in place.
 - **Deprovisioning**: When the session ends (user closes it, idle timeout, explicit cleanup), the PAT is revoked. Revoked PATs immediately stop working — any in-flight search requests fail with an auth error.
 - **Expiration**: Session PATs should have a time-based expiration as a safety net (e.g., 24 hours), independent of session lifecycle. If the session cleanup path fails, the PAT still expires.
 - **Audit**: Session PATs are distinguishable from user-created PATs in the PAT list. Users should see them (transparency) but they should be clearly labeled as session-managed and not manually editable.
@@ -388,7 +405,7 @@ The onyx-cli binary must be available inside the sandbox:
 - The binary is included in the sandbox Docker image. This is a build-time dependency, not a runtime download.
 - The binary version is pinned to the Onyx release. There is no version mismatch between the CLI and the backend it talks to.
 - The binary is on `$PATH` inside the sandbox so the agent can invoke it as `onyx-cli` without a full path.
-- The binary works without a config file — it reads `ONYX_API_KEY` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
+- The binary works without a config file — it reads `ONYX_PAT` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
 
 #### R4.3: CLI skill creation
 

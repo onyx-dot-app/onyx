@@ -6,7 +6,7 @@
 
 Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync. Mint session-scoped PATs, bundle the CLI binary, create a `company-search` skill with the user's available sources, and tear down the file-sync infrastructure.
 
-**Assumes Parts 1–3 are complete.** The CLI binary accepts `ONYX_SERVER_URL` + `ONYX_API_KEY` env vars, has `search` and `validate-config` commands, and produces agent-optimized output without a TTY. `POST /api/search` exists and returns ranked, permissioned results.
+**Part 1 is complete.** The CLI binary accepts `ONYX_SERVER_URL` + `ONYX_PAT` env vars, has `search` and `validate-config` commands, and produces agent-optimized output without a TTY. **Parts 2–3 are assumed complete.** `POST /api/search` exists and returns ranked, permissioned results.
 
 ---
 
@@ -20,7 +20,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 |----------|--------|-------|
 | Company knowledge | `find`/`grep` over JSON files in `files/` | `onyx-cli search "<query>"` |
 | Available sources | Scanned from `files/` directory at setup | Listed in `company-search` SKILL.md, queried from user's connectors |
-| Auth | None (files are pre-synced) | Session-scoped PAT via `ONYX_API_KEY` env var |
+| Auth | None (files are pre-synced) | Session-scoped PAT via `ONYX_PAT` env var |
 | AGENTS.md guidance | "Start at `files/`, use `find`/`grep`" | "Use the `company-search` skill" |
 
 ### What the sandbox contains
@@ -31,7 +31,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 | S3 sidecar container | Runs `s5cmd sync` at pod start | Gone |
 | `onyx-cli` binary | Not present | `/usr/local/bin/onyx-cli` |
 | `company-search` skill | Does not exist | `.opencode/skills/company-search/SKILL.md` with user's sources |
-| `ONYX_API_KEY` env var | Not set | Session-scoped PAT, 7-day expiry |
+| `ONYX_PAT` env var | Not set | Session-scoped PAT, 7-day expiry |
 | `ONYX_SERVER_URL` env var | Not set | Internal Kube service address |
 
 ### Session auth lifecycle
@@ -40,7 +40,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 Session created / resumed
   └─ delete old PAT if one exists (handles resume after sleep)
   └─ mint fresh PAT (name: craft-session-{session_id}, expires: 7 days)
-  └─ inject ONYX_API_KEY into sandbox environment
+  └─ inject ONYX_PAT into sandbox environment
   └─ validate: onyx-cli validate-config
   └─ agent runs, calls onyx-cli search as needed
 Session ended
@@ -124,7 +124,7 @@ Session PATs are infrastructure — users shouldn't have to see or manage them. 
 
 **4. Inject env vars into sandbox** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
-In `setup_session_workspace()`, make `ONYX_API_KEY` and `ONYX_SERVER_URL` available to agent-launched processes. The mechanism depends on how OpenCode propagates environment to child processes — either via an env file sourced by the shell, exports in the session setup script, or a shell profile.
+In `setup_session_workspace()`, make `ONYX_PAT` and `ONYX_SERVER_URL` available to agent-launched processes. The mechanism depends on how OpenCode propagates environment to child processes — either via an env file sourced by the shell, exports in the session setup script, or a shell profile.
 
 `ONYX_SERVER_URL` comes from a new config value:
 
@@ -132,18 +132,18 @@ In `setup_session_workspace()`, make `ONYX_API_KEY` and `ONYX_SERVER_URL` availa
 # server/features/build/configs.py
 SANDBOX_ONYX_SERVER_URL = os.environ.get(
     "SANDBOX_ONYX_SERVER_URL",
-    "http://api-server.onyx.svc.cluster.local:8080",
+    "http://api-server.onyx.svc.cluster.local:8080/api",
 )
 ```
 
-For local dev (`SandboxBackend.LOCAL`): defaults to `http://localhost:8080`.
+For local dev (`SandboxBackend.LOCAL`): defaults to `http://localhost:8080/api`.
 
 **5. Validate at session start** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
 After injecting env vars, before the agent starts:
 
 ```bash
-ONYX_API_KEY="..." ONYX_SERVER_URL="..." onyx-cli validate-config
+ONYX_PAT="..." ONYX_SERVER_URL="..." onyx-cli validate-config
 ```
 
 Non-zero exit → abort session setup with `OnyxError`. Better to fail immediately than let the agent discover mid-task that search is broken.
@@ -193,8 +193,10 @@ assume it exists.
 
 ## Output
 
-Stdout is markdown with numbered citations like `[1]`, `[2]`. Cite results by
-their citation number when referencing them in your response.
+Stdout is JSON with a top-level `results` array. Each result has a `document`
+field (the citation ID), plus `title`, `content`, `source_type`, and other
+metadata. Cite results by their `document` number when referencing them in your
+response.
 ```
 
 No `run.sh`. The agent calls `onyx-cli search` directly.
@@ -250,8 +252,9 @@ Delete the "Knowledge Sources" section, `{{KNOWLEDGE_SOURCES_SECTION}}` placehol
 ### Step 1: Information Retrieval
 
 1. **Search** company knowledge using the `company-search` skill. Run
-   `onyx-cli search "<query>"` and read the returned markdown; cite results by
-   their citation number when you reference them.
+   `onyx-cli search "<query>"` and read the returned JSON; each result has a
+   `document` field (the citation ID) — cite results by that number when you
+   reference them.
 2. Read the `company-search` SKILL.md for available sources and flags.
 3. **Iterate** — run additional searches to refine. Use `--source` to narrow by
    connector and `--days` for recent content.
@@ -296,7 +299,7 @@ Remove the `get_persistent_document_writer()` call and the code path that writes
 
 ### E. Local development
 
-Apply the same changes to the local sandbox manager (`sandbox/manager/directory_manager.py`): mint PAT, inject env vars, copy + render skills, remove `files/` symlink. `ONYX_SERVER_URL` defaults to `http://localhost:8080`. The CLI binary must be on the developer's `$PATH`.
+Apply the same changes to the local sandbox manager (`sandbox/manager/directory_manager.py`): mint PAT, inject env vars, copy + render skills, remove `files/` symlink. `ONYX_SERVER_URL` defaults to `http://localhost:8080/api`. The CLI binary must be on the developer's `$PATH`.
 
 ---
 
