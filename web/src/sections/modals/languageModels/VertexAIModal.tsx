@@ -88,9 +88,7 @@ function VertexAIModalInternals({
               subDescription="Choose how Onyx should authenticate with Google Vertex AI."
             >
               <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
-                <InputSelect.Trigger
-                  defaultValue={AUTH_METHOD_SERVICE_ACCOUNT}
-                />
+                <InputSelect.Trigger />
                 <InputSelect.Content>
                   <InputSelect.Item
                     value={AUTH_METHOD_SERVICE_ACCOUNT}

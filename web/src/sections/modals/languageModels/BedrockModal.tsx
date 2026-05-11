@@ -154,7 +154,7 @@ function BedrockModalInternals({
             subDescription="Choose how Onyx should authenticate with Bedrock."
           >
             <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
-              <InputSelect.Trigger defaultValue={AUTH_METHOD_IAM} />
+              <InputSelect.Trigger />
               <InputSelect.Content>
                 <InputSelect.Item
                   value={AUTH_METHOD_IAM}
