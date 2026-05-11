@@ -54,8 +54,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.001` Add `Skill` model to `backend/onyx/db/models.py` with all columns + indexes per §3
 - `[TODO]` `P1.002` Add `Skill__UserGroup` join table to `backend/onyx/db/models.py`
 - `[TODO]` `P1.003` Add `FileOrigin.SKILL_BUNDLE` to `backend/onyx/configs/constants.py:373`
-- `[TODO]` `P1.004` Add `FileOrigin.SKILL_ICON` to `backend/onyx/configs/constants.py:373`
-- `[TODO]` `P1.005` Create Alembic revision under `backend/alembic/versions/<hash>_skills.py` — `CREATE TABLE skill`, `CREATE TABLE skill__user_group`, `ALTER TYPE fileorigin ADD VALUE 'skill_bundle' / 'skill_icon'`  (deps: P1.001, P1.002, P1.003, P1.004)
+- `[TODO]` `P1.005` Create Alembic revision under `backend/alembic/versions/<hash>_skills.py` — `CREATE TABLE skill` (with `ux_skill_slug` unique index, no extra perf index in V1), `CREATE TABLE skill__user_group`, `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`  (deps: P1.001, P1.002, P1.003)
 - `[TODO]` `P1.006` Run `alembic -n schema_private upgrade head` on a fresh EE tenant; confirm clean apply + idempotent re-run  (deps: P1.005)
 
 ### 1.2 Module skeletons  (spec §2)
@@ -72,7 +71,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.020` Define `SkillRequirement` dataclass in `registry.py`  (deps: P1.011)
 - `[TODO]` `P1.021` Define `BuiltinSkill` dataclass in `registry.py`  (deps: P1.011)
 - `[TODO]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
-- `[TODO]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect template/icon, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
+- `[TODO]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
 - `[TODO]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
 - `[TODO]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
 - `[TODO]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
@@ -86,13 +85,12 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.031` Implement `validate_custom_bundle(zip_bytes, slug) -> ManifestMetadata` — zip parse, SKILL.md root check, frontmatter parse, no `*.template`  (deps: P1.030)
 - `[TODO]` `P1.032` Add path-traversal + symlink rejection to `validate_custom_bundle`  (deps: P1.031)
 - `[TODO]` `P1.033` Add per-file + total-size streaming check (defaults 25 MiB / 100 MiB)  (deps: P1.031)
-- `[TODO]` `P1.034` Add icon validation (PNG/SVG only, ≤ 256 KB, byte sniff vs declared extension)  (deps: P1.031)
 - `[TODO]` `P1.035` Add slug regex + reserved-slug check (uses `BuiltinSkillRegistry.reserved_slugs()`)  (deps: P1.031, P1.027)
 - `[TODO]` `P1.036` Implement `_safe_unzip(zip_bytes, dest)` for defensive re-check at materialization
 - `[TODO]` `P1.037` Implement `compute_bundle_sha256(zip_bytes)` — deterministic over raw bytes
-- `[TODO]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir + icon.png)
-- `[TODO]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`, oversized icon, mismatched icon magic bytes)
-- `[TODO]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.035)
+- `[TODO]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir)
+- `[TODO]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`)
+- `[TODO]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.033, P1.035)
 - `[TODO]` `P1.041` Unit test: `compute_bundle_sha256` deterministic across two zips of same content with different timestamps  (deps: P1.037)
 
 ### 1.5 Materializer  (spec §6)
@@ -110,11 +108,11 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)`  (deps: P1.060)
 - `[TODO]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — no access filter  (deps: P1.015)
 - `[TODO]` `P1.063` Implement `list_skills_for_admin(db)` — no access filter  (deps: P1.015)
-- `[TODO]` `P1.064` Implement `create_skill(...)` — inserts row; returns `Skill`  (deps: P1.015)
-- `[TODO]` `P1.065` Implement `replace_skill_bundle(...)` — updates row; returns `(old_bundle_file_id, old_icon_file_id)` for caller blob cleanup  (deps: P1.015)
+- `[TODO]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, owner_user_id, db) -> Skill`  (deps: P1.015)
+- `[TODO]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
 - `[TODO]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
 - `[TODO]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
-- `[TODO]` `P1.068` Implement `delete_skill(skill_id, db)` — soft-delete; returns `(bundle_file_id, icon_file_id)`  (deps: P1.015)
+- `[TODO]` `P1.068` Implement `delete_skill(skill_id, db) -> str` — soft-delete; returns `bundle_file_id`  (deps: P1.015)
 
 ---
 
@@ -134,13 +132,10 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P2.007` Implement `PUT /api/admin/skills/custom/{id}/bundle` — replace flow; delete old blobs AFTER commit  (deps: P2.003, P1.031, P1.065)
 - `[TODO]` `P2.008` Implement `PUT /api/admin/skills/custom/{id}/grants` — atomic group_ids replacement  (deps: P2.003, P1.067)
 - `[TODO]` `P2.009` Implement `DELETE /api/admin/skills/custom/{id}` — soft-delete (do not delete blobs; sweep handles)  (deps: P2.003, P1.068)
-- `[TODO]` `P2.010` Implement `GET /api/admin/skills/custom/{id}/icon` — stream from FileStore  (deps: P2.003)
-- `[TODO]` `P2.011` Implement `GET /api/admin/skills/builtin/{slug}/icon` — stream from disk  (deps: P2.003)
 
 ### 2.2 User router  (spec §7)
 
 - `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_satisfied`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
-- `[TODO]` `P2.021` Implement `GET /api/skills/{id}/icon` — stream with access check  (deps: P2.003, P1.061)
 
 ### 2.3 Wire-up + tests
 
@@ -307,7 +302,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 - `[TODO]` `P5.030` Create `backend/onyx/background/celery/tasks/skills/__init__.py`
 - `[TODO]` `P5.031` Create `backend/onyx/background/celery/tasks/skills/tasks.py` with `@shared_task(name="cleanup_orphaned_skill_blobs")` (must include `expires=3600` per `CLAUDE.md`)
-- `[TODO]` `P5.032` Implement `_stale_skill_blobs(db, age_days=14)` query — FileStore records with origin `SKILL_BUNDLE`/`SKILL_ICON` older than 14d with no `skill` row reference
+- `[TODO]` `P5.032` Implement `_stale_skill_blobs(db, age_days=14)` query — FileStore records with origin `SKILL_BUNDLE` older than 14d with no `skill` row reference
 - `[TODO]` `P5.033` Add weekly beat schedule entry
 - `[TODO]` `P5.034` Unit test: orphan blob older than 14 days → deleted by task
 - `[TODO]` `P5.035` Integration test: soft-delete skill → blob NOT immediately deleted; advance time → task deletes it

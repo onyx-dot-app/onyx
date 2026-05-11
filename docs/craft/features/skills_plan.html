@@ -1564,9 +1564,6 @@
     bundle_sha256:     Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
-    # Optional icon (separate FileStore blob).
-    icon_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
     owner_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
@@ -1580,7 +1577,7 @@
 
     __table_args__ = (
         Index("ux_skill_slug",            "slug", unique=True),
-        Index("ix_skill_enabled_deleted", "enabled", "deleted"),
+        
     )
 
 class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code></pre>
@@ -1591,8 +1588,7 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
     </p>
     <pre><code>class FileOrigin(str, Enum):
     ...
-    SKILL_BUNDLE = "skill_bundle"   # NEW
-    SKILL_ICON   = "skill_icon"     # NEW</code></pre>
+    SKILL_BUNDLE = "skill_bundle"   # NEW</code></pre>
 
     <p>
       Slug rules: regex <code>^[a-z][a-z0-9-]{0,63}$</code> · per-tenant unique
@@ -1622,13 +1618,6 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
       </li>
       <li>
         <strong
-          ><code>SKILL_ICON</code> is a separate
-          <code>FileOrigin</code>.</strong
-        >
-        Lets us apply different size caps, eviction policies, and quotas later.
-      </li>
-      <li>
-        <strong
           ><code>name</code> and <code>description</code> are denormalized
           columns, not extracted on-demand from JSONB.</strong
         >
@@ -1647,8 +1636,7 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
         <span class="file-ref">backend/onyx/db/models.py</span>.
       </li>
       <li>
-        Add <code>SKILL_BUNDLE</code> and <code>SKILL_ICON</code> to
-        <code>FileOrigin</code> in
+        Add <code>SKILL_BUNDLE</code> to <code>FileOrigin</code> in
         <span class="file-ref">backend/onyx/configs/constants.py:373</span>.
       </li>
       <li>
@@ -1659,10 +1647,7 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
         <ul>
           <li><code>CREATE TABLE skill</code> with all columns + indexes.</li>
           <li><code>CREATE TABLE skill__user_group</code> with FKs.</li>
-          <li>
-            <code>ALTER TYPE fileorigin ADD VALUE 'skill_bundle'</code> and
-            <code>'skill_icon'</code>.
-          </li>
+          <li><code>ALTER TYPE fileorigin ADD VALUE 'skill_bundle'</code>.</li>
         </ul>
       </li>
       <li>
@@ -1728,7 +1713,6 @@ class BuiltinSkill:
     name: str
     description: str
     has_template: bool
-    has_icon: bool
     requirements: tuple[SkillRequirement, ...] = ()
 
 class BuiltinSkillRegistry:
@@ -1899,15 +1883,13 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
     <p>
       Admins upload skill bundles as zips. We need a validator that runs
       synchronously in the upload request, rejects malformed/dangerous bundles
-      before anything persists, and extracts metadata + icon for storage.
+      before anything persists, and extracts metadata for storage.
     </p>
 
     <div class="subhead solution">Proposed Solution</div>
 
     <pre><code>&lt;bundle.zip&gt;
 ├── SKILL.md           (required — agent instructions, frontmatter optional)
-├── icon.png           (optional, ≤ 256 KB)
-│   OR icon.svg
 ├── scripts/           (optional)
 └── *.md               (optional supporting docs)</code></pre>
 
@@ -1957,20 +1939,6 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
           <td><code>bundle exceeds 100 MiB uncompressed</code></td>
         </tr>
         <tr>
-          <td>
-            Icon (if present) is <code>icon.png</code> or <code>icon.svg</code>
-          </td>
-          <td><code>icon must be PNG or SVG</code></td>
-        </tr>
-        <tr>
-          <td>Icon ≤ 256 KB</td>
-          <td><code>icon exceeds 256 KB</code></td>
-        </tr>
-        <tr>
-          <td>Icon byte sniff matches declared extension</td>
-          <td><code>icon does not match declared type</code></td>
-        </tr>
-        <tr>
           <td>Slug regex <code>^[a-z][a-z0-9-]{0,63}$</code></td>
           <td><code>invalid slug</code></td>
         </tr>
@@ -2001,8 +1969,6 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
     {"path": "scripts/run.sh", "size": 412}
   ],
   "total_uncompressed_bytes": 2244,
-  "has_icon": true,
-  "icon_format": "png",
   "validator_version": 1
 }</code></pre>
 
@@ -2029,7 +1995,6 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
         built-ins because <code>SkillRenderContext</code> shape is still
         evolving.
       </li>
-      <li><strong>Icon stored separately, not unzipped on read.</strong></li>
       <li>
         <strong><code>validator_version</code> in manifest_metadata.</strong>
         Future rule changes can identify which version validated a persisted
@@ -2059,10 +2024,6 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
           <li>
             Reject <code>*.template</code> files; verify
             <code>SKILL.md</code> at root.
-          </li>
-          <li>
-            If <code>icon.png</code> or <code>icon.svg</code>: validate size +
-            magic bytes.
           </li>
           <li>Parse YAML frontmatter; capture optionally.</li>
           <li>Return <code>ManifestMetadata</code>.</li>
@@ -2111,7 +2072,6 @@ class SkillManifestEntry(BaseModel):
     name: str
     description: str
     source: Literal["builtin", "custom"]
-    has_icon: bool
 
 class SkillsManifest(BaseModel):
     builtin: list[SkillManifestEntry]
@@ -2147,7 +2107,7 @@ def materialize_skills(
       </li>
       <li>
         For each custom: read blob, <code>_safe_unzip</code> into
-        <code>dest/slug</code>. Write icon if present.
+        <code>dest/slug</code>.
       </li>
       <li>
         Build <code>SkillsManifest</code>; write
@@ -2257,7 +2217,7 @@ def materialize_skills(
         <tr>
           <td>PUT</td>
           <td><code>/api/admin/skills/custom/{id}/bundle</code></td>
-          <td>Replace bundle bytes; re-extract icon</td>
+          <td>Replace bundle bytes</td>
         </tr>
         <tr>
           <td>PUT</td>
@@ -2268,16 +2228,6 @@ def materialize_skills(
           <td>DELETE</td>
           <td><code>/api/admin/skills/custom/{id}</code></td>
           <td>Soft-delete (<code>deleted=true</code>)</td>
-        </tr>
-        <tr>
-          <td>GET</td>
-          <td><code>/api/admin/skills/custom/{id}/icon</code></td>
-          <td>Stream custom icon image</td>
-        </tr>
-        <tr>
-          <td>GET</td>
-          <td><code>/api/admin/skills/builtin/{slug}/icon</code></td>
-          <td>Stream built-in icon from disk</td>
         </tr>
       </tbody>
     </table>
@@ -2299,11 +2249,6 @@ def materialize_skills(
             Skills accessible to current user (forward-looking, for fresh
             sessions)
           </td>
-        </tr>
-        <tr>
-          <td>GET</td>
-          <td><code>/api/skills/{id}/icon</code></td>
-          <td>Stream custom icon (404 if no access)</td>
         </tr>
       </tbody>
     </table>
@@ -2328,11 +2273,6 @@ group_ids:   list[int]   (optional, ignored unless is_public=false)</code></pre>
         <code>ManifestMetadata</code> or raise.
       </li>
       <li><code>compute_bundle_sha256(...)</code>.</li>
-      <li>
-        If bundle has icon: extract;
-        <code>file_store.save_file(..., origin=SKILL_ICON)</code> →
-        <code>icon_file_id</code>.
-      </li>
       <li>
         <code>file_store.save_file(..., origin=SKILL_BUNDLE)</code> →
         <code>bundle_file_id</code>.
@@ -2361,7 +2301,6 @@ group_ids:   list[int]   (optional, ignored unless is_public=false)</code></pre>
     name: str
     description: str
     has_template: bool
-    has_icon: bool
     available: bool                        # True iff every requirement.satisfied
     requirements: list[RequirementStatus]  # empty if skill has no requirements
 
@@ -2376,7 +2315,7 @@ class RequirementStatus(BaseModel):
     <ol>
       <li>
         Fetch existing <code>skill</code>; capture
-        <code>old_bundle_file_id</code> + <code>old_icon_file_id</code>.
+        <code>old_bundle_file_id</code>.
       </li>
       <li>Read + validate new bundle.</li>
       <li>Save new blobs.</li>
@@ -2398,13 +2337,6 @@ class RequirementStatus(BaseModel):
       <li>
         <strong>PATCH supports slug change.</strong> Snapshot fidelity makes it
         safe.
-      </li>
-      <li>
-        <strong
-          >Built-in icons served from a different route than custom
-          icons.</strong
-        >
-        Different storage backends → different read paths.
       </li>
       <li>
         <strong>No paging.</strong> Expected count &lt; 100 per tenant. Add
@@ -2779,8 +2711,8 @@ RUN mkdir -p /workspace/skills</code></pre>
     <h4>Skills panel</h4>
     <p>
       Read-only sidebar in the Craft session UI. Lists active skills with name,
-      description, source badge, icon. Click → drawer with SKILL.md preview.
-      Data source: <code>GET /api/build/sessions/{id}/skills</code>.
+      description, source badge. Click → drawer with SKILL.md preview. Data
+      source: <code>GET /api/build/sessions/{id}/skills</code>.
     </p>
 
     <h4>Inline mentions</h4>
@@ -2911,7 +2843,8 @@ RUN mkdir -p /workspace/skills</code></pre>
             — fetches manifest, renders list.
           </li>
           <li>
-            Skill row sub-component (icon, name, description, source badge).
+            Skill row sub-component (letter-monogram avatar, name, description,
+            source badge).
           </li>
           <li>Click opens drawer showing SKILL.md preview.</li>
         </ul>
@@ -2928,10 +2861,7 @@ RUN mkdir -p /workspace/skills</code></pre>
         <code>^\.agents/skills/([a-z][a-z0-9-]{0,63})/SKILL\.md$</code>; render
         pill at matching position.
       </li>
-      <li>
-        Frontend tests: panel renders, click opens drawer, missing icon falls
-        back to default.
-      </li>
+      <li>Frontend tests: panel renders, click opens drawer.</li>
     </ul>
 
     <!-- =================================================================== -->
@@ -4305,8 +4235,7 @@ RUN mkdir -p /workspace/skills</code></pre>
         <strong>FileStore is already tenant-aware</strong>:
         <code>save_file</code> calls <code>get_current_tenant_id()</code> and
         prefixes S3 keys (<span class="file-ref">file_store.py:250-256</span>).
-        <code>SKILL_BUNDLE</code> + <code>SKILL_ICON</code> blobs inherit
-        isolation automatically.
+        <code>SKILL_BUNDLE</code> blobs inherit isolation automatically.
       </li>
       <li>
         <strong>Built-ins are global</strong> (code-resident, shared across
@@ -4428,8 +4357,7 @@ RUN mkdir -p /workspace/skills</code></pre>
     <div class="subhead solution">Proposed Solution</div>
     <pre><code>@shared_task(name="cleanup_orphaned_skill_blobs")
 def cleanup_orphaned_skill_blobs() -&gt; None:
-    """Defensive sweep for FileStore blobs with origin SKILL_BUNDLE or
-    SKILL_ICON older than 14 days that no skill row references."""
+    """Defensive sweep for FileStore blobs with origin SKILL_BUNDLE older than 14 days that no skill row references."""
     with get_session_with_current_tenant() as db:
         for blob in _stale_skill_blobs(db, age_days=14):
             file_store.delete_file(blob.file_id)
@@ -4554,8 +4482,7 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
     <ul>
       <li>
         <strong>test_bundle.py</strong>: each validation rule rejected;
-        known-good fixture accepted; sha256 deterministic; icon byte sniff
-        catches mismatched extension.
+        known-good fixture accepted; sha256 deterministic.
       </li>
     </ul>
 
@@ -5311,10 +5238,6 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
         net.
       </li>
       <li>
-        <strong>Bundle icon support</strong> (Phase 1, §5) — defer to V1.5.
-        Saves validator + storage + UI complexity.
-      </li>
-      <li>
         <strong>Per-skill content endpoint</strong> (Phase 3) — SKILL.md preview
         drawer in panel; defer.
       </li>
@@ -5356,10 +5279,7 @@ from .render      import render_template_placeholders</code></pre>
       <li><code>DELETE /api/admin/skills/custom/{id}</code></li>
       <li><code>PUT /api/admin/skills/custom/{id}/bundle</code></li>
       <li><code>PUT /api/admin/skills/custom/{id}/grants</code></li>
-      <li><code>GET /api/admin/skills/custom/{id}/icon</code></li>
-      <li><code>GET /api/admin/skills/builtin/{slug}/icon</code></li>
       <li><code>GET /api/skills</code></li>
-      <li><code>GET /api/skills/{id}/icon</code></li>
       <li><code>GET /api/build/sessions/{id}/skills</code></li>
       <li><code>GET /api/build/sessions/{id}/skills/{slug}/content</code></li>
     </ul>
@@ -5369,10 +5289,7 @@ from .render      import render_template_placeholders</code></pre>
       <code>skill__user_group</code>.
     </p>
 
-    <p>
-      <strong>FileOrigin values added:</strong> <code>SKILL_BUNDLE</code>,
-      <code>SKILL_ICON</code>.
-    </p>
+    <p><strong>FileOrigin values added:</strong> <code>SKILL_BUNDLE</code>.</p>
 
     <p><strong>Key sites modified:</strong></p>
     <ul>

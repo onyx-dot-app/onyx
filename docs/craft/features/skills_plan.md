@@ -166,9 +166,6 @@ class Skill(Base):
     bundle_sha256:     Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
-    # Optional icon (extracted from bundle into a separate FileStore blob).
-    icon_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
     owner_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
@@ -188,8 +185,7 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        Index("ux_skill_slug",            "slug", unique=True),
-        Index("ix_skill_enabled_deleted", "enabled", "deleted"),
+        Index("ux_skill_slug", "slug", unique=True),
     )
 
 
@@ -208,7 +204,6 @@ class FileOrigin(str, Enum):
     ...
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE     = "skill_bundle"   # NEW
-    SKILL_ICON       = "skill_icon"     # NEW
     USER_FILE        = "user_file"
 ```
 
@@ -222,28 +217,27 @@ Slug rules:
 - **No `builtin_skill_state` table.** Built-ins are code, not data. Adding a row per built-in per tenant would create drift between the registry and DB.
 - **No `skill_version` table.** One bundle per skill; re-upload replaces. Customers needing rollback keep prior zips locally. Versioning is real work (UI, "promote" semantics, retention rules) we don't need to do yet.
 - **`bundle_file_id` and `manifest_metadata` are `NOT NULL`.** A skill always has a bundle. The first upload is creation; subsequent are replacements. There is no "skill row with no bundle yet" intermediate state.
-- **`SKILL_ICON` is a separate `FileOrigin`.** Lets us apply different size caps, eviction policies, and quotas later without touching bundle blobs.
 - **`name` and `description` are denormalized DB columns, not extracted on-demand from JSONB.** Lets list endpoints and search use indexable strings; saves a JSONB lookup on every read. The cost is a single source-of-truth: admin sets them; bundle frontmatter only pre-fills the upload form.
 - **Slug mutability is safe under snapshot fidelity.** Existing sessions reference the old slug via their snapshot; new sessions get the new slug. No data migration on rename.
 
 ### Todos
 - [ ] Add `Skill`, `Skill__UserGroup` to `backend/onyx/db/models.py`.
-- [ ] Add `SKILL_BUNDLE` and `SKILL_ICON` to `FileOrigin` in `backend/onyx/configs/constants.py:373`.
+- [ ] Add `SKILL_BUNDLE` to `FileOrigin` in `backend/onyx/configs/constants.py:373`.
 - [ ] Create Alembic migration `backend/alembic/versions/<hash>_skills.py`:
   - [ ] `CREATE TABLE skill` with all columns + indexes.
   - [ ] `CREATE TABLE skill__user_group` with FKs.
-  - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'` and `'skill_icon'`.
+  - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
   - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch).
   - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None`.
   - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — no access filter.
   - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter.
-  - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, icon_file_id, is_public, owner_user_id, db) -> Skill`.
-  - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, new_icon_file_id, db) -> Skill` (returns old_bundle_file_id + old_icon_file_id so caller can delete blobs after commit).
+  - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, owner_user_id, db) -> Skill`.
+  - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` (returns old_bundle_file_id so caller can delete the blob after commit).
   - [ ] `patch_skill(skill_id, slug=None, name=None, description=None, is_public=None, enabled=None, db) -> Skill` (partial update).
   - [ ] `replace_skill_grants(skill_id, group_ids, db) -> None` (atomic: delete + insert in one transaction).
-  - [ ] `delete_skill(skill_id, db) -> tuple[str, str | None]` — soft-delete; returns `(bundle_file_id, icon_file_id)` for blob deletion.
+  - [ ] `delete_skill(skill_id, db) -> str` — soft-delete; returns `bundle_file_id` for blob deletion.
 
 ---
 
@@ -274,7 +268,6 @@ class BuiltinSkill:
     name: str
     description: str
     has_template: bool
-    has_icon: bool
     requirements: tuple[SkillRequirement, ...] = ()   # all must be satisfied
 
 class BuiltinSkillRegistry:
@@ -359,7 +352,7 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
 ## 5. Custom skill bundle format & validation
 
 ### Context
-Admins upload skill bundles as zip files. We need a validator that runs synchronously in the upload request, rejects malformed/dangerous bundles before anything persists, and extracts metadata + icon for storage.
+Admins upload skill bundles as zip files. We need a validator that runs synchronously in the upload request, rejects malformed/dangerous bundles before anything persists, and extracts metadata for storage.
 
 ### Proposed Solution
 
@@ -368,8 +361,6 @@ Bundle format:
 ```
 <bundle.zip>
 ├── SKILL.md           (required — agent instructions, frontmatter optional)
-├── icon.png           (optional, ≤ 256 KB)
-│   OR icon.svg
 ├── scripts/           (optional)
 └── *.md               (optional supporting docs)
 ```
@@ -387,9 +378,6 @@ Validation is a single synchronous pass in the upload request. Bundles cap at 10
 | No symlinks (zip entry external attrs flag) | `bundle contains a symlink` | `INVALID_REQUEST` |
 | Per-file uncompressed ≤ 25 MiB | `file 'X' exceeds 25 MiB` | `INVALID_REQUEST` |
 | Total uncompressed ≤ 100 MiB (streaming check) | `bundle exceeds 100 MiB uncompressed` | `INVALID_REQUEST` |
-| Icon, if present, named `icon.png` or `icon.svg` only | `icon must be PNG or SVG` | `INVALID_REQUEST` |
-| Icon ≤ 256 KB | `icon exceeds 256 KB` | `INVALID_REQUEST` |
-| Icon byte sniff matches declared extension | `icon does not match declared type` | `INVALID_REQUEST` |
 | Slug regex `^[a-z][a-z0-9-]{0,63}$` | `invalid slug` | `INVALID_REQUEST` |
 | Slug not in registry reserved set | `slug 'X' is reserved` | `INVALID_REQUEST` |
 | Slug not already used by another non-deleted custom | `slug 'X' already exists` | `INVALID_REQUEST` |
@@ -406,20 +394,16 @@ Bundle frontmatter (in `SKILL.md`) is **optional** in V1. If present and parseab
     {"path": "scripts/run.sh", "size": 412}
   ],
   "total_uncompressed_bytes": 2244,
-  "has_icon": true,
-  "icon_format": "png",
   "validator_version": 1
 }
 ```
 
-Icon is extracted from the bundle on upload and stored as a separate FileStore blob under `FileOrigin.SKILL_ICON`. `Skill.icon_file_id` references it.
 
 ### Considerations / Tradeoffs / Decisions
 - **Synchronous validation, not async.** The bundle is ≤ 100 MiB; full validation is sub-second. Async would buy us nothing and create a "skill exists but isn't usable yet" intermediate state.
 - **Streaming uncompressed-size check.** Zip declares decompressed sizes, but a malicious zip can lie. We track the actual decompressed byte count as we read entries and abort on cap.
 - **Frontmatter not required.** Earlier draft required `frontmatter.name == slug`. Dropped because admin types slug/name/description in the upload form — bundle frontmatter is a pre-fill convenience, not a contract.
 - **Template files explicitly rejected.** Reserved for built-ins because `SkillRenderContext` shape is still evolving. Don't want customer bundles referencing fields we're still designing.
-- **Icon is stored separately, not unzipped on every read.** A bundle is one zip blob; serving the icon would require unzip-on-each-request. Separate blob is cleaner.
 - **`validator_version` in manifest_metadata.** Future rule changes can identify which version validated a persisted bundle. Useful for forward-compat without forcing re-validation.
 
 ### Todos
@@ -429,7 +413,6 @@ Icon is extracted from the bundle on upload and stored as a separate FileStore b
   - [ ] Per-entry: check path normalization, symlink flag (`external_attr` bit), per-file size.
   - [ ] Reject any `*.template` file.
   - [ ] Verify `SKILL.md` exists at root.
-  - [ ] If `icon.png` or `icon.svg` present: validate size and magic bytes.
   - [ ] Parse `SKILL.md` frontmatter (YAML); capture optionally.
   - [ ] Build and return `ManifestMetadata` dict.
 - [ ] Implement `compute_bundle_sha256(zip_bytes: bytes) -> str` — deterministic (raw bytes, not zip-content-hash; we want to detect "this is the exact same upload" not "this has the same contents in a different zip order").
@@ -461,7 +444,6 @@ class SkillManifestEntry(BaseModel):
     name: str
     description: str
     source: Literal["builtin", "custom"]
-    has_icon: bool
 
 class SkillsManifest(BaseModel):
     builtin: list[SkillManifestEntry]
@@ -488,12 +470,11 @@ Algorithm:
      - `rendered = render_template_placeholders(template_text, render_context)`.
      - Write `rendered` to `SKILL.md`.
      - Delete the `.template` file.
-   - Capture `SkillManifestEntry(slug, name, description, source="builtin", has_icon=...)`.
+   - Capture `SkillManifestEntry(slug, name, description, source="builtin")`.
 5. For each custom:
    - `blob_bytes = file_store.read_file(custom.bundle_file_id, mode="b")`.
    - `_safe_unzip(blob_bytes, dest_path/slug)`.
-   - If `custom.icon_file_id` is set, write the icon as `dest_path/slug/icon.<ext>` (so the panel can show it via the manifest's `has_icon`).
-   - Capture `SkillManifestEntry(slug=custom.slug, name=custom.name, description=custom.description, source="custom", has_icon=...)`.
+   - Capture `SkillManifestEntry(slug=custom.slug, name=custom.name, description=custom.description, source="custom")`.
 6. Build `SkillsManifest`; write `dest_path/.skills_manifest.json`.
 7. Return the manifest.
 
@@ -504,7 +485,6 @@ Algorithm:
 - **`shutil.copytree` for built-ins.** Simpler than reading bytes individually. The source dirs are small (a few small files).
 - **Defensive re-unzip for customs.** Validator catches traversal/symlinks at upload, but a customer might exploit a validator bug. Re-checking on each materialization is cheap and avoids a single-point-of-failure.
 - **Manifest source discriminator (`builtin` / `custom`).** Used by the admin UI and frontend panel for badging. AGENTS.md doesn't use it (it lists all skills uniformly).
-- **Icon copied into the materialized dir.** Lets the panel — which reads the manifest — find the icon at a predictable path without an extra API call.
 
 ### Todos
 - [ ] Implement `SkillRenderContext`, `SkillManifestEntry`, `SkillsManifest` Pydantic models in `backend/onyx/skills/materialize.py`.
@@ -530,18 +510,15 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 | `GET` | `/api/admin/skills` | — | List all skills: `{builtin: [...], custom: [...]}` |
 | `POST` | `/api/admin/skills/custom` | multipart: bundle, slug, name, description, is_public, group_ids? | Create custom skill atomically (bundle + metadata + grants) |
 | `PATCH` | `/api/admin/skills/custom/{id}` | JSON: `{slug?, name?, description?, is_public?, enabled?}` | Partial update; doesn't touch bundle or grants |
-| `PUT` | `/api/admin/skills/custom/{id}/bundle` | multipart: bundle | Replace bundle bytes; re-extract icon |
+| `PUT` | `/api/admin/skills/custom/{id}/bundle` | multipart: bundle | Replace bundle bytes |
 | `PUT` | `/api/admin/skills/custom/{id}/grants` | JSON: `{group_ids}` | Atomic grant replacement |
 | `DELETE` | `/api/admin/skills/custom/{id}` | — | Soft-delete (`deleted=true`) |
-| `GET` | `/api/admin/skills/custom/{id}/icon` | — | Stream custom icon image |
-| `GET` | `/api/admin/skills/builtin/{slug}/icon` | — | Stream built-in icon from disk |
 
 **User endpoints** (`/api/skills` — authenticated user):
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/skills` | Skills accessible to current user (forward-looking, for fresh sessions) |
-| `GET` | `/api/skills/{id}/icon` | Stream custom icon (404 if no access) |
 
 **Response models** (FastAPI returns these directly via typed function signatures):
 
@@ -555,7 +532,6 @@ class BuiltinSkillAdmin(BaseModel):
     name: str
     description: str
     has_template: bool
-    has_icon: bool
     available: bool                              # True iff every requirement satisfied
     requirements: list[RequirementStatus]        # empty if skill has no requirements
 
@@ -573,7 +549,6 @@ class CustomSkillAdmin(BaseModel):
     description: str
     is_public: bool
     enabled: bool
-    has_icon: bool
     bundle_sha256: str
     bundle_size_bytes: int
     granted_group_ids: list[int]
@@ -589,7 +564,6 @@ class SkillSummary(BaseModel):
     slug: str
     name: str
     description: str
-    has_icon: bool
     source: Literal["builtin", "custom"]
     skill_id: UUID | None   # set for customs, None for built-ins
 ```
@@ -600,27 +574,25 @@ class SkillSummary(BaseModel):
 3. Read bundle bytes (capped at 100 MiB).
 4. `validate_custom_bundle(bundle_bytes, slug)` → `ManifestMetadata` or raise.
 5. `compute_bundle_sha256(bundle_bytes)`.
-6. If bundle contains an icon: extract it; `file_store.save_file(icon_bytes, origin=SKILL_ICON, ...)` → `icon_file_id`.
-7. `file_store.save_file(bundle_bytes, origin=SKILL_BUNDLE, ...)` → `bundle_file_id`.
-8. `create_skill(...)` inserts row.
-9. `replace_skill_grants(skill_id, group_ids, db)` (no-op if `is_public=True` or list is empty).
-10. Return `CustomSkillAdmin`.
+6. `file_store.save_file(bundle_bytes, origin=SKILL_BUNDLE, ...)` → `bundle_file_id`.
+7. `create_skill(...)` inserts row.
+8. `replace_skill_grants(skill_id, group_ids, db)` (no-op if `is_public=True` or list is empty).
+9. Return `CustomSkillAdmin`.
 
 If any step fails after files are saved to the FileStore, the route handler must delete those orphaned blobs before re-raising. (The orphan sweep in §16 is a safety net, not the primary cleanup path.)
 
 **Replace-bundle flow** (`PUT /api/admin/skills/custom/{id}/bundle`):
-1. Fetch existing `skill`. Capture `old_bundle_file_id`, `old_icon_file_id`.
+1. Fetch existing `skill`. Capture `old_bundle_file_id`.
 2. Read + validate new bundle (same as create).
-3. Save new bundle blob; extract + save new icon blob if present.
+3. Save new bundle blob.
 4. `replace_skill_bundle(...)` updates row.
-5. **After DB commit succeeds**: delete `old_bundle_file_id` (and `old_icon_file_id` if it was set and is now replaced) from FileStore.
+5. **After DB commit succeeds**: delete `old_bundle_file_id` from FileStore.
 
 If DB commit fails, new blobs are orphaned (caught by sweep). If FileStore delete fails after commit, old blobs are orphaned (caught by sweep). Either way the system reaches a consistent state.
 
 ### Considerations / Tradeoffs / Decisions
 - **Single POST for create + grants.** Atomic. No "skill exists with no grants" intermediate state for a UI to misrender.
 - **PATCH supports slug change.** Snapshot fidelity means this is safe. New sessions get the new slug; existing sessions keep theirs.
-- **Built-in icons served from a different route than custom icons.** Built-ins are disk files; customs are FileStore blobs. Different storage → different read code path.
 - **No paging on `/api/admin/skills`.** Expected count is well under 100 per tenant. Add paging if/when this changes.
 - **`SkillSummary` returns `skill_id` for customs only.** Built-ins are identified by slug; customs by UUID (the slug can change). This lets the frontend route correctly.
 - **`enabled` flag exists on the DB row but is not in the V1 admin UI.** Reserved for future "temporarily disable without deleting" use case. The schema is forward-compatible; admin UI can add a toggle later without migration.
@@ -633,11 +605,8 @@ If DB commit fails, new blobs are orphaned (caught by sweep). If FileStore delet
   - [ ] `PUT /api/admin/skills/custom/{id}/bundle` — full replace flow.
   - [ ] `PUT /api/admin/skills/custom/{id}/grants` — call `replace_skill_grants(...)`.
   - [ ] `DELETE /api/admin/skills/custom/{id}` — call `delete_skill(...)`. Soft-delete; don't delete blobs (sweep handles it after retention).
-  - [ ] `GET /api/admin/skills/custom/{id}/icon` — stream icon.
-  - [ ] `GET /api/admin/skills/builtin/{slug}/icon` — stream icon from disk.
 - [ ] Implement user router (same file):
   - [ ] `GET /api/skills` — built-ins + customs visible to user.
-  - [ ] `GET /api/skills/{id}/icon` — stream with access check.
 - [ ] Define Pydantic response models in the same file.
 - [ ] Wire router into `backend/onyx/main.py` via `app.include_router(...)`.
 - [ ] Add the admin dependency to admin routes (matches existing admin-gating pattern; see `backend/onyx/server/features/persona/...`).
@@ -871,11 +840,9 @@ The user needs to know what skills are available in their session, and ideally s
 ### Proposed Solution
 
 #### 11.1 Skills panel
-A read-only sidebar/section in the Craft session UI. Lists active skills with name, description, source badge (Platform/Custom), and icon. Clicking a skill opens a drawer/modal with the SKILL.md content for that skill.
+A read-only sidebar/section in the Craft session UI. Lists active skills with name, description, and source badge (Platform/Custom). Clicking a skill opens a drawer/modal with the SKILL.md content for that skill.
 
-Data source: `GET /api/build/sessions/{id}/skills` (returns the manifest). Frontend renders the list. For each entry with `has_icon=true`, the icon URL is:
-- Built-in: `/api/admin/skills/builtin/<slug>/icon` (admin endpoint reusable here, or add `/api/skills/builtin/<slug>/icon` if access scoping matters).
-- Custom: `/api/skills/<skill_id>/icon`.
+Data source: `GET /api/build/sessions/{id}/skills` (returns the manifest). Frontend renders the list with letter-monogram avatars derived from the slug — no per-skill icon assets in V1.
 
 For the SKILL.md preview drawer, frontend can either:
 - Add a new backend endpoint `GET /api/build/sessions/{id}/skills/<slug>/content` returning the rendered SKILL.md text.
@@ -900,14 +867,14 @@ No toggles. To suppress a skill in the current turn, the user tells the agent in
 ### Todos
 - [ ] Implement frontend skills panel component:
   - [ ] `web/src/app/craft/.../SkillsPanel.tsx` — fetches `/api/build/sessions/{id}/skills`, renders the list.
-  - [ ] Skill row sub-component: icon, name, description, source badge.
+  - [ ] Skill row sub-component: letter-monogram avatar, name, description, source badge.
   - [ ] Click opens drawer showing SKILL.md preview.
 - [ ] Implement `GET /api/build/sessions/{id}/skills/<slug>/content` returning the rendered SKILL.md as plain text.
 - [ ] Mount the panel in the Craft session UI shell.
 - [ ] Implement inline mention rendering:
   - [ ] In the chat-stream consumer, pattern-match tool-use/file-read events on the path regex `^\.agents/skills/([a-z][a-z0-9-]{0,63})/SKILL\.md$`.
   - [ ] Render "Using `<slug>`" inline at the matching position in the stream.
-- [ ] Frontend tests for the panel (list renders, click opens drawer, missing icon falls back to default).
+- [ ] Frontend tests for the panel (list renders, click opens drawer).
 - [ ] Manual smoke: agent reads a SKILL.md in a test session → inline indicator appears.
 
 ---
@@ -958,7 +925,7 @@ Admins need a place to upload, edit, and manage custom skills, plus see what bui
 Single page at `/admin/skills`. **One unified list** of built-ins + customs together, with badges differentiating source.
 
 #### 13.1 List view
-Columns: icon, name (and slug as subtext), description (truncated), source badge (`Platform` / `Custom`), grants summary (customs only — "Org-wide" / "3 groups" / "5 users" / "Private"), updated_at, actions.
+Columns: letter-monogram avatar, name (and slug as subtext), description (truncated), source badge (`Platform` / `Custom`), grants summary (customs only — "Org-wide" / "3 groups" / "5 users" / "Private"), updated_at, actions.
 
 - **Built-in rows**: no action menu. Click row → drawer with read-only details (frontmatter, files list, on-disk path, requirements + status).
 - **Custom rows**: action menu → Edit, Replace bundle, Manage grants, Enable/Disable, Delete.
@@ -1044,7 +1011,7 @@ Onyx EE is multi-tenant via schema-per-tenant (`alembic -n schema_private`). The
 ### Proposed Solution
 - **Skill tables live in the per-tenant (private) schema** — same as Persona. No `tenant_id` column needed; schema isolation handles it.
 - **Slug uniqueness is per-tenant** by virtue of the schema-scoped unique index.
-- **FileStore is already tenant-aware**: `save_file` calls `get_current_tenant_id()` and prefixes S3 keys with the tenant ID (`file_store.py:250-256`). `SKILL_BUNDLE` and `SKILL_ICON` blobs inherit isolation automatically.
+- **FileStore is already tenant-aware**: `save_file` calls `get_current_tenant_id()` and prefixes S3 keys with the tenant ID (`file_store.py:250-256`). `SKILL_BUNDLE` blobs inherit isolation automatically.
 - **Built-ins are global** (code-resident, shared across tenants). Their slugs are reserved globally — every tenant's customs are blocked from using them.
 
 ### Considerations / Tradeoffs / Decisions
@@ -1094,7 +1061,7 @@ The skills system changes both the api_server (new endpoints, new materializer, 
 ## 16. Orphan cleanup
 
 ### Context
-FileStore blobs (bundle + icon) are saved before the DB row is committed. If a request crashes between save and commit, the blobs are orphaned. Both replace-bundle and delete-skill paths also need to delete old blobs. We need a defensive sweep to catch the rare crash case.
+FileStore blobs are saved before the DB row is committed. If a request crashes between save and commit, the blobs are orphaned. Both replace-bundle and delete-skill paths also need to delete old blobs. We need a defensive sweep to catch the rare crash case.
 
 ### Proposed Solution
 Weekly Celery beat task:
@@ -1104,7 +1071,7 @@ Weekly Celery beat task:
 
 @shared_task(name="cleanup_orphaned_skill_blobs")
 def cleanup_orphaned_skill_blobs() -> None:
-    """Defensive sweep for FileStore blobs with origin SKILL_BUNDLE or SKILL_ICON
+    """Defensive sweep for FileStore blobs with origin SKILL_BUNDLE
     older than 14 days that no skill row references."""
     with get_session_with_current_tenant() as db:
         for blob in _stale_skill_blobs(db, age_days=14):
@@ -1131,7 +1098,7 @@ Inline cleanup (the primary path) happens in:
 
 ### Todos
 - [ ] Implement `cleanup_orphaned_skill_blobs` in `backend/onyx/background/celery/tasks/skills/tasks.py`.
-- [ ] Implement `_stale_skill_blobs(db, age_days)` — query FileStore records with `origin IN (SKILL_BUNDLE, SKILL_ICON)` and `created_at < now() - age_days` whose IDs aren't referenced in `skill.bundle_file_id` or `skill.icon_file_id` (for any non-deleted skill, OR for deleted-skills-older-than-N-days).
+- [ ] Implement `_stale_skill_blobs(db, age_days)` — query FileStore records with `origin = SKILL_BUNDLE` and `created_at < now() - age_days` whose IDs aren't referenced in `skill.bundle_file_id` (for any non-deleted skill, OR for deleted-skills-older-than-N-days).
 - [ ] Add beat schedule entry. Confirm `expires=3600` is set.
 - [ ] Unit test: create an orphan blob older than 14 days, run the task, verify deletion.
 - [ ] Integration test: create a skill, soft-delete it, verify the blob is NOT deleted immediately; bump created_at to 14+ days ago, run task, verify deletion.
@@ -1147,7 +1114,7 @@ Per `CLAUDE.md`: prefer external-dependency unit tests when mocking is needed; p
 
 **External-dependency unit tests** — `backend/tests/external_dependency_unit/skills/`:
 - `test_skills_lifecycle.py`:
-  - Upload valid bundle → 200; `skill` row created; bundle + icon blobs in FileStore.
+  - Upload valid bundle → 200; `skill` row created; bundle blob in FileStore.
   - Upload invalid bundle (each failure mode) → 4xx with reason; no row, no blobs.
   - Replace bundle → row updated; old blobs deleted from FileStore.
   - Grant skill to group A → user in A sees it via `GET /api/skills`; user not in A doesn't.
@@ -1416,9 +1383,8 @@ In rough order of "cuttable first":
 1. **Invocation audit log** (Phase 5 stretch) — high value but defer to V1.5.
 2. **Built-in detail drawer** (Phase 4) — engineers can read source dirs directly.
 3. **`SkillRequirement` system** (Phase 1, §4) — ship `image-generation` always-available with a runtime-error caveat. Lose the clean "Needs setup" UX but cut a chunk of work. **Only acceptable** if the interception layer is the safety net.
-4. **Bundle icon support** (Phase 1, §5) — ship without; bundles can add icons in V1.5. Saves validator + storage + UI complexity.
-5. **Per-skill content endpoint** (`/api/build/sessions/{id}/skills/{slug}/content`, Phase 3) — SKILL.md preview drawer in panel; defer to V1.5.
-6. **Local sandbox backend skills materialization** — if Kubernetes is the only deploy target for V1, defer the local-backend changes.
+4. **Per-skill content endpoint** (`/api/build/sessions/{id}/skills/{slug}/content`, Phase 3) — SKILL.md preview drawer in panel; defer to V1.5.
+5. **Local sandbox backend skills materialization** — if Kubernetes is the only deploy target for V1, defer the local-backend changes.
 
 Don't cut, even if tempted:
 - Bundle validator security rules (path traversal, symlinks, size caps) — these are load-bearing.
@@ -1445,10 +1411,7 @@ from .render        import render_template_placeholders
 - `/api/admin/skills/custom/{id}` (PATCH, DELETE)
 - `/api/admin/skills/custom/{id}/bundle` (PUT)
 - `/api/admin/skills/custom/{id}/grants` (PUT)
-- `/api/admin/skills/custom/{id}/icon` (GET)
-- `/api/admin/skills/builtin/{slug}/icon` (GET)
 - `/api/skills` (GET)
-- `/api/skills/{id}/icon` (GET)
 - `/api/build/sessions/{id}/skills` (GET)
 - `/api/build/sessions/{id}/skills/{slug}/content` (GET)
 
@@ -1458,7 +1421,6 @@ from .render        import render_template_placeholders
 
 **FileOrigin values added:**
 - `SKILL_BUNDLE`
-- `SKILL_ICON`
 
 **Files modified (key sites):**
 - `backend/onyx/db/models.py` — two new tables.
