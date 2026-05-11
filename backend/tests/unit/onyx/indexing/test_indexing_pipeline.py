@@ -271,7 +271,7 @@ def _make_doc(
 
 
 # ---------------------------------------------------------------------------
-# _maybe_enqueue_agent_wiki_push
+# _maybe_push_to_agent_wiki
 # ---------------------------------------------------------------------------
 
 _PATCH_AGENT_WIKI_ENABLED = "onyx.indexing.indexing_pipeline.AGENT_WIKI_ENABLED"
@@ -281,7 +281,6 @@ _PATCH_GET_CC_PAIR = "onyx.indexing.indexing_pipeline.get_connector_credential_p
 _PATCH_GET_SESSION_AW = (
     "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
 )
-_PATCH_PUSH_TASK = "onyx.indexing.indexing_pipeline.push_to_agent_wiki"
 
 
 def _make_adapter(connector_id: int = 1, credential_id: int = 1) -> MagicMock:
@@ -307,38 +306,41 @@ def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
     ]
 
 
+_PATCH_THREAD = "onyx.indexing.indexing_pipeline.threading.Thread"
+
+
 def test_agent_wiki_push_skipped_when_disabled() -> None:
-    from onyx.indexing.indexing_pipeline import _maybe_enqueue_agent_wiki_push
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
 
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_AGENT_WIKI_ENABLED, False),
         patch(_PATCH_MULTI_TENANT, False),
-        patch(_PATCH_PUSH_TASK) as mock_task,
+        patch(_PATCH_THREAD) as mock_thread,
     ):
-        _maybe_enqueue_agent_wiki_push(
+        _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_task.apply_async.assert_not_called()
+    mock_thread.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_in_multi_tenant_mode() -> None:
-    from onyx.indexing.indexing_pipeline import _maybe_enqueue_agent_wiki_push
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
 
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_AGENT_WIKI_ENABLED, True),
         patch(_PATCH_MULTI_TENANT, True),
-        patch(_PATCH_PUSH_TASK) as mock_task,
+        patch(_PATCH_THREAD) as mock_thread,
     ):
-        _maybe_enqueue_agent_wiki_push(
+        _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_task.apply_async.assert_not_called()
+    mock_thread.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
-    from onyx.indexing.indexing_pipeline import _maybe_enqueue_agent_wiki_push
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
 
     doc = _make_doc(doc_id="doc1")
     ctx = MagicMock()
@@ -349,16 +351,16 @@ def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
-        patch(_PATCH_PUSH_TASK) as mock_task,
+        patch(_PATCH_THREAD) as mock_thread,
     ):
-        _maybe_enqueue_agent_wiki_push(
+        _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_task.apply_async.assert_not_called()
+    mock_thread.assert_not_called()
 
 
 def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
-    from onyx.indexing.indexing_pipeline import _maybe_enqueue_agent_wiki_push
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
 
     big_doc = _make_doc(
         doc_id="big",
@@ -373,16 +375,16 @@ def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
         patch(_PATCH_AGENT_WIKI_MAX_CHARS, 50),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_PUSH_TASK) as mock_task,
+        patch(_PATCH_THREAD) as mock_thread,
     ):
-        _maybe_enqueue_agent_wiki_push(
+        _maybe_push_to_agent_wiki(
             _make_adapter(), [big_doc], _make_insertion_records(["big"])
         )
-    mock_task.apply_async.assert_not_called()
+    mock_thread.assert_not_called()
 
 
 def test_agent_wiki_push_enqueues_for_public_doc() -> None:
-    from onyx.indexing.indexing_pipeline import _maybe_enqueue_agent_wiki_push
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
 
     doc = _make_doc(doc_id="doc1")
     ctx = MagicMock()
@@ -393,13 +395,13 @@ def test_agent_wiki_push_enqueues_for_public_doc() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=ctx),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_PUSH_TASK) as mock_task,
+        patch(_PATCH_THREAD) as mock_thread,
     ):
-        _maybe_enqueue_agent_wiki_push(
+        _maybe_push_to_agent_wiki(
             _make_adapter(), [doc], _make_insertion_records(["doc1"])
         )
-    mock_task.apply_async.assert_called_once()
-    kwargs = mock_task.apply_async.call_args.kwargs["kwargs"]
+    mock_thread.assert_called_once()
+    kwargs = mock_thread.call_args.kwargs["kwargs"]
     assert kwargs["doc_id"] == "doc1"
     assert kwargs["content"] == "Hello"
 

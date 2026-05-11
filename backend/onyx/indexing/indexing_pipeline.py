@@ -1,3 +1,4 @@
+import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -20,8 +21,6 @@ from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
 from onyx.configs.app_configs import USE_CHUNK_SUMMARY
 from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.constants import CELERY_AGENT_WIKI_PUSH_TASK_EXPIRES
-from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -1097,7 +1096,7 @@ def _apply_document_ingestion_hook(
     return result
 
 
-def _maybe_enqueue_agent_wiki_push(
+def _maybe_push_to_agent_wiki(
     adapter: IndexingBatchAdapter,
     filtered_documents: list[Document],
     insertion_records: list[DocumentInsertionRecord],
@@ -1137,34 +1136,27 @@ def _maybe_enqueue_agent_wiki_push(
                 AGENT_WIKI_MAX_DOC_CHARS,
             )
             continue
-        try:
-            push_to_agent_wiki.apply_async(
-                queue=OnyxCeleryQueues.AGENT_WIKI_PUSH,
-                expires=CELERY_AGENT_WIKI_PUSH_TASK_EXPIRES,
-                kwargs=dict(
-                    doc_id=doc_id,
-                    source=str(doc.source.value) if doc.source else "unknown",
-                    title=doc.title or doc.semantic_identifier,
-                    content=content,
-                    url=next(
-                        (
-                            s.link
-                            for s in doc.sections
-                            if isinstance(s, TextSection) and s.link
-                        ),
-                        None,
+        threading.Thread(
+            target=push_to_agent_wiki,
+            kwargs=dict(
+                doc_id=doc_id,
+                source=str(doc.source.value) if doc.source else "unknown",
+                title=doc.title or doc.semantic_identifier,
+                content=content,
+                url=next(
+                    (
+                        s.link
+                        for s in doc.sections
+                        if isinstance(s, TextSection) and s.link
                     ),
-                    doc_updated_at=(
-                        doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
-                    ),
+                    None,
                 ),
-            )
-        except Exception:
-            logger.warning(
-                "Failed to enqueue agent-wiki push for doc_id=%s; skipping",
-                doc_id,
-                exc_info=True,
-            )
+                doc_updated_at=(
+                    doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+                ),
+            ),
+            daemon=True,
+        ).start()
 
 
 @log_function_time(debug_only=True)
@@ -1379,7 +1371,7 @@ def index_doc_batch(
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
 
-    _maybe_enqueue_agent_wiki_push(
+    _maybe_push_to_agent_wiki(
         adapter=adapter,
         filtered_documents=filtered_documents,
         insertion_records=primary_doc_idx_insertion_records,
