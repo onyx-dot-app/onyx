@@ -51,7 +51,7 @@ func (c *Client) SendMessageStream(
 			return
 		}
 
-		req, err := c.newRequest(ctx, "POST", "/api/chat/send-chat-message", bytes.NewReader(body))
+		req, err := c.newRequest(ctx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
 		if err != nil {
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("request error: %v", err), IsRetryable: false}
 			return

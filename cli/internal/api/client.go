@@ -138,7 +138,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 	}
 
 	// Step 2: Authenticated check
-	req2, err := c.newRequest(ctx, "GET", "/api/me", nil)
+	req2, err := c.newRequest(ctx, "GET", "/me", nil)
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
@@ -178,7 +178,7 @@ func (c *Client) TestConnection(ctx context.Context) error {
 // ListAgents returns visible agents.
 func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) {
 	var raw []models.AgentSummary
-	if err := c.doJSON(ctx, "GET", "/api/persona", nil, &raw); err != nil {
+	if err := c.doJSON(ctx, "GET", "/persona", nil, &raw); err != nil {
 		return nil, err
 	}
 	var result []models.AgentSummary
@@ -195,7 +195,7 @@ func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDeta
 	var resp struct {
 		Sessions []models.ChatSessionDetails `json:"sessions"`
 	}
-	if err := c.doJSON(ctx, "GET", "/api/chat/get-user-chat-sessions", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/chat/get-user-chat-sessions", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Sessions, nil
@@ -204,7 +204,7 @@ func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDeta
 // GetChatSession returns full details for a session.
 func (c *Client) GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
 	var resp models.ChatSessionDetailResponse
-	if err := c.doJSON(ctx, "GET", "/api/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -221,7 +221,7 @@ func (c *Client) RenameChatSession(ctx context.Context, sessionID string, name *
 	var resp struct {
 		NewName string `json:"new_name"`
 	}
-	if err := c.doJSON(ctx, "PUT", "/api/chat/rename-chat-session", payload, &resp); err != nil {
+	if err := c.doJSON(ctx, "PUT", "/chat/rename-chat-session", payload, &resp); err != nil {
 		return "", err
 	}
 	return resp.NewName, nil
@@ -247,7 +247,7 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}
 	_ = writer.Close()
 
-	req, err := c.newRequest(ctx, "POST", "/api/user/projects/file/upload", &buf)
+	req, err := c.newRequest(ctx, "POST", "/user/projects/file/upload", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 	var resp struct {
 		BackendVersion string `json:"backend_version"`
 	}
-	if err := c.doJSON(ctx, "GET", "/api/version", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/version", nil, &resp); err != nil {
 		return "", err
 	}
 	return resp.BackendVersion, nil
@@ -293,7 +293,7 @@ func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 
 // StopChatSession sends a stop signal for a streaming session (best-effort).
 func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
-	req, err := c.newRequest(ctx, "POST", "/api/chat/stop-chat-session/"+sessionID, nil)
+	req, err := c.newRequest(ctx, "POST", "/chat/stop-chat-session/"+sessionID, nil)
 	if err != nil {
 		return
 	}

@@ -346,12 +346,6 @@ jobs:
           EOF
           fi
 
-          # CLI tests need /api prefix since the CLI is designed to go through
-          # the frontend proxy, but CI doesn't run the web server.
-          if echo "${{ matrix.test-dir.path }}" | grep -q "tests/cli"; then
-            echo "          API_PREFIX=api" >> deployment/docker_compose/.env
-          fi
-
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose

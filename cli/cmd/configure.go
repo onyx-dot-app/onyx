@@ -18,7 +18,7 @@ user config directory and is also used by AI agents calling the CLI non-interact
 
 To override the config file or skip it entirely, set environment variables:
 
-  export ONYX_SERVER_URL="https://your-onyx-server.com"
+  export ONYX_SERVER_URL="https://your-onyx-server.com/api"
   export ONYX_PAT="your-pat"`,
 		Example: `  onyx-cli configure`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -27,7 +27,7 @@ func writeConfig(t *testing.T, dir string, data []byte) {
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default server URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -55,7 +55,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -95,7 +95,7 @@ func TestLoadCorruptFile(t *testing.T) {
 	writeConfig(t, dir, []byte("not valid json {{{"))
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app" {
+	if cfg.ServerURL != "https://cloud.onyx.app/api" {
 		t.Errorf("expected default URL on corrupt file, got %s", cfg.ServerURL)
 	}
 }
