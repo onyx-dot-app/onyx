@@ -1470,6 +1470,64 @@
        │             (panel data source: reads manifest)     │
        └─────────────────────────────────────────────────────┘</code></pre>
 
+    <h3>Design decision: built-ins live in code, not the DB</h3>
+    <p><em>Why two storage paths instead of one unified table.</em></p>
+
+    <p>
+      A natural-looking simplification is to unify built-ins and custom skills
+      under one storage model — seed built-in bundles into FileStore on install,
+      store rows in the <code>skill</code> table alongside customs, drop the
+      two-path API merge. We considered it and chose the split. The reason is
+      <strong>lifecycle, not aesthetics.</strong>
+    </p>
+
+    <p>
+      <strong>Built-ins are deploy artifacts.</strong> They version with the
+      codebase, get tested in CI alongside the code that uses them, and ship
+      with the release. An engineer commits <code>pptx/SKILL.md</code>, 30
+      minutes later it's in prod for every tenant.
+    </p>
+
+    <p>
+      <strong>Customs are user data.</strong> They version per upload, persist
+      across deploys, belong to the tenant. A customer drops a zip and 5 seconds
+      later it's available to their org.
+    </p>
+
+    <p>Unifying them forces one of those lifecycles to bend:</p>
+    <ul>
+      <li>
+        If built-ins inherit the user-data lifecycle, every deploy needs a
+        reconciliation step: compare the on-disk bundle's sha256 against the DB
+        row, decide whether to clobber an admin's edits, tombstone removed
+        built-ins, backfill new tenants, serialize
+        <code>SkillRequirement.check</code> callables into rule expressions.
+        None of these are unsolvable; all of them are real code, real tests,
+        real ops complexity.
+      </li>
+      <li>
+        If customs inherit the deploy-artifact lifecycle, they have to live in
+        the repo — not viable, by definition.
+      </li>
+    </ul>
+
+    <p>
+      The current split costs ~30 lines (a route-handler merge in
+      <code>api.py</code>) plus ~10 lines (a second loop in
+      <code>materialize_skills</code>). The unified path would cost an
+      upgrade-detection seeder, multi-tenant backfill, reconciliation logic on
+      every deploy, and per-tenant FileStore growth for redundant bundle copies.
+      Lopsided.
+    </p>
+
+    <div class="callout">
+      <span class="callout-label">Revisit when</span>
+      A customer requests per-org enable/disable of built-ins. Even then, the
+      cheaper move is a separate <code>builtin_skill_org_state</code> table (one
+      row per tenant per built-in, ~50 lines) — the bundles still stay on disk.
+      Listed in §19 deferred.
+    </div>
+
     <div class="subhead considerations">
       Considerations / Tradeoffs / Decisions
     </div>
@@ -1488,9 +1546,8 @@
           >Why <code>BuiltinSkillRegistry</code> is a singleton, not
           DB-backed.</strong
         >
-        Built-ins are code-defined; their identity moves with the deploy.
-        Persisting them adds a seeder, hash tracking, and a registry-vs-DB-drift
-        failure mode for zero benefit.
+        See the "built-ins live in code" decision above. One-liner: deploy
+        lifecycle ≠ user-data lifecycle.
       </li>
       <li>
         <strong
