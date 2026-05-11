@@ -7,7 +7,8 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import { Button, LineItemButton } from "@opal/components";
+import { Button, SelectCard } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
@@ -63,24 +64,29 @@ function PrivacyOption({
   ariaLabel,
 }: PrivacyOptionProps) {
   return (
-    <div aria-label={ariaLabel}>
-      <LineItemButton
-        selectVariant="select-heavy"
-        state={selected ? "filled" : "empty"}
-        rounding="sm"
-        onClick={onClick}
+    <SelectCard
+      state={selected ? "filled" : "empty"}
+      padding="sm"
+      rounding="sm"
+      onClick={onClick}
+      aria-label={ariaLabel}
+    >
+      <ContentAction
         sizePreset="main-ui"
         variant="section"
         icon={Icon}
         title={title}
         description={description}
+        padding="fit"
+        center
+        color="interactive"
         rightChildren={
           selected ? (
             <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
           ) : undefined
         }
       />
-    </div>
+    </SelectCard>
   );
 }
 
