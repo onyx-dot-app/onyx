@@ -1,9 +1,7 @@
 """Search API endpoint (POST /api/search).
 
 Runs the full SearchTool.run() pipeline — the same multi-stage search that
-powers chat mode: LLM query expansion, multi-query hybrid retrieval against
-Vespa, weighted reciprocal-rank fusion, LLM document selection, LLM context
-expansion, and federated retrieval.  Returns ranked results without generating
+powers chat mode.  Returns ranked results without generating
 an LLM answer.
 
 Intended for programmatic consumers (onyx-cli, Craft sandbox, integrations).
@@ -48,9 +46,12 @@ from onyx.server.features.search.models import SearchAPIResponse
 from onyx.server.features.search.models import SearchAPIResult
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search")
 
@@ -85,7 +86,7 @@ def _build_results(
     return results
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_vector_db)])
 def search(
     request: SearchAPIRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -126,12 +127,6 @@ def search(
                 OnyxErrorCode.NOT_FOUND,
                 f"LLM provider '{request.provider}' not found",
             )
-        if not request.model:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "model is required when provider is specified",
-            )
-
         user_group_ids = fetch_user_group_ids(db_session, user)
         if not can_user_access_llm_provider(
             provider_model,
@@ -143,13 +138,21 @@ def search(
 
         llm_provider_view = LLMProviderView.from_model(provider_model)
         llm = llm_from_provider(
-            model_name=request.model,
+            model_name=cast(str, request.model),
             llm_provider=llm_provider_view,
         )
     elif persona is not None:
         llm = get_llm_for_persona(persona, user)
     else:
         llm = get_default_llm()
+
+    # Since the agentic search flow requires multiple LLM calls
+    # we should check the tenant usage limits before continuing
+    check_llm_cost_limit_for_provider(
+        db_session=db_session,
+        tenant_id=get_current_tenant_id(),
+        llm_provider_api_key=llm.config.api_key,
+    )
 
     # 3. Build filters
     time_cutoff = None

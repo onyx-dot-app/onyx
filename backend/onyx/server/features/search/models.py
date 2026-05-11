@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag
@@ -21,6 +22,14 @@ class SearchAPIRequest(BaseModel):
     model: str | None = None
 
     skip_query_expansion: bool = False
+
+    @model_validator(mode="after")
+    def validate_provider_model_pair(self) -> "SearchAPIRequest":
+        if self.model and not self.provider:
+            raise ValueError("provider is required when model is specified")
+        if self.provider and not self.model:
+            raise ValueError("model is required when provider is specified")
+        return self
 
 
 class SearchAPIResult(BaseModel):
