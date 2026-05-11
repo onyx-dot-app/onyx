@@ -10,7 +10,27 @@ const (
 	NotConfigured = 3
 	AuthFailure   = 4
 	Unreachable   = 5
+	RateLimited   = 6
+	Timeout       = 7
+	ServerError   = 8
+	NotAvailable  = 9
 )
+
+// ForHTTPStatus maps an HTTP status code to a CLI exit code.
+func ForHTTPStatus(statusCode int) int {
+	switch {
+	case statusCode == 401 || statusCode == 403:
+		return AuthFailure
+	case statusCode == 404:
+		return NotAvailable
+	case statusCode == 429:
+		return RateLimited
+	case statusCode >= 500:
+		return ServerError
+	default:
+		return General
+	}
+}
 
 // ExitError wraps an error with a specific exit code.
 type ExitError struct {

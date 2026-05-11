@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"text/tabwriter"
 
@@ -16,7 +17,7 @@ func newAgentsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agents",
-		Short: "List available agents",
+		Short: "List available agents (ID, name, description)",
 		Long: `List all visible agents configured on the Onyx server.
 
 By default, output is a human-readable table with ID, name, and description.
@@ -33,6 +34,10 @@ Use --json for machine-readable output.`,
 			client := api.NewClient(cfg)
 			agents, err := client.ListAgents(cmd.Context())
 			if err != nil {
+				var apiErr *api.OnyxAPIError
+				if errors.As(err, &apiErr) {
+					return exitcodes.Newf(exitcodes.ForHTTPStatus(apiErr.StatusCode), "failed to list agents: %s", apiErr.Error())
+				}
 				return fmt.Errorf("failed to list agents: %w\n  Check your connection with: onyx-cli validate-config", err)
 			}
 

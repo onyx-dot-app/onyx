@@ -62,6 +62,7 @@ type ErrorEvent struct {
 	Error       string     `json:"error"`
 	StackTrace  *string    `json:"stack_trace,omitempty"`
 	IsRetryable bool       `json:"is_retryable"`
+	StatusCode  int        `json:"-"`
 }
 
 func (e ErrorEvent) EventType() string { return EventError }

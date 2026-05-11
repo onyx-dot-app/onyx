@@ -32,7 +32,7 @@ func newAskCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "ask [question]",
-		Short: "Ask a one-shot question (non-interactive)",
+		Short: "Ask a question and print the answer to stdout",
 		Long: `Send a one-shot question to an Onyx agent and print the response.
 
 The question can be provided as a positional argument, via --prompt, or piped
@@ -117,8 +117,12 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 						return fmt.Errorf("error marshaling event: %w", err)
 					}
 					fmt.Println(string(data))
-					if _, ok := event.(models.ErrorEvent); ok {
-						lastErr = fmt.Errorf("%s", event.(models.ErrorEvent).Error)
+					if errEvt, ok := event.(models.ErrorEvent); ok {
+						if errEvt.StatusCode != 0 {
+							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", errEvt.Error)
+						} else {
+							lastErr = fmt.Errorf("%s", errEvt.Error)
+						}
 					}
 					if _, ok := event.(models.StopEvent); ok {
 						gotStop = true
@@ -157,6 +161,9 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					}
 				case models.ErrorEvent:
 					ow.Finish()
+					if e.StatusCode != 0 {
+						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", e.Error)
+					}
 					return fmt.Errorf("%s", e.Error)
 				case models.StopEvent:
 					ow.Finish()

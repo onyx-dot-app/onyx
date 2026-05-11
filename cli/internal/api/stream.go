@@ -95,6 +95,7 @@ func (c *Client) SendMessageStream(
 			ch <- models.ErrorEvent{
 				Error:       fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody[:n])),
 				IsRetryable: resp.StatusCode >= 500,
+				StatusCode:  resp.StatusCode,
 			}
 			return
 		}

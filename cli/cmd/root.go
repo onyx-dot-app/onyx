@@ -4,6 +4,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -11,6 +12,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // Version and Commit are set via ldflags at build time.
@@ -69,8 +71,8 @@ func Execute() error {
 
 	rootCmd := &cobra.Command{
 		Use:   "onyx-cli",
-		Short: "Terminal UI for chatting with Onyx",
-		Long:  "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
+		Short: "CLI for Onyx knowledge and search",
+		Long:  "Onyx CLI — query enterprise knowledge from the terminal or as an agent tool.",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if opts.Debug {
 				log.SetLevel(log.DebugLevel)
@@ -100,11 +102,14 @@ func Execute() error {
 	rootCmd.AddCommand(newInstallSkillCmd())
 	rootCmd.AddCommand(newExperimentsCmd())
 
-	// Default command is chat, but intercept --version first
+	// Default command: --version first, then TTY check, then chat TUI
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if showVersion {
 			printVersion(cmd)
 			return nil
+		}
+		if !term.IsTerminal(int(os.Stdout.Fd())) {
+			return cmd.Help()
 		}
 		return chatCmd.RunE(cmd, args)
 	}

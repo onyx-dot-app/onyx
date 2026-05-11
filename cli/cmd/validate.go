@@ -17,7 +17,7 @@ import (
 func newValidateConfigCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate-config",
-		Short: "Validate configuration and test server connection",
+		Short: "Check CLI configuration and server connectivity",
 		Long: `Check that the CLI is configured, the server is reachable, and the API key
 is valid. Also reports the server version and warns if it is below the
 minimum required.`,

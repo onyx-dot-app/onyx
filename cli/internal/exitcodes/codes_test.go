@@ -38,3 +38,26 @@ func TestExitError_ErrorsAs(t *testing.T) {
 		t.Fatalf("expected code %d, got %d", BadRequest, exitErr.Code)
 	}
 }
+
+func TestForHTTPStatus(t *testing.T) {
+	tests := []struct {
+		status int
+		want   int
+	}{
+		{200, General},
+		{400, General},
+		{401, AuthFailure},
+		{403, AuthFailure},
+		{404, NotAvailable},
+		{429, RateLimited},
+		{500, ServerError},
+		{502, ServerError},
+		{503, ServerError},
+	}
+	for _, tt := range tests {
+		got := ForHTTPStatus(tt.status)
+		if got != tt.want {
+			t.Errorf("ForHTTPStatus(%d) = %d, want %d", tt.status, got, tt.want)
+		}
+	}
+}

@@ -3,7 +3,7 @@
 [![Release CLI](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml/badge.svg)](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml)
 [![PyPI](https://img.shields.io/pypi/v/onyx-cli.svg)](https://pypi.org/project/onyx-cli/)
 
-A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) agent. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
+A CLI for querying enterprise knowledge from [Onyx](https://github.com/onyx-dot-app/onyx). Includes an interactive chat TUI for humans and non-interactive commands for AI agents and scripts.
 
 ## Installation
 
@@ -37,7 +37,7 @@ Environment variables override config file values:
 
 ## Usage
 
-### Interactive chat (default)
+### Interactive chat (default with terminal)
 
 ```shell
 onyx-cli
@@ -55,6 +55,8 @@ onyx-cli ask --json "Hello"
 |------|-------------|
 | `--agent-id <int>` | Agent ID to use (overrides default) |
 | `--json` | Output raw NDJSON events instead of plain text |
+| `--quiet` | Buffer output and print once at end |
+| `--max-output <int>` | Max bytes before truncating (0 to disable) |
 
 ### List agents
 
@@ -90,15 +92,58 @@ Useful hardening flags:
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `chat` | Launch the interactive chat TUI (default) |
-| `ask` | Ask a one-shot question (non-interactive) |
-| `agents` | List available agents |
-| `serve` | Serve the interactive chat TUI over SSH |
-| `configure` | Configure server URL and API key |
-| `validate-config` | Validate configuration and test connection |
-| `install-skill` | Install the agent skill file into a project |
+| Command | Mode | Description |
+|---------|------|-------------|
+| `chat` | Interactive | Launch the interactive chat TUI (default with terminal) |
+| `ask` | Agent / Script | Ask a question and print the answer to stdout |
+| `agents` | Agent / Script | List available agents (ID, name, description) |
+| `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
+| `install-skill` | Agent / Script | Install the agent skill file into a project |
+| `experiments` | Agent / Script | List experimental features and their status |
+| `configure` | Interactive | Configure server URL and API key |
+| `serve` | Interactive | Serve the interactive chat TUI over SSH |
+
+## Agent / Non-Interactive Use
+
+When called without a TTY (e.g., by an AI agent or piped into another command), onyx-cli adjusts its behavior:
+
+- **No subcommand**: prints help and exits 0 (instead of launching the TUI)
+- **Results to stdout**, progress/errors to stderr
+- **No ANSI codes** or interactive prompts
+- **`ask` output truncated** to 4096 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+
+### Configuration
+
+Agents should use environment variables — no config file or interactive setup needed:
+
+```shell
+export ONYX_SERVER_URL="https://your-onyx-server.com"
+export ONYX_API_KEY="your-api-key"
+```
+
+### Exit Codes
+
+| Code | Name | When |
+|------|------|------|
+| 0 | Success | Command completed |
+| 1 | General | Unknown error |
+| 2 | BadRequest | Invalid arguments |
+| 3 | NotConfigured | Missing config/API key |
+| 4 | AuthFailure | Invalid API key (401/403) |
+| 5 | Unreachable | Server unreachable |
+| 6 | RateLimited | Server returned 429 |
+| 7 | Timeout | Request timed out |
+| 8 | ServerError | Server returned 5xx |
+| 9 | NotAvailable | Feature/endpoint doesn't exist |
+
+### Skill File
+
+Install the bundled SKILL.md so AI coding agents can discover the CLI:
+
+```shell
+onyx-cli install-skill
+onyx-cli install-skill --global
+```
 
 ## Slash Commands (in TUI)
 
