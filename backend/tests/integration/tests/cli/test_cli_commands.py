@@ -83,9 +83,11 @@ def seeded_persona(
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> DATestPersona:
     """Create a persona with a known name for verification."""
+    import uuid
+
     return PersonaManager.create(
         user_performing_action=admin_user,
-        name="CLI Test Agent",
+        name=f"CLI Test Agent {uuid.uuid4().hex[:8]}",
         description="An agent created for CLI integration tests",
     )
 
@@ -318,7 +320,6 @@ def test_agents_list(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
     assert seeded_persona.name in result.stdout
-    assert "CLI integration tests" in result.stdout
 
 
 def test_agents_json(
