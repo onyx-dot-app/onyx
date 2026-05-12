@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
@@ -750,36 +749,26 @@ class TestSeatLock:
     """Tests for the advisory lock in _check_seat_availability."""
 
     @patch("ee.onyx.server.scim.api.get_current_tenant_id", return_value="tenant_abc")
+    @patch("ee.onyx.server.scim.api.check_seat_availability")
+    @patch("ee.onyx.server.scim.api.acquire_seat_lock")
     def test_acquires_advisory_lock_before_checking(
         self,
+        mock_acquire: MagicMock,
+        mock_check: MagicMock,
         _mock_tenant: MagicMock,
         mock_dal: MagicMock,
     ) -> None:
         """The advisory lock must be acquired before the seat check runs."""
         call_order: list[str] = []
 
-        def fake_acquire(_session: Any, _tenant_id: Any) -> None:
-            call_order.append("lock")
-
+        mock_acquire.side_effect = lambda *_a, **_kw: call_order.append("lock")
         mock_result = MagicMock()
         mock_result.available = True
+        mock_check.side_effect = lambda *_a, **_kw: (
+            call_order.append("check") or mock_result
+        )
 
-        def fake_check(*_args: Any, **_kwargs: Any) -> Any:
-            call_order.append("check")
-            return mock_result
-
-        def fake_fetch(_module: str, name: str, _default: Any) -> Any:
-            if name == "acquire_seat_lock":
-                return fake_acquire
-            if name == "check_seat_availability":
-                return fake_check
-            raise AssertionError(f"unexpected fetch: {name}")
-
-        with patch(
-            "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop",
-            side_effect=fake_fetch,
-        ):
-            _check_seat_availability(mock_dal)
+        _check_seat_availability(mock_dal)
 
         assert call_order == ["lock", "check"]
 
@@ -787,23 +776,3 @@ class TestSeatLock:
         """Lock id must be deterministic and differ across tenants."""
         assert seat_lock_id_for_tenant("t1") == seat_lock_id_for_tenant("t1")
         assert seat_lock_id_for_tenant("t1") != seat_lock_id_for_tenant("t2")
-
-    def test_no_error_on_ce_noop_check(
-        self,
-        mock_dal: MagicMock,
-    ) -> None:
-        """On CE, ``fetch_ee_implementation_or_noop`` returns a callable
-        no-op that yields ``None``; ``_check_seat_availability`` must
-        treat the absence of a result as "no enforcement" rather than
-        crashing on attribute access."""
-
-        def fake_fetch(_module: str, _name: str, _default: Any) -> Any:
-            return lambda *_a, **_kw: None
-
-        with patch(
-            "ee.onyx.server.scim.api.fetch_ee_implementation_or_noop",
-            side_effect=fake_fetch,
-        ):
-            result = _check_seat_availability(mock_dal)
-
-        assert result is None

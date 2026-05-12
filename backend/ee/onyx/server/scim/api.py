@@ -25,6 +25,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.license import acquire_seat_lock
+from ee.onyx.db.license import check_seat_availability
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import ScimAuthError
 from ee.onyx.server.scim.auth import verify_scim_token
@@ -64,7 +66,6 @@ from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -212,35 +213,13 @@ def _apply_exclusions(
 def _check_seat_availability(dal: ScimDAL) -> str | None:
     """Return an error message if seat limit is reached, else None.
 
-    Acquires a transaction-scoped advisory lock so that concurrent
-    SCIM requests are serialized.  IdPs like Okta send provisioning
-    requests in parallel batches — without serialization the check is
-    vulnerable to a TOCTOU race where N concurrent requests each see
-    "seats available", all insert, and the tenant ends up over its
-    seat limit.
-
-    The lock is held until the caller's next COMMIT or ROLLBACK, which
-    means the seat count cannot change between the check here and the
-    subsequent INSERT/UPDATE.  Each call site in this module follows
-    the pattern: _check_seat_availability → write → dal.commit()
-    (which releases the lock for the next waiting request).
+    Holds a transaction-scoped advisory lock across the check + the
+    caller's write (committed via ``dal.commit()``) so that batched
+    Okta / Azure AD provisioning requests cannot each pass the check
+    and race past the seat cap.
     """
-    # ``fetch_ee_implementation_or_noop`` returns a callable in all build
-    # modes — the EE function in EE builds, a sync no-op (returning the
-    # passed default) in CE. On CE the no-op acquires no lock and the
-    # check returns ``None``, falling through to the ``not result`` branch.
-    acquire_lock_fn = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "acquire_seat_lock", None
-    )
-    check_fn = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "check_seat_availability", None
-    )
-
-    acquire_lock_fn(dal.session, get_current_tenant_id())
-    result = check_fn(dal.session, seats_needed=1)
-    if result is None:
-        # CE: noop check returns None (the default). No license, no limit.
-        return None
+    acquire_seat_lock(dal.session, get_current_tenant_id())
+    result = check_seat_availability(dal.session, seats_needed=1)
     if not result.available:
         return result.error_message or "Seat limit reached"
     return None
