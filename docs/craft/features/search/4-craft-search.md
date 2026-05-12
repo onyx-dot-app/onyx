@@ -107,8 +107,10 @@ Pure backend. No image changes, no session behavior changes. Adds the PAT column
 
 ```python
 # PersonalAccessToken — distinguish user-created from system-managed PATs
-pat_type: Mapped[str] = mapped_column(
-    String, nullable=False, server_default="user"
+pat_type: Mapped[PatType] = mapped_column(
+    Enum(PatType, native_enum=False),
+    nullable=False,
+    server_default=PatType.USER.value,
 )
 
 # Sandbox — store raw PAT encrypted for re-injection on pod provisioning
@@ -117,114 +119,102 @@ encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
 )
 ```
 
-`pat_type` has two values: `"user"` (default — all existing rows, human-created PATs) and `"craft"` (system-managed PATs for sandbox auth). The `server_default="user"` means existing rows are backfilled automatically. This replaces name-prefix-based filtering with an explicit type column.
+`PatType` is a `str` enum with `USER = "USER"` and `CRAFT = "CRAFT"` (name == value, consistent with `AccountType` and `ProcessingMode`). The `server_default` backfills existing rows automatically. This replaces name-prefix-based filtering with an explicit type column.
 
 `encrypted_pat` on `Sandbox` is nullable. Existing sandbox rows get the PAT on their first pod provisioning after deploy.
 
-**2. Add `_ensure_sandbox_pat` helper** (`server/features/build/session/manager.py`)
+**2. Add `ensure_sandbox_pat` helper** (`server/features/build/db/sandbox.py`)
 
-Called during pod provisioning (before `_create_sandbox_pod()`), not during session setup. Returns the raw token for injection as a pod-level env var.
+Called during pod provisioning (before `_create_sandbox_pod()`), not during session setup. Returns the raw token for injection as a pod-level env var. Lives in the build DB layer per the project convention that all DB operations go under `db/` directories.
 
 ```python
-def _ensure_sandbox_pat(
+def ensure_sandbox_pat(
     db_session: Session, sandbox: Sandbox, user: User
 ) -> str:
-    """Return a valid PAT for this sandbox, minting if needed.
+    """Return a valid PAT for this sandbox, minting if needed."""
+    now = datetime.datetime.now(datetime.timezone.utc)
 
-    Takes a row-level lock on the Sandbox to prevent concurrent
-    provisioning from racing to mint.
-    """
-    db_session.execute(
-        select(Sandbox)
-        .where(Sandbox.id == sandbox.id)
-        .with_for_update()
-    )
-    db_session.refresh(sandbox)
-
-    # Try to reuse existing token
-    if sandbox.encrypted_pat:
-        raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
-        hashed = hash_pat(raw_token)
-        pat = db_session.scalar(
-            select(PersonalAccessToken)
-            .where(PersonalAccessToken.hashed_token == hashed)
-            .where(PersonalAccessToken.expires_at > datetime.now(timezone.utc))
-        )
-        if pat:
-            return raw_token
-
-    # Revoke old craft PAT if one exists (handles expiry and stale references)
-    old_pat = db_session.scalar(
+    # Single query: find the user's active craft PAT
+    existing_craft_pat = db_session.scalar(
         select(PersonalAccessToken)
         .where(PersonalAccessToken.user_id == user.id)
-        .where(PersonalAccessToken.pat_type == "craft")
+        .where(PersonalAccessToken.pat_type == PatType.CRAFT)
         .where(
             (PersonalAccessToken.expires_at.is_(None))
-            | (PersonalAccessToken.expires_at > datetime.now(timezone.utc))
+            | (PersonalAccessToken.expires_at > now)
         )
     )
-    if old_pat:
-        revoke_pat(db_session, old_pat.id, user.id)
 
-    # Mint fresh PAT — create_pat() commits internally
-    pat_record, raw_token = create_pat(
+    # Reuse if the stored token matches the active PAT
+    if existing_craft_pat and sandbox.encrypted_pat:
+        raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
+        if hash_pat(raw_token) == existing_craft_pat.hashed_token:
+            return raw_token
+
+    # Revoke stale/orphaned craft PAT before minting
+    if existing_craft_pat:
+        revoke_pat(db_session, existing_craft_pat.id, user.id)
+
+    # Mint fresh PAT — create_pat() flushes (does not commit)
+    _pat_record, raw_token = create_pat(
         db_session=db_session,
         user_id=user.id,
         name=f"craft-{user.id}",
         expiration_days=30,
-        pat_type="craft",
+        pat_type=PatType.CRAFT,
     )
 
-    # Store encrypted token — if this commit fails, the PAT is orphaned
-    # but self-heals: next provisioning sees no encrypted_pat, finds the
-    # orphan by pat_type, revokes it, and mints a new one.
+    # Store encrypted token and commit atomically with the PAT
     sandbox.encrypted_pat = raw_token
     db_session.commit()
     return raw_token
 ```
 
-`create_pat()` needs a new optional `pat_type` parameter (default `"user"`). The lookup for stale PATs uses `pat_type == "craft"` instead of name matching — explicit and collision-free.
+**Transaction boundaries:** `create_pat()` and `revoke_pat()` both flush (not commit) — the caller owns the transaction. `ensure_sandbox_pat()` commits once at the end, persisting the PAT record and `encrypted_pat` atomically. This follows the project-wide convention that DB helpers flush and callers commit.
+
+**`PatType` enum:** `PatType.USER` and `PatType.CRAFT` with `name == value` (uppercase), consistent with `AccountType` and `ProcessingMode`. The `server_default` uses the enum name so SQLAlchemy's non-native enum lookup works correctly on backfilled rows.
 
 The raw token is passed to `_create_sandbox_pod()` which sets it as a container env var (`ONYX_PAT`) in the pod spec. All sessions in the pod inherit it automatically — no per-session token injection needed.
 
-**3. Hide Craft PATs from user's PAT list** (`server/pat/api.py`)
+**3. Hide Craft PATs from user's PAT list and guard deletion** (`server/pat/api.py`, `db/pat.py`)
+
+`list_user_pats()` gains an optional `pat_type` filter pushed to the SQL query. The `GET /user/pats` endpoint passes `pat_type=PatType.USER` so CRAFT PATs never leave the DB layer. The `DELETE /user/pats/{id}` endpoint passes `pat_type=PatType.USER` to `revoke_pat()` so users cannot revoke system-managed CRAFT PATs.
+
+`create_pat()` and `revoke_pat()` both flush (not commit) — callers own the transaction boundary. The PAT API endpoints commit explicitly after each operation.
+
+**4. Add `SANDBOX_API_SERVER_URL` config** (`server/features/build/configs.py`)
 
 ```python
-pats = [
-    pat for pat in list_user_pats(db_session, user.id)
-    if pat.pat_type == "user"
-]
+SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 ```
 
-**4. Add `SANDBOX_ONYX_SERVER_URL` config** (`server/features/build/configs.py`)
-
-```python
-SANDBOX_ONYX_SERVER_URL = os.environ.get(
-    "SANDBOX_ONYX_SERVER_URL",
-    "http://api-server.onyx.svc.cluster.local:8080/api",
-)
-```
+No default — must be set when `SANDBOX_BACKEND=kubernetes`. Validated at provisioning time alongside `onyx_pat`.
 
 #### PR 1 file changes
 
 | Action | File |
 |--------|------|
 | New | `alembic/versions/<new>_add_pat_type_and_encrypted_pat.py` |
+| New | `db/enums.py` — `PatType` enum (`USER`, `CRAFT`) |
 | Modify | `db/models.py` — add `pat_type` to `PersonalAccessToken`, add `encrypted_pat` to `Sandbox` |
-| Modify | `db/pat.py` — add `pat_type` parameter to `create_pat()` |
-| Modify | `server/features/build/session/manager.py` — add `_ensure_sandbox_pat()`, call during pod provisioning |
-| Modify | `server/pat/api.py` — filter by `pat_type == "user"` |
-| Modify | `server/features/build/configs.py` — add `SANDBOX_ONYX_SERVER_URL` |
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — accept `api_key` in `_create_sandbox_pod()`, set `ONYX_PAT` + `ONYX_SERVER_URL` as container env vars |
+| Modify | `db/pat.py` — add `pat_type` param to `create_pat()`, `list_user_pats()`, `revoke_pat()`; change both to flush instead of commit |
+| Modify | `server/features/build/db/sandbox.py` — add `ensure_sandbox_pat()` |
+| Modify | `server/features/build/session/manager.py` — add `_provision_sandbox()`, call during pod provisioning |
+| Modify | `server/pat/api.py` — filter by `PatType.USER` at DB layer, guard DELETE, migrate to `OnyxError`, add explicit commits |
+| Modify | `server/features/build/configs.py` — add `SANDBOX_API_SERVER_URL` |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — accept `onyx_pat` in `_create_sandbox_pod()`, set `ONYX_PAT` + `ONYX_SERVER_URL` as container env vars, validate both at provisioning |
+| Modify | `sandbox/base.py` — add `onyx_pat` parameter to `provision()` |
+| Modify | `sandbox/local/local_sandbox_manager.py` — add `onyx_pat` parameter (unused) |
 
 #### PR 1 tests
 
 **File:** `tests/external_dependency_unit/craft/test_sandbox_pat.py`
 
-1. **Provisioning.** Create Sandbox, call `_ensure_sandbox_pat()`, verify PAT minted with `pat_type="craft"` and `encrypted_pat` set on Sandbox row.
+1. **Provisioning.** Create Sandbox, call `ensure_sandbox_pat()`, verify PAT minted with `PatType.CRAFT` and `encrypted_pat` set on Sandbox row.
 2. **Reuse.** Call twice, verify same raw token returned (no re-mint).
-3. **Expired token.** Create PAT with already-passed expiry, call `_ensure_sandbox_pat()`, verify new PAT minted and `encrypted_pat` updated.
-4. **Hidden from user list.** Verify `GET /user/pats` does not return PATs with `pat_type="craft"`.
+3. **Expired token.** Create PAT with already-passed expiry, call `ensure_sandbox_pat()`, verify new PAT minted and `encrypted_pat` updated.
+4. **Hidden from user list.** Verify `list_user_pats(pat_type=PatType.USER)` does not return CRAFT PATs.
+5. **Default type.** Verify `create_pat()` defaults to `PatType.USER`.
 
 ---
 
