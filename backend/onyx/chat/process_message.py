@@ -607,6 +607,7 @@ def build_chat_turn(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
+    bypass_persona_access_check: bool = False,
     # Slack context for federated Slack search
     slack_context: SlackContext | None = None,
     # Additional context to include in the chat history, e.g. Slack threads where the
@@ -645,6 +646,7 @@ def build_chat_turn(
             chat_session_request=new_msg_req.chat_session_info,
             user=user,
             db_session=db_session,
+            bypass_persona_access_check=bypass_persona_access_check,
         )
         yield CreateChatSessionID(chat_session_id=chat_session.id)
         chat_session = get_chat_session_by_id(
@@ -1398,6 +1400,7 @@ def _stream_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
     bypass_docset_ownership_check: bool = False,
+    bypass_persona_access_check: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1428,6 +1431,12 @@ def _stream_chat_turn(
             in ``build_access_filters_for_user`` intact. Used by Slack channel
             flows where the document sets come from the admin-configured channel
             persona rather than the (possibly anonymous) caller.
+        bypass_persona_access_check: If ``True``, the per-user persona access
+            check on chat-session creation is skipped. Used by Slack channel
+            flows where the persona is selected by the admin in the channel
+            config (``SlackChannelConfig``), so the caller — including the
+            anonymous user for non-DM messages — is already implicitly
+            authorized to use it.
         additional_context: Extra context prepended to the LLM's chat history, not
             stored in the DB (used for Slack thread hydration).
         slack_context: Federated Slack search context passed through to the search tool.
@@ -1486,6 +1495,7 @@ def _stream_chat_turn(
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
                     bypass_acl=bypass_acl,
+                    bypass_persona_access_check=bypass_persona_access_check,
                     slack_context=slack_context,
                     additional_context=additional_context,
                 )
@@ -1601,6 +1611,7 @@ def handle_stream_message_objects(
     mcp_headers: dict[str, str] | None = None,
     bypass_acl: bool = False,
     bypass_docset_ownership_check: bool = False,
+    bypass_persona_access_check: bool = False,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
     external_state_container: ChatStateContainer | None = None,
@@ -1615,6 +1626,7 @@ def handle_stream_message_objects(
         mcp_headers=mcp_headers,
         bypass_acl=bypass_acl,
         bypass_docset_ownership_check=bypass_docset_ownership_check,
+        bypass_persona_access_check=bypass_persona_access_check,
         additional_context=additional_context,
         slack_context=slack_context,
         external_state_container=external_state_container,

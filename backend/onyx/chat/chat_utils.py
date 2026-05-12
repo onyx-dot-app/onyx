@@ -115,6 +115,7 @@ def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
     user: User,
     db_session: Session,
+    bypass_persona_access_check: bool = False,
 ) -> ChatSession:
     """Create a chat session from a ChatSessionCreationRequest.
 
@@ -141,7 +142,7 @@ def create_chat_session_from_request(
             raise ValueError("User does not have access to project")
 
     persona_id = chat_session_request.persona_id
-    if persona_id != DEFAULT_PERSONA_ID:
+    if persona_id != DEFAULT_PERSONA_ID and not bypass_persona_access_check:
         if not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
