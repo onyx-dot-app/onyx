@@ -216,6 +216,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.GRANOLA: ConnectorMapping(
+        module_path="onyx.connectors.granola.connector",
+        class_name="GranolaConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",

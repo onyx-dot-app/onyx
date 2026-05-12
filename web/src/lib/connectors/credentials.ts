@@ -248,6 +248,10 @@ export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
+export interface GranolaCredentialJson {
+  granola_api_key: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -445,6 +449,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   fireflies: {
     fireflies_api_key: "",
   } as FirefliesCredentialJson,
+  granola: {
+    granola_api_key: "",
+  } as GranolaCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -639,6 +646,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Fireflies
   fireflies_api_key: "Fireflies API Key",
+
+  // Granola
+  granola_api_key: "Granola API Key",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",
