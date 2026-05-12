@@ -19,6 +19,7 @@ from onyx.db.external_app import create_external_app__no_commit
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import update_external_app__no_commit
+from onyx.db.external_app import upsert_external_app_user_credential__no_commit
 from onyx.db.models import ExternalApp
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -125,10 +126,17 @@ def upsert_user_credentials(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Set or replace the calling user's credentials for the given external app."""
-    raise OnyxError(
-        OnyxErrorCode.NOT_IMPLEMENTED, "upsert_user_credentials not implemented"
+    """Set or replace the calling user's credentials for the given external app.
+
+    Returns 404 if no app with `external_app_id` exists.
+    """
+    upsert_external_app_user_credential__no_commit(
+        db_session=db_session,
+        external_app_id=external_app_id,
+        user_id=user.id,
+        user_credentials=request.user_credentials,
     )
+    db_session.commit()
 
 
 @router.get("/apps")
