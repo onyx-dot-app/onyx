@@ -506,9 +506,10 @@ def test_search_source_filter(
     phrase = "cli-search-source-filter-unique"
     DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
 
+    # TODO(@wenxi-onyx): Make the integration test manager allow source types during seeding
     result = run_cli(
         cli_binary,
-        ["search", "--raw", "--source", DocumentSource.FILE.value, phrase],
+        ["search", "--raw", "--source", DocumentSource.NOT_APPLICABLE.value, phrase],
         pat=pat_token,
         timeout=120,
     )
@@ -517,7 +518,7 @@ def test_search_source_filter(
     assert len(data["results"]) > 0
     # All results should match the requested source
     for r in data["results"]:
-        assert r["source_type"] == DocumentSource.FILE.value
+        assert r["source_type"] == DocumentSource.NOT_APPLICABLE.value
 
 
 def test_search_agent_id(
