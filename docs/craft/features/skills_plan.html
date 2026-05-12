@@ -2713,6 +2713,72 @@ RUN mkdir -p /skills</code></pre>
       reuse it.
     </p>
 
+    <h4>Event-driven push on admin mutations</h4>
+    <p>
+      Polling alone would leave a 5-minute window where an admin change isn't
+      yet visible. We close that window by pushing on every skill mutation.
+    </p>
+
+    <p><strong>Flow:</strong></p>
+    <pre><code>Admin endpoint (POST/PUT/PATCH/DELETE)
+    └─ on DB commit success, enqueue Celery task:
+       propagate_skill_change(tenant_id)
+            └─ enumerate active sandbox pods for the tenant via K8s label selector
+                └─ for each pod, enqueue:
+                   refresh_pod_skills(pod_name)  [parallel via Celery workers]
+                       └─ kubectl exec &lt;pod&gt; -- /usr/local/bin/refresh-skills</code></pre>
+
+    <pre><code># backend/onyx/background/celery/tasks/skills/tasks.py
+
+@shared_task(name="propagate_skill_change", expires=60)
+def propagate_skill_change(tenant_id: str) -&gt; None:
+    """Fan out a skill-refresh push to every active sandbox pod in the tenant."""
+    pod_names = _list_active_sandbox_pods_for_tenant(tenant_id)
+    for pod_name in pod_names:
+        celery_app.send_task("refresh_pod_skills", args=[pod_name], expires=60)
+
+@shared_task(name="refresh_pod_skills", expires=60)
+def refresh_pod_skills(pod_name: str) -&gt; None:
+    """kubectl exec the refresh script. Failures are logged and swallowed —
+    the in-pod sleep loop catches missed events within its 5-min interval."""
+    try:
+        k8s_client.exec_in_pod(
+            pod_name=pod_name,
+            command=["/usr/local/bin/refresh-skills"],
+            container="sandbox",
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning("skill push failed pod=%s: %s", pod_name, e)</code></pre>
+
+    <p>
+      Endpoint hooks — five touch points in
+      <span class="file-ref">backend/onyx/server/features/skills/api.py</span>:
+      after every commit on POST custom, PATCH custom, PUT bundle, PUT grants,
+      DELETE custom, call
+      <code
+        >celery_app.send_task("propagate_skill_change", args=[str(tenant_id)],
+        expires=60)</code
+      >.
+    </p>
+
+    <p>
+      <strong>Pod labels.</strong> Sandbox provisioning sets
+      <code>onyx.app/tenant-id</code> alongside the existing
+      <code>onyx.app/sandbox-id</code> at
+      <span class="file-ref">kubernetes_sandbox_manager.py:619</span>.
+      Single-line addition.
+    </p>
+
+    <p>
+      <strong>Scope: tenant-wide push.</strong> Push to every active pod in the
+      tenant, regardless of who currently has access. Pods whose user doesn't
+      have access just fetch a tarball that didn't change. Simpler than
+      computing the "affected users" set on the api_server side; avoids race
+      conditions where access changes between the access query and the push;
+      kubectl-exec of a no-op script is cheap (~200ms).
+    </p>
+
     <div class="callout">
       <span class="callout-label"
         >Why <code>.agents/skills/</code>, not
@@ -2741,9 +2807,19 @@ RUN mkdir -p /skills</code></pre>
         rendering still works because one pod = one user.
       </li>
       <li>
-        <strong>5-minute polling, not pub/sub.</strong> Sub-second propagation
-        isn't a V1 need. Upgrade to event-driven push is a half-day if latency
-        complaints arrive.
+        <strong>Push on admin mutations + polling safety net.</strong>
+        Event-driven push on every skill mutation (typical propagation ~1-3
+        sec). Polling sleep loop at 5-min cadence is the safety net for missed
+        events (broker blip, transient kubectl-exec failure, pod restart
+        mid-push). Push is the primary path; polling is the floor.
+      </li>
+      <li>
+        <strong>Why kubectl exec push instead of Redis pub/sub.</strong> No new
+        long-running pod-side components. Reuses the
+        <code>/usr/local/bin/refresh-skills</code> script we already need.
+        Failures are recoverable via polling. Pub/sub adds reconnect handling +
+        a persistent subscriber for marginal latency improvement over
+        kubectl-exec's ~200ms.
       </li>
       <li>
         <strong>Materializer runs on api_server, not in the pod.</strong> Pod
@@ -2777,11 +2853,10 @@ RUN mkdir -p /skills</code></pre>
         bind-mounts a host path that the materializer writes to.
       </li>
       <li>
-        <strong>Manual refresh escape hatch.</strong> Admin UI can have an
-        "Apply changes now" button that posts to
-        <code>/api/admin/skills/refresh-now</code> → api_server
-        <code>kubectl exec</code>s <code>refresh-skills</code> into each
-        affected pod. Optional — V1.5 if not urgent.
+        <strong>No need for a manual refresh button.</strong> Earlier drafts
+        proposed an admin "Apply changes now" button for urgent cases. Push on
+        every mutation makes this unnecessary — every mutation IS an apply-now
+        event.
       </li>
     </ul>
 
@@ -2838,6 +2913,50 @@ RUN mkdir -p /skills</code></pre>
       </li>
       <li>
         Update existing integration tests that reference the old skills path.
+      </li>
+      <li>
+        <strong>Event-driven push (§9.7):</strong>
+        <ul>
+          <li>
+            Add <code>onyx.app/tenant-id=&lt;id&gt;</code> label to sandbox pods
+            at provisioning (<span class="file-ref"
+              >kubernetes_sandbox_manager.py:619</span
+            >).
+          </li>
+          <li>
+            Implement <code>propagate_skill_change(tenant_id)</code> Celery task
+            in
+            <span class="file-ref"
+              >backend/onyx/background/celery/tasks/skills/tasks.py</span
+            >
+            with <code>expires=60</code>.
+          </li>
+          <li>
+            Implement <code>refresh_pod_skills(pod_name)</code> Celery task with
+            <code>expires=60</code>. Swallow exec errors via
+            <code>logger.warning</code> — polling is safety net.
+          </li>
+          <li>
+            Implement
+            <code>_list_active_sandbox_pods_for_tenant(tenant_id)</code> using
+            k8s label selector on <code>onyx.app/tenant-id=&lt;id&gt;</code> +
+            phase=Running.
+          </li>
+          <li>
+            Hook
+            <code>celery_app.send_task("propagate_skill_change", ...)</code> at
+            the 5 mutation endpoints (POST custom, PATCH custom, PUT bundle, PUT
+            grants, DELETE custom).
+          </li>
+          <li>
+            Integration test: admin upload → assert push enqueued → assert pod's
+            <code>/skills/</code> reflects new content within ~3 sec.
+          </li>
+          <li>
+            Failure test: simulate kubectl-exec failure → assert polling catches
+            the change on next tick.
+          </li>
+        </ul>
       </li>
     </ul>
 
@@ -3146,10 +3265,10 @@ RUN mkdir -p /skills</code></pre>
     <div class="subhead">Context</div>
     <p>
       Earlier drafts split propagation into two cadences: live
-      <code>/skills/</code> content (≤5 min via the pod refresh loop) and
-      per-conversation AGENTS.md inventory (regenerated only at session
-      boundaries). Empirical testing of OpenCode's skill discovery (see §10)
-      showed the second tier is unnecessary:
+      <code>/skills/</code> content (~1-3 sec typical via push + ≤5 min safety
+      net via polling) and per-conversation AGENTS.md inventory (regenerated
+      only at session boundaries). Empirical testing of OpenCode's skill
+      discovery (see §10) showed the second tier is unnecessary:
       <strong
         >OpenCode rebuilds its native <code>skill</code> tool description from
         <code>.agents/skills/</code> on every turn</strong
@@ -3177,8 +3296,11 @@ RUN mkdir -p /skills</code></pre>
             <strong><code>/skills/</code> content</strong> (SKILL.md + scripts +
             supporting files)
           </td>
-          <td>✅ ≤5 min</td>
-          <td>Pod refresh loop pulls latest tarball from api_server (§9)</td>
+          <td>✅ ~1-3 sec typical; ≤5 min worst case</td>
+          <td>
+            Event-driven push from api_server on every admin mutation (§9.7),
+            with a 5-min polling sleep loop as safety net (§9.3)
+          </td>
         </tr>
         <tr>
           <td><strong>Agent inventory awareness</strong></td>
@@ -3201,10 +3323,12 @@ RUN mkdir -p /skills</code></pre>
     </table>
 
     <p>
-      End-to-end: admin uploads a new skill → ≤5 min for
-      <code>/skills/</code> to refresh → next turn in any active session sees
-      the new skill in OpenCode's <code>skill</code> tool description → agent
-      can invoke immediately.
+      End-to-end: admin uploads a new skill → Celery
+      <code>propagate_skill_change</code> fans out kubectl-exec refresh-skills
+      to every active pod in the tenant (~1-3 sec) → next turn in any active
+      session sees the new skill in OpenCode's <code>skill</code> tool
+      description → agent can invoke immediately. Polling at 5 min is the safety
+      net for missed push events.
     </p>
 
     <h4>Behavioral implications</h4>
@@ -3266,7 +3390,7 @@ RUN mkdir -p /skills</code></pre>
       <span class="callout-label">Required UX surfacing</span>
       Admin mutation modals say:
       <em
-        >"This change takes effect within a few minutes. Conversations currently
+        >"This change takes effect within a few seconds. Conversations currently
         in progress will see the new state on their next turn."</em
       >
       For deletes, additionally:
@@ -3292,9 +3416,10 @@ RUN mkdir -p /skills</code></pre>
         happening at the OpenCode layer.
       </li>
       <li>
-        <strong>5-minute propagation latency.</strong> Matches §9's polling
-        cadence. For urgent cases, the optional admin "Apply changes now" button
-        (§9) short-circuits.
+        <strong>Typical propagation: 1-3 sec via push.</strong> The 5-min
+        polling cadence is the safety net for missed events, not the primary
+        path. No manual "Apply changes now" button needed — every admin mutation
+        IS an apply-now event.
       </li>
       <li>
         <strong>No skill-immutability invariant.</strong> Earlier drafts had
@@ -3342,13 +3467,14 @@ RUN mkdir -p /skills</code></pre>
         <strong>Add</strong> an invariant docstring in
         <span class="file-ref">backend/onyx/skills/__init__.py</span>:
         <code
-          >"Skill content and inventory are both live (≤5 min propagation via
-          the pod refresh loop + OpenCode per-turn rescan)."</code
+          >"Skill content and inventory are both live (~1-3 sec typical via
+          event-driven push; ≤5 min safety net via polling; OpenCode rescans per
+          turn)."</code
         >
       </li>
       <li>
         Update admin UI mutation modals (§13) to the "takes effect within a few
-        minutes" copy.
+        seconds" copy.
       </li>
       <li>
         Confirm snapshot tar (<span class="file-ref">snapshot_manager.py</span>)
@@ -3363,9 +3489,9 @@ RUN mkdir -p /skills</code></pre>
       </li>
       <li>
         Integration test <code>test_live_skill_propagation.py</code>: upload
-        during a running session → ≤5 min → readable inside
-        <code>/skills/</code> AND the agent's <code>skill</code> tool lists it
-        on the next turn.
+        during a running session → push delivers within seconds → readable
+        inside <code>/skills/</code> AND the agent's <code>skill</code> tool
+        lists it on the next turn.
       </li>
       <li>
         Integration test <code>test_snapshot_excludes_skills.py</code>: pause →
@@ -3772,7 +3898,7 @@ RUN mkdir -p /skills</code></pre>
 
             <div class="callout warn" style="margin-top: 18px; font-size: 12px">
               <span class="callout-label">Note</span>
-              Changes to access take effect within a few minutes. Conversations
+              Changes to access take effect within a few seconds. Conversations
               currently in progress will reflect the new access on their next
               turn.
             </div>
@@ -3788,7 +3914,7 @@ RUN mkdir -p /skills</code></pre>
     </div>
     <p class="mockup-caption">
       Grants editor — shared component reused inline in the upload modal and
-      standalone here. Includes the "takes effect within a few minutes" callout.
+      standalone here. Includes the "takes effect within a few seconds" callout.
     </p>
 
     <h4>Replace bundle modal</h4>
@@ -3860,7 +3986,7 @@ RUN mkdir -p /skills</code></pre>
 
             <div class="callout warn" style="margin-top: 18px; font-size: 12px">
               <span class="callout-label">Heads up</span>
-              The new bundle takes effect within a few minutes. Conversations in
+              The new bundle takes effect within a few seconds. Conversations in
               progress see the updated content on their next file read; the
               agent's inventory list refreshes at the next session start or
               resume.
@@ -3877,7 +4003,7 @@ RUN mkdir -p /skills</code></pre>
     </div>
     <p class="mockup-caption">
       Replace-bundle modal — drag-drop new zip, current bundle metadata shown
-      for reference, the "takes effect within a few minutes" callout is
+      for reference, the "takes effect within a few seconds" callout is
       mandatory copy.
     </p>
 
@@ -4186,7 +4312,7 @@ RUN mkdir -p /skills</code></pre>
             </p>
             <div class="callout warn" style="font-size: 12px; margin: 0 0 10px">
               <span class="callout-label"
-                >Takes effect within a few minutes</span
+                >Takes effect within a few seconds</span
               >
               Sessions currently in progress will see the deletion on their next
               turn (≤ 5 min). Any agents that have already read this skill's
@@ -4617,7 +4743,7 @@ RUN mkdir -p /skills</code></pre>
       <li>
         <span class="file-ref">EditSkillModal.tsx</span>,
         <span class="file-ref">ReplaceBundleModal.tsx</span> (with "takes effect
-        within a few minutes" copy per §12),
+        within a few seconds" copy per §12),
         <span class="file-ref">VisibilityPicker.tsx</span> (shared).
       </li>
       <li>Delete confirmation modal with standard copy.</li>
