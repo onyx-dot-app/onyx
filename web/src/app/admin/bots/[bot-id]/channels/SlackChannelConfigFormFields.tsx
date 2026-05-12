@@ -544,11 +544,18 @@ export function SlackChannelConfigFormFields({
                 name="respond_member_group_list"
                 label="(Optional) Respond to Certain Users / Groups"
                 subtext={
-                  "If specified, OnyxBot responses will only " +
-                  "be visible to the members or groups in this list."
+                  "If specified, only these users / groups can invoke " +
+                  "OnyxBot in this channel, and responses are visible only " +
+                  "to them."
                 }
                 values={values}
                 placeholder="User email or user group name..."
+                disabled={values.is_ephemeral}
+                tooltip={
+                  values.is_ephemeral
+                    ? "Disabled while 'Respond to user in a private (ephemeral) message' is on — ephemeral responses target a single user only."
+                    : undefined
+                }
               />
 
               <StandardAnswerCategoryDropdownField
