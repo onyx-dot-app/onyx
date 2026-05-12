@@ -383,6 +383,31 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        """Write a text file to the sandbox workspace root.
+
+        Creates parent directories as needed. Sessions symlink to the
+        sandbox-root skills directory, so writes here are visible to
+        all sessions.
+
+        Args:
+            sandbox_id: The sandbox ID
+            path: Relative path (e.g., "skills/company-search/SKILL.md").
+                Must not contain ".." or start with "/".
+            content: UTF-8 text content to write
+
+        Raises:
+            RuntimeError: If write fails
+            ValueError: If path is invalid
+        """
+        ...
+
+    @abstractmethod
     def get_upload_stats(
         self,
         sandbox_id: UUID,

@@ -503,6 +503,8 @@ def restore_session(
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
+
+                session_manager.push_dynamic_skills(sandbox.id, user.id)
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",

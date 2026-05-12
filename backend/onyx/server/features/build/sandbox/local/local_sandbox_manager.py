@@ -9,6 +9,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 
 import mimetypes
 import re
+import shutil
 import subprocess
 import threading
 from collections.abc import Generator
@@ -23,6 +24,7 @@ from onyx.server.features.build.configs import DEMO_DATA_PATH
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
@@ -74,14 +76,13 @@ class LocalSandboxManager(SandboxManager):
         """Initialize managers."""
         # Paths for templates
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "sandbox" / "kubernetes" / "docker" / "skills"
         agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
             outputs_template_path=Path(OUTPUTS_TEMPLATE_PATH),
             venv_template_path=Path(VENV_TEMPLATE_PATH),
-            skills_path=skills_path,
+            skills_path=Path(SKILLS_TEMPLATE_PATH),
             agent_instructions_template_path=agent_instructions_template_path,
         )
         self._process_manager = ProcessManager()
@@ -317,6 +318,14 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug("Sandbox directory created at %s", sandbox_path)
 
+        # Copy skills to sandbox root so write_sandbox_file + session symlinks work
+        sandbox_skills = sandbox_path / "skills"
+        if (
+            self._directory_manager.skills_source_path.exists()
+            and not sandbox_skills.exists()
+        ):
+            shutil.copytree(self._directory_manager.skills_source_path, sandbox_skills)
+
         logger.info(
             "Provisioned sandbox %s at %s (no sessions yet)", sandbox_id, sandbox_path
         )
@@ -509,7 +518,9 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Outputs directory ready")
 
             logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(session_path)
+            self._directory_manager.setup_skills(
+                session_path, skills_target=sandbox_path / "skills"
+            )
             logger.debug("Skills ready")
 
             # Setup attachments directory
@@ -1274,6 +1285,21 @@ class LocalSandboxManager(SandboxManager):
         logger.info("Deleted file from session %s: %s", session_id, path)
 
         return True
+
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        if ".." in path:
+            raise ValueError(f"Invalid sandbox file path: {path}")
+        sandbox_path = self._get_sandbox_path(sandbox_id)
+        target = sandbox_path / path
+        if not target.resolve().is_relative_to(sandbox_path.resolve()):
+            raise ValueError(f"Invalid sandbox file path: {path}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
 
     def get_upload_stats(
         self,

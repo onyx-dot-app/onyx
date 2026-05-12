@@ -52,6 +52,7 @@ from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -78,6 +79,9 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
     SSEKeepalive,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.skills.rendering import (
+    render_company_search_skill,
+)
 from onyx.server.features.build.sandbox.tasks.tasks import (
     _get_disabled_user_library_paths,
 )
@@ -382,6 +386,24 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
+    def push_dynamic_skills(self, sandbox_id: UUID, user_id: UUID) -> None:
+        """Render dynamic skill templates and push them to the sandbox."""
+        try:
+            user = fetch_user_by_id(self._db_session, user_id)
+            if not user:
+                logger.warning("Cannot push dynamic skills: user %s not found", user_id)
+                return
+            skill_file = render_company_search_skill(
+                self._db_session, user, Path(SKILLS_TEMPLATE_PATH)
+            )
+            self._sandbox_manager.write_sandbox_file(
+                sandbox_id, skill_file.path, skill_file.content
+            )
+        except Exception:
+            logger.warning(
+                "Failed to push dynamic skills to sandbox %s", sandbox_id, exc_info=True
+            )
+
     def _provision_sandbox(
         self,
         sandbox: Sandbox,
@@ -603,6 +625,7 @@ class SessionManager:
             use_demo_data=demo_data_enabled,
             excluded_user_library_paths=excluded_user_library_paths,
         )
+        self.push_dynamic_skills(sandbox.id, user_id)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -669,6 +692,7 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
+                    self.push_dynamic_skills(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,

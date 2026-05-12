@@ -78,7 +78,7 @@ Pods don't live long enough for the PAT to expire mid-session — the 1-hour idl
 
 - **One pod per user**, shared across sessions. Per-session workspaces at `/workspace/sessions/{session_id}/`.
 - **File sync**: S3 `file-sync` sidecar (`peakcom/s5cmd:v2.3.0`) syncs documents to `/workspace/files/`. Main container mounts it read-only. Sessions get a `files/` symlink → `/workspace/files/` (or → `/workspace/demo_data` in demo mode). A standalone `_build_filtered_symlink_script()` helper produces filtered symlinks when `excluded_user_library_paths` is set. `generate_agents_md.py` scans `files/` to populate `{{KNOWLEDGE_SOURCES_SECTION}}` in AGENTS.md. The sidecar stays alive for incremental syncs triggered by `sync_files()`.
-- **Skills**: Baked into image at `/workspace/skills/` (two skills: `image-generation`, `pptx`). **Kubernetes** symlinks skills into sessions (`ln -sf /workspace/skills {session_path}/.opencode/skills`). **Local** already copies them via `DirectoryManager.setup_skills()` using `shutil.copytree()`.
+- **Skills**: Baked into image at `/workspace/skills/` (two skills: `image-generation`, `pptx`). **Kubernetes** symlinks skills into sessions (`ln -sf /workspace/skills {session_path}/.opencode/skills`). **Local** already symlinks them via `DirectoryManager.setup_skills()` (`session/.opencode/skills` -> `sandbox-root/skills/`).
 - **No sandbox auth**: `Sandbox` has no token. The sandbox cannot call the Onyx API.
 - **AGENTS.md**: References `files/`, JSON documents, `find`/`grep`. Uses `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder — filled by `generate_agents_md.py` at container runtime (K8s) or by `generate_agent_instructions()` with a `files_path` argument (local).
 - **OpenCode config**: Whitelists `/workspace/files` and `/workspace/demo_data` as external directories.
@@ -220,7 +220,7 @@ No default — must be set when `SANDBOX_BACKEND=kubernetes`. Validated at provi
 
 ### PR 2: Search Tool Wiring
 
-Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage.
+Purely additive (~160 lines). Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage. Old file-based knowledge code (dead after the AGENTS.template.md rewrite) is left in place and cleaned up in PR 2c.
 
 **5. Add onyx-cli to Dockerfile** (`sandbox/kubernetes/docker/Dockerfile`)
 
@@ -232,6 +232,8 @@ RUN chmod +x /usr/local/bin/onyx-cli
 ```
 
 **6. Add company-search skill template** (`sandbox/kubernetes/docker/skills/company-search/SKILL.md.template`)
+
+Baked into the Docker image at `/workspace/skills/company-search/SKILL.md.template`. After `setup_session_workspace()` creates symlinks from sessions into `/workspace/skills/`, `write_sandbox_file()` overwrites the pod-level `skills/company-search/SKILL.md` with rendered content. All session symlinks point there automatically — no change from symlink to copy.
 
 ```markdown
 ---
@@ -260,9 +262,6 @@ assume it exists.
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
 | `--limit` | Maximum number of results | `--limit 5` |
-| `--agent-id` | Scope search to an agent's configured filters | `--agent-id 5` |
-| `--no-query-expansion` | Skip LLM query expansion (faster, less comprehensive) | `--no-query-expansion` |
-| `--raw` | Output full API response with scores, links, and document IDs | `--raw` |
 
 ## Output
 
@@ -270,33 +269,25 @@ Stdout is JSON with a top-level `results` array. Each result has a `document`
 field (the citation ID), plus `title`, `content`, `source_type`, and other
 metadata. Cite results by their `document` number when referencing them in your
 response.
-
-When stdout is not a TTY, output is truncated to 4096 bytes with the full
-response saved to a temp file (path printed at end of output).
 ```
 
-**7. Add `build_available_sources_section`** (`sandbox/util/agent_instructions.py`)
+**7. Add `build_available_sources_section` and `render_company_search_skill`**
 
-New function that queries `get_connector_credential_pairs_for_user(db_session, user, get_editable=False)`, groups by source type, and formats each as `- \`{source_name}\` — {description}`. Descriptions from a `SOURCE_DESCRIPTIONS` dict with fallback to source name. For Slack, Linear, and GitHub, appends sub-scope examples from `connector_specific_config`, capped at 5.
+Both functions live in `sandbox/skills/rendering.py`:
 
-**8. Wire PAT into pod provisioning, skills + validation into session setup** (`session/manager.py`, `kubernetes_sandbox_manager.py`)
+`build_available_sources_section(db_session, user)`: Queries `get_connector_credential_pairs_for_user()`, deduplicates by source type, and formats each as `- \`{source_name}\` — {description}`. Descriptions reuse the existing `DocumentSourceDescription` dict from `configs/constants.py` (with improved wording) — no separate `SOURCE_DESCRIPTIONS` duplication.
 
-In `SessionManager`, during pod provisioning (before `_create_sandbox_pod()`):
-- Call `_ensure_sandbox_pat()` to get `raw_token`
-- Pass `raw_token` to `_create_sandbox_pod()` which sets `ONYX_PAT` and `ONYX_SERVER_URL` as container env vars in the pod spec
+`render_company_search_skill(db_session, user, skills_dir) -> RenderedSkillFile`: Takes the skills template directory as a parameter (via `SKILLS_TEMPLATE_PATH` config constant). Returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing.
 
-In `SessionManager`, before calling `setup_session_workspace()`:
-- Call `build_available_sources_section()` to get source list
-- Render SKILL.md template with source list
-- Pass rendered SKILL.md to `setup_session_workspace()`
+**8. Add `write_sandbox_file` and `push_dynamic_skills`**
 
-In `setup_session_workspace()` and `restore_snapshot()`:
-- Copy skills (instead of symlink) and write rendered company-search SKILL.md
-- Run `onyx-cli validate-config` — non-zero exit aborts with `OnyxError` (uses pod-level `ONYX_PAT` env var, already set)
+`write_sandbox_file(sandbox_id, path, content)` — new abstract method on `SandboxManager` (`sandbox/base.py`). Writes a file to `/workspace/{path}` on the pod (or sandbox root for local). Used to push rendered dynamic skill content. NOT per-session — writes to the pod-level directory. Existing symlinks make it visible to all sessions.
+
+`push_dynamic_skills(sandbox_id, user_id)` — on `SessionManager` (`session/manager.py`). Resolves the user from UUID, calls `render_company_search_skill()` then calls `write_sandbox_file()` with the result. Catches all exceptions and logs a warning so skill rendering failures don't block session setup. Called after `setup_session_workspace()` in create, reuse, and restore paths. No skill-specific parameters on any manager method — the rendering is fully decoupled from the manager interface.
 
 **9. Rewrite AGENTS.template.md** (`server/features/build/AGENTS.template.md`)
 
-Delete the "Knowledge Sources" section, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder, the JSON document format note, and all `files/` references. Replace "Step 1: Information Retrieval":
+Remove `files/` references and `{{KNOWLEDGE_SOURCES_SECTION}}`. Point the agent at `onyx-cli search` and the company-search skill. Old code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `generate_agents_md.py`, etc.) is NOT removed in this PR — it becomes dead code, cleaned up in PR 2c.
 
 ```markdown
 ### Step 1: Information Retrieval
@@ -308,30 +299,27 @@ Delete the "Knowledge Sources" section, `{{KNOWLEDGE_SOURCES_SECTION}}` placehol
 2. Read the `company-search` SKILL.md for available sources and flags.
 3. **Iterate** — run additional searches to refine. Use `--source` to narrow by
    connector and `--days` for recent content.
-4. **User library files** (spreadsheets, documents, etc. uploaded by the user)
-   are available at `/workspace/user_library/`. Open them directly with Python
-   libraries when the task requires working with the raw file.
-5. **Summarize** key findings before proceeding to output generation.
+4. **Summarize** key findings before proceeding to output generation.
 ```
-
-Keep everything else. The `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder removal means `generate_agents_md.py` (still in the image) will no-op on its `str.replace()` call — safe, cleaned up in PR 3.
-
-**10. Local development** (`sandbox/local/local_sandbox_manager.py`, `sandbox/manager/directory_manager.py`)
-
-Same changes for local backend: ensure PAT, inject env vars, render + write company-search SKILL.md after `DirectoryManager.setup_skills()` copies skills. `ONYX_SERVER_URL` defaults to `http://localhost:8080/api`. CLI binary must be on developer's `$PATH`.
 
 #### PR 2 file changes
 
 | Action | File |
 |--------|------|
 | New | `sandbox/kubernetes/docker/skills/company-search/SKILL.md.template` |
-| Modify | `sandbox/kubernetes/docker/Dockerfile` — add onyx-cli binary |
-| Modify | `sandbox/util/agent_instructions.py` — add `build_available_sources_section()` + `SOURCE_DESCRIPTIONS` |
-| Modify | `server/features/build/session/manager.py` — render SKILL.md, pass to workspace setup |
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — copy skills, write SKILL.md, validate, in both `setup_session_workspace()` and `restore_snapshot()` |
-| Modify | `sandbox/local/local_sandbox_manager.py` — same for local backend (local: inject env vars at session level since there's no pod) |
-| Modify | `sandbox/manager/directory_manager.py` — write rendered SKILL.md after copying skills |
-| Modify | `server/features/build/AGENTS.template.md` — rewrite, remove `files/` and `{{KNOWLEDGE_SOURCES_SECTION}}` |
+| New | `sandbox/skills/rendering.py` |
+| New | `tests/external_dependency_unit/craft/test_company_search_skill.py` |
+| Modify | `configs.py` — add `SKILLS_TEMPLATE_PATH` constant |
+| Modify | `sandbox/manager/directory_manager.py` — `setup_skills()` changed from copy to symlink |
+| Modify | `configs/constants.py` — improve `DocumentSourceDescription` wording |
+| Modify | `sandbox/base.py` — add `write_sandbox_file()` abstract method |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — implement `write_sandbox_file()` |
+| Modify | `sandbox/local/local_sandbox_manager.py` — implement `write_sandbox_file()` |
+| Modify | `session/manager.py` — add `push_dynamic_skills()` |
+| Modify | `api/sessions_api.py` — call `push_dynamic_skills()` in restore path |
+| Modify | `AGENTS.template.md` — rewrite for onyx-cli search |
+| Modify | `sandbox/util/__init__.py` — remove stale exports (`build_knowledge_sources_section`, etc.) |
+| Modify | `sandbox/manager/test_directory_manager.py` — update tests for `setup_skills()` symlink change |
 
 #### PR 2 tests
 
@@ -339,7 +327,18 @@ Same changes for local backend: ensure PAT, inject env vars, render + write comp
 
 1. **Source list rendering.** Create test CC pairs, call `build_available_sources_section()`, assert correct sources and descriptions.
 2. **Empty sources.** User with no connectors → `"No connected sources available for this user."`.
-3. **Sub-scope examples.** Slack connector with channel config → channels appear in output.
+3. **Deduplication and format.** Multiple CC pairs for the same source produce one line; output lines match `- \`{source}\` — {description}` format.
+
+---
+
+### PR 2c: Dead Code Cleanup
+
+Removes old file-based knowledge code that became dead after PR 2's AGENTS.template.md rewrite. No behavioral change.
+
+- Remove `CONNECTOR_INFO`, `_normalize_connector_name()`, `_scan_directory_to_depth()`, `build_knowledge_sources_section()` from `agent_instructions.py`
+- Remove `generate_agents_md.py` from the Docker image
+- Remove `{{KNOWLEDGE_SOURCES_SECTION}}` replacement logic
+- Remove `files_path` parameter from `generate_agent_instructions()`
 
 ---
 
@@ -397,7 +396,7 @@ Update callers:
 - `LocalSandboxManager.setup_session_workspace()` — remove `files_path` argument
 - `KubernetesSandboxManager` — already passes `files_path=None`; remove the parameter
 
-Update `sandbox/util/__init__.py` — remove `build_knowledge_sources_section` export.
+`sandbox/util/__init__.py` exports were already removed in PR 2 — no further changes needed here.
 
 #### OpenCode config
 
@@ -482,7 +481,7 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 | Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — remove sidecar (replace with user-library volume), remove files/ symlink, remove `generate_agents_md.py` calls, remove `sync_files()`, remove `_build_filtered_symlink_script()`, add user library sync via kubectl exec in setup + restore |
 | Modify | `sandbox/kubernetes/docker/Dockerfile` — remove `files/` mkdir, remove `generate_agents_md.py` copy, remove `demo_data.zip` copy + extraction, add `mkdir -p /workspace/user_library` |
 | Modify | `sandbox/util/agent_instructions.py` — remove `CONNECTOR_INFO`, `build_knowledge_sources_section()`, helpers, `files_path` param |
-| Modify | `sandbox/util/__init__.py` — remove export |
+| Modify | `sandbox/util/__init__.py` — already cleared in PR 2; no further changes needed |
 | Modify | `sandbox/util/opencode_config.py` — remove `/workspace/files` allowlist, add `/workspace/user_library` allowlist |
 | Modify | `sandbox/base.py` — remove `sync_files()` abstract method |
 | Modify | `sandbox/local/local_sandbox_manager.py` — remove `sync_files()` impl, remove files/ setup |

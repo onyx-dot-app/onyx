@@ -112,3 +112,38 @@ The sync is idempotent — `s5cmd sync` compares checksums and only transfers ch
 
 The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups is unclear and depends on how we implement Docker Compose sandboxes — this is out of scope for this plan but needs resolution before Craft ships on non-K8s infrastructure.
 
+---
+
+## 4. Skill delivery for dynamic content (company-search)
+
+### What we need
+
+The `company-search` skill contains a rendered `SKILL.md` with the user's available sources. This content is dynamic (varies per user) but skills are baked into the image at `/workspace/skills/` and symlinked into sessions. We need to get user-specific rendered content into the skill directory without breaking the existing skill setup.
+
+### Decision: Skills stay symlinked, dynamic content written to the pod-level skills directory
+
+Skills remain symlinked from `/workspace/skills/` into each session's `.opencode/skills/` — no symlink-to-copy migration. Dynamic content (the rendered `company-search/SKILL.md`) is written to the pod-level `/workspace/skills/` directory via `write_sandbox_file()`, and session symlinks see it automatically.
+
+This replaces the earlier plan (step 8) which called for copying all skills into each session and writing the rendered SKILL.md per-session. That approach would have duplicated static skill files across every session and required touching each session's directory on every skill update.
+
+### How it works
+
+1. **`render_company_search_skill()`** lives in `sandbox/skills/rendering.py`, co-located with template logic rather than in the session manager. It takes the user's available sources and returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing.
+
+2. **`write_sandbox_file()`** writes the rendered SKILL.md to `/workspace/skills/company-search/SKILL.md`. Since sessions symlink to `/workspace/skills/`, the rendered file is visible in every session immediately — no per-session writes needed.
+
+3. **`DocumentSourceDescription` reuse** — source descriptions come from the existing `DocumentSourceDescription` constant in `configs/constants.py`. No separate `SOURCE_DESCRIPTIONS` dict.
+
+### Why not copy skills per session?
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Symlink + pod-level write** (chosen) | Zero duplication, one write serves all sessions, matches existing K8s skill setup | Dynamic content must go to the shared directory |
+| **Copy all skills per session** (earlier plan) | Session-isolated, could customize per session | Duplicates static files N times, requires touching each session directory, diverges from the existing symlink pattern |
+
+The symlink approach is simpler and consistent with how K8s sessions already handle skills. The one trade-off — dynamic content must be written to the shared directory — is not a real constraint since the company-search skill is user-scoped (one user per pod) not session-scoped.
+
+### Future direction
+
+The current push-based approach (render template, write file) is a stepping stone. A full skill system will eventually handle multi-file skill bundles, versioning, and more complex delivery patterns. The `write_sandbox_file()` + symlink pattern is intentionally minimal to avoid over-engineering ahead of that work.
+

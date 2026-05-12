@@ -78,6 +78,10 @@ class DirectoryManager:
         self._skills_path = skills_path
         self._agent_instructions_template_path = agent_instructions_template_path
 
+    @property
+    def skills_source_path(self) -> Path:
+        return self._skills_path
+
     def create_sandbox_directory(self, sandbox_id: str) -> Path:
         """Create sandbox directory structure (user-level).
 
@@ -322,57 +326,22 @@ class DirectoryManager:
         agent_md_path.write_text(content)
         logger.debug("Generated AGENTS.md at %s", agent_md_path)
 
-    def setup_skills(self, sandbox_path: Path, overwrite: bool = True) -> None:
-        """Copy skills directory to .opencode/skills.
+    def setup_skills(self, session_path: Path, skills_target: Path) -> None:
+        """Symlink session's .opencode/skills to the given skills directory."""
+        skills_dest = session_path / ".opencode" / "skills"
 
-        Copies all skills from the source skills directory to the sandbox's
-        .opencode/skills directory. If the destination already exists, it will
-        be removed and recreated to ensure skills are up-to-date.
-
-        Args:
-            sandbox_path: Path to the sandbox directory
-            overwrite: If True, overwrite existing skills. If False, preserve existing skills.
-        """
-        skills_dest = sandbox_path / ".opencode" / "skills"
-
-        if not self._skills_path.exists():
-            logger.warning(
-                "Skills path %s does not exist, skipping skills setup",
-                self._skills_path,
-            )
+        if not skills_target.exists():
+            logger.warning("Skills path %s does not exist", skills_target)
             return
 
-        if not overwrite and skills_dest.exists():
-            logger.debug(
-                "Skills directory already exists at %s, skipping skills setup",
-                skills_dest,
-            )
-            return
-
-        try:
-            # Remove existing skills directory if it exists to ensure fresh copy
-            if skills_dest.exists():
+        if skills_dest.is_symlink() or skills_dest.exists():
+            if skills_dest.is_symlink():
+                skills_dest.unlink()
+            else:
                 shutil.rmtree(skills_dest)
 
-            # Create parent directory and copy skills
-            skills_dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(self._skills_path, skills_dest)
-
-            # Verify the copy succeeded
-            if not skills_dest.exists():
-                logger.error(
-                    "Skills copy failed: destination %s does not exist after copy",
-                    skills_dest,
-                )
-        except Exception as e:
-            logger.error(
-                "Failed to copy skills from %s to %s: %s",
-                self._skills_path,
-                skills_dest,
-                e,
-                exc_info=True,
-            )
-            raise
+        skills_dest.parent.mkdir(parents=True, exist_ok=True)
+        skills_dest.symlink_to(skills_target)
 
     def setup_opencode_config(
         self,

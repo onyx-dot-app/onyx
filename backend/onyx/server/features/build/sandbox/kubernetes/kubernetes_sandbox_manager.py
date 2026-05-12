@@ -2695,6 +2695,45 @@ echo "$base"
         except ApiException as e:
             raise RuntimeError(f"Failed to delete file: {e}") from e
 
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        if (
+            ".." in path
+            or path.startswith("/")
+            or not re.match(r"^[a-zA-Z0-9_][a-zA-Z0-9_\-./]*$", path)
+        ):
+            raise ValueError(f"Invalid sandbox file path: {path}")
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        safe_path = shlex.quote(f"/workspace/{path}")
+        safe_dir = shlex.quote(f"/workspace/{path}".rsplit("/", 1)[0])
+        escaped = content.replace("'", "'\\''")
+
+        script = f"""set -e
+mkdir -p {safe_dir}
+printf '%s' '{escaped}' > {safe_path}
+echo WRITE_OK"""
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+            if "WRITE_OK" not in resp:
+                raise RuntimeError(f"write_sandbox_file failed for {path}: {resp}")
+        except ApiException as e:
+            raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
+
     def get_upload_stats(
         self,
         sandbox_id: UUID,

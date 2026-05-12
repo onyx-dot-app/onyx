@@ -387,6 +387,8 @@ Persona scoping is exposed as `--agent-id` on the `search` command. When specifi
 
 Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI binary, creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
 
+> **Architecture summary.** Dynamic skill content (the rendered `company-search` SKILL.md) is written to the pod via a `write_sandbox_file()` / `render_company_search_skill()` pattern that is decoupled from the sandbox manager interface. Content is rendered in `sandbox/skills/rendering.py`, written to `/workspace/skills/` at the pod level (shared across sessions via existing symlinks), and orchestrated by `SessionManager.push_dynamic_skills()`. This avoids threading new parameters through the manager abstraction and provides a clean extension point for future skill bundles.
+
 ### Requirements
 
 #### R4.1: Per-user PAT lifecycle
@@ -419,7 +421,7 @@ The search tool is exposed to the agent as a skill (following the existing skill
 
 - **`SKILL.md.template`**: A template that describes how to use onyx-cli search, rendered at session setup with the user's available sources. This is a built-in skill registered with the `BuiltinSkillRegistry`.
 - **Skill name**: `company-search` (consistent with `search-requirements.md` — reads naturally, brand-neutral).
-- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a per-session SKILL.md that tells the agent:
+- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a SKILL.md that tells the agent:
   - What the search tool is and what it does
   - What sources are available (specific to this user's permissions)
   - Usage examples with the CLI flags
@@ -427,6 +429,18 @@ The search tool is exposed to the agent as a skill (following the existing skill
   - What to do when a source they expect isn't listed
 
 The skill does NOT include a shell script wrapper. The agent calls onyx-cli directly — the CLI is the tool, not a wrapper around curl.
+
+> **Implementation note.** The rendered SKILL.md is written to the **pod-level** `/workspace/skills/` directory, not per-session. The pod is per-user, so all sessions share the same rendered skills via existing symlinks (K8s) or symlinks (local). No migration is needed — the existing delivery mechanism works as-is.
+>
+> The rendering and writing are decoupled from the session manager interface:
+>
+> - **`render_company_search_skill(db_session, user, skills_dir) -> RenderedSkillFile`** in `sandbox/skills/rendering.py` renders the company-search skill template and returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing. `skills_dir` comes from the `SKILLS_TEMPLATE_PATH` config constant.
+> - **`write_sandbox_file(sandbox_id, path, content)`** on `SandboxManager` writes to `/workspace/{path}` on the pod. Generic method for pushing any dynamic content. K8s implementation uses `kubectl exec` + `printf`; local uses `Path.write_text`.
+> - **`SessionManager.push_dynamic_skills()`** orchestrates: calls `render_company_search_skill()` then `write_sandbox_file()` with the result. Catches all exceptions and logs a warning so skill rendering failures don't block session setup. Called after `setup_session_workspace()` in both `create_session__no_commit()` and the restore path in `sessions_api.py`.
+>
+> This means `company_search_skill_md` is NOT passed through `setup_session_workspace()` or `restore_snapshot()`. The rendering is fully decoupled from the manager interface — no parameter threading through the sandbox manager abstraction.
+>
+> **Future direction:** The current push-based `write_sandbox_file()` approach is a stepping stone. Eventually a full skill system will handle multi-file skill bundles. `render_company_search_skill()` handles the company-search template today; adding new skills would mean adding new rendering functions or generalizing the pattern.
 
 #### R4.4: Available sources injection
 
@@ -438,11 +452,15 @@ The skill's source list is populated from the user's actual connector access:
 - The list is a snapshot at session creation — not refreshed mid-session. Connector changes take effect on the next session.
 - If the user has no connected sources, the skill still renders but the source list says so explicitly. The agent should not hallucinate sources.
 
+> **Implementation note.** Source descriptions reuse the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording where needed) rather than defining a duplicate `SOURCE_DESCRIPTIONS` dict. This keeps source descriptions in one place across the codebase.
+
 #### R4.5: Decommission file sync and rework user library delivery
 
 Remove the legacy `files/` corpus sync infrastructure (search replaces it) and replace the file-sync sidecar with a lightweight user library sync mechanism.
 
 > **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
+
+> **Implementation note.** This removal happens in a separate PR (PR 3) after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. This ensures the agent has both paths available during the transition and the search tool can be validated before the old path is cut.
 
 **File sync removal:**
 - Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
@@ -479,10 +497,11 @@ The `files/` infrastructure is the only delivery mechanism for demo data. Removi
 
 ### Key Challenges
 
-- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_ONYX_SERVER_URL` config.
-- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. This data may not exist today and may need to be added to connector metadata or crafted per source type.
+- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_API_SERVER_URL` config.
+- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. Resolved by reusing the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording) — no new source metadata system needed.
 - **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) provides both paths before PR 3 (file sync removal) removes the old one.
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in the follow-up PR 3 (file sync removal).
+- **Decoupled rendering**: The dynamic skill rendering (`render_company_search_skill()` + `write_sandbox_file()`) is deliberately decoupled from the sandbox manager interface. This avoids threading new parameters through `setup_session_workspace()` and `restore_snapshot()`, keeping the manager abstraction clean. The orchestration lives in `SessionManager.push_dynamic_skills()`, which catches all exceptions and logs a warning so failures don't block session setup.
 
 ---
 

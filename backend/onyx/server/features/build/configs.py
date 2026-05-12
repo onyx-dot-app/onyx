@@ -37,6 +37,9 @@ DEMO_DATA_PATH = str(
 SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
 VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
+SKILLS_TEMPLATE_PATH = str(
+    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
+)
 
 # Sandbox agent configuration
 SANDBOX_AGENT_COMMAND = os.environ.get("SANDBOX_AGENT_COMMAND", "opencode").split()
