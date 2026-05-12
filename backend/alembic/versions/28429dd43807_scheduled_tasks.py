@@ -70,7 +70,7 @@ def upgrade() -> None:
             "origin",
             session_origin_enum,
             nullable=False,
-            server_default="interactive",
+            server_default="INTERACTIVE",
         ),
     )
 
@@ -107,7 +107,7 @@ def upgrade() -> None:
             "status",
             scheduled_task_status_enum,
             nullable=False,
-            server_default="active",
+            server_default="ACTIVE",
         ),
         sa.Column("next_run_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -165,7 +165,7 @@ def upgrade() -> None:
             "status",
             scheduled_task_run_status_enum,
             nullable=False,
-            server_default="queued",
+            server_default="QUEUED",
         ),
         sa.Column(
             "trigger_source",

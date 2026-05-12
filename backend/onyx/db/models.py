@@ -5195,7 +5195,7 @@ class BuildSession(Base):
         Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
         nullable=False,
         default=SessionOrigin.INTERACTIVE,
-        server_default="interactive",
+        server_default="INTERACTIVE",
     )
 
     # Relationships
@@ -5409,7 +5409,7 @@ class ScheduledTask(Base):
         Enum(ScheduledTaskStatus, native_enum=False, name="scheduledtaskstatus"),
         nullable=False,
         default=ScheduledTaskStatus.ACTIVE,
-        server_default="active",
+        server_default="ACTIVE",
     )
     # The dispatcher's only read field. NULL when paused; recomputed on
     # every fire and every schedule/timezone edit. Stored UTC.
@@ -5480,7 +5480,7 @@ class ScheduledTaskRun(Base):
         ),
         nullable=False,
         default=ScheduledTaskRunStatus.QUEUED,
-        server_default="queued",
+        server_default="QUEUED",
     )
     trigger_source: Mapped[ScheduledTaskTriggerSource] = mapped_column(
         Enum(
