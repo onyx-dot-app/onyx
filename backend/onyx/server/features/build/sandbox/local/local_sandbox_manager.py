@@ -1002,6 +1002,13 @@ class LocalSandboxManager(SandboxManager):
             client = ACPAgentClient(cwd=str(session_path))
             self._acp_clients[client_key] = client
 
+            logger.info(
+                "ACP client ready for sandbox %s, session %s (pid=%s)",
+                sandbox_id,
+                session_id,
+                client._process.pid if client._process else "none",
+            )
+
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
 
@@ -1014,6 +1021,13 @@ class LocalSandboxManager(SandboxManager):
             # Log successful completion
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
+            )
+        except GeneratorExit:
+            logger.warning(
+                "Sandbox send_message generator closed for session %s "
+                "after %d events (consumer disconnected)",
+                session_id,
+                events_count,
             )
         except Exception as e:
             # Log failure

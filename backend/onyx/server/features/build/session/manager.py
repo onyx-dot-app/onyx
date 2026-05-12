@@ -1270,6 +1270,9 @@ class SessionManager:
             },
         )
 
+        events_emitted = 0
+        state = BuildStreamingState(turn_index=0)
+
         try:
             # Verify session exists and belongs to user
             session = get_build_session(session_id, user_id, self._db_session)
@@ -1539,6 +1542,15 @@ class SessionManager:
             # Update heartbeat after successful message exchange
             update_sandbox_heartbeat(self._db_session, sandbox_id)
 
+        except GeneratorExit:
+            logger.warning(
+                "Stream generator closed for session %s after %d events "
+                "(client disconnected mid-stream)",
+                session_id,
+                events_emitted,
+            )
+            _save_build_turn(state)
+            return
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
