@@ -102,7 +102,7 @@ class TestEnsureSandboxPat:
         assert new_pat.expires_at is not None
         assert new_pat.expires_at > datetime.now(timezone.utc)
 
-    def test_craft_pat_hidden_from_user_list(
+    def test_user_pat_filter_excludes_craft_pat(
         self,
         db_session: Session,
         test_user: User,
@@ -118,13 +118,12 @@ class TestEnsureSandboxPat:
             expiration_days=30,
         )
 
-        all_pats = list_user_pats(db_session, test_user.id)
-        user_pats = [p for p in all_pats if p.pat_type == PatType.USER]
-        craft_pats = [p for p in all_pats if p.pat_type == PatType.CRAFT]
-
+        user_pats = list_user_pats(db_session, test_user.id, pat_type=PatType.USER)
         assert len(user_pats) == 1
         assert user_pats[0].name == "my-user-pat"
-        assert len(craft_pats) == 1
+
+        all_pats = list_user_pats(db_session, test_user.id)
+        assert any(p.pat_type == PatType.CRAFT for p in all_pats)
 
     def test_pat_type_defaults_to_user(
         self,
