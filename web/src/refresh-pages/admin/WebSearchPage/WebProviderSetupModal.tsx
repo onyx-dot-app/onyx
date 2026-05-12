@@ -23,7 +23,7 @@ import {
 } from "@/lib/webSearch/utils";
 import { connectProviderFlow } from "@/lib/webSearch/svc";
 import type {
-  WebProviderCategory,
+  WebSearchProviderType,
   WebSearchProviderView,
   WebContentProviderView,
 } from "@/lib/webSearch/types";
@@ -37,22 +37,31 @@ interface FormValues {
   config: string;
 }
 
+export type ProviderModalState =
+  | {
+      category: "search";
+      providerType: WebSearchProviderType;
+      provider: WebSearchProviderView | null;
+    }
+  | {
+      category: "content";
+      providerType: string;
+      provider: WebContentProviderView | null;
+    };
+
 export interface WebProviderSetupModalProps {
-  providerType: string;
-  category: WebProviderCategory;
-  provider: WebSearchProviderView | WebContentProviderView | null;
+  state: ProviderModalState;
   mutate: () => Promise<unknown>;
   onSuccess: () => void;
 }
 
 export function WebProviderSetupModal({
-  providerType,
-  category,
-  provider,
+  state,
   mutate,
   onSuccess,
 }: WebProviderSetupModalProps) {
   const onClose = useModalClose();
+  const { category, providerType, provider } = state;
 
   const isEditing = !!provider && provider.id > 0;
   const hasStoredKey = !!provider?.masked_api_key;

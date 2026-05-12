@@ -16,7 +16,10 @@ import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button, MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
+import {
+  WebProviderSetupModal,
+  type ProviderModalState,
+} from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -197,36 +200,19 @@ function WebSearchDisconnectModal({
 }
 
 // ---------------------------------------------------------------------------
-// Local state types
-// ---------------------------------------------------------------------------
-
-type ActiveSearchProviderState = {
-  providerType: WebSearchProviderType;
-  provider: WebSearchProviderView | null;
-};
-
-type ActiveContentProviderState = {
-  providerType: WebContentProviderType;
-  provider: WebContentProviderView | null;
-};
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
-  const [activeSearchProvider, setActiveSearchProvider] =
-    useState<ActiveSearchProviderState | null>(null);
-  const [activeContentProvider, setActiveContentProvider] =
-    useState<ActiveContentProviderState | null>(null);
+  const [activeProvider, setActiveProvider] =
+    useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
     useState<DisconnectTargetState | null>(null);
   const [replacementProviderId, setReplacementProviderId] = useState<
     string | null
   >(null);
 
-  const searchSetupModal = useCreateModal();
-  const contentSetupModal = useCreateModal();
+  const setupModal = useCreateModal();
 
   const {
     searchProviders,
@@ -268,25 +254,28 @@ export default function WebSearchPage() {
           }
         : null);
 
-    setActiveSearchProvider({ providerType, provider: effectiveProvider });
-    searchSetupModal.toggle(true);
+    setActiveProvider({
+      category: "search",
+      providerType,
+      provider: effectiveProvider,
+    });
+    setupModal.toggle(true);
   };
 
   const openContentModal = (
     providerType: WebContentProviderType,
     provider?: WebContentProviderView
   ) => {
-    setActiveContentProvider({ providerType, provider: provider ?? null });
-    contentSetupModal.toggle(true);
+    setActiveProvider({
+      category: "content",
+      providerType,
+      provider: provider ?? null,
+    });
+    setupModal.toggle(true);
   };
 
-  const handleSearchSuccess = () => {
-    searchSetupModal.toggle(false);
-    toast.success("Provider connected");
-  };
-
-  const handleContentSuccess = () => {
-    contentSetupModal.toggle(false);
+  const handleSuccess = () => {
+    setupModal.toggle(false);
     toast.success("Provider connected");
   };
 
@@ -744,39 +733,27 @@ export default function WebSearchPage() {
         />
       )}
 
-      <searchSetupModal.Provider>
-        {activeSearchProvider && (
+      <setupModal.Provider>
+        {activeProvider && (
           <WebProviderSetupModal
-            providerType={activeSearchProvider.providerType}
-            category="search"
-            provider={activeSearchProvider.provider}
+            state={activeProvider}
             mutate={async () => {
-              await mutateSearchProviders();
-              if (activeSearchProvider.providerType === "exa") {
-                await mutateContentProviders();
-              }
-            }}
-            onSuccess={handleSearchSuccess}
-          />
-        )}
-      </searchSetupModal.Provider>
-
-      <contentSetupModal.Provider>
-        {activeContentProvider && (
-          <WebProviderSetupModal
-            providerType={activeContentProvider.providerType}
-            category="content"
-            provider={activeContentProvider.provider}
-            mutate={async () => {
-              await mutateContentProviders();
-              if (activeContentProvider.providerType === "exa") {
+              if (activeProvider.category === "search") {
                 await mutateSearchProviders();
+                if (activeProvider.providerType === "exa") {
+                  await mutateContentProviders();
+                }
+              } else {
+                await mutateContentProviders();
+                if (activeProvider.providerType === "exa") {
+                  await mutateSearchProviders();
+                }
               }
             }}
-            onSuccess={handleContentSuccess}
+            onSuccess={handleSuccess}
           />
         )}
-      </contentSetupModal.Provider>
+      </setupModal.Provider>
     </>
   );
 }
