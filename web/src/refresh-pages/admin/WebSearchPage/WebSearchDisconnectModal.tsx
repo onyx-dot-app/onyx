@@ -83,7 +83,7 @@ export function WebSearchDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={markdown(`Disconnect *${disconnectTarget.label}*`)}
+      title={`Disconnect ${disconnectTarget.label}`}
       description="This will remove the stored credentials for this provider."
       submit={
         <Button
