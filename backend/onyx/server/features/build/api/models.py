@@ -367,12 +367,20 @@ class UpsertUserCredentialsRequest(BaseModel):
 class ExternalAppUserResponse(BaseModel):
     """User-facing view of an external app.
 
-    `is_configured` is true iff the calling user has stored credentials for
-    this app. Org-level credentials and the auth template are intentionally
+    `credential_keys` are the parameter names the calling user must supply —
+    derived from the app's `auth_template` minus whatever the organization
+    has already filled in. `credential_values` are the values the user has
+    previously stored for those keys (intersection — stale keys from
+    deleted/migrated templates are filtered out). `authenticated` is true
+    iff `credential_values` covers every key in `credential_keys`.
+
+    Organization credentials and the raw auth template are intentionally
     omitted — those are admin-only.
     """
 
     id: int
     name: str
     description: str
-    is_configured: bool
+    credential_keys: list[str]
+    credential_values: dict[str, Any]
+    authenticated: bool
