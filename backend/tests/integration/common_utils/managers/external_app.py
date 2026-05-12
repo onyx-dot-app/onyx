@@ -21,7 +21,6 @@ class ExternalAppManager:
 
     @staticmethod
     def create(
-        *,
         user_performing_action: DATestUser,
         name: str,
         description: str,
@@ -31,19 +30,18 @@ class ExternalAppManager:
         enabled: bool = True,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
-            user_performing_action=user_performing_action,
-            app_id=None,
-            name=name,
-            description=description,
-            upstream_urls=upstream_urls,
-            auth_template=auth_template,
-            organization_credentials=organization_credentials,
-            enabled=enabled,
+            user_performing_action,
+            None,
+            name,
+            description,
+            upstream_urls,
+            auth_template,
+            organization_credentials,
+            enabled,
         )
 
     @staticmethod
     def update(
-        *,
         user_performing_action: DATestUser,
         app_id: int,
         name: str,
@@ -54,19 +52,18 @@ class ExternalAppManager:
         enabled: bool = True,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
-            user_performing_action=user_performing_action,
-            app_id=app_id,
-            name=name,
-            description=description,
-            upstream_urls=upstream_urls,
-            auth_template=auth_template,
-            organization_credentials=organization_credentials,
-            enabled=enabled,
+            user_performing_action,
+            app_id,
+            name,
+            description,
+            upstream_urls,
+            auth_template,
+            organization_credentials,
+            enabled,
         )
 
     @staticmethod
     def _upsert(
-        *,
         user_performing_action: DATestUser,
         app_id: int | None,
         name: str,
@@ -96,7 +93,7 @@ class ExternalAppManager:
 
     @staticmethod
     def list_admin(
-        *, user_performing_action: DATestUser
+        user_performing_action: DATestUser,
     ) -> list[ExternalAppAdminResponse]:
         response = requests.get(
             f"{_BUILD_PREFIX}/admin/apps",
@@ -107,7 +104,7 @@ class ExternalAppManager:
         return [ExternalAppAdminResponse.model_validate(row) for row in response.json()]
 
     @staticmethod
-    def delete(*, user_performing_action: DATestUser, app_id: int) -> None:
+    def delete(user_performing_action: DATestUser, app_id: int) -> None:
         response = requests.delete(
             f"{_BUILD_PREFIX}/admin/apps/{app_id}",
             headers=user_performing_action.headers,
@@ -117,7 +114,7 @@ class ExternalAppManager:
 
     @staticmethod
     def list_for_user(
-        *, user_performing_action: DATestUser
+        user_performing_action: DATestUser,
     ) -> list[ExternalAppUserResponse]:
         response = requests.get(
             f"{_BUILD_PREFIX}/apps",
@@ -129,12 +126,10 @@ class ExternalAppManager:
 
     @staticmethod
     def get_for_user(
-        *, user_performing_action: DATestUser, app_id: int
+        user_performing_action: DATestUser, app_id: int
     ) -> ExternalAppUserResponse:
         """Convenience: list and find by id. Raises KeyError if not visible."""
-        for app in ExternalAppManager.list_for_user(
-            user_performing_action=user_performing_action
-        ):
+        for app in ExternalAppManager.list_for_user(user_performing_action):
             if app.id == app_id:
                 return app
         raise KeyError(
@@ -143,7 +138,6 @@ class ExternalAppManager:
 
     @staticmethod
     def upsert_user_credentials(
-        *,
         user_performing_action: DATestUser,
         app_id: int,
         credentials: dict[str, Any],

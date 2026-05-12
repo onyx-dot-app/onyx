@@ -1,13 +1,3 @@
-"""Integration tests for the External Apps admin + user routes.
-
-These routes live under the `/build` prefix and are gated by the
-`onyx-craft-enabled` feature flag. When PostHog is not configured the
-gate falls back to the `ENABLE_CRAFT` env var, so the API server must be
-started with `ENABLE_CRAFT=true` for this suite to run end-to-end. If the
-gate is off every request returns 403 and the tests fail fast at the
-first admin call.
-"""
-
 from typing import Any
 
 import pytest
