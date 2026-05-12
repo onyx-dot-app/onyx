@@ -5827,15 +5827,23 @@ class ExternalApp(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
     upstream_urls: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=False, default=list
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
     auth_template: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=dict
+        postgresql.JSONB(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
     )
     organization_credentials: Mapped[dict[str, Any]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=dict
+        postgresql.JSONB(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
