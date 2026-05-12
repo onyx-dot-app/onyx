@@ -15,6 +15,7 @@ from onyx.auth.pat import calculate_expiration
 from onyx.auth.pat import generate_pat
 from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.enums import PatType
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -89,6 +90,7 @@ def create_pat(
     user_id: UUID,
     name: str,
     expiration_days: int | None,
+    pat_type: PatType = PatType.USER,
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
 
@@ -109,9 +111,10 @@ def create_pat(
         token_display=build_displayable_pat(raw_token),
         user_id=user_id,
         expires_at=calculate_expiration(expiration_days),
+        pat_type=pat_type,
     )
     db_session.add(pat)
-    db_session.commit()
+    db_session.flush()
 
     return pat, raw_token
 
@@ -152,5 +155,5 @@ def revoke_pat(db_session: Session, pat_id: int, user_id: UUID) -> bool:
     # Revoke by setting expires_at to NOW() and marking as revoked for audit trail
     pat.expires_at = now
     pat.is_revoked = True
-    db_session.commit()
+    db_session.flush()
     return True
