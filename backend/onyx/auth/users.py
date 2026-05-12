@@ -335,7 +335,11 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
-def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
+def enforce_seat_limit(
+    db_session: Session,
+    seats_needed: int = 1,
+    lock_session: Session | None = None,
+) -> None:
     """Raise ``OnyxError(SEAT_LIMIT_EXCEEDED)`` if seats would be exceeded.
 
     Self-hosted runs ``check_seat_availability``; cloud delegates to
@@ -348,7 +352,11 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
             "onyx.server.tenants.billing",
             "enforce_cloud_seat_limit",
             lambda **_kw: None,
-        )(seats_needed=seats_needed)
+        )(
+            seats_needed=seats_needed,
+            tenant_id=get_current_tenant_id(),
+            db_session=lock_session,
+        )
         return
 
     result = fetch_ee_implementation_or_noop(
@@ -360,21 +368,20 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
 
 
 def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> None:
-    """Self-hosted: take the tenant advisory lock on ``db_session`` then
-    enforce. Lock holds until caller commits — so the check and the
-    write share one transaction.
+    """Acquire the tenant advisory lock on ``db_session``, then enforce.
 
-    Cloud: best-effort pre-flight only. The cap is actually enforced
-    inside ``add_users_to_tenant``, which calls
-    ``enforce_cloud_seat_limit(db_session=shared_session)`` and holds
-    the advisory lock across {count, Stripe modify, mapping insert}.
+    Self-hosted: lock + ``check_seat_availability`` on the caller's
+    session — held until caller commits.
+
+    Cloud: lock + ``get_tenant_count`` + Stripe modify also held on the
+    caller's session — released on caller commit so the seat-consuming
+    write (e.g. ``activate_user``) is covered.
     """
-    if not MULTI_TENANT:
-        fetch_ee_implementation_or_noop("onyx.db.license", "acquire_seat_lock", None)(
-            db_session, get_current_tenant_id()
-        )
+    fetch_ee_implementation_or_noop("onyx.db.license", "acquire_seat_lock", None)(
+        db_session, get_current_tenant_id()
+    )
 
-    enforce_seat_limit(db_session, seats_needed=seats_needed)
+    enforce_seat_limit(db_session, seats_needed=seats_needed, lock_session=db_session)
 
 
 def _user_currently_counts_toward_seats(user: User) -> bool:
