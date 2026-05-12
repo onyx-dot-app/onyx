@@ -1,36 +1,36 @@
-{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_heavy.replicaCount) 0) }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-heavy
+  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
-    {{- with .Values.celery_worker_heavy.deploymentLabels }}
+    {{- with .Values.celery_worker_scheduled_tasks.deploymentLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  {{- if not .Values.celery_worker_heavy.autoscaling.enabled }}
-  replicas: {{ .Values.celery_worker_heavy.replicaCount }}
+  {{- if not .Values.celery_worker_scheduled_tasks.autoscaling.enabled }}
+  replicas: {{ .Values.celery_worker_scheduled_tasks.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
       {{- include "onyx.selectorLabels" . | nindent 6 }}
-      {{- if .Values.celery_worker_heavy.deploymentLabels }}
-      {{- toYaml .Values.celery_worker_heavy.deploymentLabels | nindent 6 }}
+      {{- if .Values.celery_worker_scheduled_tasks.deploymentLabels }}
+      {{- toYaml .Values.celery_worker_scheduled_tasks.deploymentLabels | nindent 6 }}
       {{- end }}
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-      {{- with .Values.celery_worker_heavy.podAnnotations }}
+      {{- with .Values.celery_worker_scheduled_tasks.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
-        {{- with .Values.celery_worker_heavy.deploymentLabels }}
+        {{- with .Values.celery_worker_scheduled_tasks.deploymentLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with .Values.celery_worker_heavy.podLabels }}
+        {{- with .Values.celery_worker_scheduled_tasks.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
@@ -41,20 +41,20 @@ spec:
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
-      {{- with .Values.celery_worker_heavy.nodeSelector }}
+      {{- with .Values.celery_worker_scheduled_tasks.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.celery_worker_heavy.affinity }}
+      {{- with .Values.celery_worker_scheduled_tasks.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.celery_worker_heavy.tolerations }}
+      {{- with .Values.celery_worker_scheduled_tasks.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: celery-worker-heavy
+        - name: celery-worker-scheduled-tasks
           securityContext:
             {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
@@ -63,28 +63,28 @@ spec:
             [
               "celery",
               "-A",
-              "onyx.background.celery.versioned_apps.heavy",
+              "onyx.background.celery.versioned_apps.scheduled_tasks",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_heavy.logLevel | quote }},
-              "--hostname=heavy@%n",
+              {{ printf "--loglevel=%s" .Values.celery_worker_scheduled_tasks.logLevel | quote }},
+              "--hostname=scheduled_tasks@%n",
               "-Q",
-              "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox",
+              "scheduled_tasks",
             ]
           ports:
             - name: metrics
-              containerPort: 9094
+              containerPort: 9098
               protocol: TCP
           resources:
-            {{- toYaml .Values.celery_worker_heavy.resources | nindent 12 }}
+            {{- toYaml .Values.celery_worker_scheduled_tasks.resources | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
-            {{- with .Values.celery_worker_heavy.extraEnv }}
+            {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.celery_worker_heavy.volumeMounts }}
+          {{- with .Values.celery_worker_scheduled_tasks.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -99,7 +99,7 @@ spec:
                 - >
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe readiness
-                    --filename /tmp/onyx_k8s_heavy_readiness.txt
+                    --filename /tmp/onyx_k8s_scheduledtasks_readiness.txt
           livenessProbe:
             {{ .Values.celery_shared.livenessProbe | toYaml | nindent 12}}
             exec:
@@ -109,8 +109,8 @@ spec:
                 - >
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
-                    --filename /tmp/onyx_k8s_heavy_liveness.txt
-      {{- with .Values.celery_worker_heavy.volumes }}
+                    --filename /tmp/onyx_k8s_scheduledtasks_liveness.txt
+      {{- with .Values.celery_worker_scheduled_tasks.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -11,7 +11,7 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.configs.constants import POSTGRES_CELERY_WORKER_HEAVY_APP_NAME
+from onyx.configs.constants import POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
 from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
@@ -25,7 +25,7 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 celery_app = Celery(__name__)
-celery_app.config_from_object("onyx.background.celery.configs.heavy")
+celery_app.config_from_object("onyx.background.celery.configs.scheduled_tasks")
 celery_app.Task = app_base.TenantAwareTask  # ty: ignore[invalid-assignment]
 
 
@@ -90,7 +90,7 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
-    SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_HEAVY_APP_NAME)
+    SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # ty: ignore[unresolved-attribute]
     SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
 
@@ -107,7 +107,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
-    start_metrics_server("heavy")
+    start_metrics_server("scheduled_tasks")
     app_base.on_worker_ready(sender, **kwargs)
 
 
@@ -130,10 +130,11 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     app_base.filter_task_modules(
         [
-            "onyx.background.celery.tasks.pruning",
-            # Sandbox tasks (file sync, cleanup)
-            "onyx.server.features.build.sandbox.tasks",
-            "onyx.background.celery.tasks.hierarchyfetching",
+            # Craft scheduled-task dispatcher / executor / stuck-run sweeper.
+            # Owned by this dedicated worker so long-running headless agent
+            # fires don't compete for slots with `heavy` queue work
+            # (pruning, perms sync, csv export).
+            "onyx.background.celery.tasks.scheduled_tasks",
         ]
     )
 )

@@ -63,6 +63,14 @@ browser open, and clicks any past run to open the completed session.
   insert `queued` run rows, advance `next_run_at` via `croniter`, enqueue
   `run_scheduled_task(run_id)` on a new `scheduled_tasks` queue
   (`expires=900`). Same pattern as `check-for-indexing` / `check-for-pruning`.
+- **Dedicated `scheduled_tasks` Celery worker.** Both the dispatcher and the
+  executor run on a new `celery_worker_scheduled_tasks` process registered
+  in supervisord, the dev runner, and the Helm chart. Headless agent fires
+  are long-running (LLM + tool calls in a sandbox), so colocating them on
+  `heavy` (pruning, perms-sync, csv-export) would let a small handful of
+  fires starve the rest of the heavy queue. Dedicated worker = isolated
+  thread pool, isolated HPA / KEDA scaling, and its own Prometheus port
+  (9098).
 - **Schedule storage:** `(cron_expression, IANA timezone, editor_mode)`.
   All three editor modes compile to cron on save. `croniter` +
   `ZoneInfo(timezone)` handles DST. `editor_mode` is a UI hint only.
@@ -120,7 +128,8 @@ browser open, and clicks any past run to open the completed session.
 ## Architecture
 
 ```
-Beat (30s, per tenant)                Celery queue "scheduled_tasks"
+Beat (30s, per tenant)                Celery "scheduled_tasks" queue
+                                      (served by celery_worker_scheduled_tasks)
 ──────────────────────                ────────────────────────────────
 dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
   BEGIN;                                if run.status != 'queued': return
@@ -169,9 +178,21 @@ cleanup_stuck_scheduled_runs                    ▼
 - `backend/onyx/background/celery/tasks/beat_schedule.py:200` — add the
   two beat templates.
 - `backend/onyx/configs/constants.py` — new `OnyxCeleryTask`,
-  `OnyxCeleryQueues.SCHEDULED_TASKS`, `NotificationType` values.
-- Celery worker config — register `scheduled_tasks` queue on the existing
-  `heavy` worker for V1.
+  `OnyxCeleryQueues.SCHEDULED_TASKS`, `NotificationType` values,
+  `POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME`.
+- `backend/onyx/configs/app_configs.py` — new
+  `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY` env-driven setting.
+- `backend/onyx/server/metrics/metrics_server.py` — register port 9098 for
+  the new `scheduled_tasks` worker in `_DEFAULT_PORTS`.
+- `backend/supervisord.conf` — add a `celery_worker_scheduled_tasks` program
+  block; include its log file in the log-redirect tail.
+- `backend/scripts/dev_run_background_jobs.py` — add the worker command so
+  the local dev runner brings it up alongside the others.
+- `deployment/helm/charts/onyx/values.yaml` + `values-local.yaml` — new
+  `celery_worker_scheduled_tasks` section (replicas, resources, HPA/KEDA
+  autoscaling knobs, labels).
+- `deployment/helm/charts/onyx/templates/celery-worker-servicemonitors.yaml`
+  — append a `ServiceMonitor` entry so Prometheus scrapes the new worker.
 
 **New (backend):**
 
@@ -191,6 +212,18 @@ cleanup_stuck_scheduled_runs                    ▼
 - `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py` —
   `@shared_task` definitions (each enqueue uses `expires=`; per-run timeout
   enforced inside the task body via monotonic budget check).
+- `backend/onyx/background/celery/configs/scheduled_tasks.py` — Celery
+  config (threads pool, prefetch=1, concurrency from
+  `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY`).
+- `backend/onyx/background/celery/apps/scheduled_tasks.py` — Celery app
+  with the standard Onyx signal wiring (prerun/postrun metrics,
+  `wait_for_redis` / `wait_for_db`, k8s probe), autodiscovers
+  `onyx.background.celery.tasks.scheduled_tasks`.
+- `backend/onyx/background/celery/versioned_apps/scheduled_tasks.py` —
+  factory stub used by the `celery -A …` CLI entrypoint.
+- `deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*.yaml`
+  — Deployment + HPA + KEDA ScaledObject + metrics Service for the new
+  worker (mirrors the user-file-processing layout).
 - `backend/alembic/versions/<new>.py` — schema migration.
 
 **New (frontend):**
@@ -321,8 +354,8 @@ approvals project; until that ships, treat as terminal-for-display.
   `queued`/`running`/`awaiting_approval`/`skipped`.
 - **Session view banner:** when the scheduled-run-context endpoint returns
   a result, render "This session was started by scheduled task X at Y. ←
-  Back to task." above the transcript; hide the chat input (scheduled
-  runs aren't interactive).
+  Back to task." above the transcript. The chat input stays available —
+  users can send follow-up messages on a scheduled-run session.
 - **Notifications:** two new bell entries — "Task X failed", "Task X needs
   approval" — deep-linking to the run row.
 - **Mobile:** list/detail tolerable; editor explicitly requires desktop
@@ -337,8 +370,14 @@ approvals project; until that ships, treat as terminal-for-display.
   `build_session`. No data migration.
 - Beat schedule grows two entries: `dispatch-due-scheduled-tasks` (30 s,
   `expires=60`, MEDIUM, `scheduled_tasks` queue) and
-  `cleanup-stuck-scheduled-runs` (hourly, `expires=3600`, LOW, HEAVY).
-- New `scheduled_tasks` Celery queue on the `heavy` worker for V1.
+  `cleanup-stuck-scheduled-runs` (hourly, `expires=3600`, LOW,
+  `scheduled_tasks` queue).
+- New `scheduled_tasks` Celery queue served by a dedicated
+  `celery_worker_scheduled_tasks` process — registered in
+  `backend/supervisord.conf`, `backend/scripts/dev_run_background_jobs.py`,
+  and the Helm chart (`values.yaml`, `values-local.yaml`, and new
+  `celery-worker-scheduled-tasks{,-hpa,-scaledobject,-metrics-service}.yaml`
+  templates). The `heavy` worker no longer serves the queue.
 
 ## Tests
 

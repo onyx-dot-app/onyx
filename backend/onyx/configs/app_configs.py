@@ -608,6 +608,14 @@ CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
+# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
+# run one headless agent fire at a time, so this caps simultaneous in-flight
+# scheduled runs per pod. Default is intentionally modest because each fire
+# can be long-running (LLM + tool calls in a sandbox).
+CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
+)
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
 
