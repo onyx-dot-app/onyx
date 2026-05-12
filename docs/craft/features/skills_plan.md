@@ -820,15 +820,18 @@ mv "$NEXT" "$DEST"
 rm -rf "$PREV" || true
 ```
 
-Driven by a tiny background loop in the sandbox entrypoint:
+Driven by two triggers:
 
-```sh
-# in /usr/local/bin/refresh-loop, started by the container entrypoint
-while true; do
-  /usr/local/bin/refresh-skills 2>&1 | logger -t skills-refresh || true
-  sleep 300
-done &
-```
+1. **Event push from api_server (primary)** — see §9.7. Most refreshes happen via kubectl-exec triggered immediately on admin mutations. End-to-end ~1-3 seconds.
+2. **Background sleep loop (safety net)** — catches anything the push missed (Celery broker blip, pod restart mid-push, exec timeout):
+
+   ```sh
+   # in /usr/local/bin/refresh-loop, started by the container entrypoint
+   while true; do
+     /usr/local/bin/refresh-skills 2>&1 | logger -t skills-refresh || true
+     sleep 300
+   done &
+   ```
 
 First refresh runs synchronously as an initContainer (or as the first iteration before sessions can start), so `/skills/` exists by the time any session symlinks into it.
 
@@ -872,19 +875,99 @@ The pod needs to identify itself to api_server. Simplest model: a short-lived be
 
 If Onyx already has a pod→api_server auth path (likely — pods do call back to api_server today), reuse it. Worth confirming during implementation.
 
+#### 9.7 Event-driven push on admin mutations
+
+Polling alone would leave a 5-minute window where an admin change isn't yet visible. We close that window by pushing on every skill mutation.
+
+**Flow:**
+
+```
+Admin endpoint (POST/PUT/PATCH/DELETE)
+    └─ on DB commit success, enqueue Celery task:
+       propagate_skill_change(tenant_id)
+            └─ enumerate active sandbox pods for the tenant via K8s label selector
+                └─ for each pod, enqueue:
+                   refresh_pod_skills(pod_name)  [parallel via Celery workers]
+                       └─ kubectl exec <pod> -- /usr/local/bin/refresh-skills
+```
+
+Implementation:
+
+```python
+# backend/onyx/background/celery/tasks/skills/tasks.py
+
+@shared_task(name="propagate_skill_change", expires=60)
+def propagate_skill_change(tenant_id: str) -> None:
+    """Fan out a skill-refresh push to every active sandbox pod in the tenant.
+
+    Tenant-wide push (not user-scoped): each pod fetches an access-filtered
+    tarball, so unaffected users' tarballs are unchanged — the api_server can
+    respond 304 to those (optional optimization). Simpler than computing
+    affected-users on the api_server side.
+    """
+    pod_names = _list_active_sandbox_pods_for_tenant(tenant_id)
+    for pod_name in pod_names:
+        celery_app.send_task("refresh_pod_skills", args=[pod_name], expires=60)
+
+@shared_task(name="refresh_pod_skills", expires=60)
+def refresh_pod_skills(pod_name: str) -> None:
+    """kubectl exec the refresh script. Failures are logged and swallowed —
+    the in-pod sleep loop catches missed events within its 5-min interval."""
+    try:
+        k8s_client.exec_in_pod(
+            pod_name=pod_name,
+            command=["/usr/local/bin/refresh-skills"],
+            container="sandbox",
+            timeout=10,
+        )
+    except Exception as e:
+        logger.warning("skill push failed pod=%s tenant=%s: %s", pod_name, ..., e)
+
+
+def _list_active_sandbox_pods_for_tenant(tenant_id: str) -> list[str]:
+    """K8s label selector on the sandbox namespace."""
+    resp = k8s_core_api.list_namespaced_pod(
+        namespace=SANDBOX_NAMESPACE,
+        label_selector=f"onyx.app/tenant-id={tenant_id}",
+    )
+    return [p.metadata.name for p in resp.items if p.status.phase == "Running"]
+```
+
+Endpoint hooks — five touch points in `backend/onyx/server/features/skills/api.py`:
+
+```python
+# After every commit on any of these:
+#   POST   /api/admin/skills/custom
+#   PATCH  /api/admin/skills/custom/{id}
+#   PUT    /api/admin/skills/custom/{id}/bundle
+#   PUT    /api/admin/skills/custom/{id}/grants
+#   DELETE /api/admin/skills/custom/{id}
+
+celery_app.send_task(
+    "propagate_skill_change",
+    args=[str(tenant_id)],
+    expires=60,  # if not processed in 60s, polling catches anyway
+)
+```
+
+**Pod labels** — sandbox provisioning sets `onyx.app/tenant-id` on each pod (per `kubernetes_sandbox_manager.py:619`, which already sets `onyx.app/sandbox-id`). Single-line addition.
+
+**Scope decision: tenant-wide push.** Push to every active pod in the tenant, regardless of who currently has access. Pods whose user doesn't have access just fetch a tarball that didn't change. Simpler than computing the "affected users" set on the api_server side, avoids race conditions where access changes between the access query and the push, and `kubectl exec` of a no-op script is cheap (~200ms).
+
 **Why `.agents/skills/` and not `.opencode/skills/`?** Unchanged from before — OpenCode's discovery walks `.agents/skills/`, `.opencode/skills/`, and `.claude/skills/` (per [OpenCode docs](https://opencode.ai/docs/skills/)). `.agents/` is the agent-runtime-agnostic choice.
 
 ### Considerations / Tradeoffs / Decisions
 
-- **Why pod-level `/skills/` instead of per-session materialization.** Lets admin uploads/grants/deletes propagate to all sessions (new and existing) within ~5 min, without per-session work. Sessions don't carry skill content into snapshots → snapshots stay small. Per-user template rendering still works because one pod = one user.
-- **5-minute polling, not pub/sub.** Sub-second propagation isn't a V1 need; admin uploads aren't usually emergencies. A sleep-loop is zero new infrastructure. Upgrade to event-driven push (Option B in earlier brainstorm) is a half-day of work if latency complaints arrive.
+- **Why pod-level `/skills/` instead of per-session materialization.** Lets admin uploads/grants/deletes propagate to all sessions (new and existing). Sessions don't carry skill content into snapshots → snapshots stay small. Per-user template rendering still works because one pod = one user.
+- **Push on admin mutations + polling safety net.** Two triggers: event-driven push on every skill mutation (typical propagation ~1-3 sec), polling sleep loop at 5-min cadence as safety net (catches missed events from broker blips, transient kubectl-exec failures, pod restart mid-push). Push is the primary path; polling is the floor.
+- **Why kubectl exec push instead of Redis pub/sub.** No new long-running pod-side components. Reuses the `/usr/local/bin/refresh-skills` script we already need. Failures are recoverable via polling. Pub/sub adds reconnect handling + a persistent subscriber for marginal latency improvement over kubectl-exec's ~200ms.
 - **Materializer runs on api_server, not in the pod.** The pod only needs to extract a tarball — no FileStore access, no DB queries, no bundle validation. The sandbox image stays minimal. Bundle blobs never traverse a fan-out path.
 - **Atomic rename pattern.** `mv NEXT DEST` is atomic within a filesystem (POSIX guarantee). Mid-rename, a reader's `cat /skills/X/SKILL.md` either resolves to the old version (if the dentry walk happened before rename) or the new (if after) — never a torn read. This is the standard "live-update a directory under concurrent reads" pattern.
 - **AGENTS.md regen on resume happens but no longer matters for skills.** `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736-1809` regenerates AGENTS.md on snapshot restore. We add one line to also (re)create the `.agents/skills` symlink. AGENTS.md itself no longer carries skill information (§10) — OpenCode's per-turn `skill` tool rescan handles inventory. The symlink is the only skill-related restore step.
 - **First-refresh bootstrap via initContainer.** Pod can't start serving sessions until `/skills/` exists. The synchronous first refresh in an initContainer makes pod startup predictable (one extra HTTP call + tar extract — ~500 ms total).
 - **Local backend.** For dev, the local sandbox manager runs the refresh as a subprocess of the same Python process — same script, no kubectl needed. Or even simpler: dev-mode skips refresh and reads `/skills/` directly from the api_server's host FS via a bind mount.
 - **What if api_server is briefly unavailable mid-refresh?** Script exits non-zero, loop sleeps, retries on next tick. Pod keeps serving the previous `/skills/`. Self-healing.
-- **Manual refresh escape hatch.** For "I need this update NOW" cases, admin UI can have an "Apply changes now" button that posts to `/api/admin/skills/refresh-now` → api_server `kubectl exec`s `/usr/local/bin/refresh-skills` into each pod for the affected tenant. Single helper, no new long-running components. Optional — defer to V1.5 if not urgent.
+- **No need for a manual refresh button.** Earlier drafts proposed an admin "Apply changes now" button for urgent cases. Push on every mutation makes this unnecessary — every mutation IS an apply-now event.
 
 ### Todos
 - [ ] Add `GET /api/internal/sandbox/{sandbox_id}/skills-tarball` to `backend/onyx/server/features/skills/api.py` — runs `materialize_skills(...)` into a temp dir, streams tarball. Auth via pod token.
@@ -900,6 +983,14 @@ If Onyx already has a pod→api_server auth path (likely — pods do call back t
 - [ ] Remove `directory_manager.setup_skills(...)` and its callers (we no longer materialize per-session).
 - [ ] Local backend: implement an equivalent refresh path — a subprocess that calls `materialize_skills` directly to a host path that the sandbox bind-mounts.
 - [ ] Add a feature flag `SKILLS_MATERIALIZATION_V2_ENABLED` for staged rollout (see §15).
+- [ ] **Event-driven push (§9.7):**
+  - [ ] Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning (`kubernetes_sandbox_manager.py:619`, beside the existing `onyx.app/sandbox-id` label).
+  - [ ] Implement `propagate_skill_change(tenant_id)` Celery task in `backend/onyx/background/celery/tasks/skills/tasks.py`. `expires=60`.
+  - [ ] Implement `refresh_pod_skills(pod_name)` Celery task. `expires=60`. Swallow exec errors with a `logger.warning` — polling is the safety net.
+  - [ ] Implement `_list_active_sandbox_pods_for_tenant(tenant_id)` using k8s label selector on `onyx.app/tenant-id=<id>` + phase=Running.
+  - [ ] Hook `celery_app.send_task("propagate_skill_change", args=[str(tenant_id)], expires=60)` at the 5 mutation endpoints after their respective commits: POST custom, PATCH custom, PUT bundle, PUT grants, DELETE custom.
+  - [ ] Integration test: admin upload → assert push enqueued → assert pod's `/skills/` reflects new content within ~3 sec (test infra mocks kubectl exec or uses a real test pod).
+  - [ ] Failure test: simulate kubectl-exec failure → assert polling catches the change on next tick.
 - [ ] Update existing integration tests for sandbox setup that referenced the old skills path.
 
 ---
@@ -992,7 +1083,7 @@ No toggles. To suppress a skill in the current turn, the user tells the agent in
 ## 12. Skill propagation — fully live (content + inventory)
 
 ### Context
-Earlier drafts split propagation into two cadences: live `/skills/` content (≤5 min via the pod refresh loop) and per-conversation AGENTS.md inventory (regenerated only at session boundaries). Empirical testing of OpenCode's skill discovery (see §10) showed the second tier is unnecessary: **OpenCode rebuilds its native `skill` tool description from `.agents/skills/` on every turn**, so any change in `/skills/` propagates to the agent's inventory awareness on the next turn — without any AGENTS.md regen step.
+Earlier drafts split propagation into two cadences: live `/skills/` content (~1-3 sec typical via push + ≤5 min safety net via polling) and per-conversation AGENTS.md inventory (regenerated only at session boundaries). Empirical testing of OpenCode's skill discovery (see §10) showed the second tier is unnecessary: **OpenCode rebuilds its native `skill` tool description from `.agents/skills/` on every turn**, so any change in `/skills/` propagates to the agent's inventory awareness on the next turn — without any AGENTS.md regen step.
 
 ### Proposed Solution
 
@@ -1000,11 +1091,11 @@ Earlier drafts split propagation into two cadences: live `/skills/` content (≤
 
 | Layer | Live? | How |
 |---|---|---|
-| **`/skills/` content** (SKILL.md + scripts + supporting files) | ✅ ≤5 min | Pod refresh loop pulls latest tarball from api_server (§9) |
+| **`/skills/` content** (SKILL.md + scripts + supporting files) | ✅ ~1-3 sec typical; ≤5 min worst case | Event-driven push from api_server on every admin mutation (§9.7), with a 5-min polling sleep loop as safety net (§9.3) |
 | **Agent inventory awareness** | ✅ next turn after content refresh | OpenCode's native `skill` tool rescans `.agents/skills/` per turn and re-exposes the inventory in the tool description |
 | **Session snapshot** | n/a | Doesn't include `/skills/` content — skills are pod-level infra, not session data |
 
-End-to-end behavior: admin uploads a new skill → ≤5 min for `/skills/` to refresh → next turn in any active session sees the new skill in OpenCode's `skill` tool description → agent can invoke immediately.
+End-to-end behavior: admin uploads a new skill → Celery `propagate_skill_change` fans out kubectl-exec refresh-skills to every active pod in the tenant (~1-3 sec) → next turn in any active session sees the new skill in OpenCode's `skill` tool description → agent can invoke immediately.
 
 ### Behavioral implications
 
@@ -1018,7 +1109,7 @@ End-to-end behavior: admin uploads a new skill → ≤5 min for `/skills/` to re
 
 The Admin UI mutation copy is the same as in earlier drafts:
 
-> "This change takes effect within a few minutes. Conversations currently in progress will see the new state on their next turn."
+> "This change takes effect within a few seconds. Conversations currently in progress will see the new state on their next turn."
 
 For deletes:
 > "Files this skill wrote to user workspaces remain there until the sessions end."
@@ -1027,7 +1118,7 @@ For deletes:
 ### Considerations / Tradeoffs / Decisions
 
 - **Why no boundary-stable inventory anymore.** The earlier "AGENTS.md regenerated only at session boundaries" model was designed to prevent the agent's *list of available skills* from shifting mid-conversation. Investigation showed this was based on a wrong assumption — OpenCode doesn't use AGENTS.md for skill awareness in the first place. The agent's inventory comes from OpenCode's `skill` tool, which is per-turn already. So we're not adding mid-conversation drift; we're just acknowledging it was already happening at the OpenCode layer.
-- **5-minute propagation latency.** Matches §9's polling cadence. For urgent cases, the optional "Apply changes now" admin button (§9) short-circuits the wait.
+- **Typical propagation: 1-3 sec via push.** The 5-min polling cadence is the safety net for missed events, not the primary path. No manual "Apply changes now" button needed — every admin mutation IS an apply-now event.
 - **No skill-immutability invariant.** Earlier drafts had "Sessions are skill-immutable after start" — fully reversed.
 - **Snapshot size impact.** Snapshots no longer carry skill content. Customs at 10+ MiB × 20 per tenant × every snapshot — storage cost is gone.
 - **Mid-conversation user-visible behavior.** A user's agent might confidently invoke `deal-summary` in turn 5 using SKILL.md content read earlier; admin deletes it; turn 6 the skill is gone from inventory. Agent gets a missing-dir error on next attempt and reports it. This is essentially the same behavior we'd have had at the boundary model — admins were never going to delete skills "carefully" relative to in-flight conversations.
@@ -1037,11 +1128,11 @@ For deletes:
 
 ### Todos
 - [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` from the top of the doc.
-- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (≤5 min propagation via the pod refresh loop + OpenCode per-turn rescan)."`
-- [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few minutes."
+- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push; ≤5 min safety net via polling; OpenCode rescans per turn)."`
+- [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few seconds."
 - [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
 - [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. (AGENTS.md regen there is no longer needed for skill purposes — see §10.)
-- [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait ≤5 min, verify the new skill is readable inside `/skills/` AND the agent's `skill` tool lists it on the next turn.
+- [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait for push to propagate (≤5 sec in test), verify the new skill is readable inside `/skills/` AND the agent's `skill` tool lists it on the next turn.
 - [ ] Integration test `test_snapshot_excludes_skills.py`: pause a session, inspect the snapshot tar, confirm `/skills/` is absent. Resume and confirm `.agents/skills` is a symlink to `/skills/`, populated from current admin state.
 
 ---
@@ -1095,11 +1186,11 @@ On a custom skill row:
 - **Replace bundle** → drag-and-drop new zip in a modal with confirmation copy → `PUT /api/admin/skills/custom/{id}/bundle`.
 - **Manage grants** → reuses the visibility picker → `PUT /api/admin/skills/custom/{id}/grants`.
 
-All mutation modals include the "takes effect within a few minutes" callout (see §12).
+All mutation modals include the "takes effect within a few seconds" callout (see §12).
 
 #### 13.4 Delete
 Soft-delete confirmation modal:
-> "Delete `<name>`? This removes the skill and revokes access for all granted users and groups. Conversations currently in progress will see the deletion on their next turn (≤ 5 min). Files this skill *wrote into* user workspaces (generated outputs, attachments) remain there until the sessions end; the skill's own code stops being readable on the next refresh. This action can be reversed by an engineer in the database."
+> "Delete `<name>`? This removes the skill and revokes access for all granted users and groups. Conversations currently in progress will see the deletion on their next turn (typically within seconds). Files this skill *wrote into* user workspaces (generated outputs, attachments) remain there until the sessions end; the skill's own code stops being readable on the next refresh. This action can be reversed by an engineer in the database."
 
 Submit → `DELETE /api/admin/skills/custom/{id}`. Row disappears from list. Hard delete is not a V1 admin action.
 
@@ -1125,7 +1216,7 @@ Visibility picker (radio + group + user multi-select) is reused across upload mo
   - [ ] Client-side frontmatter pre-fill from selected zip (use a zip-reading lib like `jszip`).
 - [ ] Edit / replace / grants:
   - [ ] `web/src/app/admin/skills/EditSkillModal.tsx`.
-  - [ ] `web/src/app/admin/skills/ReplaceBundleModal.tsx` with "takes effect within a few minutes" copy (per §12).
+  - [ ] `web/src/app/admin/skills/ReplaceBundleModal.tsx` with "takes effect within a few seconds" copy (per §12).
   - [ ] `web/src/app/admin/skills/VisibilityPicker.tsx` — shared component.
 - [ ] Delete confirmation modal with the standard copy.
 - [ ] Hook the page into the admin nav.
@@ -1387,7 +1478,7 @@ These two together collapse the realistic exfil surface to side channels (timing
 
 1. **Prompt injection via SKILL.md.** The agent reads SKILL.md as instructions. A malicious bundle can override agent behavior across every session materializing the skill. Mitigated only by approval gates on writes + admin review of SKILL.md content (visible in the detail drawer). Not fully fixable at V1.
 2. **Confused-deputy via legitimate grants.** A skill calling `api.linear.app` *as the user* can read everything that user can read in Linear. Even with the "writes require approval" tightening, the read scope of allowed services is the user's full scope. Mitigation is fine-grained per-skill scope declarations — deferred to V2.
-3. **Workspace persistence after skill delete.** The skill itself stops being readable on next refresh (≤ 5 min), but files the skill *wrote* into the session workspace (e.g. `pptx`-generated decks) persist across snapshot/resume. Admin delete modal must call this out.
+3. **Workspace persistence after skill delete.** The skill itself stops being readable on next refresh (typically within seconds), but files the skill *wrote* into the session workspace (e.g. `pptx`-generated decks) persist across snapshot/resume. Admin delete modal must call this out.
 4. **Side-channel exfil through allowed reads.** Timing, query patterns, request sizes. Not addressable without significant infrastructure.
 5. **Sandbox escape (defense in depth gap).** If a container-escape vuln exists, all network controls are bypassed. Why sandbox hardening is non-negotiable regardless of network posture.
 

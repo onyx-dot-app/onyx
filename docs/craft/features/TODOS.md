@@ -176,10 +176,28 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 ### 3.4 In-pod refresh script + loop  (spec §9)
 
 - `[TODO]` `P3.030` Create `backend/onyx/server/features/build/sandbox/kubernetes/docker/refresh-skills` — POSIX-sh script: curl tarball → extract to `/skills.next/` → atomic rename to `/skills/`. No external deps beyond `curl` + `tar` (both standard in the sandbox base image).
-- `[TODO]` `P3.031` Create `refresh-loop` — `while true; do refresh-skills; sleep 300; done` wrapper for the background loop.
+- `[TODO]` `P3.031` Create `refresh-loop` — `while true; do refresh-skills; sleep 300; done` wrapper. Polling is the safety net; event-driven push (§3.4b) is the primary path.
 - `[TODO]` `P3.032` Add initContainer to the sandbox pod spec that runs `refresh-skills` synchronously before the sandbox container starts (guarantees `/skills/` exists before sessions can use it).
 - `[TODO]` `P3.033` Update sandbox entrypoint to background `refresh-loop &`.
-- `[TODO]` `P3.034` Mount a pod-level emptyDir volume at `/skills/` in the pod spec (writable only by the refresh-skills initContainer + the entrypoint; read-only mount into the sandbox container is fine too).
+- `[TODO]` `P3.034` Mount a pod-level emptyDir volume at `/skills/` in the pod spec.
+
+### 3.4b Event-driven push  (spec §9.7)
+
+Primary propagation path. ~1-3 sec typical end-to-end. Polling (§3.4) is the safety net.
+
+- `[TODO]` `P3.035` Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning, alongside the existing `onyx.app/sandbox-id` (`kubernetes_sandbox_manager.py:619`).
+- `[TODO]` `P3.036` Create `backend/onyx/background/celery/tasks/skills/__init__.py` + `tasks.py` if not already created by Phase 5 sweep.
+- `[TODO]` `P3.037` Implement `_list_active_sandbox_pods_for_tenant(tenant_id) -> list[str]` using k8s label selector `onyx.app/tenant-id={id}` + phase=Running.  (deps: P3.035)
+- `[TODO]` `P3.038` Implement `@shared_task(name="propagate_skill_change", expires=60)` — calls `_list_active_sandbox_pods_for_tenant`, then `send_task("refresh_pod_skills", ...)` per pod.  (deps: P3.037)
+- `[TODO]` `P3.039` Implement `@shared_task(name="refresh_pod_skills", expires=60)` — kubectl-exec into the named pod and run `/usr/local/bin/refresh-skills`. Swallow exec errors with `logger.warning` (polling catches misses).
+- `[TODO]` `P3.040x` Hook `celery_app.send_task("propagate_skill_change", args=[str(tenant_id)], expires=60)` at the 5 mutation endpoints AFTER their respective commits:
+  - POST `/api/admin/skills/custom`
+  - PATCH `/api/admin/skills/custom/{id}`
+  - PUT `/api/admin/skills/custom/{id}/bundle`
+  - PUT `/api/admin/skills/custom/{id}/grants`
+  - DELETE `/api/admin/skills/custom/{id}`
+- `[TODO]` `P3.041x` Integration test: admin upload → wait ≤5 sec → assert pod's `/skills/` reflects new content AND agent's `skill` tool lists it on the next turn.
+- `[TODO]` `P3.042x` Failure test: simulate kubectl-exec failure during push → assert polling catches the change on next tick (use a 10-sec poll interval for the test to keep it fast).
 
 ### 3.5 Per-session symlink  (spec §9)
 
