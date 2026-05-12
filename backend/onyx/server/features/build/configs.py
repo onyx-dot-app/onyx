@@ -109,6 +109,10 @@ SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Internal URL the sandbox uses to reach the Onyx API server.
+# Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
+SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
+
 # ============================================================================
 # SSE Streaming Configuration
 # ============================================================================

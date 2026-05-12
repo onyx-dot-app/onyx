@@ -31,6 +31,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
+from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
 from onyx.llm.factory import get_default_llm
@@ -65,6 +66,7 @@ from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -380,6 +382,27 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
+    def _provision_sandbox(
+        self,
+        sandbox: Sandbox,
+        user: User,
+        user_id: UUID,
+        tenant_id: str,
+        llm_config: LLMProviderConfig,
+    ) -> None:
+        """Ensure PAT exists and provision the sandbox pod."""
+        onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
+        sandbox_info = self._sandbox_manager.provision(
+            sandbox_id=sandbox.id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            llm_config=llm_config,
+            onyx_pat=onyx_pat,
+        )
+        update_sandbox_status__no_commit(
+            self._db_session, sandbox.id, sandbox_info.status
+        )
+
     def create_session__no_commit(
         self,
         user_id: UUID,
@@ -469,6 +492,11 @@ class SessionManager:
             nextjs_port,
         )
 
+        # Fetch user early — needed for PAT provisioning and AGENTS.md personalization
+        user = fetch_user_by_id(self._db_session, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
         # Check if user already has a sandbox (one sandbox per user model)
         existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
@@ -489,16 +517,7 @@ class SessionManager:
                     sandbox_id,
                     user_id,
                 )
-                sandbox_info = self._sandbox_manager.provision(
-                    sandbox_id=sandbox_id,
-                    user_id=user_id,
-                    tenant_id=tenant_id,
-                    llm_config=llm_config,
-                )
-                # Use update function to also set heartbeat when transitioning to RUNNING
-                update_sandbox_status__no_commit(
-                    self._db_session, sandbox_id, sandbox_info.status
-                )
+                self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -518,15 +537,8 @@ class SessionManager:
                     logger.info(
                         "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
                     )
-                    sandbox_info = self._sandbox_manager.provision(
-                        sandbox_id=sandbox_id,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                        llm_config=llm_config,
-                    )
-                    # Use update function to also set heartbeat when transitioning to RUNNING
-                    update_sandbox_status__no_commit(
-                        self._db_session, sandbox_id, sandbox_info.status
+                    self._provision_sandbox(
+                        sandbox, user, user_id, tenant_id, llm_config
                     )
                 else:
                     logger.info(
@@ -555,27 +567,14 @@ class SessionManager:
                 "Created sandbox record %s for session %s", sandbox_id, session_id
             )
 
-            # Provision sandbox (no DB operations inside)
-            sandbox_info = self._sandbox_manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                llm_config=llm_config,
-            )
-
-            # Update sandbox status (also refreshes heartbeat when transitioning to RUNNING)
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox_id, sandbox_info.status
-            )
+            self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
 
         # Set up session workspace within the sandbox
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
-        # Fetch user data for personalization in AGENTS.md
-        user = fetch_user_by_id(self._db_session, user_id)
-        user_name = user.personal_name if user else None
-        user_role = user.personal_role if user else None
+        user_name = user.personal_name
+        user_role = user.personal_role
 
         # Get excluded user library paths (files with sync_disabled=True)
         # Only query if not using demo data (user library only applies to user files)

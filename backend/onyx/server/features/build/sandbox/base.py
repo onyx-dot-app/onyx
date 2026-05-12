@@ -76,6 +76,7 @@ class SandboxManager(ABC):
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,
+        onyx_pat: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -90,6 +91,7 @@ class SandboxManager(ABC):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration (for default config)
+            onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the sandbox
 
         Returns:
             SandboxInfo with the provisioned sandbox details

@@ -59,6 +59,7 @@ from kubernetes.stream import stream as k8s_stream
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
@@ -438,6 +439,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: str,
         user_id: str,
         tenant_id: str,
+        onyx_pat: str,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox (user-level).
 
@@ -520,11 +522,17 @@ done
                 )
             )
 
+        sandbox_env_vars = [
+            client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
+            client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+        ]
+
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
             ports=container_ports,
+            env=sandbox_env_vars,
             volume_mounts=[
                 client.V1VolumeMount(
                     name="files", mount_path="/workspace/files", read_only=True
@@ -907,6 +915,7 @@ done
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
+        onyx_pat: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -927,6 +936,7 @@ done
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
+            onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the pod
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -968,6 +978,13 @@ done
                 last_heartbeat=None,
             )
 
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+            )
+
         try:
             # 1. Create Pod (user-level only, no session setup)
             logger.debug("Creating Pod %s", pod_name)
@@ -975,6 +992,7 @@ done
                 sandbox_id=str(sandbox_id),
                 user_id=str(user_id),
                 tenant_id=tenant_id,
+                onyx_pat=onyx_pat,
             )
             try:
                 self._core_api.create_namespaced_pod(

@@ -280,6 +280,7 @@ class LocalSandboxManager(SandboxManager):
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
+        onyx_pat: str | None = None,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -295,6 +296,8 @@ class LocalSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration (stored for default config)
+            onyx_pat: Not used for LocalSandboxManager as it requires onyx-cli pre-configured
+                with the correct URL and PAT token.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
