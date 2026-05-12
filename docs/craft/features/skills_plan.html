@@ -1627,7 +1627,7 @@
     bundle_sha256:     Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
-    owner_user_id: Mapped[UUID | None] = mapped_column(
+    author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -4490,7 +4490,7 @@ RUN mkdir -p /skills</code></pre>
       </li>
       <li>
         <strong>No audit log in V1.</strong> <code>created_at</code> /
-        <code>updated_at</code> / <code>owner_user_id</code> are sufficient.
+        <code>updated_at</code> / <code>author_user_id</code> are sufficient.
       </li>
       <li>
         <strong>No bulk operations.</strong> "Grant skill to N groups" is the
@@ -4988,7 +4988,7 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
       <li>Admin-only upload route.</li>
       <li>Per-tenant blob isolation via FileStore prefixing.</li>
       <li>
-        Audit trail on each <code>skill</code> row: <code>owner_user_id</code>,
+        Audit trail on each <code>skill</code> row: <code>author_user_id</code>,
         <code>bundle_sha256</code>, <code>created_at</code>,
         <code>updated_at</code>.
       </li>
@@ -5385,7 +5385,7 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
       <li>
         <strong>Compliance / data handling.</strong> Retention of soft-deleted
         skill rows is indefinite (only blobs are swept). GDPR user-deletion sets
-        <code>owner_user_id</code> to NULL but keeps the skill (org-owned,
+        <code>author_user_id</code> to NULL but keeps the skill (org-owned,
         intentional). SOC 2 audit trail for upload/replace/delete events should
         land in Onyx's existing audit log infra rather than a parallel store —
         confirm during implementation.
