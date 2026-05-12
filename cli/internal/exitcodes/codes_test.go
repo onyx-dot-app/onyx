@@ -64,6 +64,7 @@ func TestForHTTPStatus(t *testing.T) {
 	}{
 		{200, Success},
 		{400, BadRequest},
+		{422, BadRequest},
 		{401, AuthFailure},
 		{403, AuthFailure},
 		{404, NotAvailable},

@@ -15,6 +15,42 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// buildSearchRequest maps CLI flags into a SearchRequest.
+// Boolean "set" parameters indicate whether the corresponding flag was explicitly provided.
+func buildSearchRequest(
+	query string,
+	sources []string,
+	days int, daysSet bool,
+	limit int, limitSet bool,
+	agentID int, agentIDSet bool,
+	defaultAgentID int,
+	noQueryExpansion bool,
+) models.SearchRequest {
+	req := models.SearchRequest{Query: query}
+
+	for _, s := range sources {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			req.Sources = append(req.Sources, s)
+		}
+	}
+	if daysSet {
+		req.TimeCutoffDays = &days
+	}
+	if limitSet {
+		req.NumResults = limit
+	}
+	if agentIDSet {
+		req.PersonaID = &agentID
+	} else if defaultAgentID != 0 {
+		req.PersonaID = &defaultAgentID
+	}
+	if noQueryExpansion {
+		req.SkipQueryExpansion = true
+	}
+	return req
+}
+
 func newSearchCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
 		searchSources          string
@@ -60,34 +96,19 @@ full response is saved to a temp file.`,
 					"no query provided\n  Usage: onyx-cli search \"your query\"")
 			}
 
-			req := models.SearchRequest{
-				Query: args[0],
-			}
-
+			var sources []string
 			if cmd.Flags().Changed("source") {
-				for _, s := range strings.Split(searchSources, ",") {
-					s = strings.TrimSpace(s)
-					if s != "" {
-						req.Sources = append(req.Sources, s)
-					}
-				}
+				sources = strings.Split(searchSources, ",")
 			}
-			if cmd.Flags().Changed("days") {
-				req.TimeCutoffDays = &searchDays
-			}
-			if cmd.Flags().Changed("limit") {
-				req.NumResults = searchLimit
-			}
-			agentID := cfg.DefaultAgentID
-			if cmd.Flags().Changed("agent-id") {
-				agentID = searchAgentID
-			}
-			if agentID != 0 {
-				req.PersonaID = &agentID
-			}
-			if searchNoQueryExpansion {
-				req.SkipQueryExpansion = true
-			}
+			req := buildSearchRequest(
+				args[0],
+				sources,
+				searchDays, cmd.Flags().Changed("days"),
+				searchLimit, cmd.Flags().Changed("limit"),
+				searchAgentID, cmd.Flags().Changed("agent-id"),
+				cfg.DefaultAgentID,
+				searchNoQueryExpansion,
+			)
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()

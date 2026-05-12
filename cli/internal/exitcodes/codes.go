@@ -24,7 +24,7 @@ func ForHTTPStatus(statusCode int) Code {
 	switch {
 	case statusCode >= 200 && statusCode < 300:
 		return Success
-	case statusCode == 400:
+	case statusCode == 400 || statusCode == 422:
 		return BadRequest
 	case statusCode == 401 || statusCode == 403:
 		return AuthFailure

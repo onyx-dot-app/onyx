@@ -130,7 +130,7 @@ Prints a table of agent IDs, names, and descriptions. Use `--json` for structure
 onyx-cli validate-config
 ```
 
-Checks config exists, PAT is present, server is reachable, and credentials are valid. Use before `ask` or `agents` to confirm the CLI is properly set up.
+Checks config exists, PAT is present, server is reachable, and credentials are valid. Use before `search`, `ask`, or `agents` to confirm the CLI is properly set up.
 
 ## Output Conventions
 

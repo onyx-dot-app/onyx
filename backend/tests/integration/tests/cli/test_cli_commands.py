@@ -37,6 +37,8 @@ Test Suite:
 21. test_search_no_query - No query returns exit code 2
 22. test_search_bad_pat - Invalid PAT returns exit code 4
 23. test_search_not_configured - Missing PAT returns exit code 3
+24. test_search_source_filter - --source filters results to matching source types
+25. test_search_agent_id - --agent-id scopes search to a persona's document sets
 """
 
 import json
@@ -47,9 +49,11 @@ from pathlib import Path
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestAPIKey
@@ -488,3 +492,80 @@ def test_search_not_configured(
     result = run_cli(cli_binary, ["search", "test"])
 
     assert result.returncode == 3
+
+
+def test_search_source_filter(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """--source filters results to matching source types."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    phrase = "cli-search-source-filter-unique"
+    DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
+
+    result = run_cli(
+        cli_binary,
+        ["search", "--raw", "--source", DocumentSource.FILE.value, phrase],
+        pat=pat_token,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    data = json.loads(result.stdout)
+    assert len(data["results"]) > 0
+    # All results should match the requested source
+    for r in data["results"]:
+        assert r["source_type"] == DocumentSource.FILE.value
+
+
+def test_search_agent_id(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """--agent-id scopes search to a persona's document sets."""
+    cc_pair_in = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+
+    shared_phrase = "cli-search-agent-scope-unique"
+    doc_in = DocumentManager.seed_doc_with_content(
+        cc_pair_in,
+        f"{shared_phrase} in scope",
+        api_key,
+    )
+    doc_out = DocumentManager.seed_doc_with_content(
+        cc_pair_out,
+        f"{shared_phrase} out of scope",
+        api_key,
+    )
+
+    doc_set = DocumentSetManager.create(
+        cc_pair_ids=[cc_pair_in.id],
+        user_performing_action=admin_user,
+    )
+    DocumentSetManager.wait_for_sync(
+        user_performing_action=admin_user,
+        document_sets_to_check=[doc_set],
+    )
+
+    persona = PersonaManager.create(
+        user_performing_action=admin_user,
+        document_set_ids=[doc_set.id],
+        is_public=True,
+    )
+
+    result = run_cli(
+        cli_binary,
+        ["search", "--raw", "--agent-id", str(persona.id), shared_phrase],
+        pat=pat_token,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    data = json.loads(result.stdout)
+    result_doc_ids = {r["document_id"] for r in data["results"]}
+    assert doc_in.id in result_doc_ids
+    assert doc_out.id not in result_doc_ids

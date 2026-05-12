@@ -79,7 +79,7 @@ func wrapTimeoutError(err error) error {
 	return err
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
+func (c *Client) doJSONWith(ctx context.Context, httpClient *http.Client, method, path string, reqBody any, result any) error {
 	var body io.Reader
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -97,7 +97,7 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return wrapTimeoutError(err)
 	}
@@ -113,38 +113,12 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 	return nil
 }
 
+func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
+	return c.doJSONWith(ctx, c.httpClient, method, path, reqBody, result)
+}
+
 func (c *Client) doJSONLong(ctx context.Context, method, path string, reqBody any, result any) error {
-	var body io.Reader
-	if reqBody != nil {
-		data, err := json.Marshal(reqBody)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(data)
-	}
-
-	req, err := c.newRequest(ctx, method, path, body)
-	if err != nil {
-		return err
-	}
-	if reqBody != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := c.longHTTPClient.Do(req)
-	if err != nil {
-		return wrapTimeoutError(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if err := checkResponse(resp); err != nil {
-		return err
-	}
-
-	if result != nil {
-		return json.NewDecoder(resp.Body).Decode(result)
-	}
-	return nil
+	return c.doJSONWith(ctx, c.longHTTPClient, method, path, reqBody, result)
 }
 
 // Search calls POST /api/search and returns the response.
