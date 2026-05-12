@@ -1,9 +1,12 @@
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -99,3 +102,44 @@ def delete_external_app__no_commit(
 
     db_session.delete(app)
     db_session.flush()
+
+
+def upsert_external_app_user_credential__no_commit(
+    *,
+    db_session: Session,
+    external_app_id: int,
+    user_id: UUID,
+    user_credentials: dict[str, Any],
+) -> ExternalAppUserCredential:
+    """Create or replace the calling user's credentials for the given external app.
+
+    Atomic via ON CONFLICT against the unique (external_app_id, user_id)
+    constraint, so concurrent callers can't both insert a duplicate row.
+
+    Raises OnyxError(NOT_FOUND) if no app with `external_app_id` exists.
+    """
+    app = get_external_app_by_id(
+        db_session=db_session, external_app_id=external_app_id
+    )
+    if app is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {external_app_id} not found.",
+        )
+
+    stmt = pg_insert(ExternalAppUserCredential).values(
+        external_app_id=external_app_id,
+        user_id=user_id,
+        user_credentials=user_credentials,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[
+            ExternalAppUserCredential.external_app_id,
+            ExternalAppUserCredential.user_id,
+        ],
+        set_={"user_credentials": stmt.excluded.user_credentials},
+    ).returning(ExternalAppUserCredential)
+
+    cred = db_session.scalars(stmt).one()
+    db_session.flush()
+    return cred
