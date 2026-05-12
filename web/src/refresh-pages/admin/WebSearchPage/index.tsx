@@ -7,10 +7,9 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { markdown } from "@opal/utils";
-import useSWR from "swr";
-import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
@@ -31,28 +30,26 @@ import {
   isBuiltInSearchProviderType,
   isSearchProviderConfigured,
   searchProviderRequiresApiKey,
-  type WebSearchProviderType,
-} from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
-import {
   CONTENT_PROVIDER_DETAILS,
   CONTENT_PROVIDER_ORDER,
   getSingleContentConfigFieldValueForForm,
   getCurrentContentProviderType,
   isContentProviderConfigured,
-  type WebContentProviderType,
-} from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
+} from "@/lib/webSearch/utils";
 import {
   activateSearchProvider,
   deactivateSearchProvider,
   activateContentProvider,
   deactivateContentProvider,
   disconnectProvider,
-} from "@/refresh-pages/admin/WebSearchPage/svc";
+} from "@/lib/webSearch/svc";
 import type {
+  WebSearchProviderType,
+  WebContentProviderType,
   WebSearchProviderView,
   WebContentProviderView,
   DisconnectTargetState,
-} from "@/refresh-pages/admin/WebSearchPage/interfaces";
+} from "@/lib/webSearch/types";
 
 const NO_DEFAULT_VALUE = "__none__";
 
@@ -272,29 +269,14 @@ export default function WebSearchPage() {
   const contentSetupModal = useCreateModal();
 
   const {
-    data: searchProvidersData,
-    error: searchProvidersError,
-    isLoading: isLoadingSearchProviders,
-    mutate: mutateSearchProviders,
-  } = useSWR<WebSearchProviderView[]>(
-    SWR_KEYS.webSearchSearchProviders,
-    errorHandlingFetcher
-  );
-
-  const {
-    data: contentProvidersData,
-    error: contentProvidersError,
-    isLoading: isLoadingContentProviders,
-    mutate: mutateContentProviders,
-  } = useSWR<WebContentProviderView[]>(
-    SWR_KEYS.webSearchContentProviders,
-    errorHandlingFetcher
-  );
-
-  const searchProviders = searchProvidersData ?? [];
-  const contentProviders = contentProvidersData ?? [];
-
-  const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
+    searchProviders,
+    contentProviders,
+    searchProvidersError,
+    contentProvidersError,
+    isLoading,
+    mutateSearchProviders,
+    mutateContentProviders,
+  } = useWebSearchProviders();
 
   const exaSearchProvider = searchProviders.find(
     (p) => p.provider_type === "exa"

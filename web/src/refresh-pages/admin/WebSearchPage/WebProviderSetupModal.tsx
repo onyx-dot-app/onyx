@@ -10,13 +10,13 @@ import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import { MASKED_API_KEY_PLACEHOLDER } from "@/refresh-pages/admin/WebSearchPage/WebProviderModalReducer";
 import {
-  connectProviderFlow,
-  type WebProviderCategory,
-} from "@/refresh-pages/admin/WebSearchPage/connectProviderFlow";
-import { buildSearchProviderConfig } from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
-import { buildContentProviderConfig } from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
+  buildSearchProviderConfig,
+  buildContentProviderConfig,
+} from "@/lib/webSearch/utils";
+
+import { connectProviderFlow } from "@/lib/webSearch/svc";
+import type { WebProviderCategory } from "@/lib/webSearch/types";
 import {
   ApiKeyField,
   ConfigTextField,
@@ -43,8 +43,8 @@ export interface WebProviderSetupModalProps {
   existingProvider?: ExistingProviderInfo | null;
   /**
    * When true, an API key is already available via a sibling provider (e.g. Exa
-   * search key shared with Exa content). Affects whether the masked placeholder
-   * is shown as the initial value even when existingProvider is null.
+   * search key shared with Exa content). Skips the required-key validation and
+   * renders the API key field in non-revealable mode.
    */
   hasSharedApiKey?: boolean;
   initialConfigValue?: string;
@@ -78,18 +78,18 @@ export function WebProviderSetupModal({
 
   const hasStoredKey =
     (existingProvider?.has_api_key ?? false) || hasSharedApiKey;
-  const initialApiKey = hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "";
   const initialConfig = initialConfigValue ?? "";
 
   const initialValues: FormValues = {
-    api_key: initialApiKey,
+    api_key: "",
     config: initialConfig,
   };
 
   const validationSchema = Yup.object().shape({
-    api_key: requiresApiKey
-      ? Yup.string().required("API key is required")
-      : Yup.string(),
+    api_key:
+      requiresApiKey && !hasStoredKey
+        ? Yup.string().required("API key is required")
+        : Yup.string(),
     config: configField
       ? Yup.string().required(`${configField.title} is required`)
       : Yup.string(),
@@ -99,7 +99,7 @@ export function WebProviderSetupModal({
     values: FormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = requiresApiKey && values.api_key !== initialApiKey;
+    const apiKeyChanged = requiresApiKey && values.api_key.trim().length > 0;
 
     const config =
       category === "search"
@@ -162,6 +162,7 @@ export function WebProviderSetupModal({
                     <ApiKeyField
                       providerLabel={providerLabel}
                       apiKeyUrl={apiKeyUrl}
+                      isNonRevealable={hasStoredKey}
                     />
                   )}
                   {configField && (

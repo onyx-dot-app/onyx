@@ -9,9 +9,14 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 interface ApiKeyFieldProps {
   providerLabel: string;
   apiKeyUrl?: string;
+  isNonRevealable?: boolean;
 }
 
-export function ApiKeyField({ providerLabel, apiKeyUrl }: ApiKeyFieldProps) {
+export function ApiKeyField({
+  providerLabel,
+  apiKeyUrl,
+  isNonRevealable,
+}: ApiKeyFieldProps) {
   return (
     <InputVertical
       title="API Key"
@@ -22,7 +27,11 @@ export function ApiKeyField({ providerLabel, apiKeyUrl }: ApiKeyFieldProps) {
           : `Paste your API key from ${providerLabel} to connect.`
       )}
     >
-      <PasswordInputTypeInField name="api_key" showClearButton={false} />
+      <PasswordInputTypeInField
+        name="api_key"
+        showClearButton={false}
+        isNonRevealable={isNonRevealable}
+      />
     </InputVertical>
   );
 }
