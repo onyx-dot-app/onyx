@@ -140,12 +140,13 @@ func (m Model) handleConfigTestResult(msg ConfigTestResultMsg) (Model, tea.Cmd) 
 
 	m.config.ServerURL = m.configState.serverURL
 	m.config.APIKey = m.configState.apiKey
+	m.client = api.NewClient(m.config)
+
 	if err := config.Save(m.config); err != nil {
 		m.viewport.addError("Could not save config: " + err.Error())
 		return m.exitConfigureMode(), nil
 	}
 
-	m.client = api.NewClient(m.config)
 	m.viewport.addInfo("Connected to " + m.config.ServerURL + ". Configuration saved.")
 	m.status.setServer(m.config.ServerURL)
 	m.startMode = startNormal
