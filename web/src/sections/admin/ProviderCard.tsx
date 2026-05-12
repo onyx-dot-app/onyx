@@ -97,7 +97,6 @@ export default function ProviderCard({
     >
       <SelectCard
         state={STATUS_TO_STATE[status]}
-        borderColor="interactive"
         padding="sm"
         rounding="lg"
         aria-label={ariaLabel}

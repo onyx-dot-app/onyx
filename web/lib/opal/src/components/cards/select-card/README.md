@@ -41,7 +41,6 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 | `padding` | `PaddingVariants` | `"md"` | Padding preset |
 | `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
 | `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
-| `borderColor` | `Extract<ColorTypes, "default" \| "interactive">` | `"default"` | `"default"` → always `border-01`; `"interactive"` → `border-01` at rest, `--interactive-foreground` when selected |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 
@@ -79,7 +78,7 @@ SelectCard's stylesheet (`styles.css`) provides:
 
 - `w-full overflow-clip` base styles
 - Border style via `data-border` (`none` / `dashed` / `solid`)
-- Border color via `data-border-color` (`default` → `border-01` always; `interactive` → `border-01` for `empty`/`filled`, `--interactive-foreground` for `selected`)
+- Border color tied to state: `border-01` for `empty`/`filled`, `var(--interactive-foreground)` for `selected`
 
 All background and foreground colors come from the Interactive.Stateful CSS, not from SelectCard.
 

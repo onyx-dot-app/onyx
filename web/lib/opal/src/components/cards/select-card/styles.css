@@ -17,12 +17,13 @@
   @apply border;
 }
 
-/* Border color */
-.opal-select-card[data-border-color="default"],
-.opal-select-card[data-border-color="interactive"] {
+/* Border color — tied to state, mirrors the foreground/background matrix */
+.opal-select-card[data-border="solid"],
+.opal-select-card[data-border="dashed"] {
   @apply border-border-01;
 }
 
-.opal-select-card[data-border-color="interactive"][data-interactive-state="selected"] {
+.opal-select-card[data-border="solid"][data-interactive-state="selected"],
+.opal-select-card[data-border="dashed"][data-interactive-state="selected"] {
   border-color: var(--interactive-foreground);
 }
