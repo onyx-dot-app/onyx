@@ -108,7 +108,7 @@ function InteractiveStateless({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "cursor-default! select-auto!",
     group
   );
 

@@ -67,7 +67,7 @@ describe("Logo Icons", () => {
       "custom",
       "text-red-500",
       "dark:text-black",
-      "!text-[#33C19E]"
+      "text-[#33C19E]!"
     );
   });
 });

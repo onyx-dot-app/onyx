@@ -530,7 +530,7 @@ const AppInputBar = React.memo(
           "flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
-            : "opacity-100 p-1 h-[2.75rem] pointer-events-auto",
+            : "opacity-100 p-1 h-11 pointer-events-auto",
           "transition-all duration-150"
         )}
       >
@@ -812,7 +812,7 @@ const AppInputBar = React.memo(
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
-                    className="px-3 py-2 flex-1 flex h-[2.75rem] overflow-hidden"
+                    className="px-3 py-2 flex-1 flex h-11 overflow-hidden"
                   >
                     <div
                       ref={inputRef}
@@ -831,7 +831,7 @@ const AppInputBar = React.memo(
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
                       onCompositionEnd={handleCompositionEnd}
-                      className="p-[2px] w-full h-full outline-none bg-transparent whitespace-pre-wrap break-words overflow-y-auto"
+                      className="p-[2px] w-full h-full outline-hidden bg-transparent whitespace-pre-wrap wrap-break-word overflow-y-auto"
                       tabIndex={disabled ? -1 : 0}
                       style={{
                         scrollbarWidth: "thin",

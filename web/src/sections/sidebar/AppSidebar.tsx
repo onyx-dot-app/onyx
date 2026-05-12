@@ -647,7 +647,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
       <AnimatePresence>
         {showIntroAnimation && (
           <motion.div
-            className="fixed inset-0 z-[9999]"
+            className="fixed inset-0 z-9999"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

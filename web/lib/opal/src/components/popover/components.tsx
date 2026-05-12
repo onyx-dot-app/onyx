@@ -110,12 +110,12 @@ const PopoverClose = PopoverPrimitive.Close;
 type PopoverWidths = "fit" | "sm" | "md" | "lg" | "xl" | "2xl" | "trigger";
 const widthClasses: Record<PopoverWidths, string> = {
   fit: "w-fit",
-  sm: "w-[10rem]",
-  md: "w-[12rem]",
-  lg: "w-[15rem]",
-  xl: "w-[18rem]",
-  "2xl": "w-[25rem]",
-  trigger: "w-[var(--radix-popover-trigger-width)]",
+  sm: "w-40",
+  md: "w-48",
+  lg: "w-60",
+  xl: "w-72",
+  "2xl": "w-100",
+  trigger: "w-(--radix-popover-trigger-width)",
 };
 interface PopoverContentProps
   extends WithoutStyles<
@@ -144,7 +144,7 @@ function PopoverContent({
         className={cn(
           "bg-background-neutral-00 p-1 z-popover rounded-12 border shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "flex flex-col",
-          "max-h-[var(--radix-popover-content-available-height)]",
+          "max-h-(--radix-popover-content-available-height)",
           "overflow-hidden",
           widthClasses[width]
         )}
@@ -231,7 +231,7 @@ function PopoverMenu({
     <Section alignItems="stretch" height="auto" className="flex-1 min-h-0">
       <ShadowDiv
         scrollContainerRef={scrollContainerRef}
-        className="flex flex-col gap-1 max-h-[20rem] w-full"
+        className="flex flex-col gap-1 max-h-80 w-full"
       >
         {filteredChildren.map((child, index) => (
           <div key={index}>

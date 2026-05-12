@@ -64,7 +64,7 @@ export function AnnouncementBanner() {
           return (
             <div
               key={notification.id}
-              className="absolute top-0 left-1/2 transform -translate-x-1/2 bg-blue-600 rounded-sm text-white px-4 pr-8 py-3 mx-auto"
+              className="absolute top-0 left-1/2 transform -translate-x-1/2 bg-blue-600 rounded-xs text-white px-4 pr-8 py-3 mx-auto"
             >
               {notification.notif_type == "reindex" ? (
                 <p className="text-center">

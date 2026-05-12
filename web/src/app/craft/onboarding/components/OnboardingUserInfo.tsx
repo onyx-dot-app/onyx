@@ -101,7 +101,7 @@ export default function OnboardingUserInfo({
                 value={firstName}
                 onChange={(e) => onFirstNameChange(e.target.value)}
                 placeholder="First name"
-                className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+                className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-hidden"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -113,7 +113,7 @@ export default function OnboardingUserInfo({
                 value={lastName}
                 onChange={(e) => onLastNameChange(e.target.value)}
                 placeholder="Last name"
-                className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+                className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-hidden"
               />
             </div>
           </div>

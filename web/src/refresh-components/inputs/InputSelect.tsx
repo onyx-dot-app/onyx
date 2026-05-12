@@ -153,7 +153,7 @@ function InputSelectRoot({
   );
 
   return (
-    <div className="w-full min-w-[var(--block-width-form-input-min)] relative">
+    <div className="w-full min-w-(--block-width-form-input-min) relative">
       <InputSelectContext.Provider value={contextValue}>
         <SelectPrimitive.Root
           {...(isControlled ? { value: currentValue } : { defaultValue })}
@@ -237,7 +237,7 @@ function InputSelectTrigger({
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
+        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-hidden",
         wrapperClasses[variant],
         variant === "primary" && "data-[state=open]:border-border-05"
       )}
@@ -291,7 +291,7 @@ function InputSelectContent({
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "z-popover w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
+          "z-popover w-(--radix-select-trigger-width) max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
@@ -372,7 +372,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-none focus:outline-none rounded-08 data-[highlighted]:bg-background-tint-02"
+      className="outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}

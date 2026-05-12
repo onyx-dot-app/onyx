@@ -95,7 +95,7 @@ function BuildFileCard({
       </span>
       <button
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded"
+        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
       >
         <SvgX className="h-3 w-3 text-text-03" />
       </button>
@@ -325,10 +325,10 @@ const InputBar = memo(
                   "w-full",
                   "h-full",
                   "min-h-[44px]",
-                  "outline-none",
+                  "outline-hidden",
                   "bg-transparent",
                   "whitespace-pre-wrap",
-                  "break-words",
+                  "wrap-break-word",
                   "overscroll-contain",
                   "overflow-y-auto",
                   "px-3",

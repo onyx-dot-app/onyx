@@ -28,9 +28,9 @@ TooltipTrigger.displayName = TooltipPrimitive.Trigger.displayName;
 type TooltipSize = "sm" | "md" | "lg";
 
 const tooltipSizeClasses: Record<TooltipSize, string> = {
-  sm: "px-2 py-1 max-w-[12rem]",
-  md: "px-3 py-2 max-w-[20rem]",
-  lg: "px-3 py-2 max-w-[30rem]",
+  sm: "px-2 py-1 max-w-48",
+  md: "px-3 py-2 max-w-80",
+  lg: "px-3 py-2 max-w-120",
 };
 
 const TooltipContent = React.forwardRef<

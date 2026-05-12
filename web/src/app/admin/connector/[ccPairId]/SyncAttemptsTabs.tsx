@@ -243,7 +243,7 @@ function SyncAttemptsTabSpinner() {
       justifyContent="center"
       alignItems="center"
       height="auto"
-      className="min-h-[32rem]"
+      className="min-h-128"
     >
       <SimpleLoader className="h-6 w-6" />
     </Section>

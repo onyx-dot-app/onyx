@@ -54,7 +54,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         role="switch"
         aria-checked={checked}
         className={cn(
-          "peer inline-flex h-[1.125rem] w-[2rem] shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-none",
+          "peer inline-flex h-4.5 w-8 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-hidden",
           disabled
             ? checked
               ? "switch-disabled-checked"
@@ -69,8 +69,8 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
       >
         <span
           className={cn(
-            "pointer-events-none block h-[0.875rem] w-[0.875rem] rounded-full ring-0 transition-transform",
-            checked ? "translate-x-[15px]" : "translate-x-[1px]",
+            "pointer-events-none block h-3.5 w-3.5 rounded-full ring-0 transition-transform",
+            checked ? "translate-x-[15px]" : "translate-x-px",
             disabled ? "switch-thumb-disabled" : "switch-thumb"
           )}
         />

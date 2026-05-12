@@ -405,12 +405,12 @@ export default function BuildChatPanel({
               onClick={toggleOutputPanel}
               tooltip="Open output panel"
               tertiary
-              className="!bg-background-tint-00 border rounded-full"
-              iconClassName="!stroke-text-04"
+              className="bg-background-tint-00! border rounded-full"
+              iconClassName="stroke-text-04!"
             />
           )}
           {/* Soft fade border at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+          <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
 
         {/* Main content area */}
@@ -439,7 +439,7 @@ export default function BuildChatPanel({
         {(hasSession || existingSessionId) && (
           <div className="px-4 pb-8 pt-4 relative">
             {/* Soft fade border at top */}
-            <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+            <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
             <div className="max-w-2xl mx-auto">
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (

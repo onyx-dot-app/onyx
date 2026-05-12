@@ -216,7 +216,7 @@ export const FederatedConnectorSelector = ({
                   className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
                 >
                   <div className="flex items-center overflow-hidden">
-                    <div className="mr-1 flex-shrink-0">
+                    <div className="mr-1 shrink-0">
                       <SourceIcon
                         sourceType={federatedSourceToRegularSource(
                           connector.source
@@ -229,7 +229,7 @@ export const FederatedConnectorSelector = ({
                     </span>
                     {hasEntitiesConfigured && (
                       <div
-                        className="ml-1 w-2 h-2 bg-green-500 rounded-full flex-shrink-0"
+                        className="ml-1 w-2 h-2 bg-green-500 rounded-full shrink-0"
                         title="Entities configured"
                       />
                     )}

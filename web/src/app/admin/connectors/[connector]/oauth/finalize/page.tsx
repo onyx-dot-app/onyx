@@ -213,7 +213,7 @@ export default function OAuthFinalizePage() {
             {({ isSubmitting, isValid, setFieldValue }) => (
               <Form>
                 {/* Debug info
-                <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+                <div className="mb-4 p-2 bg-gray-100 rounded-sm text-xs">
                   <pre>
                     isValid: {String(isValid)}
                     errors: {JSON.stringify(errors, null, 2)}

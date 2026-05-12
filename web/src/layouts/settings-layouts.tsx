@@ -47,7 +47,7 @@ const widthClasses = {
   "sm-md": "w-[min(var(--container-sm-md),100%)]",
   md: "w-[min(var(--container-md),100%)]",
   lg: "w-[min(var(--container-lg),100%)]",
-  full: "w-[var(--container-full)]",
+  full: "w-(--container-full)",
 };
 
 /**
@@ -261,7 +261,7 @@ function SettingsHeader({
       {isSticky && (
         <div
           className={cn(
-            "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            "absolute left-0 right-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
             showShadow && "opacity-100"
           )}
           style={{
@@ -306,7 +306,7 @@ function SettingsBody(
 ) {
   return (
     <div
-      className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full"
+      className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full"
       {...props}
     />
   );
