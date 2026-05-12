@@ -218,7 +218,15 @@ class Skill(Base):
     )
 
     __table_args__ = (
-        Index("ux_skill_slug", "slug", unique=True),
+        # Partial unique index: slug uniqueness only among non-deleted rows.
+        # Lets a slug be reused after the original is soft-deleted (matches the
+        # §5 validator rule "slug not already used by another non-deleted custom").
+        Index(
+            "ux_skill_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
 
@@ -242,7 +250,7 @@ class FileOrigin(str, Enum):
 
 Slug rules:
 - Regex: `^[a-z][a-z0-9-]{0,63}$`.
-- Per-tenant unique (via schema isolation; no `tenant_id` column).
+- Per-tenant unique among **non-deleted** rows (via schema isolation + the partial unique index on `slug WHERE deleted_at IS NULL`). Slugs can be reused after a skill is soft-deleted; the application validator (§5) enforces the same rule so failures surface as `INVALID_REQUEST`, not raw DB constraint violations.
 - Globally reserved against built-in slugs.
 - **Mutable** post-creation via PATCH.
 

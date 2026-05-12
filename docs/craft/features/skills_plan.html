@@ -1639,8 +1639,14 @@
     groups = relationship("UserGroup", secondary="skill__user_group", viewonly=True)
 
     __table_args__ = (
-        Index("ux_skill_slug",            "slug", unique=True),
-        
+        # Partial unique: slug uniqueness only among non-deleted rows.
+        # Matches §5 rule "slug not already used by another non-deleted custom".
+        Index(
+            "ux_skill_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
     )
 
 class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code></pre>
