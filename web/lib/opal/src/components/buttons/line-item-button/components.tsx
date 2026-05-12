@@ -26,6 +26,7 @@ type LineItemButtonOwnProps = Pick<
   | "group"
   | "ref"
   | "type"
+  | "disabled"
 > & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
@@ -59,7 +60,8 @@ function LineItemButton({
   target,
   group,
   ref,
-  type = "button",
+  type,
+  disabled = false,
 
   // Sizing
   rounding = "md",
@@ -80,6 +82,7 @@ function LineItemButton({
       target={target}
       group={group}
       ref={ref}
+      disabled={disabled}
     >
       <Interactive.Container
         type={type}

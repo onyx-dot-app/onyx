@@ -1,12 +1,10 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import type { IconProps } from "@opal/types";
-import { Tooltip } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
 
@@ -78,40 +76,45 @@ export default function SwitchList({
           />
         </div>,
 
-        <LineItem
+        <LineItemButton
           key="enable-disable-all"
+          sizePreset="main-ui"
+          variant="section"
+          rounding="sm"
+          center
           icon={allDisabled ? SvgPlug : SvgUnplug}
           onClick={allDisabled ? onEnableAll : onDisableAll}
-        >
-          {allDisabled ? "Enable All" : "Disable All"}
-        </LineItem>,
+          title={allDisabled ? "Enable All" : "Disable All"}
+        />,
 
         ...filteredItems.map((item) => {
           const tooltip = item.disabled
             ? item.disabledTooltip
             : item.description;
           return (
-            <Tooltip key={item.id} tooltip={tooltip}>
-              <LineItem
-                icon={
-                  item.leading
-                    ? ((() =>
-                        item.leading) as React.FunctionComponent<IconProps>)
-                    : undefined
-                }
-                strokeIcon={false}
-                rightChildren={
-                  <Switch
-                    checked={item.isEnabled}
-                    onCheckedChange={item.onToggle}
-                    aria-label={`Toggle ${item.label}`}
-                    disabled={item.disabled}
-                  />
-                }
-              >
-                {item.label}
-              </LineItem>
-            </Tooltip>
+            <LineItemButton
+              key={item.id}
+              sizePreset="main-ui"
+              variant="section"
+              rounding="sm"
+              center
+              tooltip={tooltip}
+              tooltipSide="right"
+              icon={
+                item.leading
+                  ? ((() => item.leading) as React.FunctionComponent<IconProps>)
+                  : undefined
+              }
+              title={item.label}
+              rightChildren={
+                <Switch
+                  checked={item.isEnabled}
+                  onCheckedChange={item.onToggle}
+                  aria-label={`Toggle ${item.label}`}
+                  disabled={item.disabled}
+                />
+              }
+            />
           );
         }),
       ]}

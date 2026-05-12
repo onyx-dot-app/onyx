@@ -6,10 +6,9 @@ import {
   MCPAuthenticationPerformer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, markdown } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import {
   SvgCheck,
@@ -19,7 +18,7 @@ import {
   SvgServer,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
@@ -95,44 +94,48 @@ export default function MCPLineItem({
   const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
 
   return (
-    <LineItem
-      data-mcp-server-id={server.id}
-      data-mcp-server-name={server.name}
-      icon={getServerIcon()}
-      onClick={handleClick}
-      strikethrough={allToolsDisabled}
-      selected={isActive}
-      rightChildren={
-        <Section gap={0.25} flexDirection="row">
-          {isAuthenticated &&
-            tools.length > 0 &&
-            enabledTools.length > 0 &&
-            tools.length !== enabledTools.length && (
-              <EnabledCount
-                enabledCount={enabledTools.length}
-                totalCount={tools.length}
+    <div data-mcp-server-id={server.id} data-mcp-server-name={server.name}>
+      <LineItemButton
+        sizePreset="main-ui"
+        variant="section"
+        rounding="sm"
+        center
+        icon={getServerIcon()}
+        onClick={handleClick}
+        state={isActive ? "selected" : "empty"}
+        color={allToolsDisabled ? "muted" : "interactive"}
+        tooltipSide="right"
+        title={allToolsDisabled ? markdown(`~~${server.name}~~`) : server.name}
+        rightChildren={
+          <Section gap={0.25} flexDirection="row">
+            {isAuthenticated &&
+              tools.length > 0 &&
+              enabledTools.length > 0 &&
+              tools.length !== enabledTools.length && (
+                <EnabledCount
+                  enabledCount={enabledTools.length}
+                  totalCount={tools.length}
+                />
+              )}
+            {canClickIntoServer && (
+              <Button
+                icon={SvgChevronRight}
+                prominence="tertiary"
+                size="sm"
+                onClick={onSelect}
               />
             )}
-          {canClickIntoServer && (
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              size="sm"
-              onClick={onSelect}
-            />
-          )}
-          {showReauthButton && (
-            <Button
-              icon={SvgKey}
-              prominence="tertiary"
-              size="sm"
-              onClick={onAuthenticate}
-            />
-          )}
-        </Section>
-      }
-    >
-      {server.name}
-    </LineItem>
+            {showReauthButton && (
+              <Button
+                icon={SvgKey}
+                prominence="tertiary"
+                size="sm"
+                onClick={onAuthenticate}
+              />
+            )}
+          </Section>
+        }
+      />
+    </div>
   );
 }

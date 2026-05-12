@@ -5,19 +5,16 @@ import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Tooltip } from "@opal/components";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { Button } from "@opal/components";
+import { Button, LineItemButton } from "@opal/components";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { markdown } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { Section } from "@/layouts/general-layouts";
+import { Hoverable } from "@opal/core";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -37,7 +34,6 @@ export interface ActionItemProps {
   toolAuthStatus?: ToolAuthStatus;
   onOAuthAuthenticate?: () => void;
   onClose?: () => void;
-  // Source counts for internal search tool
   sourceCounts?: { enabled: number; total: number };
 }
 
@@ -61,7 +57,6 @@ export default function ActionLineItem({
   onClose,
   sourceCounts,
 }: ActionItemProps) {
-  const router = useRouter();
   const { currentProjectId } = useProjectsContext();
 
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
@@ -80,7 +75,6 @@ export default function ActionLineItem({
   const isSearchToolAndNotInProject =
     tool?.in_code_tool_id === SEARCH_TOOL_ID && !currentProjectId;
 
-  // Show source count when: internal search is pinned, has some (but not all) sources enabled
   const shouldShowSourceCount =
     isSearchToolAndNotInProject &&
     !isSearchToolWithNoConnectors &&
@@ -92,9 +86,12 @@ export default function ActionLineItem({
   const tooltipText = tooltip || tool?.description;
 
   return (
-    <Tooltip tooltip={tooltipText}>
-      <LineItem
-        data-testid={`tool-option-${toolName}`}
+    <Hoverable.Root group="action-row" data-testid={`tool-option-${toolName}`}>
+      <LineItemButton
+        sizePreset="main-ui"
+        variant="section"
+        rounding="sm"
+        center
         onClick={() => {
           if (isUnavailable) {
             onForceToggle();
@@ -106,11 +103,15 @@ export default function ActionLineItem({
             onSourceManagementOpen?.();
           else onClose?.();
         }}
-        selected={isForced}
+        state={isForced ? "selected" : "empty"}
         disabled={isSearchToolWithNoConnectors || (isUnavailable && !isForced)}
-        muted={isUnavailable && isForced}
-        strikethrough={disabled}
+        color={
+          disabled || (isUnavailable && isForced) ? "muted" : "interactive"
+        }
+        title={disabled ? markdown(`~~${label}~~`) : label}
         icon={Icon}
+        tooltip={tooltipText}
+        tooltipSide="right"
         rightChildren={
           <Section gap={0.25} flexDirection="row">
             {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
@@ -129,55 +130,61 @@ export default function ActionLineItem({
               />
             )}
 
-            {!isSearchToolWithNoConnectors && !isUnavailable && (
-              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-              <IconButton
-                icon={SvgSlash}
-                onClick={noProp(onToggle)}
-                internal
-                aria-label={disabled ? "Enable" : "Disable"}
-                className={cn(
-                  !disabled && "invisible group-hover/LineItem:visible",
-                  // Hide when showing source count (it has its own hover behavior)
-                  shouldShowSourceCount && "!hidden"
-                )}
-                tooltip={disabled ? "Enable" : "Disable"}
-              />
-            )}
+            {!isSearchToolWithNoConnectors &&
+              !isUnavailable &&
+              !shouldShowSourceCount &&
+              (disabled ? (
+                <Button
+                  icon={SvgSlash}
+                  onClick={noProp(onToggle)}
+                  prominence="internal"
+                  size="sm"
+                  aria-label="Enable"
+                  tooltip="Enable"
+                />
+              ) : (
+                <Hoverable.Item group="action-row" variant="appear-on-hover">
+                  <Button
+                    icon={SvgSlash}
+                    onClick={noProp(onToggle)}
+                    prominence="internal"
+                    size="sm"
+                    aria-label="Disable"
+                    tooltip="Disable"
+                  />
+                </Hoverable.Item>
+              ))}
 
             {isUnavailable && showAdminConfigure && adminConfigureHref && (
               <Button
                 icon={SvgSettings}
-                onClick={noProp(() => {
-                  router.push(adminConfigureHref as Route);
-                  onClose?.();
-                })}
+                href={adminConfigureHref as Route}
                 prominence="tertiary"
                 size="sm"
                 tooltip={adminConfigureTooltip}
               />
             )}
 
-            {/* Source count for internal search - show when some but not all sources selected AND tool is pinned */}
             {shouldShowSourceCount && (
-              <span className="relative flex items-center whitespace-nowrap">
-                {/* Show count normally, disable icon on hover - both in same space */}
-                <span className="group-hover/LineItem:invisible">
+              <div className="relative flex items-center whitespace-nowrap">
+                <Hoverable.Item group="action-row" variant="appear-on-rest">
                   <EnabledCount
                     enabledCount={sourceCounts.enabled}
                     totalCount={sourceCounts.total}
                   />
-                </span>
-                <span className="absolute inset-0 flex items-center justify-center invisible group-hover/LineItem:visible">
-                  <Button
-                    icon={SvgSlash}
-                    onClick={noProp(onToggle)}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip={disabled ? "Enable" : "Disable"}
-                  />
-                </span>
-              </span>
+                </Hoverable.Item>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Hoverable.Item group="action-row" variant="appear-on-hover">
+                    <Button
+                      icon={SvgSlash}
+                      onClick={noProp(onToggle)}
+                      prominence="tertiary"
+                      size="sm"
+                      tooltip="Disable"
+                    />
+                  </Hoverable.Item>
+                </div>
+              </div>
             )}
 
             {isSearchToolAndNotInProject && (
@@ -190,11 +197,16 @@ export default function ActionLineItem({
                 icon={
                   isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
                 }
-                onClick={noProp(() => {
-                  if (isSearchToolWithNoConnectors)
-                    router.push("/admin/add-connector");
-                  else onSourceManagementOpen?.();
-                })}
+                href={
+                  isSearchToolWithNoConnectors
+                    ? ("/admin/add-connector" as Route)
+                    : undefined
+                }
+                onClick={
+                  isSearchToolWithNoConnectors
+                    ? undefined
+                    : noProp(onSourceManagementOpen)
+                }
                 prominence="tertiary"
                 size="sm"
                 tooltip={
@@ -206,9 +218,7 @@ export default function ActionLineItem({
             )}
           </Section>
         }
-      >
-        {label}
-      </LineItem>
-    </Tooltip>
+      />
+    </Hoverable.Root>
   );
 }
