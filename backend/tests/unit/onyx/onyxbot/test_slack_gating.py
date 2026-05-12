@@ -418,3 +418,176 @@ class TestGetUsedSeats:
 
         assert get_used_seats() == 3
         mock_session.execute.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# handle_message invocation allowlist (respond_member_group_list as gate)
+# ---------------------------------------------------------------------------
+
+
+class TestHandleMessageInvocationAllowlist:
+    """The `respond_member_group_list` field gates bot invocation: non-allowlisted
+    senders are dropped before telemetry fires or a Slack-user account row is
+    created (no license seat consumed).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _common_patches(self) -> Any:
+        with (
+            patch(f"{_HANDLE_MSG}.send_msg_ack_to_user"),
+            patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False),
+            patch(f"{_HANDLE_MSG}.handle_standard_answers", return_value=False),
+            patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists"),
+            patch(f"{_HANDLE_MSG}.get_user_by_email") as mock_get_user,
+            patch(f"{_HANDLE_MSG}.fetch_ee_implementation_or_noop") as mock_fetch_ee,
+        ):
+            mock_get_user.return_value = MagicMock()
+            mock_fetch_ee.return_value = lambda **_kw: MagicMock(available=True)
+            yield
+
+    @pytest.fixture
+    def db_session(self) -> Generator[MagicMock, None, None]:
+        with patch(f"{_HANDLE_MSG}.get_session_with_current_tenant") as mock:
+            session = MagicMock()
+            mock.return_value.__enter__ = MagicMock(return_value=session)
+            mock.return_value.__exit__ = MagicMock(return_value=False)
+            yield session
+
+    def _make_config(
+        self, allowlist: list[str] | None = None, **extra: Any
+    ) -> MagicMock:
+        config = MagicMock()
+        config.persona = None
+        channel_config: dict[str, Any] = {**extra}
+        if allowlist is not None:
+            channel_config["respond_member_group_list"] = allowlist
+        config.channel_config = channel_config
+        return config
+
+    def _call(
+        self,
+        slack_channel_config: MagicMock,
+        client: MagicMock | None = None,
+    ) -> bool:
+        from onyx.onyxbot.slack.handlers.handle_message import handle_message
+
+        return handle_message(
+            message_info=_make_message_info(),
+            slack_channel_config=slack_channel_config,
+            client=client or MagicMock(),
+            feedback_reminder_id=None,
+        )
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_empty_allowlist_processes_normally(
+        self, mock_usage_report: MagicMock
+    ) -> None:
+        self._call(self._make_config(allowlist=None))
+        mock_usage_report.assert_called_once()
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups", return_value=([], []))
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_sender_in_allowlist_by_email_processes(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        _mock_fetch_groups: MagicMock,
+    ) -> None:
+        # _make_message_info() returns sender_id="U123"
+        mock_fetch_emails.return_value = (["U123"], [])
+
+        self._call(self._make_config(allowlist=["allowed@test.com"]))
+
+        mock_usage_report.assert_called_once()
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups")
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_sender_in_allowlist_by_group_processes(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        mock_fetch_groups: MagicMock,
+    ) -> None:
+        # Email lookup fails for the group name, group lookup resolves it to U123
+        mock_fetch_emails.return_value = ([], ["sales-team"])
+        mock_fetch_groups.return_value = (["U123"], [])
+
+        self._call(self._make_config(allowlist=["sales-team"]))
+
+        mock_usage_report.assert_called_once()
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups", return_value=([], []))
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_sender_not_in_allowlist_is_dropped(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        _mock_fetch_groups: MagicMock,
+        mock_add_user: MagicMock,
+    ) -> None:
+        # Allowlist resolves to a different user ID than the sender
+        mock_fetch_emails.return_value = (["U999"], [])
+
+        result = self._call(self._make_config(allowlist=["allowed@test.com"]))
+
+        assert result is False
+        mock_usage_report.assert_not_called()
+        mock_add_user.assert_not_called()
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups", return_value=([], []))
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_unresolved_allowlist_entries_deny_invocation(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        _mock_fetch_groups: MagicMock,
+        mock_add_user: MagicMock,
+    ) -> None:
+        # Email never resolves to any Slack user; allowlist non-empty -> deny
+        mock_fetch_emails.return_value = ([], ["unknown@test.com"])
+
+        result = self._call(self._make_config(allowlist=["unknown@test.com"]))
+
+        assert result is False
+        mock_usage_report.assert_not_called()
+        mock_add_user.assert_not_called()
+
+    @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
+    @patch(f"{_HANDLE_MSG}.fetch_user_ids_from_groups", return_value=([], []))
+    @patch(f"{_HANDLE_MSG}.fetch_slack_user_ids_from_emails")
+    @patch(f"{_HANDLE_MSG}.slack_usage_report")
+    def test_missing_sender_id_with_allowlist_is_dropped(
+        self,
+        mock_usage_report: MagicMock,
+        mock_fetch_emails: MagicMock,
+        _mock_fetch_groups: MagicMock,
+        mock_add_user: MagicMock,
+    ) -> None:
+        mock_fetch_emails.return_value = (["U123"], [])
+
+        info = _make_message_info()
+        info.sender_id = None
+        from onyx.onyxbot.slack.handlers.handle_message import handle_message
+
+        result = handle_message(
+            message_info=info,
+            slack_channel_config=self._make_config(allowlist=["allowed@test.com"]),
+            client=MagicMock(),
+            feedback_reminder_id=None,
+        )
+
+        assert result is False
+        mock_usage_report.assert_not_called()
+        mock_add_user.assert_not_called()

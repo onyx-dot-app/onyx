@@ -2,7 +2,6 @@ import time
 from datetime import datetime
 from datetime import timezone
 
-from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
@@ -21,6 +20,7 @@ from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,7 +36,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         parent_pid: int,
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
     ):
         super().__init__()

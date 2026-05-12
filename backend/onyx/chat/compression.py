@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import COMPRESSION_TRIGGER_RATIO
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
+from onyx.db.tools import get_tools
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage
 from onyx.llm.models import ChatCompletionMessage
@@ -328,11 +330,9 @@ def generate_summary(
 
 
 def compress_chat_history(
-    db_session: Session,
     chat_history: list[ChatMessage],
     llm: LLM,
     compression_params: CompressionParams,
-    tool_id_to_name: dict[int, str],
 ) -> CompressionResult:
     """
     Main compression function. Creates a summary ChatMessage.
@@ -351,14 +351,21 @@ def compress_chat_history(
     existing summary text is passed into the LLM so the new summary
     incorporates it instead of summarizing from scratch.
 
+    Sessions are short-lived: one for the read phase (existing summary +
+    tool name map), the LLM call runs with no session held, and a fresh
+    session is opened to persist the summary. ``chat_history`` items may
+    be detached, but callers must have eager-loaded the ``tool_calls``
+    relationship (e.g. via ``create_chat_history_chain`` with the default
+    ``prefetch_top_two_level_tool_calls=True``); ``_build_llm_messages_for_summarization``
+    walks ``msg.tool_calls`` and would raise ``DetachedInstanceError`` if
+    the relationship were lazy on a detached instance.
+
     For more details, see the COMPRESSION.md file.
 
     Args:
-        db_session: Database session
         chat_history: Branch-aware list of messages
         llm: LLM to use for summarization
         compression_params: Parameters from get_compression_params
-        tool_id_to_name: Mapping of tool IDs to display names
 
     Returns:
         CompressionResult indicating success/failure
@@ -384,10 +391,17 @@ def compress_chat_history(
         },
     ):
         try:
-            # Find existing summary for this branch
-            existing_summary = find_summary_for_branch(db_session, chat_history)
+            # Read phase: existing summary + tool name map. Closed before LLM call.
+            with get_session_with_current_tenant() as read_session:
+                existing_summary = find_summary_for_branch(read_session, chat_history)
+                existing_summary_text = (
+                    existing_summary.message if existing_summary else None
+                )
+                all_tools = get_tools(read_session)
+                tool_id_to_name: dict[int, str] = {
+                    tool.id: tool.name for tool in all_tools
+                }
 
-            # Get messages to summarize
             summary_content = get_messages_to_summarize(
                 chat_history,
                 existing_summary,
@@ -398,10 +412,7 @@ def compress_chat_history(
                 logger.debug("No messages to summarize, skipping compression")
                 return CompressionResult(summary_created=False, messages_summarized=0)
 
-            # Generate summary (incorporate existing summary if present)
-            existing_summary_text = (
-                existing_summary.message if existing_summary else None
-            )
+            # LLM call runs with no DB connection held.
             summary_text = generate_summary(
                 older_messages=summary_content.older_messages,
                 recent_messages=summary_content.recent_messages,
@@ -410,7 +421,6 @@ def compress_chat_history(
                 existing_summary=existing_summary_text,
             )
 
-            # Calculate token count for the summary
             tokenizer = get_tokenizer(None, None)
             summary_token_count = len(tokenizer.encode(summary_text))
             logger.debug(
@@ -419,18 +429,18 @@ def compress_chat_history(
                 summary_text[:200],
             )
 
-            # Create new summary as a ChatMessage
-            # Parent is the last message in history - this makes the summary branch-aware
-            summary_message = ChatMessage(
-                chat_session_id=chat_session_id,
-                message_type=MessageType.ASSISTANT,
-                message=summary_text,
-                token_count=summary_token_count,
-                parent_message_id=chat_history[-1].id,
-                last_summarized_message_id=summary_content.older_messages[-1].id,
-            )
-            db_session.add(summary_message)
-            db_session.commit()
+            # Persist phase: fresh short session.
+            with get_session_with_current_tenant() as write_session:
+                summary_message = ChatMessage(
+                    chat_session_id=chat_session_id,
+                    message_type=MessageType.ASSISTANT,
+                    message=summary_text,
+                    token_count=summary_token_count,
+                    parent_message_id=chat_history[-1].id,
+                    last_summarized_message_id=summary_content.older_messages[-1].id,
+                )
+                write_session.add(summary_message)
+                write_session.commit()
 
             logger.info(
                 "Compressed %s messages into summary (session_id=%s, summary_tokens=%s)",
@@ -448,7 +458,6 @@ def compress_chat_history(
             logger.exception(
                 "Compression failed for session %s: %s", chat_session_id, e
             )
-            db_session.rollback()
             return CompressionResult(
                 summary_created=False,
                 messages_summarized=0,

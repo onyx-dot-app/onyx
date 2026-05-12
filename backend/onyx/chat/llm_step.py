@@ -53,6 +53,7 @@ from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningDone
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
 from onyx.utils.b64 import get_image_type_from_bytes
@@ -680,7 +681,7 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
                 id=tc.tool_call_id,
                 type="function",
                 function=FunctionCall(
-                    name=tc.tool_name,
+                    name=sanitize_tool_name(tc.tool_name),
                     arguments=json.dumps(tc.tool_arguments),
                 ),
             )

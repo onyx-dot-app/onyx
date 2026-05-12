@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { structureValue } from "@/lib/languageModels/utils";
 import { getModelIcon } from "@/lib/languageModels";

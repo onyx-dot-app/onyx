@@ -51,7 +51,8 @@ test.describe("Share Chat Session Modal", () => {
     await expect(privateOption.locator("svg").last()).toBeVisible();
 
     const submitButton = dialog.locator('[aria-label="share-modal-submit"]');
-    await expect(submitButton).toHaveText("Done");
+    await expect(submitButton).toHaveText("Create Share Link");
+    await expect(submitButton).toBeDisabled();
 
     const cancelButton = dialog.locator('[aria-label="share-modal-cancel"]');
     await expect(cancelButton).toBeVisible();

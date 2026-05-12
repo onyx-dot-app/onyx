@@ -1,7 +1,7 @@
 import { R2Icon, S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
 import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
 import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
@@ -507,7 +507,7 @@ export function getSourceMetadataForSources(sources: ValidSources[]) {
   return sources.map((source) => getSourceMetadata(source));
 }
 
-export function getSourcesForPersona(persona: Persona): ValidSources[] {
+export function getSourcesForPersona(persona: Agent): ValidSources[] {
   const personaSources: ValidSources[] = [];
   persona.document_sets.forEach((documentSet) => {
     documentSet.cc_pair_summaries.forEach((ccPair) => {

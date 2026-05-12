@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton } from "@opal/components";
@@ -9,7 +9,7 @@ import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
-import Separator from "@/refresh-components/Separator";
+import { Separator } from "@opal/components";
 
 export const MAX_MODELS = 3;
 

@@ -86,8 +86,12 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
       header: "Error Message",
       weight: 28,
       enableSorting: false,
-      cell: (value) => (
-        <ErrorMessageCell errorMessage={value} onErrorClick={onErrorClick} />
+      cell: (value, row) => (
+        <ErrorMessageCell
+          errorMessage={value}
+          modalContent={row.full_exception_trace ?? value}
+          onErrorClick={onErrorClick}
+        />
       ),
     }),
   ];
@@ -95,6 +99,14 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
 
 interface ErrorMessageCellProps {
   errorMessage: string | null;
+  /**
+   * Full content shown in `ExceptionTraceModal` on click — prefers the
+   * traceback when present, otherwise falls back to the short
+   * ``error_message``. Older attempts (pre-traceback-capture migration)
+   * have ``full_exception_trace = null`` and gracefully degrade to the
+   * single-line summary, matching `IndexAttemptsTable`'s behavior.
+   */
+  modalContent: string | null;
   onErrorClick: (errorMessage: string) => void;
 }
 
@@ -107,6 +119,7 @@ interface ErrorMessageCellProps {
  */
 function ErrorMessageCell({
   errorMessage,
+  modalContent,
   onErrorClick,
 }: ErrorMessageCellProps) {
   if (!errorMessage) {
@@ -119,7 +132,7 @@ function ErrorMessageCell({
   return (
     <button
       type="button"
-      onClick={() => onErrorClick(errorMessage)}
+      onClick={() => onErrorClick(modalContent ?? errorMessage)}
       aria-label="View full error message"
       className="text-left w-full cursor-pointer hover:underline"
     >

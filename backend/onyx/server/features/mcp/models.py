@@ -1,4 +1,5 @@
 import datetime
+import re
 from enum import Enum
 from typing import Any
 from typing import List
@@ -16,6 +17,39 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 
+# Matches `{placeholder_name}` inside header value templates.
+_PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+
+
+def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
+    """Single source of truth for placeholders the backend fills in
+    automatically when rendering an ``MCPAuthTemplate`` into final headers.
+
+    Both the substitution call site (``apply_auto_substitutions``) and the
+    "which fields must the user supply" derivation
+    (``MCPAuthTemplate.derive_required_fields``) read from this map, so adding
+    a new auto-filled placeholder is a one-line change here.
+    """
+    return {"user_email": user_email}
+
+
+# Names of placeholders the backend auto-substitutes; never surfaced to the
+# user as fields they must fill in. Derived from the substitution map so the
+# two can never drift.
+AUTO_SUBSTITUTED_PLACEHOLDER_KEYS: frozenset[str] = frozenset(
+    _build_auto_substitution_map(user_email="").keys()
+)
+
+
+def apply_auto_substitutions(value: str, *, user_email: str) -> str:
+    """Substitute every backend-managed placeholder in ``value`` (e.g.
+    ``{user_email}``). User-provided substitutions are handled separately at
+    the call site that has access to the user's credential map."""
+    subst = _build_auto_substitution_map(user_email=user_email)
+    for key, replacement in subst.items():
+        value = value.replace(f"{{{key}}}", replacement)
+    return value
+
 
 # This should be updated along with MCPConnectionData
 class MCPOAuthKeys(str, Enum):
@@ -32,6 +66,11 @@ class MCPConnectionData(TypedDict):
 
     headers: dict[str, str]
     header_substitutions: NotRequired[dict[str, str]]
+    # Names of fields the user must supply for header substitution. Persisted
+    # only on the per-user template config (the admin's connection config that
+    # serves as the template); empty/absent on regular per-user configs and on
+    # admin-credential configs.
+    required_fields: NotRequired[list[str]]
 
     # For OAuth only
     # Note: Update MCPOAuthKeys if necessary when modifying these
@@ -60,6 +99,20 @@ class MCPAuthTemplate(BaseModel):
         default_factory=list,
         description="List of required field names that users must provide",
     )
+
+    @staticmethod
+    def derive_required_fields(headers: dict[str, str]) -> list[str]:
+        """Extract the set of `{placeholder}` field names referenced by
+        ``headers`` values, excluding placeholders the backend fills in
+        automatically (see ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
+        """
+        seen: set[str] = set()
+        for value in headers.values():
+            for match in _PLACEHOLDER_RE.findall(value):
+                if match in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
+                    continue
+                seen.add(match)
+        return list(seen)
 
 
 class MCPToolCreateRequest(BaseModel):

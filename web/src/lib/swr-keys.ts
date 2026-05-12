@@ -26,6 +26,8 @@ export const SWR_KEYS = {
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   personaLabels: "/api/persona/labels",
+  adminAgents: "/api/admin/agents",
+  adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
@@ -199,4 +201,11 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
   ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
+
+  // ── Indexing Errors ───────────────────────────────────────────────────────
+  // Base key for the per-cc-pair errors endpoint. The page also reads
+  // paginated variants via `usePaginatedFetch`, but `mutate` against
+  // this base key invalidates every variant under the same prefix.
+  ccPairIndexingErrors: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/errors`,
 } as const;

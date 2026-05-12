@@ -18,7 +18,6 @@ from onyx.db.models import SlackChannelConfig
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.onyxbot.slack.blocks import get_restate_blocks
 from onyx.onyxbot.slack.constants import GENERATE_ANSWER_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import update_emote_react
@@ -221,14 +220,6 @@ def _handle_standard_answers(
                 thread_ts=message_info.msg_to_respond,
                 unfurl=False,
             )
-
-            if receiver_ids and slack_thread_id:
-                send_team_member_message(
-                    client=client,
-                    channel=message_info.channel_to_respond,
-                    thread_ts=slack_thread_id,
-                    receiver_ids=receiver_ids,
-                )
 
             return True
         except Exception as e:

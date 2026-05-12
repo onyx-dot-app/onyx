@@ -251,6 +251,7 @@ def test_contextual_rag(
 # ---------------------------------------------------------------------------
 
 _PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+_PATCH_GET_SESSION = "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
 
 
 def _make_doc(
@@ -269,62 +270,220 @@ def _make_doc(
     )
 
 
+# ---------------------------------------------------------------------------
+# _maybe_push_to_agent_wiki
+# ---------------------------------------------------------------------------
+
+_PATCH_AGENT_WIKI_ENABLED = "onyx.indexing.indexing_pipeline.AGENT_WIKI_ENABLED"
+_PATCH_AGENT_WIKI_MAX_CHARS = "onyx.indexing.indexing_pipeline.AGENT_WIKI_MAX_DOC_CHARS"
+_PATCH_MULTI_TENANT = "onyx.indexing.indexing_pipeline.MULTI_TENANT"
+_PATCH_GET_CC_PAIR = "onyx.indexing.indexing_pipeline.get_connector_credential_pair"
+_PATCH_GET_SESSION_AW = (
+    "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
+)
+
+
+def _make_adapter(connector_id: int = 1, credential_id: int = 1) -> MagicMock:
+    adapter = MagicMock()
+    adapter.connector_id = connector_id
+    adapter.credential_id = credential_id
+    return adapter
+
+
+def _make_cc_pair(is_public: bool) -> MagicMock:
+    from onyx.db.enums import AccessType
+
+    cc_pair = MagicMock()
+    cc_pair.access_type = AccessType.PUBLIC if is_public else AccessType.PRIVATE
+    return cc_pair
+
+
+def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
+    from onyx.document_index.interfaces import DocumentInsertionRecord
+
+    return [
+        DocumentInsertionRecord(document_id=d, already_existed=False) for d in doc_ids
+    ]
+
+
+_PATCH_RUN_IN_BACKGROUND = "onyx.indexing.indexing_pipeline.run_in_background"
+
+
+def test_agent_wiki_push_skipped_when_disabled() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, False),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    big_doc = _make_doc(
+        doc_id="big",
+        sections=[TextSection(text="x" * 100, link="http://example.com")],
+    )
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_AGENT_WIKI_MAX_CHARS, 50),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [big_doc], _make_insertion_records(["big"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_enqueues_for_public_doc() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_called_once()
+    kwargs = mock_run.call_args.kwargs
+    assert kwargs["doc_id"] == "doc1"
+    assert kwargs["content"] == "Hello"
+
+
 def test_document_ingestion_hook_skipped_passes_through() -> None:
     doc = _make_doc()
-    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+    with (
+        patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
     assert result == [doc]
 
 
 def test_document_ingestion_hook_soft_failed_passes_through() -> None:
     doc = _make_doc()
-    with patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+    with (
+        patch(_PATCH_EXECUTE_HOOK, return_value=HookSoftFailed()),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
     assert result == [doc]
 
 
 def test_document_ingestion_hook_none_sections_drops_document() -> None:
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=None, rejection_reason="PII detected"
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=None, rejection_reason="PII detected"
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_all_invalid_sections_drops_document() -> None:
     """A non-empty list where every section has neither text nor image_file_id drops the doc."""
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(sections=[DocumentIngestionSection()]),
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[DocumentIngestionSection()]
+            ),
+        ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_empty_sections_drops_document() -> None:
     doc = _make_doc()
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(sections=[]),
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(sections=[]),
+        ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert result == []
 
 
 def test_document_ingestion_hook_rewrites_text_sections() -> None:
     doc = _make_doc(sections=[TextSection(text="original", link="http://a.com")])
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=[DocumentIngestionSection(text="rewritten", link="http://b.com")]
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[
+                    DocumentIngestionSection(text="rewritten", link="http://b.com")
+                ]
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert len(result) == 1
     assert len(result[0].sections) == 1
     section = result[0].sections[0]
@@ -340,16 +499,19 @@ def test_document_ingestion_hook_preserves_image_section_order() -> None:
         sections=[TextSection(text="original", link=None), image],
     )
     # Hook moves the image before the text section
-    with patch(
-        _PATCH_EXECUTE_HOOK,
-        return_value=DocumentIngestionResponse(
-            sections=[
-                DocumentIngestionSection(image_file_id="img-1", link=None),
-                DocumentIngestionSection(text="rewritten", link=None),
-            ]
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[
+                    DocumentIngestionSection(image_file_id="img-1", link=None),
+                    DocumentIngestionSection(text="rewritten", link=None),
+                ]
+            ),
         ),
+        patch(_PATCH_GET_SESSION),
     ):
-        result = _apply_document_ingestion_hook([doc], MagicMock())
+        result = _apply_document_ingestion_hook([doc])
     assert len(result) == 1
     sections = result[0].sections
     assert len(sections) == 2
@@ -375,10 +537,11 @@ def test_document_ingestion_hook_mixed_batch() -> None:
             )
         return HookSkipped()
 
-    with patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect):
-        result = _apply_document_ingestion_hook(
-            [doc_drop, doc_rewrite, doc_skip], MagicMock()
-        )
+    with (
+        patch(_PATCH_EXECUTE_HOOK, side_effect=_side_effect),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc_drop, doc_rewrite, doc_skip])
 
     assert len(result) == 2
     ids = {d.id for d in result}

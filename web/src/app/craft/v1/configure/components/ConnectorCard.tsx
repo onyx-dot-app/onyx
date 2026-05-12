@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Card from "@/refresh-components/cards/Card";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ContentAction } from "@opal/layouts";
 import { ValidSources } from "@/lib/types";

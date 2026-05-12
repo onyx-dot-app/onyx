@@ -18,7 +18,7 @@ import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import { FilterButton } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";

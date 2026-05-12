@@ -45,11 +45,14 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import (
     VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 
@@ -310,14 +313,29 @@ class LitellmLLM(LLM):
         # Create a dictionary for model-specific arguments if it's None
         model_kwargs = model_kwargs or {}
 
+        vertex_auth_method = (
+            (custom_config or {}).get(VERTEX_AUTH_METHOD_KWARG)
+            if model_provider == LlmProviderNames.VERTEX_AI
+            else None
+        )
+        vertex_is_workload_identity = (
+            vertex_auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
+        )
+
         if custom_config:
             for k, v in custom_config.items():
                 if model_provider == LlmProviderNames.VERTEX_AI:
+                    # In Workload Identity mode, omit vertex_credentials so LiteLLM
+                    # falls back to google.auth.default() (the GKE metadata server).
                     if k == VERTEX_CREDENTIALS_FILE_KWARG:
-                        model_kwargs[k] = v
+                        if not vertex_is_workload_identity:
+                            model_kwargs[k] = v
                     elif k == VERTEX_CREDENTIALS_FILE_KWARG_ENV_VAR_FORMAT:
-                        model_kwargs[VERTEX_CREDENTIALS_FILE_KWARG] = v
+                        if not vertex_is_workload_identity:
+                            model_kwargs[VERTEX_CREDENTIALS_FILE_KWARG] = v
                     elif k == VERTEX_LOCATION_KWARG:
+                        model_kwargs[k] = v
+                    elif k == VERTEX_PROJECT_KWARG:
                         model_kwargs[k] = v
                 elif model_provider == LlmProviderNames.OLLAMA_CHAT:
                     if k == OLLAMA_API_KEY_CONFIG_KEY:

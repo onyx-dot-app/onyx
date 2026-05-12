@@ -2049,14 +2049,14 @@ wheels = [
 
 [[package]]
 name = "gitpython"
-version = "3.1.49"
+version = "3.1.50"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "gitdb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/63/210aaa302d6a0a78daa67c5c15bbac2cad361722841278b0209b6da20855/gitpython-3.1.49.tar.gz", hash = "sha256:42f9399c9eb33fc581014bedd76049dfbaf6375aa2a5754575966387280315e1", size = 219367, upload-time = "2026-04-29T00:31:20.478Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/f6/354ae6491228b5eb40e10d89c4d13c651fe1cf7556e35ebdded50cff57ce/gitpython-3.1.50.tar.gz", hash = "sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc", size = 219798, upload-time = "2026-05-06T04:01:26.571Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/6f/b842bfa6f21d6f87c57f9abf7194225e55279d96d869775e19e9f7236fc5/gitpython-3.1.49-py3-none-any.whl", hash = "sha256:024b0422d7f84d15cd794844e029ffebd4c5d42a7eb9b936b458697ef550a02c", size = 212190, upload-time = "2026-04-29T00:31:18.412Z" },
+    { url = "https://files.pythonhosted.org/packages/20/7a/1c6e3562dfd8950adbb11ffbc65d21e7c89d01a6e4f137fa981056de25c5/gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9", size = 212507, upload-time = "2026-05-06T04:01:23.799Z" },
 ]
 
 [[package]]
@@ -3229,10 +3229,11 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.2.28"
+version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
+    { name = "langchain-protocol" },
     { name = "langsmith" },
     { name = "packaging" },
     { name = "pydantic" },
@@ -3241,9 +3242,21 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/a4/317a1a3ac1df33a64adb3670bf88bbe3b3d5baa274db6863a979db472897/langchain_core-1.2.28.tar.gz", hash = "sha256:271a3d8bd618f795fdeba112b0753980457fc90537c46a0c11998516a74dc2cb", size = 846119, upload-time = "2026-04-08T18:19:34.867Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/ae/8b74458fc3850ec3d150eb9f45e857db129dafa801fb5cf173dfc9f8bbf3/langchain_core-1.3.3.tar.gz", hash = "sha256:fa510a5db8efdc0c6ff41c0939fb5c00a0183c11f6b84233e892e3227ff69182", size = 915041, upload-time = "2026-05-05T19:02:36.612Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/92/32f785f077c7e898da97064f113c73fbd9ad55d1e2169cf3a391b183dedb/langchain_core-1.2.28-py3-none-any.whl", hash = "sha256:80764232581eaf8057bcefa71dbf8adc1f6a28d257ebd8b95ba9b8b452e8c6ac", size = 508727, upload-time = "2026-04-08T18:19:32.823Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/01/4771b7ab2af1d1aba5b710bd8f13d9225c609425214b357590a17b01be77/langchain_core-1.3.3-py3-none-any.whl", hash = "sha256:18aae8506f37da7f74398492279a7d6efcee4f8e23c4c41c7af080eeb7ef7bd1", size = 543857, upload-time = "2026-05-05T19:02:34.52Z" },
+]
+
+[[package]]
+name = "langchain-protocol"
+version = "0.0.15"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/24/9777489d6fbbee64af0c8f96d4f840239c408cf694f3394672807dafc490/langchain_protocol-0.0.15.tar.gz", hash = "sha256:9ab2d11ee73944754f10e037e717098d3a6796f0e58afa9cadda6154e7655ade", size = 5862, upload-time = "2026-05-01T22:30:04.748Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1d/7a/9c97a7b9cbe4c5dc6a44cdb1545450c28f0c8ce89b9c1f0ee7fbad896263/langchain_protocol-0.0.15-py3-none-any.whl", hash = "sha256:461eb794358f83d5e42635a5797799ffec7b4702314e34edf73ac21e75d3ef79", size = 6982, upload-time = "2026-05-01T22:30:03.877Z" },
 ]
 
 [[package]]
@@ -3490,14 +3503,14 @@ wheels = [
 
 [[package]]
 name = "mako"
-version = "1.3.11"
+version = "1.3.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markupsafe" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/59/8a/805404d0c0b9f3d7a326475ca008db57aea9c5c9f2e1e39ed0faa335571c/mako-1.3.11.tar.gz", hash = "sha256:071eb4ab4c5010443152255d77db7faa6ce5916f35226eb02dc34479b6858069", size = 399811, upload-time = "2026-04-14T20:19:51.493Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/62/791b31e69ae182791ec67f04850f2f062716bbd205483d63a215f3e062d3/mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a", size = 400219, upload-time = "2026-04-28T19:01:08.512Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/a5/19d7aaa7e433713ffe881df33705925a196afb9532efc8475d26593921a6/mako-1.3.11-py3-none-any.whl", hash = "sha256:e372c6e333cf004aa736a15f425087ec977e1fcbd2966aae7f17c8dc1da27a77", size = 78503, upload-time = "2026-04-14T20:19:53.233Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/b1/a0ec7a5a9db730a08daef1fdfb8090435b82465abbf758a596f0ea88727e/mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9", size = 78521, upload-time = "2026-04-28T19:01:10.393Z" },
 ]
 
 [[package]]
@@ -4455,6 +4468,7 @@ backend = [
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
+    { name = "google-cloud-storage" },
     { name = "httpcore" },
     { name = "httpx", extra = ["http2"] },
     { name = "httpx-oauth" },
@@ -4626,6 +4640,7 @@ backend = [
     { name = "google-api-python-client", specifier = "==2.86.0" },
     { name = "google-auth-httplib2", specifier = "==0.1.0" },
     { name = "google-auth-oauthlib", specifier = "==1.0.0" },
+    { name = "google-cloud-storage", specifier = ">=3.0.0,<4.0.0" },
     { name = "httpcore", specifier = "==1.0.9" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "httpx-oauth", specifier = "==0.15.1" },
@@ -4634,11 +4649,11 @@ backend = [
     { name = "jira", specifier = "==3.10.5" },
     { name = "jsonref", specifier = "==1.1.0" },
     { name = "kubernetes", specifier = "==31.0.0" },
-    { name = "langchain-core", specifier = "==1.2.28" },
+    { name = "langchain-core", specifier = "==1.3.3" },
     { name = "langfuse", specifier = "==3.10.0" },
     { name = "lazy-imports", specifier = "==1.0.1" },
     { name = "lxml", specifier = "==6.1.0" },
-    { name = "mako", specifier = "==1.3.11" },
+    { name = "mako", specifier = "==1.3.12" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx", "xls"], specifier = "==0.1.2" },
     { name = "mcp", extras = ["cli"], specifier = "==1.27.0" },
     { name = "mistune", specifier = "==3.2.1" },
@@ -4691,7 +4706,7 @@ backend = [
     { name = "types-openpyxl", specifier = "==3.0.4.7" },
     { name = "unstructured", specifier = "==0.18.27" },
     { name = "unstructured-client", specifier = "==0.42.6" },
-    { name = "urllib3", specifier = "==2.6.3" },
+    { name = "urllib3", specifier = "==2.7.0" },
     { name = "xmlsec", specifier = "==1.3.17" },
     { name = "zulip", specifier = "==0.8.2" },
 ]
@@ -4703,7 +4718,7 @@ dev = [
     { name = "ipykernel", specifier = "==6.29.5" },
     { name = "manygo", specifier = "==0.2.0" },
     { name = "matplotlib", specifier = "==3.10.8" },
-    { name = "onyx-devtools", specifier = "==0.7.6" },
+    { name = "onyx-devtools", specifier = "==0.7.7" },
     { name = "openapi-generator-cli", specifier = "==7.17.0" },
     { name = "pandas-stubs", specifier = "~=2.3.3" },
     { name = "pre-commit", specifier = "==3.2.2" },
@@ -4747,19 +4762,19 @@ model-server = [
 
 [[package]]
 name = "onyx-devtools"
-version = "0.7.6"
+version = "0.7.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "openapi-generator-cli" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/e5/cbb5fb2a4c0211180b6378bb37e3e59acfa1714b51a610d3f2897c3ab996/onyx_devtools-0.7.6-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:8d51f7471592ccaf3a593366f18b10cb7d9ce903106f1ff1f0a5af62c5dae4b1", size = 4254929, upload-time = "2026-04-24T02:31:58.409Z" },
-    { url = "https://files.pythonhosted.org/packages/22/e4/6b7b09729fa8b65aa027b61bb1bcbde723cfdeb3fbe8f05a24cb71682cc2/onyx_devtools-0.7.6-py3-none-macosx_11_0_arm64.whl", hash = "sha256:289d126f5e0d42cea8c164a0b8be4ca7948fe3b6a5afd72e2b4868da4ed6a7f7", size = 3925618, upload-time = "2026-04-24T02:32:02.608Z" },
-    { url = "https://files.pythonhosted.org/packages/dd/7b/fd0d4f7f57c4d8e2c87283c37a1a222ae82a76db1638c1dc59f908339175/onyx_devtools-0.7.6-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:1aca8681a00bce984f7b9639be00e6b2a90718d5872d3e3781922423940cc915", size = 3791309, upload-time = "2026-04-24T02:31:55.484Z" },
-    { url = "https://files.pythonhosted.org/packages/1b/5c/b47887f90eff14666f888e1993bc03fae7eaac5becd6ec6b6a84b0b9853b/onyx_devtools-0.7.6-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:2f4cc8d1cbaa116f54c7556206cfd2c029ed7faeb16c02fcfdee12f525cf5aab", size = 4215980, upload-time = "2026-04-24T02:31:57.629Z" },
-    { url = "https://files.pythonhosted.org/packages/80/6c/96ee0a26673b09d0c254e8af25e69c19e45887216ca508fc3b9dd8a6214c/onyx_devtools-0.7.6-py3-none-win_amd64.whl", hash = "sha256:2f82951d5470e4c05f64760282e59ef086a0640c4f5584e517f94a8c5d3a60d4", size = 4333866, upload-time = "2026-04-24T02:31:57.973Z" },
-    { url = "https://files.pythonhosted.org/packages/8f/b9/ce77376bc57bdfa08acbc4088904d6d737538e277a3bb8a0bd35a67e17fe/onyx_devtools-0.7.6-py3-none-win_arm64.whl", hash = "sha256:821b1aee102b8f3f2874a2cb774e59c31513d6c471c9c84f85b408d5a9c4524a", size = 3872019, upload-time = "2026-04-24T02:31:57.356Z" },
+    { url = "https://files.pythonhosted.org/packages/63/7a/c17558a6ffc63ce9777a0abb019ce9bba5a752ff945604ef383fe1b19e1c/onyx_devtools-0.7.7-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:ab8a5f62f22632b3ad14a05cfae0579a5b889de5b1ea252563d477d81e830eed", size = 4259808, upload-time = "2026-05-09T00:59:28.307Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/46/acb4ca559ebd6ec460d9d960d32b0ee617e9850478f850d481bf5b3b7c37/onyx_devtools-0.7.7-py3-none-macosx_11_0_arm64.whl", hash = "sha256:429b9780bc92d70b933cfa0d0ff498dfaa1fdf40189dfda79c0f10e1d7b98c35", size = 3936588, upload-time = "2026-05-09T00:59:19.481Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/30/fa80d932e97076e85b7c9f8fe8b5f906a1faff100e20b667b1b18734c641/onyx_devtools-0.7.7-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:b8c2c955e4bc23710e51b883bd03804830c8670f3ed6a52ef23142d941cc728f", size = 3797750, upload-time = "2026-05-09T00:59:28.172Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/3e/e48b2f1f8290b681792565eff1a0bb11c7ccbe3e30630724713fcb81e47e/onyx_devtools-0.7.7-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:68709e01235f8d4a325f1b13a2c3616c254864d4f612ee45a97b3559ff1f1665", size = 4225151, upload-time = "2026-05-09T00:59:24.923Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/d3/fcf8399ec4618eda139a89d85ae3b015a5b3b93338eaa15055e1b30a8897/onyx_devtools-0.7.7-py3-none-win_amd64.whl", hash = "sha256:666ce86016a50ea02b07e433b1175b8e77c96c97827f776cc9ff05bfa5e22944", size = 4343044, upload-time = "2026-05-09T00:59:21.27Z" },
+    { url = "https://files.pythonhosted.org/packages/42/1b/092ef389ebafff2f1d762add72aed76b3f8f1d7c32ef62713ff6be30f3b5/onyx_devtools-0.7.7-py3-none-win_arm64.whl", hash = "sha256:537ad7b6f13ce8998674572cc3f24e58285849511fd12691b331f1104ba68094", size = 3879417, upload-time = "2026-05-09T00:59:21.126Z" },
 ]
 
 [[package]]
@@ -7905,11 +7920,11 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "2.6.3"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
 ]
 
 [[package]]

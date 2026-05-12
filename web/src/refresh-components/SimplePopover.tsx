@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 
 export interface SimplePopoverProps
   extends React.ComponentPropsWithoutRef<typeof Popover.Content> {

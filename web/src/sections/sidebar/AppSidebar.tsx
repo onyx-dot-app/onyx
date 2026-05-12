@@ -4,7 +4,7 @@ import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import AgentButton from "@/sections/sidebar/AgentButton";
@@ -32,7 +32,11 @@ import {
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { useAgents, useCurrentAgent, usePinnedAgents } from "@/hooks/useAgents";
+import {
+  useAgents,
+  useCurrentAgent,
+  usePinnedAgents,
+} from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/components/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
@@ -80,9 +84,9 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
 function buildVisibleAgents(
-  pinnedAgents: MinimalPersonaSnapshot[],
-  currentAgent: MinimalPersonaSnapshot | null
-): [MinimalPersonaSnapshot[], boolean] {
+  pinnedAgents: MinimalAgent[],
+  currentAgent: MinimalAgent | null
+): [MinimalAgent[], boolean] {
   /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
   so we filter it out. */
   if (!currentAgent)
@@ -337,7 +341,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
         (agentId) => agentId === over.id
       );
 
-      let newPinnedAgents: MinimalPersonaSnapshot[];
+      let newPinnedAgents: MinimalAgent[];
 
       if (currentAgent && !currentAgentIsPinned) {
         // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.

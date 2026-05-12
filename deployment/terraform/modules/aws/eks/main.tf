@@ -39,6 +39,10 @@ module "eks" {
       # Only add subnet_ids override for vespa node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
         subnet_ids = var.vespa_node_subnet_ids
+      } : {},
+      # Only add subnet_ids override for main node group if specified
+      k == "main" && length(var.main_node_subnet_ids) > 0 ? {
+        subnet_ids = var.main_node_subnet_ids
       } : {}
     )
   }

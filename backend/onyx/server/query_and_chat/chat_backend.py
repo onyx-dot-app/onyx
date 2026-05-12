@@ -403,7 +403,6 @@ def rename_chat_session(
     rename_req: ChatRenameRequest,
     request: Request,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
 ) -> RenameChatSessionResponse:
     # 3000 tokens is more than enough for a pair of messages which is enough to provide the required context for generating a
     # good name for the chat session. It's also small enough to fit on even the worst context window LLMs.
@@ -414,12 +413,13 @@ def rename_chat_session(
     user_id = user.id
 
     if name:
-        update_chat_session(
-            db_session=db_session,
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-            description=name,
-        )
+        with get_session_with_current_tenant() as db_session:
+            update_chat_session(
+                db_session=db_session,
+                user_id=user_id,
+                chat_session_id=chat_session_id,
+                description=name,
+            )
         return RenameChatSessionResponse(new_name=name)
 
     llm = get_default_llm(
@@ -428,18 +428,22 @@ def rename_chat_session(
         )
     )
 
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
-    )
-
-    full_history = create_chat_history_chain(
-        chat_session_id=chat_session_id, db_session=db_session
-    )
+    # Read-phase short session: usage check + history fetch. Closed before the
+    # LLM call so the underlying pool connection is fully released for the
+    # 2-10s generation window. (db_session.close() alone is insufficient in
+    # multi-tenant mode where the session is bound to an explicit Connection
+    # held by get_session_with_tenant's outer with-block.)
+    with get_session_with_current_tenant() as db_session:
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=llm.config.api_key,
+        )
+        full_history = create_chat_history_chain(
+            chat_session_id=chat_session_id, db_session=db_session
+        )
 
     token_counter = get_llm_token_counter(llm)
-
     simple_chat_history = convert_chat_history_basic(
         chat_history=full_history,
         token_counter=token_counter,
@@ -457,12 +461,13 @@ def rename_chat_session(
     ):
         new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
 
-    update_chat_session(
-        db_session=db_session,
-        user_id=user_id,
-        chat_session_id=chat_session_id,
-        description=new_name,
-    )
+    with get_session_with_current_tenant() as db_session:
+        update_chat_session(
+            db_session=db_session,
+            user_id=user_id,
+            chat_session_id=chat_session_id,
+            description=new_name,
+        )
 
     return RenameChatSessionResponse(new_name=new_name)
 
@@ -862,10 +867,11 @@ def fetch_chat_file(
     db_session: Session = Depends(get_session),
 ) -> Response:
     # For user files, we need to get the file id from the user file id
-    file_id_from_user_file = get_file_id_by_user_file_id(file_id, user.id, db_session)
+    file_id_from_user_file = get_file_id_by_user_file_id(file_id, db_session)
     if file_id_from_user_file:
         file_id = file_id_from_user_file
-    elif not user_can_access_chat_file(file_id, user, db_session):
+
+    if not user_can_access_chat_file(file_id, user, db_session):
         # Return 404 (rather than 403) so callers cannot probe for file
         # existence across ownership boundaries.
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")

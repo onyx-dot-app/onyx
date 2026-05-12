@@ -2094,10 +2094,9 @@ class SearchSettings(Base):
     # Contextual RAG
     enable_contextual_rag: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Contextual RAG LLM
-    contextual_rag_llm_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    contextual_rag_llm_provider: Mapped[str | None] = mapped_column(
-        String, nullable=True
+    # Contextual RAG LLM — FK to model_configuration (replaces deprecated string columns)
+    contextual_rag_model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="SET NULL"), nullable=True
     )
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
@@ -4973,8 +4972,9 @@ class DocPermissionSyncAttempt(Base):
     total_docs_synced: Mapped[int | None] = mapped_column(Integer, default=0)
     docs_with_permission_errors: Mapped[int | None] = mapped_column(Integer, default=0)
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -5042,8 +5042,9 @@ class ExternalGroupPermissionSyncAttempt(Base):
         Integer, default=0
     )
 
-    # Error message if sync fails
+    # Error information if sync fails
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
 
     # Timestamps
     time_created: Mapped[datetime.datetime] = mapped_column(

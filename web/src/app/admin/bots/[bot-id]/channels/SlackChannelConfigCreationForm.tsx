@@ -16,7 +16,7 @@ import {
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
@@ -30,7 +30,7 @@ export const SlackChannelConfigCreationForm = ({
 }: {
   slack_bot_id: number;
   documentSets: DocumentSetSummary[];
-  personas: MinimalPersonaSnapshot[];
+  personas: MinimalAgent[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackChannelConfig?: SlackChannelConfig;
 }) => {
@@ -58,7 +58,7 @@ export const SlackChannelConfigCreationForm = ({
         }
         return acc;
       },
-      [[], []] as [MinimalPersonaSnapshot[], MinimalPersonaSnapshot[]]
+      [[], []] as [MinimalAgent[], MinimalAgent[]]
     );
   }, [personas]);
 

@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
 import { Checkbox } from "@opal/components";
@@ -54,7 +54,11 @@ import { getProvider } from "@/lib/languageModels";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
-export function DisplayNameField() {
+export interface DisplayNameFieldProps {
+  disabled?: boolean;
+}
+
+export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
   return (
     <InputPadder>
       <InputVertical
@@ -63,7 +67,11 @@ export function DisplayNameField() {
         suffix="optional"
         subDescription="Used to identify this provider in the app."
       >
-        <InputTypeInField name="name" placeholder="Display Name" />
+        <InputTypeInField
+          name="name"
+          placeholder="Display Name"
+          variant={disabled ? "disabled" : undefined}
+        />
       </InputVertical>
     </InputPadder>
   );

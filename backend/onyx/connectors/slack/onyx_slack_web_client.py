@@ -1,17 +1,16 @@
 import threading
 import time
 from typing import Any
-from typing import cast
 from typing import Dict
 from urllib.request import Request
 
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 
 from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_BLOCKING_TIMEOUT
 from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_TOTAL_BLOCKING_TIMEOUT
 from onyx.connectors.slack.utils import ONYX_SLACK_LOCK_TTL
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -29,12 +28,17 @@ class OnyxSlackWebClient(WebClient):
     """
 
     def __init__(
-        self, delay_lock: str, delay_key: str, r: Redis, *args: Any, **kwargs: Any
+        self,
+        delay_lock: str,
+        delay_key: str,
+        r: TenantRedisClient,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._delay_key = delay_key
         self._delay_lock = delay_lock
-        self._redis: Redis = r
+        self._redis: TenantRedisClient = r
         self.num_requests: int = 0
         self._lock = threading.Lock()
 
@@ -94,7 +98,7 @@ class OnyxSlackWebClient(WebClient):
         urllib/urlopen ... so this is a good place to perform our delay."""
 
         # read and execute the delay
-        delay_ms = cast(int, self._redis.pttl(self._delay_key))
+        delay_ms = self._redis.pttl(self._delay_key)
         if delay_ms < 0:  # negative values are error status codes ... see docs
             delay_ms = 0
 

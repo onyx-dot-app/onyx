@@ -11,8 +11,9 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
+from onyx.background.celery.tasks.agent_wiki.tasks import push_to_agent_wiki
+from onyx.configs.app_configs import AGENT_WIKI_ENABLED
+from onyx.configs.app_configs import AGENT_WIKI_MAX_DOC_CHARS
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
@@ -33,9 +34,12 @@ from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -89,7 +93,9 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -338,7 +344,6 @@ def index_doc_batch_with_handler(
     document_batch: list[Document],
     request_id: str | None,
     tenant_id: str,
-    db_session: Session,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
     enable_contextual_rag: bool = False,
@@ -352,7 +357,6 @@ def index_doc_batch_with_handler(
             document_batch=document_batch,
             request_id=request_id,
             tenant_id=tenant_id,
-            db_session=db_session,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
             enable_contextual_rag=enable_contextual_rag,
@@ -964,13 +968,15 @@ def _verify_indexing_completeness(
 
 def _apply_document_ingestion_hook(
     documents: list[Document],
-    db_session: Session,
 ) -> list[Document]:
     """Apply the Document Ingestion hook to each document in the batch.
 
     - HookSkipped / HookSoftFailed → document passes through unchanged.
     - Response with sections=None → document is dropped (logged).
     - Response with sections → document sections are replaced with the hook's output.
+
+    Opens its own short-lived session so the caller holds no connection during
+    this call.
     """
 
     def _build_payload(doc: Document) -> DocumentIngestionPayload:
@@ -1056,37 +1062,95 @@ def _apply_document_ingestion_hook(
     if not documents:
         return documents
 
-    # Run the hook for the first document. If it returns HookSkipped the hook
-    # is not configured — skip the remaining N-1 DB lookups.
-    first_doc = documents[0]
-    first_payload = _build_payload(first_doc).model_dump()
-    first_hook_result = execute_hook(
-        db_session=db_session,
-        hook_point=HookPoint.DOCUMENT_INGESTION,
-        payload=first_payload,
-        response_type=DocumentIngestionResponse,
-    )
-    if isinstance(first_hook_result, HookSkipped):
-        return documents
-
-    result: list[Document] = []
-    first_applied = _apply_result(first_doc, first_hook_result)
-    if first_applied is not None:
-        result.append(first_applied)
-
-    for doc in documents[1:]:
-        payload = _build_payload(doc).model_dump()
-        hook_result = execute_hook(
+    with get_session_with_current_tenant() as db_session:
+        # Run the hook for the first document. If it returns HookSkipped the hook
+        # is not configured — skip the remaining N-1 DB lookups.
+        first_doc = documents[0]
+        first_payload = _build_payload(first_doc).model_dump()
+        first_hook_result = execute_hook(
             db_session=db_session,
             hook_point=HookPoint.DOCUMENT_INGESTION,
-            payload=payload,
+            payload=first_payload,
             response_type=DocumentIngestionResponse,
         )
-        applied = _apply_result(doc, hook_result)
-        if applied is not None:
-            result.append(applied)
+        if isinstance(first_hook_result, HookSkipped):
+            return documents
+
+        result: list[Document] = []
+        first_applied = _apply_result(first_doc, first_hook_result)
+        if first_applied is not None:
+            result.append(first_applied)
+
+        for doc in documents[1:]:
+            payload = _build_payload(doc).model_dump()
+            hook_result = execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.DOCUMENT_INGESTION,
+                payload=payload,
+                response_type=DocumentIngestionResponse,
+            )
+            applied = _apply_result(doc, hook_result)
+            if applied is not None:
+                result.append(applied)
 
     return result
+
+
+def _maybe_push_to_agent_wiki(
+    adapter: IndexingBatchAdapter,
+    filtered_documents: list[Document],
+    insertion_records: list[DocumentInsertionRecord],
+) -> None:
+    # Agent-wiki is single-tenant; pushing from a multi-tenant deployment would
+    # mix documents from different organizations into a shared instance.
+    if not AGENT_WIKI_ENABLED or MULTI_TENANT:
+        return
+
+    if adapter.connector_id is None or adapter.credential_id is None:
+        return
+
+    successfully_indexed = {r.document_id for r in insertion_records}
+    if not successfully_indexed:
+        return
+
+    with get_session_with_current_tenant() as db_session:
+        cc_pair = get_connector_credential_pair(
+            db_session, adapter.connector_id, adapter.credential_id
+        )
+        if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
+            # TODO: support permissioned (non-public) connectors in a future version
+            return
+
+    doc_map = {doc.id: doc for doc in filtered_documents}
+    for doc_id in successfully_indexed:
+        doc = doc_map.get(doc_id)
+        if doc is None:
+            continue
+        content = " ".join(
+            s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+        )
+        if len(content) > AGENT_WIKI_MAX_DOC_CHARS:
+            logger.debug(
+                "Skipping agent-wiki push for doc_id=%s: content length %d exceeds limit %d",
+                doc_id,
+                len(content),
+                AGENT_WIKI_MAX_DOC_CHARS,
+            )
+            continue
+        run_in_background(
+            push_to_agent_wiki,
+            doc_id=doc_id,
+            source=str(doc.source.value) if doc.source else "unknown",
+            title=doc.title or doc.semantic_identifier,
+            content=content,
+            url=next(
+                (s.link for s in doc.sections if isinstance(s, TextSection) and s.link),
+                None,
+            ),
+            doc_updated_at=(
+                doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+            ),
+        )
 
 
 @log_function_time(debug_only=True)
@@ -1098,7 +1162,6 @@ def index_doc_batch(
     document_indices: list[DocumentIndex],
     request_id: str | None,
     tenant_id: str,
-    db_session: Session,
     adapter: IndexingBatchAdapter,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
@@ -1137,7 +1200,7 @@ def index_doc_batch(
     )
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
-    filtered_documents = _apply_document_ingestion_hook(filtered_documents, db_session)
+    filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(filtered_documents, ignore_time_skip)
     if not context:
@@ -1226,11 +1289,12 @@ def index_doc_batch(
         # Acquires a lock on the documents so that no other process can modify
         # them.  Not needed until here, since this is when the actual race
         # condition with vector db can occur.
-        with adapter.lock_context(context.updatable_docs):
+        with adapter.lock_context(context.updatable_docs) as db_session:
             enricher = adapter.prepare_enrichment(
                 context=context,
                 tenant_id=tenant_id,
                 chunks=embedded_chunks,
+                db_session=db_session,
             )
 
             index_batch_params = IndexBatchParams(
@@ -1295,10 +1359,18 @@ def index_doc_batch(
                     updatable_chunk_data=updatable_chunk_data,
                     filtered_documents=filtered_documents,
                     enrichment=enricher,
+                    db_session=db_session,
                 )
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
+
+    _maybe_push_to_agent_wiki(
+        adapter=adapter,
+        filtered_documents=filtered_documents,
+        insertion_records=primary_doc_idx_insertion_records,
+    )
+
     return IndexingPipelineResult(
         new_docs=sum(
             1 for r in primary_doc_idx_insertion_records if not r.already_existed
@@ -1317,14 +1389,18 @@ def run_indexing_pipeline(
     request_id: str | None,
     embedder: IndexingEmbedder,
     document_indices: list[DocumentIndex],
-    db_session: Session,
+    db_session: Session | None = None,
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    all_search_settings = get_active_search_settings(db_session)
+    if db_session is not None:
+        all_search_settings = get_active_search_settings(db_session)
+    else:
+        with get_session_with_current_tenant() as _sess:
+            all_search_settings = get_active_search_settings(_sess)
     if (
         all_search_settings.secondary
         and all_search_settings.secondary.status == IndexModelStatus.FUTURE
@@ -1340,11 +1416,16 @@ def run_indexing_pipeline(
     )
     llm = None
     if enable_contextual_rag:
-        llm = get_llm_for_contextual_rag(
-            search_settings.contextual_rag_llm_name or DEFAULT_CONTEXTUAL_RAG_LLM_NAME,
-            search_settings.contextual_rag_llm_provider
-            or DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER,
-        )
+        mc_id = search_settings.contextual_rag_model_configuration_id
+        if mc_id is None:
+            # Fall back to the global default contextual RAG model (LLMModelFlow).
+            from onyx.db.llm import fetch_default_contextual_rag_model
+
+            with get_session_with_current_tenant() as fallback_session:
+                mc = fetch_default_contextual_rag_model(fallback_session)
+            mc_id = mc.id if mc else None
+        if mc_id is not None:
+            llm = get_llm_for_contextual_rag(mc_id)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
@@ -1361,7 +1442,6 @@ def run_indexing_pipeline(
         document_batch=document_batch,
         request_id=request_id,
         tenant_id=tenant_id,
-        db_session=db_session,
         adapter=adapter,
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,

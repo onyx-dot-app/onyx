@@ -406,7 +406,7 @@ def update_document_set(
             )
 
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
         raise
 
@@ -489,7 +489,7 @@ def mark_document_set_as_to_be_deleted(
         # are no more relationships to cc pairs
         document_set_row.is_up_to_date = False
         db_session.commit()
-    except:
+    except Exception:
         db_session.rollback()
         raise
 

@@ -12,7 +12,7 @@ import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button } from "@opal/components";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { UNNAMED_CHAT } from "@/lib/constants";
@@ -22,7 +22,7 @@ import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
-  persona: Persona;
+  persona: Agent;
 }
 
 export default function SharedChatDisplay({
