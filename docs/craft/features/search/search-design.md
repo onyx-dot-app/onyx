@@ -415,7 +415,7 @@ The onyx-cli binary must be available inside the sandbox:
 
 #### R4.3: CLI skill creation
 
-The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills.md`). The skill consists of:
+The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills/skills.md`). The skill consists of:
 
 - **`SKILL.md.template`**: A template that describes how to use onyx-cli search, rendered at session setup with the user's available sources. This is a built-in skill registered with the `BuiltinSkillRegistry`.
 - **Skill name**: `company-search` (consistent with `search-requirements.md` — reads naturally, brand-neutral).
