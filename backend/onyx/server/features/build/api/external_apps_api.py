@@ -68,6 +68,35 @@ def _to_user_response(
     )
 
 
+def _to_user_response(
+    app: ExternalApp, user_cred: ExternalAppUserCredential | None
+) -> ExternalAppUserResponse:
+    """Compute the user-facing view of an app.
+
+    `credential_keys` = keys the auth_template references that the org has
+    not pre-filled. `credential_values` is the user's stored values for
+    those same keys (stale keys from prior templates are filtered out so
+    the frontend never renders a field that's no longer relevant).
+    """
+    required_keys = [
+        key
+        for key in app.auth_template.keys()
+        if key not in app.organization_credentials
+    ]
+    stored = user_cred.user_credentials if user_cred is not None else {}
+    credential_values = {key: stored[key] for key in required_keys if key in stored}
+    authenticated = all(key in credential_values for key in required_keys)
+
+    return ExternalAppUserResponse(
+        id=app.id,
+        name=app.name,
+        description=app.description,
+        credential_keys=required_keys,
+        credential_values=credential_values,
+        authenticated=authenticated,
+    )
+
+
 # =============================================================================
 # Admin Endpoints
 # =============================================================================
