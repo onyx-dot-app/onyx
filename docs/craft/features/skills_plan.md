@@ -1083,7 +1083,7 @@ No toggles. To suppress a skill in the current turn, the user tells the agent in
 
 ### Todos
 - [ ] Implement frontend skills panel component:
-  - [ ] `web/src/app/craft/.../SkillsPanel.tsx` — fetches `/api/build/sessions/{id}/skills`, renders the list.
+  - [ ] `web/src/app/craft/.../SkillsPanel.tsx` — fetches via `SWR_KEYS.buildSessionSkills(sessionId)` (defined in §13 todos), renders the list.
   - [ ] Skill row sub-component: letter-monogram avatar, name, description, source badge.
   - [ ] Click opens drawer showing SKILL.md preview.
 - [ ] Implement `GET /api/build/sessions/{id}/skills/<slug>/content` returning the rendered SKILL.md as plain text.
@@ -1221,6 +1221,25 @@ Visibility picker (radio + group + user multi-select) is reused across upload mo
 - **No bulk operations.** "Grant skill X to N groups at once" is the picker. "Delete N skills" isn't a workflow we've heard demand for.
 
 ### Todos
+
+- [ ] **Register all new endpoints in `web/src/lib/swr-keys.ts` BEFORE implementing the components.** Per the repo convention (doc string at the top of `swr-keys.ts`): all `useSWR()` and `mutate()` calls must reference `SWR_KEYS` constants, never inline strings. ~170 existing references; **zero** inline `useSWR("...")` calls in the codebase. Add:
+  ```ts
+  // ── Skills ───────────────────────────────────────────────────────────────
+  skills: "/api/skills",                                          // user-facing list
+  adminSkills: "/api/admin/skills",                               // admin list (builtin + custom)
+  adminSkillsCustom: "/api/admin/skills/custom",                  // POST (create)
+  adminSkillsCustomById: (id: string) =>                          // PATCH, DELETE
+      `/api/admin/skills/custom/${id}`,
+  adminSkillsCustomBundle: (id: string) =>                        // PUT (replace bundle)
+      `/api/admin/skills/custom/${id}/bundle`,
+  adminSkillsCustomGrants: (id: string) =>                        // PUT (replace grants)
+      `/api/admin/skills/custom/${id}/grants`,
+  buildSessionSkills: (sessionId: string) =>                      // panel data source
+      `/api/build/sessions/${sessionId}/skills`,
+  buildSessionSkillContent: (sessionId: string, slug: string) =>  // SKILL.md preview
+      `/api/build/sessions/${sessionId}/skills/${slug}/content`,
+  ```
+  Used by every list view, modal, and panel below. Mutation handlers (POST/PATCH/PUT/DELETE) call `mutate(SWR_KEYS.adminSkills)` after success to refresh the list.
 - [ ] Create `web/src/app/admin/skills/page.tsx` — list view shell.
 - [ ] List components:
   - [ ] `web/src/app/admin/skills/SkillsList.tsx` — table renderer.

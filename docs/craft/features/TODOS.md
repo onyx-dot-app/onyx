@@ -259,7 +259,8 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 ### 4.1 Page shell + routing
 
-- `[TODO]` `P4.001` Create `web/src/app/admin/skills/page.tsx` using `SettingsLayouts.Root`/`.Header`/`.Body` pattern from `AgentsPage.tsx`
+- `[TODO]` `P4.000` **Register SWR keys FIRST** in `web/src/lib/swr-keys.ts` — repo convention forbids inline `useSWR("...")` strings (~170 existing `SWR_KEYS.*` refs, zero inline). Add: `skills`, `adminSkills`, `adminSkillsCustom`, `adminSkillsCustomById(id)`, `adminSkillsCustomBundle(id)`, `adminSkillsCustomGrants(id)`, `buildSessionSkills(sessionId)`, `buildSessionSkillContent(sessionId, slug)`. Mutation handlers in P4.020-P4.053 will call `mutate(SWR_KEYS.adminSkills)` after success. Blocks every frontend component task that follows.
+- `[TODO]` `P4.001` Create `web/src/app/admin/skills/page.tsx` using `SettingsLayouts.Root`/`.Header`/`.Body` pattern from `AgentsPage.tsx`  (deps: P4.000)
 - `[TODO]` `P4.002` Add Skills entry to admin nav in `web/src/lib/admin-routes.ts`
 - `[TODO]` `P4.003` Frontend type definitions matching backend Pydantic models (`BuiltinSkillAdmin`, `CustomSkillAdmin`, etc.)  (deps: P2.003)
 

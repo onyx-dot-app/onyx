@@ -3279,7 +3279,9 @@ def refresh_pod_skills(pod_name: str) -&gt; None:
         <ul>
           <li>
             <span class="file-ref">web/src/app/craft/.../SkillsPanel.tsx</span>
-            — fetches manifest, renders list.
+            — fetches via
+            <code>SWR_KEYS.buildSessionSkills(sessionId)</code> (defined in §13
+            todos), renders list.
           </li>
           <li>
             Skill row sub-component (letter-monogram avatar, name, description,
@@ -4746,6 +4748,30 @@ def refresh_pod_skills(pod_name: str) -&gt; None:
 
     <div class="subhead todos">Todos</div>
     <ul class="todos">
+      <li>
+        <strong
+          >Register all new endpoints in
+          <span class="file-ref">web/src/lib/swr-keys.ts</span> BEFORE
+          implementing components.</strong
+        >
+        Repo convention: every <code>useSWR()</code> and
+        <code>mutate()</code> call must reference
+        <code>SWR_KEYS</code> constants, never inline strings (~170 existing
+        references, zero inline calls). Add:
+        <pre><code>// ── Skills ───────────────────────────────────────────────────────────────
+skills: "/api/skills",
+adminSkills: "/api/admin/skills",
+adminSkillsCustom: "/api/admin/skills/custom",
+adminSkillsCustomById: (id: string) =&gt; `/api/admin/skills/custom/${id}`,
+adminSkillsCustomBundle: (id: string) =&gt; `/api/admin/skills/custom/${id}/bundle`,
+adminSkillsCustomGrants: (id: string) =&gt; `/api/admin/skills/custom/${id}/grants`,
+buildSessionSkills: (sessionId: string) =&gt; `/api/build/sessions/${sessionId}/skills`,
+buildSessionSkillContent: (sessionId: string, slug: string) =&gt;
+    `/api/build/sessions/${sessionId}/skills/${slug}/content`,</code></pre>
+        Mutation handlers (POST/PATCH/PUT/DELETE) call
+        <code>mutate(SWR_KEYS.adminSkills)</code> after success to refresh the
+        list.
+      </li>
       <li>
         Create page shell
         <span class="file-ref">web/src/app/admin/skills/page.tsx</span> using
