@@ -18,9 +18,6 @@ from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 router = APIRouter()
 
