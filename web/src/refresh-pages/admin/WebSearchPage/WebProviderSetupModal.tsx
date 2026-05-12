@@ -9,6 +9,7 @@ import Modal from "@/refresh-components/Modal";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
+import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import {
   buildSearchProviderConfig,
   buildContentProviderConfig,
@@ -51,17 +52,13 @@ export type ProviderModalState =
 
 export interface WebProviderSetupModalProps {
   state: ProviderModalState;
-  mutate: () => Promise<unknown>;
-  onSuccess: () => void;
 }
 
-export function WebProviderSetupModal({
-  state,
-  mutate,
-  onSuccess,
-}: WebProviderSetupModalProps) {
+export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
   const onClose = useModalClose();
   const { category, providerType, provider } = state;
+  const { mutateSearchProviders, mutateContentProviders } =
+    useWebSearchProviders();
 
   const isEditing = !!provider && provider.id > 0;
   const hasStoredKey = !!provider?.masked_api_key;
@@ -120,6 +117,16 @@ export function WebProviderSetupModal({
       : Yup.string(),
   });
 
+  async function mutate() {
+    if (category === "search") {
+      await mutateSearchProviders();
+      if (providerType === "exa") await mutateContentProviders();
+    } else {
+      await mutateContentProviders();
+      if (providerType === "exa") await mutateSearchProviders();
+    }
+  }
+
   async function handleSubmit(
     values: FormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
@@ -150,7 +157,10 @@ export function WebProviderSetupModal({
         onValidating: () => {},
         onSaving: () => {},
         onError: (message) => toast.error(message),
-        onClose: onSuccess,
+        onClose: () => {
+          toast.success("Provider connected");
+          onClose?.();
+        },
         mutate,
       });
     } finally {

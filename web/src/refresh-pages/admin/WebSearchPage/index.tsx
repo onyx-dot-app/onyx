@@ -274,11 +274,6 @@ export default function WebSearchPage() {
     setupModal.toggle(true);
   };
 
-  const handleSuccess = () => {
-    setupModal.toggle(false);
-    toast.success("Provider connected");
-  };
-
   const hasActiveSearchProvider = searchProviders.some(
     (provider) => provider.is_active
   );
@@ -734,25 +729,7 @@ export default function WebSearchPage() {
       )}
 
       <setupModal.Provider>
-        {activeProvider && (
-          <WebProviderSetupModal
-            state={activeProvider}
-            mutate={async () => {
-              if (activeProvider.category === "search") {
-                await mutateSearchProviders();
-                if (activeProvider.providerType === "exa") {
-                  await mutateContentProviders();
-                }
-              } else {
-                await mutateContentProviders();
-                if (activeProvider.providerType === "exa") {
-                  await mutateSearchProviders();
-                }
-              }
-            }}
-            onSuccess={handleSuccess}
-          />
-        )}
+        {activeProvider && <WebProviderSetupModal state={activeProvider} />}
       </setupModal.Provider>
     </>
   );
