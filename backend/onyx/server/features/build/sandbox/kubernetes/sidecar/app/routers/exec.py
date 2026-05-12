@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from contextlib import suppress
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -118,7 +119,11 @@ async def run_exec(req: ExecRequest) -> ExecResponse:
     async def _write_stdin() -> None:
         if stdin_bytes is not None and proc.stdin is not None:
             proc.stdin.write(stdin_bytes)
-            await proc.stdin.drain()
+            # Subprocess can close its stdin before consuming all input —
+            # normal for commands like `head -c 1` that read only part of
+            # their stdin. drain() then gets EPIPE; treat as success.
+            with suppress(BrokenPipeError, ConnectionResetError):
+                await proc.stdin.drain()
             proc.stdin.close()
 
     async def _run() -> None:

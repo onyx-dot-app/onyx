@@ -60,3 +60,23 @@ def test_exec_interleaved_stdin_stdout_does_not_deadlock(client, auth_headers) -
     assert body["timed_out"] is False
     assert body["exit_code"] == 0
     assert base64.b64decode(body["stdout_b64"]) == payload
+
+
+def test_exec_subprocess_closes_stdin_early(client, auth_headers) -> None:
+    """Regression: a subprocess that closes stdin before consuming all input
+    (`head -c 1` with a big stdin payload) must not surface as 500. drain()
+    gets EPIPE on the closed pipe — caught and treated as success."""
+    payload = b"abcdef" + b"x" * 200_000
+    resp = client.post(
+        "/exec",
+        headers=auth_headers,
+        json={
+            "argv": ["/usr/bin/head", "-c", "1"],
+            "stdin_b64": base64.b64encode(payload).decode(),
+            "timeout_seconds": 5,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["exit_code"] == 0
+    assert base64.b64decode(body["stdout_b64"]) == b"a"
