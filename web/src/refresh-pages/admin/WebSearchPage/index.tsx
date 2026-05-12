@@ -1,27 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
+import { useMemo, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { markdown } from "@opal/utils";
 import { FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
+import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Button, MessageCard } from "@opal/components";
+import { MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   WebProviderSetupModal,
   type ProviderModalState,
 } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { WebSearchDisconnectModal } from "@/refresh-pages/admin/WebSearchPage/WebSearchDisconnectModal";
 import {
   SEARCH_PROVIDER_DETAILS,
   SEARCH_PROVIDER_ORDER,
@@ -38,7 +34,6 @@ import {
   deactivateSearchProvider,
   activateContentProvider,
   deactivateContentProvider,
-  disconnectProvider,
 } from "@/lib/webSearch/svc";
 import type {
   WebSearchProviderType,
@@ -48,156 +43,7 @@ import type {
   DisconnectTargetState,
 } from "@/lib/webSearch/types";
 
-const NO_DEFAULT_VALUE = "__none__";
-
 const route = ADMIN_ROUTES.WEB_SEARCH;
-
-// ---------------------------------------------------------------------------
-// WebSearchDisconnectModal
-// ---------------------------------------------------------------------------
-
-function WebSearchDisconnectModal({
-  disconnectTarget,
-  searchProviders,
-  contentProviders,
-  replacementProviderId,
-  onReplacementChange,
-  onClose,
-  onDisconnect,
-}: {
-  disconnectTarget: DisconnectTargetState;
-  searchProviders: WebSearchProviderView[];
-  contentProviders: WebContentProviderView[];
-  replacementProviderId: string | null;
-  onReplacementChange: (id: string | null) => void;
-  onClose: () => void;
-  onDisconnect: () => void;
-}) {
-  const isSearch = disconnectTarget.category === "search";
-
-  const isActive = isSearch
-    ? searchProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false
-    : contentProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false;
-
-  const replacementOptions = isSearch
-    ? searchProviders.filter(
-        (p) => p.id !== disconnectTarget.id && p.id > 0 && !!p.masked_api_key
-      )
-    : contentProviders.filter(
-        (p) =>
-          p.id !== disconnectTarget.id &&
-          p.provider_type !== "onyx_web_crawler" &&
-          p.id > 0 &&
-          !!p.masked_api_key
-      );
-
-  const needsReplacement = isActive;
-  const hasReplacements = replacementOptions.length > 0;
-
-  const getLabel = (p: { name: string; provider_type: string }) => {
-    if (isSearch) {
-      const details =
-        SEARCH_PROVIDER_DETAILS[p.provider_type as WebSearchProviderType];
-      return details?.label ?? p.name ?? p.provider_type;
-    }
-    const details = CONTENT_PROVIDER_DETAILS[p.provider_type];
-    return details?.label ?? p.name ?? p.provider_type;
-  };
-
-  const categoryLabel = isSearch ? "search engine" : "web crawler";
-  const featureLabel = isSearch ? "web search" : "web crawling";
-  const disableLabel = isSearch ? "Disable Web Search" : "Disable Web Crawling";
-
-  useEffect(() => {
-    if (needsReplacement && hasReplacements && !replacementProviderId) {
-      const first = replacementOptions[0];
-      if (first) onReplacementChange(String(first.id));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <ConfirmationModalLayout
-      icon={SvgUnplug}
-      title={markdown(`Disconnect *${disconnectTarget.label}*`)}
-      description="This will remove the stored credentials for this provider."
-      onClose={onClose}
-      submit={
-        <Button
-          variant="danger"
-          onClick={onDisconnect}
-          disabled={
-            needsReplacement && hasReplacements && !replacementProviderId
-          }
-        >
-          Disconnect
-        </Button>
-      }
-    >
-      {needsReplacement ? (
-        hasReplacements ? (
-          <Section alignItems="start">
-            <Text as="p" font="main-ui-body" color="text-03">
-              {markdown(
-                `**${disconnectTarget.label}** is currently the active ${categoryLabel}. Search history will be preserved.`
-              )}
-            </Text>
-            <Section alignItems="start" gap={0.25}>
-              <Text as="p" font="secondary-body" color="text-03">
-                Set New Default
-              </Text>
-              <InputSelect
-                value={replacementProviderId ?? undefined}
-                onValueChange={(v) => onReplacementChange(v)}
-              >
-                <InputSelect.Trigger placeholder="Select a replacement provider" />
-                <InputSelect.Content>
-                  {replacementOptions.map((p) => (
-                    <InputSelect.Item key={p.id} value={String(p.id)}>
-                      {getLabel(p)}
-                    </InputSelect.Item>
-                  ))}
-                  <InputSelect.Separator />
-                  <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
-                    <span>
-                      <b>No Default</b>
-                      <span className="text-text-03"> ({disableLabel})</span>
-                    </span>
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </Section>
-          </Section>
-        ) : (
-          <>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {markdown(
-                `**${disconnectTarget.label}** is currently the active ${categoryLabel}.`
-              )}
-            </Text>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {`Connect another provider to continue using ${featureLabel}.`}
-            </Text>
-          </>
-        )
-      ) : (
-        <>
-          <Text as="p" font="main-ui-body" color="text-03">
-            {markdown(
-              `${
-                isSearch ? "Web search" : "Web crawling"
-              } will no longer be routed through **${disconnectTarget.label}**.`
-            )}
-          </Text>
-          <Text as="p" font="main-ui-body" color="text-03">
-            Search history will be preserved.
-          </Text>
-        </>
-      )}
-    </ConfirmationModalLayout>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -208,12 +54,8 @@ export default function WebSearchPage() {
     useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
     useState<DisconnectTargetState | null>(null);
-  const [replacementProviderId, setReplacementProviderId] = useState<
-    string | null
-  >(null);
-
   const setupModal = useCreateModal();
-
+  const disconnectModal = useCreateModal();
   const {
     searchProviders,
     contentProviders,
@@ -426,7 +268,7 @@ export default function WebSearchPage() {
     );
   }
 
-  const handleActivateSearchProvider = async (providerId: number) => {
+  async function handleActivateSearchProvider(providerId: number) {
     try {
       await activateSearchProvider(providerId);
       await mutateSearchProviders();
@@ -435,9 +277,9 @@ export default function WebSearchPage() {
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     }
-  };
+  }
 
-  const handleDeactivateSearchProvider = async (providerId: number) => {
+  async function handleDeactivateSearchProvider(providerId: number) {
     try {
       await deactivateSearchProvider(providerId);
       await mutateSearchProviders();
@@ -446,11 +288,11 @@ export default function WebSearchPage() {
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     }
-  };
+  }
 
-  const handleActivateContentProvider = async (
+  async function handleActivateContentProvider(
     provider: WebContentProviderView
-  ) => {
+  ) {
     try {
       await activateContentProvider(provider);
       await mutateContentProviders();
@@ -459,12 +301,12 @@ export default function WebSearchPage() {
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     }
-  };
+  }
 
-  const handleDeactivateContentProvider = async (
+  async function handleDeactivateContentProvider(
     providerId: number,
     providerType: string
-  ) => {
+  ) {
     try {
       await deactivateContentProvider(providerId, providerType);
       await mutateContentProviders();
@@ -473,27 +315,7 @@ export default function WebSearchPage() {
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     }
-  };
-
-  const handleDisconnectProvider = async () => {
-    if (!disconnectTarget) return;
-    const { id, category } = disconnectTarget;
-
-    try {
-      await disconnectProvider(id, category, replacementProviderId);
-      toast.success(`${disconnectTarget.label} disconnected`);
-      await mutateSearchProviders();
-      await mutateContentProviders();
-    } catch (error) {
-      console.error("Failed to disconnect web search provider:", error);
-      const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
-      toast.error(message);
-    } finally {
-      setDisconnectTarget(null);
-      setReplacementProviderId(null);
-    }
-  };
+  }
 
   return (
     <>
@@ -594,12 +416,19 @@ export default function WebSearchPage() {
                                 category: "search",
                                 providerType,
                               });
+                              disconnectModal.toggle(true);
                             }
                           : undefined
                       }
                       disconnectModalOpen={
+                        disconnectModal.isOpen &&
                         disconnectTarget?.id === providerId &&
                         disconnectTarget?.category === "search"
+                      }
+                      setupModalOpen={
+                        setupModal.isOpen &&
+                        activeProvider?.category === "search" &&
+                        activeProvider?.providerType === providerType
                       }
                     />
                   );
@@ -692,18 +521,26 @@ export default function WebSearchPage() {
                       provider.provider_type !== "onyx_web_crawler" &&
                       isConfigured &&
                       provider.id > 0
-                        ? () =>
+                        ? () => {
                             setDisconnectTarget({
                               id: provider.id,
                               label,
                               category: "content",
                               providerType: provider.provider_type,
-                            })
+                            });
+                            disconnectModal.toggle(true);
+                          }
                         : undefined
                     }
                     disconnectModalOpen={
+                      disconnectModal.isOpen &&
                       disconnectTarget?.id === providerId &&
                       disconnectTarget?.category === "content"
+                    }
+                    setupModalOpen={
+                      setupModal.isOpen &&
+                      activeProvider?.category === "content" &&
+                      activeProvider?.providerType === provider.provider_type
                     }
                   />
                 );
@@ -714,23 +551,16 @@ export default function WebSearchPage() {
       </SettingsLayouts.Root>
 
       {disconnectTarget && (
-        <WebSearchDisconnectModal
-          disconnectTarget={disconnectTarget}
-          searchProviders={searchProviders}
-          contentProviders={combinedContentProviders}
-          replacementProviderId={replacementProviderId}
-          onReplacementChange={setReplacementProviderId}
-          onClose={() => {
-            setDisconnectTarget(null);
-            setReplacementProviderId(null);
-          }}
-          onDisconnect={() => void handleDisconnectProvider()}
-        />
+        <disconnectModal.Provider>
+          <WebSearchDisconnectModal disconnectTarget={disconnectTarget} />
+        </disconnectModal.Provider>
       )}
 
-      <setupModal.Provider>
-        {activeProvider && <WebProviderSetupModal state={activeProvider} />}
-      </setupModal.Provider>
+      {activeProvider && (
+        <setupModal.Provider>
+          <WebProviderSetupModal state={activeProvider} />
+        </setupModal.Provider>
+      )}
     </>
   );
 }
