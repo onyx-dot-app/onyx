@@ -87,6 +87,12 @@ export interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
+// JSM uses the same Atlassian credential shape as Jira (email + API token).
+// Declaring it as an explicit alias rather than reusing JiraCredentialJson
+// directly means TypeScript will surface errors if the credential shapes
+// ever diverge, instead of silently accepting mismatched objects.
+export type JiraServiceManagementCredentialJson = JiraCredentialJson;
+
 export interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -309,6 +315,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   } as JiraCredentialJson,
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  } as JiraServiceManagementCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
@@ -512,7 +522,9 @@ export const credentialDisplayNames: Record<string, string> = {
   confluence_username: "Confluence Username",
   confluence_access_token: "Confluence Access Token",
 
-  // Jira
+  // Jira & Jira Service Management
+  // JiraServiceManagementCredentialJson is an alias of JiraCredentialJson, so
+  // both connectors resolve their credential field labels through these entries.
   jira_user_email: "Jira User Email (required for Jira Cloud)",
   jira_api_token: "API or Personal Access Token",
 

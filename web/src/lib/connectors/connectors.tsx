@@ -745,6 +745,104 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description:
+      "Connect to Jira Service Management to index service desk tickets, customer requests, SLA metrics, and request types across all your JSM projects.",
+    subtext: `Configure which Jira Service Management content to index. You can index everything or specify a particular project.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "How Should We Index Your Jira Service Management?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all issues the provided credentials have access to!",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Project",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the project key:",
+                label: "Project Key",
+                name: "project_key",
+                optional: false,
+                description:
+                  "The key of a specific JSM project to index (e.g., 'SERVICEDESK').",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label: "JQL Query",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JQL query:",
+                label: "JQL Query",
+                name: "jql_query",
+                description:
+                  "A custom JQL query to filter Jira Service Management issues." +
+                  "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
+                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter labels to skip:",
+        label: "Labels to Skip",
+        name: "labels_to_skip",
+        description:
+          "Tickets with any of these labels will not be indexed. " +
+          "Useful for excluding sensitive or internal-only tickets.",
+        optional: true,
+      },
+    ],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -1964,6 +2062,34 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+// NOTE: JSM intentionally does NOT extend JiraConfig.
+// The standard Jira connector form sends `jira_project_url`, but the JSM
+// connector form (and the JiraConnector backend __init__) expects `jira_base_url`.
+// Extending JiraConfig would silently inherit the wrong field name, causing a
+// type mismatch between form data and the config object stored in the database.
+export interface JiraServiceManagementConfig {
+  /** Base URL of the Jira instance, e.g. https://your-domain.atlassian.net */
+  jira_base_url: string;
+  /** Optional project key to limit indexing to a single JSM project. */
+  project_key?: string;
+  /** User emails whose comments should be excluded from indexing. */
+  comment_email_blacklist?: string[];
+  /** Custom JQL query to filter issues (no time filters or ORDER BY). */
+  jql_query?: string;
+  /** Whether a scoped OAuth token is being used. */
+  scoped_token?: boolean;
+  /** Labels that should cause tickets to be excluded from indexing. */
+  labels_to_skip?: string[];
+  /**
+   * Tab selection value from the indexing-scope form widget
+   * ("everything" | "project" | "jql").  Sent by the form UI but not
+   * consumed by the backend connector — the backend reads project_key and
+   * jql_query directly.  Declared here so the form config object is fully
+   * typed and TypeScript does not widen it to a looser shape.
+   */
+  indexing_scope?: string;
 }
 
 export interface SalesforceConfig {

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import TypeAlias
 
 from jira import JIRA
 from jira.resources import PermissionScheme
@@ -12,7 +13,9 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
-HolderMap = dict[str, list[Holder]]
+# Explicit TypeAlias so mypy and readers understand this is a deliberate type alias,
+# not a plain variable assignment.
+HolderMap: TypeAlias = dict[str, list[Holder]]
 
 
 logger = setup_logger()
@@ -22,7 +25,7 @@ def _get_role_id(holder: Holder) -> str | None:
     return holder.get("value") or holder.get("parameter")
 
 
-def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
+def _build_holder_map(permissions: list[dict]) -> HolderMap:
     """
     A "Holder" in JIRA is a person / entity who "holds" the corresponding permission.
     It can have different types. They can be one of (but not limited to):
@@ -35,15 +38,19 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
         - `{ "type": "projectRole", "value": "$PROJECT_ID", ..  }`
 
     When we fetch the PermissionSchema from JIRA, we retrieve a list of "Holder"s.
-    The list of "Holder"s can have multiple "Holder"s of the same type in the list (e.g., you can have two `"type": "user"`s in
-    there, each corresponding to a different user).
-    This function constructs a map of "Holder" types to a list of the "Holder"s which contained that type.
+    The list of "Holder"s can have multiple "Holder"s of the same type in the list
+    (e.g., you can have two `"type": "user"`s in there, each corresponding to a
+    different user).
+
+    This function constructs a map of "Holder" types to a list of the "Holder"s which
+    contained that type.
 
     Returns:
-        A dict from the "Holder" type to the actual "Holder" instance.
+        A plain ``dict`` (not a ``defaultdict``) mapping holder type strings to
+        the list of ``Holder`` instances with that type.
 
-    Example:
-        ```
+    Example::
+
         {
             "user": [
                 { "type": "user", "value": "10000", "user": { .. }, .. },
@@ -58,9 +65,11 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
             ],
             ..
         }
-        ```
     """
 
+    # Use defaultdict internally for convenient append-without-key-check,
+    # then convert to a plain dict on return so the return type precisely matches
+    # HolderMap and callers do not accidentally rely on defaultdict behaviour.
     holder_map: defaultdict[str, list[Holder]] = defaultdict(list)
 
     for raw_perm in permissions:
@@ -72,12 +81,14 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
 
         permission = Permission(**raw_perm.raw)  # ty: ignore[invalid-argument-type]
 
-        # We only care about ability to browse through projects + issues (not other permissions such as read/write).
+        # We only care about ability to browse through projects + issues
+        # (not other permissions such as read/write).
         if permission.permission != "BROWSE_PROJECTS":
             continue
 
-        # In order to associate this permission to some Atlassian entity, we need the "Holder".
-        # If this doesn't exist, then we cannot associate this permission to anyone; just skip.
+        # In order to associate this permission to some Atlassian entity, we need the
+        # "Holder".  If this doesn't exist, then we cannot associate this permission to
+        # anyone; just skip.
         if not permission.holder:
             logger.warning(
                 "Expected to find a permission holder, but none was found: permission=%r",
@@ -85,17 +96,19 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
             )
             continue
 
-        type = permission.holder.get("type")
-        if not type:
+        # Use an explicit name to avoid shadowing the built-in `type`.
+        holder_type = permission.holder.get("type")
+        if not holder_type:
             logger.warning(
                 "Expected to find the type of permission holder, but none was found: permission=%r",
                 permission,
             )
             continue
 
-        holder_map[type].append(permission.holder)
+        holder_map[holder_type].append(permission.holder)
 
-    return holder_map
+    # Convert to plain dict so the return type is exactly HolderMap, not defaultdict.
+    return dict(holder_map)
 
 
 def _get_user_emails(user_holders: list[Holder]) -> list[str]:
@@ -260,12 +273,29 @@ def get_project_permissions(
     jira_client: JIRA,
     jira_project: str,
     add_prefix: bool = False,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
-    """
-    Get project permissions from Jira.
+    """Get project permissions from Jira.
 
-    add_prefix: When True, prefix group IDs with source type (for indexing path).
-               When False (default), leave unprefixed (for permission sync path).
+    Args:
+        jira_client: An authenticated JIRA client instance.
+        jira_project: The Jira project key (e.g. ``"HELP"``).
+        add_prefix: When ``True``, prefix each group ID with the source-type
+            string (e.g. ``"jira_my-group"`` or
+            ``"jira_service_management_my-group"``).  This is used on the
+            *indexing* path.  When ``False`` (the default), group IDs are left
+            unprefixed because ``upsert_document_external_perms`` handles
+            prefixing on the permission-sync path.  Passing a non-default
+            ``source`` with ``add_prefix=False`` has no effect.
+        source: The ``DocumentSource`` used to build the group-name prefix when
+            ``add_prefix=True``.  Defaults to ``DocumentSource.JIRA``; the JSM
+            connector passes ``DocumentSource.JIRA_SERVICE_MANAGEMENT`` so that
+            indexed group IDs use the ``jira_service_management_`` prefix and
+            match the permission-sync path correctly.
+
+    Returns:
+        An ``ExternalAccess`` instance describing who may access the project,
+        or ``None`` if the project has no readable permission scheme.
     """
     project_permissions: PermissionScheme = jira_client.project_permissionscheme(
         project=jira_project
@@ -285,10 +315,12 @@ def get_project_permissions(
         jira_client=jira_client, jira_project=jira_project, holder_map=holder_map
     )
 
-    # Prefix group IDs with source type if requested (for indexing path)
+    # Prefix group IDs with source type if requested (for indexing path).
+    # The source parameter is intentionally consumed only when add_prefix=True;
+    # passing a non-default source with add_prefix=False has no effect.
     if add_prefix and external_access and external_access.external_user_group_ids:
         prefixed_groups = {
-            build_ext_group_name_for_onyx(g, DocumentSource.JIRA)
+            build_ext_group_name_for_onyx(g, source)
             for g in external_access.external_user_group_ids
         }
         return ExternalAccess(

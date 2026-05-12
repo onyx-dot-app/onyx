@@ -17,6 +17,7 @@ from jira.resources import Issue
 from more_itertools import chunked
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
@@ -60,7 +61,7 @@ logger = setup_logger()
 ONE_HOUR = 3600
 
 _MAX_RESULTS_FETCH_IDS = 5000
-_JIRA_FULL_PAGE_SIZE = 50
+JIRA_FULL_PAGE_SIZE = 50
 # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
 _JIRA_BULK_FETCH_LIMIT = 100
 
@@ -83,6 +84,7 @@ _FIELD_PROJECT_NAME = "project_name"
 _FIELD_UPDATED = "updated"
 _FIELD_RESOLUTION_DATE = "resolutiondate"
 _FIELD_RESOLUTION_DATE_KEY = "resolution_date"
+
 
 
 def _is_cloud_client(jira_client: JIRA) -> bool:
@@ -389,6 +391,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -489,7 +492,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -542,8 +545,9 @@ class JiraConnector(
         self.jql_query = jql_query
         self.scoped_token = scoped_token
         self._jira_client: JIRA | None = None
-        # Cache project permissions to avoid fetching them repeatedly across runs
-        self._project_permissions_cache: dict[str, Any] = {}
+        # Cache project permissions to avoid fetching them repeatedly across runs.
+        # Keyed by "<project_key>:prefixed" or "<project_key>:unprefixed".
+        self._project_permissions_cache: dict[str, ExternalAccess | None] = {}
 
     @property
     def comment_email_blacklist(self) -> tuple:
@@ -564,16 +568,19 @@ class JiraConnector(
 
     def _get_project_permissions(
         self, project_key: str, add_prefix: bool = False
-    ) -> Any:
+    ) -> ExternalAccess | None:
         """Get project permissions with caching.
 
         Args:
-            project_key: The Jira project key
-            add_prefix: When True, prefix group IDs with source type (for indexing path).
-                       When False (default), leave unprefixed (for permission sync path).
+            project_key: The Jira project key.
+            add_prefix: When True, prefix group IDs with the source type for the
+                indexing path (e.g. ``"jira_my-group"``).  When False (default),
+                leave unprefixed for the permission-sync path where
+                ``upsert_document_external_perms`` handles prefixing.
 
         Returns:
-            The external access permissions for the project
+            The external access permissions for the project, or ``None`` if
+            the project has no permissions or the lookup failed.
         """
         # Use different cache keys for prefixed vs unprefixed to avoid mixing
         cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
@@ -582,6 +589,7 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self._get_document_source(),
             )
         return self._project_permissions_cache[cache_key]
 
@@ -775,6 +783,25 @@ class JiraConnector(
                 )
             raise e
 
+    def _get_document_source(self) -> DocumentSource:
+        """Return the DocumentSource for indexed documents.
+
+        Subclasses override this to tag documents with a different source
+        (e.g. JIRA_SERVICE_MANAGEMENT) without duplicating _load_from_checkpoint.
+        """
+        return DocumentSource.JIRA
+
+    def _enrich_document(self, document: Document, issue: Any) -> Document:
+        """Hook called after every successfully-processed issue document.
+
+        Base implementation is a no-op. Subclasses override to attach
+        source-specific metadata (e.g. SLA fields for JSM).
+
+        Must never raise — any failure must be caught internally and logged.
+        The document must always be returned.
+        """
+        return document
+
     def _load_from_checkpoint(
         self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
@@ -792,7 +819,7 @@ class JiraConnector(
             jira_client=self.jira_client,
             jql=jql,
             start=current_offset,
-            max_results=_JIRA_FULL_PAGE_SIZE,
+            max_results=JIRA_FULL_PAGE_SIZE,
             all_issue_ids=new_checkpoint.all_issue_ids,
             checkpoint_callback=checkpoint_callback,
             nextPageToken=new_checkpoint.cursor,
@@ -838,9 +865,11 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self._get_document_source(),
                 ):
+                    document = self._enrich_document(document, issue)
                     # Add permission information to the document if requested
-                    if include_permissions:
+                    if include_permissions and project_key:
                         document.external_access = self._get_project_permissions(
                             project_key,  # ty: ignore[invalid-argument-type]
                             add_prefix=True,  # Indexing path - prefix here
@@ -864,7 +893,7 @@ class JiraConnector(
 
         # Update checkpoint
         self.update_checkpoint_for_next_run(
-            new_checkpoint, current_offset, starting_offset, _JIRA_FULL_PAGE_SIZE
+            new_checkpoint, current_offset, starting_offset, JIRA_FULL_PAGE_SIZE
         )
 
         return new_checkpoint
