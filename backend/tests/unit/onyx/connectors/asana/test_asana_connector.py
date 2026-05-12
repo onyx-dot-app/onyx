@@ -119,13 +119,13 @@ def _build_api_with_mocks(
         [{"gid": gid} for gid in project_to_tasks]
     )
 
-    def _get_project(gid: str, _opts: dict[str, Any]) -> dict[str, Any]:
+    def _get_project(gid: str, **_kwargs: Any) -> dict[str, Any]:
         return {**default_metadata, **metadata_overrides.get(gid, {})}
 
     project_api.get_project.side_effect = _get_project
 
     def _get_tasks_for_project(
-        gid: str, _opts: dict[str, Any]
+        gid: str, *_args: Any, **_kwargs: Any
     ) -> Iterator[dict[str, Any]]:
         return iter(project_to_tasks.get(gid, []))
 
