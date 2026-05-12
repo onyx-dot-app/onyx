@@ -206,13 +206,17 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P3.071` Implement `read_file_from_session` in `KubernetesSandboxManager` (kubectl exec cat)  (deps: P3.070)
 - `[TODO]` `P3.072` Implement `read_file_from_session` in local sandbox manager (direct FS read)  (deps: P3.070)
 
-### 3.9 AGENTS.md generation
+### 3.9 AGENTS.md skill section — drop entirely  (spec §10)
 
-- `[TODO]` `P3.080` Rewrite `build_skills_section(skills_dir)` at `agent_instructions.py:267` — read `.skills_manifest.json` from `/skills/`, inline every entry, no threshold
-- `[TODO]` `P3.081` Delete `_skills_cache` and `_skills_cache_lock` (top of `agent_instructions.py`)  (deps: P3.080)
-- `[TODO]` `P3.082` Delete `_scan_skills_directory` if unused after rewrite  (deps: P3.080)
-- `[TODO]` `P3.083` Confirm callsite at `agent_instructions.py:481` still works (signature unchanged)  (deps: P3.080)
-- `[TODO]` `P3.084` Confirm `build_skills_section` is called with the symlinked dir (`/skills/` via session's `.agents/skills`), not the old source dir  (deps: P3.080)
+OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicative. Empirically verified 2026-05-12 — OpenCode rescans `.agents/skills/` per turn.
+
+- `[TODO]` `P3.080` Remove `{{AVAILABLE_SKILLS_SECTION}}` placeholder from `AGENTS.template.md`
+- `[TODO]` `P3.081` Remove `available_skills_section = build_skills_section(skills_path)` and the `content.replace("{{AVAILABLE_SKILLS_SECTION}}", ...)` line at `agent_instructions.py:481-495`
+- `[TODO]` `P3.082` Delete `build_skills_section(skills_path)` at `agent_instructions.py:267-296`
+- `[TODO]` `P3.083` Delete `_scan_skills_directory` (unused after P3.082)
+- `[TODO]` `P3.084` Delete `_skills_cache` and `_skills_cache_lock` (unused after P3.082)
+- `[TODO]` `P3.085` Verify no other call sites reference `build_skills_section` or `{{AVAILABLE_SKILLS_SECTION}}`
+- `[TODO]` `P3.086` Smoke test: launch a session, confirm the agent lists current skills correctly via OpenCode's `skill` tool without the inlined section
 
 ### 3.10 Dockerfile
 

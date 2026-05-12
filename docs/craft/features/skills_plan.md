@@ -11,7 +11,7 @@ This document is structured so implementation can begin section-by-section with 
 
 > **Three invariants the whole design respects:**
 >
-> 1. **Skill content is live; AGENTS.md inventory is per-conversation.** Admin uploads propagate to all sessions (new + existing) within ~5 min. The agent's *list* of available skills (AGENTS.md) is stable within a conversation — regenerated at session start and on snapshot restore.
+> 1. **Skill content AND inventory are live.** Admin uploads propagate to all sessions (new + existing) within ~5 min. The agent learns about new skills on its next turn — OpenCode rescans `.agents/skills/` per turn and re-exposes the inventory via its native `skill` tool (§10). No AGENTS.md regeneration needed for skill changes.
 > 2. **Bundle is content; DB row is metadata.** Slug, name, description, grants are admin-controlled in DB. The bundle is just the agent-facing instructions and supporting files.
 > 3. **Universal layer is consumer-blind.** `backend/onyx/skills/` knows nothing about sessions, sandboxes, or `.agents/skills`. Consumers translate their state into the materializer's inputs and choose the destination path.
 
@@ -150,7 +150,7 @@ The current split costs ~30 lines (a route-handler merge in `api.py`) plus ~10 l
 ### Considerations / Tradeoffs / Decisions
 - **Why a separate `backend/onyx/server/features/skills/api.py` rather than inlining endpoints into the build feature.** Customers will integrate against `/api/admin/skills`. Moving that path later (when Persona/Chat adopts) is a breaking change. Putting it at the universal layer on day one is cheap.
 - **Why `BuiltinSkillRegistry` is a singleton, not DB-backed.** See the "built-ins live in code" decision above. One-liner: deploy lifecycle ≠ user-data lifecycle.
-- **Why the panel data source is a Craft-specific endpoint, not the universal `/api/skills`.** Because of snapshot fidelity (§12), a resumed session's skills can diverge from the user's current grants. The panel must reflect what's *actually in the session*, which lives in `.skills_manifest.json` — read via a session-scoped endpoint that the build feature owns.
+- **Why the panel data source is a Craft-specific endpoint, not the universal `/api/skills`.** The panel reflects what's *actually visible to the running session* via `.agents/skills/.skills_manifest.json` (which resolves through the symlink to `/skills/.skills_manifest.json` — the live pod-level state). Under live propagation (§12) this is usually identical to what `/api/skills` would return for the user, but the session-scoped path is the right shape for the build consumer and remains useful for debugging when sandbox state is the question.
 
 ### Todos
 - [ ] Create empty module skeletons:
@@ -878,7 +878,7 @@ If Onyx already has a pod→api_server auth path (likely — pods do call back t
 - **5-minute polling, not pub/sub.** Sub-second propagation isn't a V1 need; admin uploads aren't usually emergencies. A sleep-loop is zero new infrastructure. Upgrade to event-driven push (Option B in earlier brainstorm) is a half-day of work if latency complaints arrive.
 - **Materializer runs on api_server, not in the pod.** The pod only needs to extract a tarball — no FileStore access, no DB queries, no bundle validation. The sandbox image stays minimal. Bundle blobs never traverse a fan-out path.
 - **Atomic rename pattern.** `mv NEXT DEST` is atomic within a filesystem (POSIX guarantee). Mid-rename, a reader's `cat /skills/X/SKILL.md` either resolves to the old version (if the dentry walk happened before rename) or the new (if after) — never a torn read. This is the standard "live-update a directory under concurrent reads" pattern.
-- **AGENTS.md regen on resume is already wired up.** `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736-1809` already regenerates AGENTS.md on snapshot restore — we add one line to also (re)create the `.agents/skills` symlink. AGENTS.md picks up the current skill inventory from `/skills/.skills_manifest.json` automatically.
+- **AGENTS.md regen on resume happens but no longer matters for skills.** `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736-1809` regenerates AGENTS.md on snapshot restore. We add one line to also (re)create the `.agents/skills` symlink. AGENTS.md itself no longer carries skill information (§10) — OpenCode's per-turn `skill` tool rescan handles inventory. The symlink is the only skill-related restore step.
 - **First-refresh bootstrap via initContainer.** Pod can't start serving sessions until `/skills/` exists. The synchronous first refresh in an initContainer makes pod startup predictable (one extra HTTP call + tar extract — ~500 ms total).
 - **Local backend.** For dev, the local sandbox manager runs the refresh as a subprocess of the same Python process — same script, no kubectl needed. Or even simpler: dev-mode skips refresh and reads `/skills/` directly from the api_server's host FS via a bind mount.
 - **What if api_server is briefly unavailable mid-refresh?** Script exits non-zero, loop sleeps, retries on next tick. Pod keeps serving the previous `/skills/`. Self-healing.
@@ -902,49 +902,41 @@ If Onyx already has a pod→api_server auth path (likely — pods do call back t
 
 ---
 
-## 10. AGENTS.md generation
+## 10. AGENTS.md skill section — dropped; OpenCode handles discovery natively
 
 ### Context
-The agent's system prompt currently has a `{{AVAILABLE_SKILLS_SECTION}}` placeholder, filled by `build_skills_section(skills_path)` in `agent_instructions.py:267`. It scans the symlinked skills directory once per process (`_skills_cache`) and inlines every skill it finds. We need to replace that with a per-session read from the materialized manifest, and remove the cache.
+Earlier drafts inlined a skill list into AGENTS.md via a `{{AVAILABLE_SKILLS_SECTION}}` placeholder filled by `build_skills_section(skills_path)`. Empirical testing (2026-05) on a live session confirmed this is **redundant**: OpenCode has a native `skill` tool that exposes the skill inventory to the agent via the tool description, and **OpenCode rebuilds that tool description from the filesystem on every turn**. Adding a new SKILL.md under `.agents/skills/<slug>/` mid-conversation makes the skill visible to the agent on the next turn with zero AGENTS.md regeneration.
+
+> Per [OpenCode docs](https://opencode.ai/docs/skills/): "Skills are loaded on-demand via the native `skill` tool — agents see available skills and can load the full content when needed." The tool description includes the structured `<available_skills>` inventory.
+>
+> Test (2026-05-12): with a Craft session running, dropped `.opencode/skills/zarf-the-magnificent/SKILL.md` directly into the session FS. Asked the agent to list its skills on the next turn. Agent returned `zarf-the-magnificent` with the test description. **Confirmed: OpenCode rescans per-turn.**
 
 ### Proposed Solution
 
-New implementation:
+**Delete the skill-list section from AGENTS.md entirely.** No `{{AVAILABLE_SKILLS_SECTION}}` placeholder, no `build_skills_section(...)` helper, no `.skills_manifest.json` consumption inside AGENTS.md. The agent learns about skills from OpenCode's native `skill` tool, which auto-discovers from `.agents/skills/` on every turn.
 
-```python
-def build_skills_section(skills_dir: Path) -> str:
-    manifest_path = skills_dir / ".skills_manifest.json"
-    if not manifest_path.exists():
-        return "No skills available."
-
-    manifest = SkillsManifest.model_validate_json(manifest_path.read_text())
-    all_skills = manifest.builtin + manifest.custom
-    if not all_skills:
-        return "No skills available."
-
-    lines = [
-        "You have these skills available under `.agents/skills/<slug>/`. "
-        "Read the relevant SKILL.md before starting work that the skill covers.",
-        "",
-    ]
-    for entry in all_skills:
-        lines.append(f"- **{entry.slug}**: {entry.description}")
-    return "\n".join(lines)
-```
-
-No threshold logic, no discovery fallback, no built-in-vs-custom split — all skills inlined uniformly. `agent_instructions.py:481-495` (the templating step) is unchanged; only `build_skills_section` changes.
+AGENTS.md retains only the content OpenCode doesn't generate for us:
+- User context (name, email, role)
+- Org info section
+- LLM / NextJS config
+- Environment / methodology / system-prompt boilerplate
 
 ### Considerations / Tradeoffs / Decisions
-- **No threshold in V1.** Expected counts are <20 per tenant. Inlining 20 entries × ~150 chars ≈ 3000 chars ≈ 750 tokens. Trivial on modern contexts.
-- **Source not surfaced to the agent.** Built-in vs custom is irrelevant to invocation — the agent reads `SKILL.md` either way. The panel shows the badge to humans; AGENTS.md doesn't.
-- **Cache removal.** The existing `_skills_cache` keyed on `skills_path` returns stale data once skills are per-session. Removing it is required for correctness.
+
+- **OpenCode is the source of truth for skill inventory.** The agent's awareness of "what skills exist" comes from OpenCode's tool description, not from text we inline in AGENTS.md. Inlining would just duplicate (and risk diverging from) what OpenCode already provides.
+- **Live inventory propagation is free.** Because OpenCode rescans per turn, the moment `/skills/<slug>/` appears (via our refresh loop in §9), the next agent turn sees it. No regen step needed on our side.
+- **Snapshot resume is also free.** OpenCode rescans on start AND on each turn. Resumed sessions inherit the current state of `/skills/` without anything in `_regenerate_session_config` touching skill content.
+- **`.skills_manifest.json` is now a frontend-only artifact.** Written by the materializer in §6 for the panel data source (§11); the agent never reads it.
+- **What if we switch off OpenCode** (custom harness, Codex, etc.)? The harness would need its own equivalent of OpenCode's `skill` tool — either inlining into the system prompt (what we were going to do) or building its own auto-discovery. Either way, the on-disk layout at `.agents/skills/<slug>/SKILL.md` stays — that's the cross-runtime contract per the `.agents/` choice from earlier.
 
 ### Todos
-- [ ] Rewrite `build_skills_section(skills_dir)` in `backend/onyx/server/features/build/sandbox/util/agent_instructions.py:267-296`.
-- [ ] Delete `_skills_cache: dict[str, str]` and `_skills_cache_lock` (top of the same file).
-- [ ] Delete `_scan_skills_directory(...)` if it's unused after the rewrite.
-- [ ] Verify callsite at `agent_instructions.py:481` still works (signature unchanged).
-- [ ] Confirm `build_skills_section` is called with the materialized skills dir, not the source dir.
+- [ ] **Remove** the `{{AVAILABLE_SKILLS_SECTION}}` placeholder from `AGENTS.template.md`.
+- [ ] **Remove** the `available_skills_section = build_skills_section(skills_path)` line and the `content.replace("{{AVAILABLE_SKILLS_SECTION}}", ...)` line at `agent_instructions.py:481-495`.
+- [ ] **Delete** `build_skills_section(skills_path)` at `agent_instructions.py:267-296`.
+- [ ] **Delete** `_scan_skills_directory(...)` if unused after the above (likely).
+- [ ] **Delete** `_skills_cache` and `_skills_cache_lock` (also unused after the above).
+- [ ] Verify no other call sites reference `build_skills_section` or `{{AVAILABLE_SKILLS_SECTION}}`.
+- [ ] Smoke test: launch a session, confirm the agent lists current skills correctly without the inlined section.
 
 ---
 
@@ -995,60 +987,59 @@ No toggles. To suppress a skill in the current turn, the user tells the agent in
 
 ---
 
-## 12. Skill propagation (live content, boundary inventory)
+## 12. Skill propagation — fully live (content + inventory)
 
 ### Context
-Earlier drafts had skills frozen in each session's snapshot. That made admin uploads invisible to running sessions, weakened revocation, and bloated snapshots. With the pod-level `/skills/` model from §9, skill content is **live** — admin uploads propagate within ~5 minutes — but the agent's *awareness* of what skills exist (the inline list in AGENTS.md) stays stable within a conversation.
+Earlier drafts split propagation into two cadences: live `/skills/` content (≤5 min via the pod refresh loop) and per-conversation AGENTS.md inventory (regenerated only at session boundaries). Empirical testing of OpenCode's skill discovery (see §10) showed the second tier is unnecessary: **OpenCode rebuilds its native `skill` tool description from `.agents/skills/` on every turn**, so any change in `/skills/` propagates to the agent's inventory awareness on the next turn — without any AGENTS.md regen step.
 
 ### Proposed Solution
 
-**Two levels, two cadences.** Cleanly separated:
+**One cadence, one mechanism.** Everything is live within ~5 minutes:
 
-| Layer | What it represents | Cadence | Where it's regenerated |
-|---|---|---|---|
-| **`/skills/` content** | The actual SKILL.md + scripts + supporting files | Live — refreshed every ~5 min from current admin state | Pod refresh loop (§9) |
-| **AGENTS.md skill section** | The agent's inventory awareness ("you have these skills available") | Stable per conversation — regenerated at session start and on snapshot restore | `setup_session_workspace` + `_regenerate_session_config` (existing code paths, already wired up at `kubernetes_sandbox_manager.py:1736`) |
+| Layer | Live? | How |
+|---|---|---|
+| **`/skills/` content** (SKILL.md + scripts + supporting files) | ✅ ≤5 min | Pod refresh loop pulls latest tarball from api_server (§9) |
+| **Agent inventory awareness** | ✅ next turn after content refresh | OpenCode's native `skill` tool rescans `.agents/skills/` per turn and re-exposes the inventory in the tool description |
+| **Session snapshot** | n/a | Doesn't include `/skills/` content — skills are pod-level infra, not session data |
 
-This gives a clean conversational model:
-- The agent's *list* of skills doesn't shift mid-conversation. It learns the inventory at turn 1, that list stays consistent through turn N.
-- The agent's *implementation* of any listed skill is always current. If admin fixes a bug in `deal-summary`'s SKILL.md, the agent's next read of `.agents/skills/deal-summary/SKILL.md` (via the symlink to `/skills/`) sees the fix.
+End-to-end behavior: admin uploads a new skill → ≤5 min for `/skills/` to refresh → next turn in any active session sees the new skill in OpenCode's `skill` tool description → agent can invoke immediately.
 
 ### Behavioral implications
 
 | Admin event | Mid-conversation user | Next turn in same session | New session / resume |
 |---|---|---|---|
-| Upload new skill `X` | Doesn't see `X` in AGENTS.md, can't invoke | Same | AGENTS.md regenerated → `X` appears |
-| Replace `X`'s bundle | Already-read SKILL.md content stays in agent's context; subsequent reads see new content | Same | AGENTS.md regenerated; agent reads new `X` content |
-| Delete / revoke grant for `X` | Already-read content can still be acted on; new reads to `/skills/X/` fail (dir gone after refresh) | Same | `X` absent from AGENTS.md; symlinks resolve nowhere |
-| Rename `X`'s slug | Old slug `/skills/X/` is gone after refresh; agent's in-context reference to `X` will fail on next file op | Same | New slug appears in AGENTS.md |
-| Capability flip (e.g. `image-generation` provider removed) | Skill silently disappears from `/skills/` on next refresh | Agent's prior knowledge of the skill is stale; next attempt to use it sees missing dir | AGENTS.md regenerated; skill absent |
+| Upload new skill `X` | Doesn't see `X` yet | `X` appears in `skill` tool inventory; agent can invoke | Same — agent sees `X` from the start |
+| Replace `X`'s bundle | Already-read SKILL.md content stays in agent's context for current actions | Next read of `.agents/skills/X/SKILL.md` gets new content | Same |
+| Delete / revoke grant for `X` | `X` still in agent's prior turn context | `X` absent from next turn's inventory; reads to `/skills/X/` fail (dir gone after refresh) | `X` absent from inventory |
+| Rename `X`'s slug | Old slug still in prior turn context | Old slug missing on next inventory; new slug present; agent's in-context reference to old slug fails on next file op | New slug present from start |
+| Capability flip (e.g. `image-generation` provider removed) | Skill disappears from `/skills/` on next refresh | Skill absent from agent's next-turn inventory | Skill absent |
 
-The Admin UI mutation copy changes from the old "applies to new sessions only" framing to:
+The Admin UI mutation copy is the same as in earlier drafts:
 
 > "This change takes effect within a few minutes. Conversations currently in progress will see the new state on their next turn."
 
-For deletes, an additional line:
-
+For deletes:
 > "Files this skill wrote to user workspaces remain there until the sessions end."
-*(workspace persistence still applies to outputs the skill produced — `pptx`-generated decks, etc. Only the skill's own code stops being available.)*
+*(Workspace persistence still applies to outputs the skill produced — `pptx`-generated decks, etc. Only the skill's own code stops being available.)*
 
 ### Considerations / Tradeoffs / Decisions
 
-- **Why live content + boundary inventory.** Live content fixes the worst current pain: "I uploaded a fix, sessions still broken." Boundary inventory avoids a worse pain: agent's behavior changing mid-conversation in surprising ways. The split is the right place to draw the line.
-- **5-minute propagation latency.** Matches §9's polling cadence. Most admin uploads aren't emergencies; for the rare urgent case, the optional "Apply changes now" admin button (also §9) short-circuits the wait.
-- **No more skill-immutability invariant.** The earlier invariant "Sessions are skill-immutable after start" is **explicitly reversed.** Sessions now reflect current admin state for skill content, with AGENTS.md as the only stable surface within a conversation.
-- **Snapshot size impact.** Snapshots no longer carry skill content. Customs at 10+ MiB each × 20 per tenant × every session snapshot — that storage cost is gone.
-- **Mid-conversation user-visible behavior.** A user's agent might respond confidently in turn 5 using a skill that gets deleted by turn 6. Turn 7 the agent attempts the skill and fails. Acceptable — admins can communicate planned skill removals out of band; rare for skills to be deleted while in active use.
-- **Workspace persistence (separate concern).** Files a skill *generated and wrote into the session workspace* persist across snapshot/resume. The skill *itself* doesn't. The admin delete modal calls both out.
-- **No "kill switch."** Same as before — a malicious skill, once revoked, stops being readable on next refresh. Running agents that already read its instructions might still act on them in flight. Sub-5-minute kill needs a different mechanism (deferred).
+- **Why no boundary-stable inventory anymore.** The earlier "AGENTS.md regenerated only at session boundaries" model was designed to prevent the agent's *list of available skills* from shifting mid-conversation. Investigation showed this was based on a wrong assumption — OpenCode doesn't use AGENTS.md for skill awareness in the first place. The agent's inventory comes from OpenCode's `skill` tool, which is per-turn already. So we're not adding mid-conversation drift; we're just acknowledging it was already happening at the OpenCode layer.
+- **5-minute propagation latency.** Matches §9's polling cadence. For urgent cases, the optional "Apply changes now" admin button (§9) short-circuits the wait.
+- **No skill-immutability invariant.** Earlier drafts had "Sessions are skill-immutable after start" — fully reversed.
+- **Snapshot size impact.** Snapshots no longer carry skill content. Customs at 10+ MiB × 20 per tenant × every snapshot — storage cost is gone.
+- **Mid-conversation user-visible behavior.** A user's agent might confidently invoke `deal-summary` in turn 5 using SKILL.md content read earlier; admin deletes it; turn 6 the skill is gone from inventory. Agent gets a missing-dir error on next attempt and reports it. This is essentially the same behavior we'd have had at the boundary model — admins were never going to delete skills "carefully" relative to in-flight conversations.
+- **Workspace persistence (separate concern).** Files a skill *generated and wrote into the session workspace* persist across snapshot/resume. The skill *itself* doesn't. Admin delete modal calls both out.
+- **No "kill switch."** A revoked skill stops being readable on next refresh + next agent turn. Running agents that already loaded SKILL.md content might still act on it in flight (within the current turn). Sub-5-minute kill needs a different mechanism (deferred).
+- **Cross-harness implication.** If we ever swap OpenCode for a different agent runtime (custom harness, Codex, etc.), the new runtime needs its own per-turn skill rescanning equivalent — either via its own `skill` tool, by reading the directory each turn, or by including the inventory in the system prompt and regenerating it per turn. The on-disk `.agents/skills/<slug>/` contract stays; only the consumption pattern changes.
 
 ### Todos
-- [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` — it's reversed.
-- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content is live (≤5 min propagation); AGENTS.md skill list is stable within a session."`
-- [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few minutes" instead of "new sessions only."
+- [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` from the top of the doc.
+- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (≤5 min propagation via the pod refresh loop + OpenCode per-turn rescan)."`
+- [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few minutes."
 - [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
-- [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. The AGENTS.md regen there already covers inventory refresh.
-- [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait ≤5 min, verify the new skill is readable inside `/skills/` from the running session. Verify AGENTS.md does NOT yet contain the new skill in the current session (boundary inventory).
+- [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. (AGENTS.md regen there is no longer needed for skill purposes — see §10.)
+- [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait ≤5 min, verify the new skill is readable inside `/skills/` AND the agent's `skill` tool lists it on the next turn.
 - [ ] Integration test `test_snapshot_excludes_skills.py`: pause a session, inspect the snapshot tar, confirm `/skills/` is absent. Resume and confirm `.agents/skills` is a symlink to `/skills/`, populated from current admin state.
 
 ---
@@ -1574,7 +1565,7 @@ from .render        import render_template_placeholders
 - `backend/onyx/main.py` — registration call.
 - `backend/onyx/server/features/build/sandbox/manager/directory_manager.py:325` — drop `setup_skills`, drop `_skills_path`.
 - `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:1338` — replace symlink block with tarball-into-pod.
-- `backend/onyx/server/features/build/sandbox/util/agent_instructions.py:267` — rewrite `build_skills_section`; remove `_skills_cache`.
+- `backend/onyx/server/features/build/sandbox/util/agent_instructions.py:267` — **delete** `build_skills_section` + `_skills_cache` entirely. Remove `{{AVAILABLE_SKILLS_SECTION}}` from template. OpenCode's native `skill` tool handles inventory.
 - `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile:99` — drop `COPY skills/`, drop `mkdir`.
 
 **On-disk built-in source** (unchanged):
