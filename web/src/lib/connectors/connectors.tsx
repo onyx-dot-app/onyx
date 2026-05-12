@@ -1059,6 +1059,60 @@ export const connectorConfigs: Record<
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management project to index.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "text",
+        query: "Enter the Jira Service Management project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'IT').",
+      },
+      {
+        type: "text",
+        query: "Enter an optional JQL query:",
+        label: "JQL Query",
+        name: "jql_query",
+        optional: true,
+        description:
+          "An optional JQL query to further filter Jira Service Management issues." +
+          "\n\nIMPORTANT: Do not include project, time-based filters, or ORDER BY clauses. The connector automatically scopes results to the configured project and polling window." +
+          "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "Comments from these emails will be excluded from the indexed content.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
+
   productboard: {
     description: "Configure Productboard connector",
     values: [],
