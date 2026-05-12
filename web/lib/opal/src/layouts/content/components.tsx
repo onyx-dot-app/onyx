@@ -34,7 +34,6 @@ type SizePreset =
   | "secondary";
 
 type ContentVariant = "heading" | "section" | "body";
-type ContentColor = ColorTypes;
 
 interface ContentBaseProps {
   /** Optional icon component. */
@@ -74,7 +73,7 @@ interface ContentBaseProps {
    *
    * @default "default"
    */
-  color?: ContentColor;
+  color?: ColorTypes;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -213,7 +212,6 @@ function Content(props: ContentProps) {
 export {
   Content,
   type ContentProps,
-  type ContentColor,
   type SizePreset,
   type ContentVariant,
   type XlContentProps,
