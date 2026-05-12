@@ -340,6 +340,10 @@ class CloudEmbedding:
                 model=model,
                 input_type=embedding_type,
                 truncate="END",
+                # Explicit float request — guarantees .float_ is populated
+                # on Cohere's typed v4 response and keeps the contract
+                # explicit on the older v3 endpoint too.
+                embedding_types=["float"],
             )
             final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
