@@ -169,6 +169,12 @@ export async function disconnectProvider(
 
 // ── Connect / update provider flow ────────────────────────────────────────────
 
+type ExaSiblingSpec = {
+  category: WebProviderCategory;
+  existingProviderId: number | null;
+  existingProviderName: string | null;
+};
+
 export type ConnectProviderFlowArgs = {
   category: WebProviderCategory;
   providerType: string;
@@ -185,6 +191,9 @@ export type ConnectProviderFlowArgs = {
 
   config: Record<string, string>;
   configChanged: boolean;
+
+  /** When set and a new plaintext key is provided, also upsert the linked Exa sibling. */
+  exaSibling?: ExaSiblingSpec;
 
   onValidating: (message: string) => void;
   onSaving: (message: string) => void;
@@ -206,6 +215,7 @@ export async function connectProviderFlow({
   apiKey,
   config,
   configChanged,
+  exaSibling,
   onValidating,
   onSaving,
   onError,
@@ -287,6 +297,26 @@ export async function connectProviderFlow({
           ? (errorBody as { detail: string }).detail
           : msg.activateFailedFallback
       );
+    }
+
+    if (exaSibling && apiKeyChangedForProvider && apiKey) {
+      const siblingPayload: ProviderUpsertPayload = {
+        id: exaSibling.existingProviderId,
+        name: exaSibling.existingProviderName ?? "Exa",
+        provider_type: "exa",
+        api_key: apiKey,
+        api_key_changed: true,
+        config: {},
+        activate: false,
+      };
+      await fetch(
+        WEB_SEARCH_PROVIDER_ENDPOINTS[exaSibling.category].upsertUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(siblingPayload),
+        }
+      ).catch(() => {});
     }
 
     await mutate();

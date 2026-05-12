@@ -57,8 +57,35 @@ export interface WebProviderSetupModalProps {
 export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
   const onClose = useModalClose();
   const { category, providerType, provider } = state;
-  const { mutateSearchProviders, mutateContentProviders } =
-    useWebSearchProviders();
+  const {
+    searchProviders,
+    contentProviders,
+    mutateSearchProviders,
+    mutateContentProviders,
+  } = useWebSearchProviders();
+
+  const exaSibling =
+    providerType === "exa"
+      ? category === "search"
+        ? {
+            category: "content" as const,
+            existingProviderId:
+              contentProviders.find((p) => p.provider_type === "exa")?.id ??
+              null,
+            existingProviderName:
+              contentProviders.find((p) => p.provider_type === "exa")?.name ??
+              null,
+          }
+        : {
+            category: "search" as const,
+            existingProviderId:
+              searchProviders.find((p) => p.provider_type === "exa")?.id ??
+              null,
+            existingProviderName:
+              searchProviders.find((p) => p.provider_type === "exa")?.name ??
+              null,
+          }
+      : undefined;
 
   const isEditing = !!provider && provider.id > 0;
   const hasStoredKey = !!provider?.masked_api_key;
@@ -154,6 +181,7 @@ export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
         apiKey: values.api_key,
         config,
         configChanged,
+        exaSibling,
         onValidating: () => {},
         onSaving: () => {},
         onError: (message) => toast.error(message),

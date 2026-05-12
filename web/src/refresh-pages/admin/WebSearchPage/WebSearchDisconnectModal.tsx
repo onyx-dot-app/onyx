@@ -4,15 +4,10 @@ import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
-import {
-  isSearchProviderConfigured,
-  isContentProviderConfigured,
-} from "@/lib/webSearch/utils";
 import { disconnectProvider } from "@/lib/webSearch/svc";
 import type { DisconnectTargetState } from "@/lib/webSearch/types";
 
@@ -33,6 +28,7 @@ export function WebSearchDisconnectModal({
   } = useWebSearchProviders();
 
   const isSearch = disconnectTarget.category === "search";
+  const isExa = disconnectTarget.providerType === "exa";
 
   const isActive = isSearch
     ? searchProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
@@ -40,22 +36,13 @@ export function WebSearchDisconnectModal({
     : contentProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
       false;
 
-  const otherConfigured = isSearch
-    ? searchProviders.filter(
-        (p) =>
-          p.id !== disconnectTarget.id &&
-          p.id > 0 &&
-          isSearchProviderConfigured(p.provider_type, p)
-      )
-    : contentProviders.filter(
-        (p) =>
-          p.id !== disconnectTarget.id &&
-          p.provider_type !== "onyx_web_crawler" &&
-          p.id > 0 &&
-          isContentProviderConfigured(p.provider_type, p)
-      );
+  const siblingCategory = isSearch ? "content" : "search";
+  const exaSibling = isExa
+    ? isSearch
+      ? contentProviders.find((p) => p.provider_type === "exa" && p.id > 0)
+      : searchProviders.find((p) => p.provider_type === "exa" && p.id > 0)
+    : undefined;
 
-  const isBlocked = isActive && otherConfigured.length > 0;
   const categoryLabel = isSearch ? "search engine" : "web crawler";
   const featureLabel = isSearch ? "web search" : "web crawling";
 
@@ -67,6 +54,9 @@ export function WebSearchDisconnectModal({
         disconnectTarget.category,
         null
       );
+      if (exaSibling) {
+        await disconnectProvider(exaSibling.id, siblingCategory, null);
+      }
       toast.success(`${disconnectTarget.label} disconnected`);
       await mutateSearchProviders();
       await mutateContentProviders();
@@ -89,40 +79,25 @@ export function WebSearchDisconnectModal({
         <Button
           variant="danger"
           onClick={() => void handleDisconnect()}
-          disabled={isBlocked || isSubmitting}
+          disabled={isSubmitting}
         >
           Disconnect
         </Button>
       }
     >
-      <Section alignItems="start" gap={0.5}>
-        {isBlocked ? (
-          <Text as="p" font="main-ui-body" color="text-03">
-            {markdown(
-              `**${disconnectTarget.label}** is the active ${categoryLabel}. Set another ${categoryLabel} as active before disconnecting.`
-            )}
-          </Text>
-        ) : isActive ? (
-          <>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {markdown(
-                `**${disconnectTarget.label}** is the active ${categoryLabel}.`
-              )}
-            </Text>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {`Disconnecting will disable ${featureLabel}.`}
-            </Text>
-          </>
-        ) : (
-          <Text as="p" font="main-ui-body" color="text-03">
-            {markdown(
-              `${
-                isSearch ? "Web search" : "Web crawling"
-              } will no longer be routed through **${disconnectTarget.label}**.`
-            )}
-          </Text>
-        )}
-      </Section>
+      {isExa ? (
+        <Text as="p" font="main-ui-body" color="text-03">
+          Both the Exa search engine and web crawler will be disconnected.
+        </Text>
+      ) : isActive ? (
+        <Text as="p" font="main-ui-body" color="text-03">
+          {markdown(
+            `**${disconnectTarget.label}** is the active ${categoryLabel}. ${
+              featureLabel.charAt(0).toUpperCase() + featureLabel.slice(1)
+            } history will be preserved.`
+          )}
+        </Text>
+      ) : null}
     </ConfirmationModalLayout>
   );
 }
