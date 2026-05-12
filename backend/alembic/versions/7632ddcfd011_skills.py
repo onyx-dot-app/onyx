@@ -31,7 +31,7 @@ def upgrade() -> None:
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
         ),
-        sa.Column("owner_user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("is_public", sa.Boolean(), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False),
         sa.Column("deleted", sa.Boolean(), nullable=False),
@@ -48,7 +48,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["owner_user_id"],
+            ["author_user_id"],
             ["user.id"],
             ondelete="SET NULL",
         ),

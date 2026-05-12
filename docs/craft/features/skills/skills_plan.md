@@ -268,7 +268,6 @@ Slug rules:
 - [ ] Create Alembic migration `backend/alembic/versions/<hash>_skills.py`:
   - [ ] `CREATE TABLE skill` with all columns + indexes.
   - [ ] `CREATE TABLE skill__user_group` with FKs.
-  - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
   - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant, with **`enabled = True AND deleted_at IS NULL`** filter (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch). This is the materializer's source — disabled or soft-deleted skills never make it into `/skills/`.
