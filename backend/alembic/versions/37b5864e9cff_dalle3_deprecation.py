@@ -1,7 +1,7 @@
 """dalle3 deprecation
 
 Revision ID: 37b5864e9cff
-Revises: 4ff2545411ad
+Revises: 2c7f9d3a84a0
 Create Date: 2026-05-12 10:29:16.985208
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "37b5864e9cff"
-down_revision = "4ff2545411ad"
+down_revision = "2c7f9d3a84a0"
 branch_labels = None
 depends_on = None
 
