@@ -78,6 +78,7 @@ from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
 from onyx.db.enums import OpenSearchTenantMigrationStatus
+from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
@@ -524,6 +525,12 @@ class PersonalAccessToken(Base):
     is_revoked: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false"), nullable=False
     )  # True if user explicitly revoked (vs naturally expired)
+
+    pat_type: Mapped[PatType] = mapped_column(
+        Enum(PatType, native_enum=False),
+        nullable=False,
+        server_default=PatType.USER.value,
+    )
 
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
 
@@ -5228,6 +5235,10 @@ class Sandbox(Base):
     )
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
     )
 
     # Relationships
