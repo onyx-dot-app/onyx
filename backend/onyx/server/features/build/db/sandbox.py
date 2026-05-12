@@ -29,23 +29,25 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
     """Return a valid PAT for this sandbox, minting if needed."""
     now = datetime.datetime.now(datetime.timezone.utc)
 
-    existing_craft_pat = db_session.scalar(
-        select(PersonalAccessToken)
-        .where(PersonalAccessToken.user_id == user.id)
-        .where(PersonalAccessToken.pat_type == PatType.CRAFT)
-        .where(
-            (PersonalAccessToken.expires_at.is_(None))
-            | (PersonalAccessToken.expires_at > now)
-        )
+    existing_craft_pats = list(
+        db_session.scalars(
+            select(PersonalAccessToken)
+            .where(PersonalAccessToken.user_id == user.id)
+            .where(PersonalAccessToken.pat_type == PatType.CRAFT)
+            .where(
+                (PersonalAccessToken.expires_at.is_(None))
+                | (PersonalAccessToken.expires_at > now)
+            )
+        ).all()
     )
 
-    if existing_craft_pat and sandbox.encrypted_pat:
+    if sandbox.encrypted_pat and len(existing_craft_pats) == 1:
         raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
-        if hash_pat(raw_token) == existing_craft_pat.hashed_token:
+        if hash_pat(raw_token) == existing_craft_pats[0].hashed_token:
             return raw_token
 
-    if existing_craft_pat:
-        revoke_pat(db_session, existing_craft_pat.id, user.id)
+    for pat in existing_craft_pats:
+        revoke_pat(db_session, pat.id, user.id)
 
     _pat_record, raw_token = create_pat(
         db_session=db_session,
