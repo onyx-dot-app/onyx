@@ -58,8 +58,9 @@ A small ABC under `backend/onyx/sandbox_sync/bundle.py`. Each consumer provides 
 
 ```python
 class SandboxBundle(ABC):
-    bundle_key: ClassVar[str]          # "skills" | "user_library" | "org_files"
-    mount_path: ClassVar[str]          # in-pod absolute path
+    bundle_key: ClassVar[str]                    # "skills" | "user_library" | "org_files"
+    mount_path: ClassVar[str]                    # in-pod absolute path
+    cache_on_mutation: ClassVar[bool] = False    # write-through tarball cache (see below)
 
     @abstractmethod
     def materialize(self, db: Session, ctx: SandboxContext) -> Iterator[BundleEntry]: ...
@@ -75,6 +76,7 @@ class SandboxBundle(ABC):
 - `SandboxContext` carries `tenant_id`, `sandbox_id`, and `user_id` (resolved at request time from the sandbox row). Bundles read what they need.
 - `pod_label_selector(tenant_id, user_id)` returns a K8s label selector string. Skills ignores `user_id` and returns `onyx.app/tenant-id={tenant}`. user_library returns the same selector — server filters per-sandbox by `user_id` at materialize time, so no extra label is needed.
 - `last_modified` returns the max source-row timestamp under this scope — used by the tarball endpoint for `If-Modified-Since`.
+- `cache_on_mutation` opts the bundle into write-through tarball caching. Default `False`. Bundles that fan out across many pods (skills) set it to `True`; per-user bundles (user_library) leave it off since there's nothing to amortize. See the "Write-through tarball cache" section.
 
 Registration happens at import time in `backend/onyx/sandbox_sync/bundles/__init__.py`:
 
@@ -150,7 +152,44 @@ If a bundle refresh fails at boot, the pod still starts — the agent gets an em
 - If `If-Modified-Since` ≥ `last_modified` → `304 Not Modified`. (~one indexed DB query, no S3, no tarring.)
 - Else streams `tar(bundle.materialize(db, ctx))` with `Last-Modified` header set.
 
-That's the whole endpoint. No caching layer, no size threshold, no operational state beyond what's already in Postgres.
+**Cache lookup before materialize.** If the bundle's `cache_on_mutation` is `True`, the endpoint first tries `redis.get("bundle:tar:{tenant}:{bundle_key}:{last_modified_iso}")` and streams those bytes when present. Miss → fall through to live materialize (this is the failure mode if the write-through wasn't durable; the response is still correct, just N-way racy on bursts).
+
+### Write-through tarball cache
+
+For bundles with `cache_on_mutation = True`, the **mutation site** populates the cache before enqueuing propagation. This eliminates the thundering herd on tenant fan-out:
+
+```python
+# in the mutation handler, after writing to DB + S3:
+bundle_sync.enqueue_change(db, tenant_id, "skills")
+
+# enqueue_change internally:
+def enqueue_change(db, tenant_id, bundle_key, user_id=None):
+    bundle = BundleRegistry.get(bundle_key)
+    if bundle.cache_on_mutation:
+        ctx = SandboxContext(tenant_id=tenant_id, user_id=user_id)
+        last_modified = bundle.last_modified(db, ctx)
+        tarball = b"".join(tar_stream(bundle.materialize(db, ctx)))
+        redis.set(
+            f"bundle:tar:{tenant_id}:{bundle_key}:{last_modified.isoformat()}",
+            tarball,
+            ex=15 * 60,
+        )
+    propagate_bundle_change.apply_async(args=(tenant_id, bundle_key, user_id), expires=60)
+```
+
+**Ordering guarantee:** the cache is populated *before* `propagate_bundle_change` is enqueued. By the time any pod curls the tarball endpoint, the cache key exists. N pods on the same change → 1 materialization (at the mutation site) + N cache reads. No race, no singleflight machinery.
+
+**Failure modes:**
+- Redis write fails → log warning, continue. Propagation still fires; pods fall back to live materialize on miss (the original lazy path, with its N-way race, but only on this one mutation).
+- Mutation handler crashes between DB commit and `enqueue_change` → manual refresh / next lifecycle event reconciles.
+- Cache TTL expires (15 min) before all pods have refreshed → pods on the next push fall back to live materialize, which is correct just less optimal.
+
+**Why per-bundle, not always-on:** user_library has no fan-out within a user (1 sandbox/user), so write-through adds work without benefit. The flag keeps the optimization scoped to bundles that actually benefit.
+
+**Operational notes:**
+- Cache keys live under a single prefix `bundle:tar:` so they can be flushed independently of other Redis state.
+- 15-min TTL bounds memory footprint; each `last_modified` advance retires the prior key naturally.
+- A metric `bundle_tarball_cache_hit_total{bundle_key}` / `_miss_total{bundle_key}` surfaces whether the cache is earning its keep. Skills should run near 100% hit ratio after the first request post-mutation.
 
 ### Manual refresh endpoint
 
@@ -167,12 +206,14 @@ The frontend wires this to a "Refresh sandbox" button in the Craft UI's sandbox 
 
 **`SkillsBundle`** (`backend/onyx/sandbox_sync/bundles/skills.py`):
 
+- `cache_on_mutation = True` — tenant fan-out benefits from write-through caching.
 - `materialize`: walks built-in skills on disk + custom skills from Postgres/`FileStore`, applies template rendering for built-ins that declare a template. Replaces the rendering/discovery work currently in `skills_plan.md` §9.
 - `pod_label_selector(tenant_id, _)`: `onyx.app/tenant-id={tenant_id}`.
 - `last_modified`: `SELECT MAX(updated_at) FROM skill WHERE tenant_id=...`.
 
 **`UserLibraryBundle`** (`backend/onyx/sandbox_sync/bundles/user_library.py`):
 
+- `cache_on_mutation = False` (default) — no fan-out within a user (1 sandbox/user), so write-through adds work without benefit.
 - `materialize`: lists enabled docs for the user from Postgres (`Document` table, filtering `sync_disabled`), streams each from S3.
 - `pod_label_selector(tenant_id, user_id)`: `onyx.app/tenant-id={tenant_id}`. (Server filters per-sandbox by `user_id` at materialize time; no `onyx.app/user-id` label needed since the tarball endpoint resolves user from the sandbox row.)
 - `last_modified`: `SELECT MAX(updated_at) FROM document WHERE user_id=... AND sync_disabled=false`.
@@ -192,7 +233,7 @@ Both replace bespoke push calls; no other changes to those handlers.
 
 - **No content_hash, no bundle-version table, no monotonic counter.** `If-Modified-Since` over `MAX(updated_at)` is sufficient.
 - **No Redis debounce in `enqueue_change`.** Bursts are rare in practice; when they happen, the pod's flock + 304 short-circuit absorb them with a few seconds of busy work.
-- **No tarball cache.** Skills bundles materialize in milliseconds; user_library has no fan-out within a user. Caching optimizes a non-problem.
+- **Tarball cache is scoped, not global.** Only bundles that fan out across many pods opt in via `cache_on_mutation = True` (skills). Per-user bundles (user_library) skip it — there's nothing to amortize across, and write-through would just add a Redis round-trip per upload.
 - **No ConfigMap-driven bundle discovery on the pod.** The bundle list is hardcoded in `refresh-bundle` and the pod entrypoint. Adding `OrgFilesBundle` is a code + image-rebuild change anyway.
 - **No delta / incremental push.** Full tarball every time. user_library at scale is fine because of the 304 short-circuit; if a real bundle gets large enough to hurt, add `materialize_delta` then.
 - **No background polling cron in the pod.** Push covers the happy path; session setup, session wakeup, and manual refresh cover the ~5% push-failure tail. A pod doing nothing isn't checking for updates — when it next does anything user-visible, it refreshes first.
@@ -217,6 +258,7 @@ The dominant test type for this work is **integration**: a real Postgres + Redis
 - `test_manual_refresh_recovers_from_push_miss.py` — provision a sandbox, mutate a skill, simulate kubectl-exec failure (block the API or kill the refresh worker mid-task). Call `POST /api/sandbox/{sid}/refresh`. Assert the pod now reflects the mutation.
 - `test_304_short_circuit.py` — mutate nothing between two refreshes (any trigger), assert tarball endpoint returns 304 and pod state is untouched.
 - `test_user_library_per_user_isolation.py` — two users, two sandboxes; mutate user A's library; assert user A's pod gets the new file and user B's pod does not.
+- `test_skills_writethrough_cache.py` — provision two sandboxes in the same tenant, instrument `SkillsBundle.materialize` with a call counter, upload a skill. After all pods finish refreshing, assert `materialize` ran exactly once (the upload-time call) and that subsequent pod tarball requests hit the Redis cache.
 
 ### Unit tests
 
@@ -228,8 +270,9 @@ None planned; the components are thin and have no isolated business logic worth 
 backend/onyx/sandbox_sync/                                          NEW
 ├── bundle.py                  # SandboxBundle ABC, BundleEntry, SandboxContext
 ├── registry.py                # BundleRegistry
-├── enqueue.py                 # enqueue_change()
+├── enqueue.py                 # enqueue_change() — calls cache.materialize_and_store if bundle opts in
 ├── tarball.py                 # streaming tar builder over BundleEntry iterator
+├── cache.py                   # Redis-backed tarball cache (get / materialize_and_store)
 └── bundles/
     ├── __init__.py            # registers bundles at import time
     ├── skills.py              # SkillsBundle
@@ -260,4 +303,4 @@ backend/onyx/server/user_files/*.py (or current sync call site)      +enqueue_ch
 docs/craft/features/skills/skills_plan.md                            §9.7 points at this abstraction
 ```
 
-No alembic migration. No new pod labels. No new Redis state.
+No alembic migration. No new pod labels. The one new Redis usage is the write-through tarball cache under the `bundle:tar:` prefix — scoped, TTL-bounded, opt-in per bundle.
