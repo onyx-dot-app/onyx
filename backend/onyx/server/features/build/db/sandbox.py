@@ -56,7 +56,7 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
     )
 
     sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
-    db_session.commit()
+    db_session.flush()
     return raw_token
 
 
