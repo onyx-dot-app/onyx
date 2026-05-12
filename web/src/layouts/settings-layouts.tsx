@@ -43,11 +43,11 @@ import { Content } from "@opal/layouts";
 import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
-  sm: "w-[min(var(--container-sm),100%)]",
-  "sm-md": "w-[min(var(--container-sm-md),100%)]",
-  md: "w-[min(var(--container-md),100%)]",
-  lg: "w-[min(var(--container-lg),100%)]",
-  full: "w-(--container-full)",
+  sm: "w-[min(var(--app-container-sm),100%)]",
+  "sm-md": "w-[min(var(--app-container-sm-md),100%)]",
+  md: "w-[min(var(--app-container-md),100%)]",
+  lg: "w-[min(var(--app-container-lg),100%)]",
+  full: "w-(--app-container-full)",
 };
 
 /**
