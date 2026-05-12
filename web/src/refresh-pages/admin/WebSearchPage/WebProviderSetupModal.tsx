@@ -26,7 +26,7 @@ import {
 export interface ExistingProviderInfo {
   id: number;
   name: string;
-  has_api_key: boolean;
+  masked_api_key: string | null;
   config: Record<string, string> | null;
 }
 
@@ -35,6 +35,11 @@ export interface ConfigFieldSpec {
   placeholder: string;
   subDescription?: string | RichStr;
   defaultValue?: string;
+}
+
+interface FormValues {
+  api_key: string;
+  config: string;
 }
 
 export interface WebProviderSetupModalProps {
@@ -56,11 +61,6 @@ export interface WebProviderSetupModalProps {
   onSuccess: () => void;
 }
 
-interface FormValues {
-  api_key: string;
-  config: string;
-}
-
 export function WebProviderSetupModal({
   providerType,
   category,
@@ -77,9 +77,9 @@ export function WebProviderSetupModal({
   const onClose = useModalClose();
   const isEditing = !!existingProvider && existingProvider.id > 0;
 
-  const hasStoredKey =
-    (existingProvider?.has_api_key ?? false) || hasSharedApiKey;
-  const initialApiKey = hasStoredKey ? "••••••••••••••••" : "";
+  const hasStoredKey = !!existingProvider?.masked_api_key || hasSharedApiKey;
+  const initialApiKey =
+    existingProvider?.masked_api_key ?? (hasSharedApiKey ? "••••••••••••" : "");
 
   const initialConfig = configField
     ? (category === "search"
@@ -126,8 +126,7 @@ export function WebProviderSetupModal({
         providerType,
         existingProviderId: existingProvider?.id ?? null,
         existingProviderName: existingProvider?.name ?? null,
-        existingProviderHasApiKey:
-          (existingProvider?.has_api_key ?? false) || hasSharedApiKey,
+        existingProviderHasApiKey: hasStoredKey,
         displayName: providerLabel,
         providerRequiresApiKey: requiresApiKey,
         apiKeyChangedForProvider: apiKeyChanged,

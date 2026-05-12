@@ -153,7 +153,7 @@ export function isSearchProviderConfigured(
   provider: SearchProviderLike
 ): boolean {
   const caps = getSearchCapabilities(providerType);
-  if (caps.requiresApiKey && !(provider?.has_api_key ?? false)) return false;
+  if (caps.requiresApiKey && !provider?.masked_api_key) return false;
   for (const requiredKey of caps.requiredConfigKeys) {
     if (
       !getStoredSearchConfigValue(providerType, requiredKey, provider?.config)
@@ -291,7 +291,7 @@ export function isContentProviderConfigured(
   provider: ContentProviderLike
 ): boolean {
   const caps = getContentCapabilities(providerType);
-  if (caps.requiresApiKey && !(provider?.has_api_key ?? false)) return false;
+  if (caps.requiresApiKey && !provider?.masked_api_key) return false;
   for (const requiredKey of caps.requiredConfigKeys) {
     if (
       !getStoredContentConfigValue(providerType, requiredKey, provider?.config)

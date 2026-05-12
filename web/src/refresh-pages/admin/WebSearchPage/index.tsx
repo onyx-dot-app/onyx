@@ -122,14 +122,14 @@ function WebSearchDisconnectModal({
 
   const replacementOptions = isSearch
     ? searchProviders.filter(
-        (p) => p.id !== disconnectTarget.id && p.id > 0 && p.has_api_key
+        (p) => p.id !== disconnectTarget.id && p.id > 0 && !!p.masked_api_key
       )
     : contentProviders.filter(
         (p) =>
           p.id !== disconnectTarget.id &&
           p.provider_type !== "onyx_web_crawler" &&
           p.id > 0 &&
-          p.has_api_key
+          !!p.masked_api_key
       );
 
   const needsReplacement = isActive;
@@ -288,15 +288,15 @@ export default function WebSearchPage() {
   const exaContentProvider = contentProviders.find(
     (p) => p.provider_type === "exa"
   );
-  const hasSharedExaKey =
-    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
-    false;
+  const hasSharedExaKey = !!(
+    exaSearchProvider?.masked_api_key || exaContentProvider?.masked_api_key
+  );
 
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
-    const hasStoredKey = provider?.has_api_key ?? false;
+    const hasStoredKey = !!provider?.masked_api_key;
     const isExa = providerType === "exa";
     const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
 
@@ -315,9 +315,7 @@ export default function WebSearchPage() {
     const realProvider = provider && provider.id > 0 ? provider : null;
     const providerRequiresApiKey = providerType !== "onyx_web_crawler";
     const hasSharedKey =
-      providerRequiresApiKey &&
-      !realProvider &&
-      (provider?.has_api_key ?? false);
+      providerRequiresApiKey && !realProvider && !!provider?.masked_api_key;
 
     setActiveContentProvider({
       providerType,
@@ -396,7 +394,7 @@ export default function WebSearchPage() {
           provider_type: "onyx_web_crawler",
           is_active: true,
           config: null,
-          has_api_key: true,
+          masked_api_key: null,
         } satisfies WebContentProviderView;
       }
 
@@ -407,7 +405,7 @@ export default function WebSearchPage() {
           provider_type: "firecrawl",
           is_active: false,
           config: null,
-          has_api_key: false,
+          masked_api_key: null,
         } satisfies WebContentProviderView;
       }
 
@@ -418,7 +416,10 @@ export default function WebSearchPage() {
           provider_type: "exa",
           is_active: false,
           config: null,
-          has_api_key: hasSharedExaKey,
+          masked_api_key:
+            exaSearchProvider?.masked_api_key ??
+            exaContentProvider?.masked_api_key ??
+            null,
         } satisfies WebContentProviderView;
       }
 
@@ -808,7 +809,8 @@ export default function WebSearchPage() {
                 ? {
                     id: activeSearchProvider.provider.id,
                     name: activeSearchProvider.provider.name,
-                    has_api_key: activeSearchProvider.provider.has_api_key,
+                    masked_api_key:
+                      activeSearchProvider.provider.masked_api_key,
                     config: activeSearchProvider.provider.config,
                   }
                 : null
@@ -848,7 +850,8 @@ export default function WebSearchPage() {
                 ? {
                     id: activeContentProvider.provider.id,
                     name: activeContentProvider.provider.name,
-                    has_api_key: activeContentProvider.provider.has_api_key,
+                    masked_api_key:
+                      activeContentProvider.provider.masked_api_key,
                     config: activeContentProvider.provider.config,
                   }
                 : null

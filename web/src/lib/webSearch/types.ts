@@ -23,14 +23,14 @@ export type WebProviderCategory = "search" | "content";
 export type SearchProviderConfig = Record<string, string> | null | undefined;
 
 export type SearchProviderLike =
-  | { has_api_key: boolean; config: SearchProviderConfig }
+  | { masked_api_key: string | null; config: SearchProviderConfig }
   | null
   | undefined;
 
 export type ContentProviderConfig = Record<string, string> | null | undefined;
 
 export type ContentProviderLike =
-  | { has_api_key: boolean; config: ContentProviderConfig }
+  | { masked_api_key: string | null; config: ContentProviderConfig }
   | null
   | undefined;
 
@@ -42,7 +42,7 @@ export interface WebSearchProviderView {
   provider_type: WebSearchProviderType;
   is_active: boolean;
   config: Record<string, string> | null;
-  has_api_key: boolean;
+  masked_api_key: string | null;
 }
 
 export interface WebContentProviderView {
@@ -51,7 +51,7 @@ export interface WebContentProviderView {
   provider_type: WebContentProviderType;
   is_active: boolean;
   config: Record<string, string> | null;
-  has_api_key: boolean;
+  masked_api_key: string | null;
 }
 
 // ── UI state ──────────────────────────────────────────────────────────────────
