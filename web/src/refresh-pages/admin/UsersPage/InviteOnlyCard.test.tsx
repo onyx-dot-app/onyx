@@ -11,6 +11,7 @@ const mockUseSettingsContext = jest.fn();
 const mockToastSuccess = jest.fn();
 const mockToastError = jest.fn();
 const mockMutate = jest.fn();
+const mockUpdateAdminSettings = jest.fn();
 
 jest.mock("@/providers/SettingsProvider", () => ({
   useSettingsContext: () => mockUseSettingsContext(),
@@ -29,11 +30,12 @@ jest.mock("swr", () => ({
   mutate: (...args: unknown[]) => mockMutate(...args),
 }));
 
-describe("InviteOnlyCard", () => {
-  let fetchSpy: jest.SpyInstance;
+jest.mock("@/lib/settings/svc", () => ({
+  updateAdminSettings: (...args: unknown[]) => mockUpdateAdminSettings(...args),
+}));
 
+describe("InviteOnlyCard", () => {
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, "fetch");
     mockUseSettingsContext.mockReturnValue({ settings: baseSettings });
     mockMutate.mockImplementation(async (_key, fn) => {
       if (typeof fn === "function") return fn();
@@ -41,7 +43,6 @@ describe("InviteOnlyCard", () => {
   });
 
   afterEach(() => {
-    fetchSpy.mockRestore();
     jest.clearAllMocks();
   });
 
@@ -62,11 +63,8 @@ describe("InviteOnlyCard", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   });
 
-  test("clicking switch PUTs /api/admin/settings with invite_only_enabled toggled", async () => {
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
+  test("clicking switch calls updateAdminSettings with the merged payload", async () => {
+    mockUpdateAdminSettings.mockResolvedValueOnce(undefined);
 
     const user = userEvent.setup();
     render(<InviteOnlyCard />);
@@ -74,30 +72,19 @@ describe("InviteOnlyCard", () => {
     await user.click(screen.getByRole("switch"));
 
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith(
-        "/api/admin/settings",
-        expect.objectContaining({
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-        })
+      expect(mockUpdateAdminSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ invite_only_enabled: true })
       );
     });
-
-    const callArgs = fetchSpy.mock.calls[0];
-    const body = JSON.parse(callArgs[1].body as string);
-    expect(body.invite_only_enabled).toBe(true);
     expect(mockToastSuccess).toHaveBeenCalledWith("Settings updated");
   });
 
-  test("shows error toast when PUT fails", async () => {
+  test("surfaces error message in toast when service throws", async () => {
     const consoleErrorSpy = jest
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    fetchSpy.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ detail: "boom" }),
-    } as Response);
+    mockUpdateAdminSettings.mockRejectedValueOnce(new Error("boom"));
 
     const user = userEvent.setup();
     render(<InviteOnlyCard />);
@@ -111,15 +98,12 @@ describe("InviteOnlyCard", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  test("falls back to generic message when error has no detail", async () => {
+  test("falls back to generic message when error has no message", async () => {
     const consoleErrorSpy = jest
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    fetchSpy.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({}),
-    } as Response);
+    mockUpdateAdminSettings.mockRejectedValueOnce(new Error(""));
 
     const user = userEvent.setup();
     render(<InviteOnlyCard />);
@@ -127,7 +111,7 @@ describe("InviteOnlyCard", () => {
     await user.click(screen.getByRole("switch"));
 
     await waitFor(() => {
-      expect(mockToastError).toHaveBeenCalledWith("Request failed");
+      expect(mockToastError).toHaveBeenCalledWith("Failed to update settings");
     });
     consoleErrorSpy.mockRestore();
   });

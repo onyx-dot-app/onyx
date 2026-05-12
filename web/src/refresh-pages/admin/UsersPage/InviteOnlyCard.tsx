@@ -9,6 +9,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import { Settings } from "@/interfaces/settings";
+import { updateAdminSettings } from "@/lib/settings/svc";
 
 export default function InviteOnlyCard() {
   const { settings } = useSettingsContext();
@@ -20,15 +21,7 @@ export default function InviteOnlyCard() {
         await mutate(
           SWR_KEYS.settings,
           async () => {
-            const response = await fetch("/api/admin/settings", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(newSettings),
-            });
-            if (!response.ok) {
-              const body = (await response.json()) as { detail?: string };
-              throw new Error(body.detail ?? "Request failed");
-            }
+            await updateAdminSettings(newSettings);
             return newSettings;
           },
           {
