@@ -12,7 +12,6 @@ from onyx.error_handling.exceptions import OnyxError
 
 
 def get_external_app_by_id(
-    *,
     db_session: Session,
     external_app_id: int,
 ) -> ExternalApp | None:
@@ -21,7 +20,6 @@ def get_external_app_by_id(
 
 
 def get_external_apps(
-    *,
     db_session: Session,
 ) -> list[ExternalApp]:
     stmt = select(ExternalApp).order_by(ExternalApp.id)
@@ -29,7 +27,6 @@ def get_external_apps(
 
 
 def get_user_credentials_by_app_id(
-    *,
     db_session: Session,
     user_id: UUID,
 ) -> dict[int, ExternalAppUserCredential]:
@@ -44,7 +41,6 @@ def get_user_credentials_by_app_id(
 
 
 def create_external_app__no_commit(
-    *,
     db_session: Session,
     name: str,
     description: str,
@@ -67,7 +63,6 @@ def create_external_app__no_commit(
 
 
 def update_external_app__no_commit(
-    *,
     db_session: Session,
     external_app_id: int,
     name: str,
@@ -81,7 +76,7 @@ def update_external_app__no_commit(
 
     Raises OnyxError(NOT_FOUND) if no row with `external_app_id` exists.
     """
-    app = get_external_app_by_id(db_session=db_session, external_app_id=external_app_id)
+    app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -100,7 +95,6 @@ def update_external_app__no_commit(
 
 
 def delete_external_app__no_commit(
-    *,
     db_session: Session,
     external_app_id: int,
 ) -> None:
@@ -108,7 +102,7 @@ def delete_external_app__no_commit(
 
     Raises OnyxError(NOT_FOUND) if no row with `external_app_id` exists.
     """
-    app = get_external_app_by_id(db_session=db_session, external_app_id=external_app_id)
+    app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -120,7 +114,6 @@ def delete_external_app__no_commit(
 
 
 def upsert_external_app_user_credential__no_commit(
-    *,
     db_session: Session,
     external_app_id: int,
     user_id: UUID,
@@ -133,7 +126,7 @@ def upsert_external_app_user_credential__no_commit(
 
     Raises OnyxError(NOT_FOUND) if no app with `external_app_id` exists.
     """
-    app = get_external_app_by_id(db_session=db_session, external_app_id=external_app_id)
+    app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
