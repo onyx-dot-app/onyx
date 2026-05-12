@@ -41,6 +41,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
+        sa.Column(
+            "enabled",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 

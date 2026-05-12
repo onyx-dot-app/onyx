@@ -5835,6 +5835,7 @@ class ExternalApp(Base):
     organization_credentials: Mapped[dict[str, str]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
