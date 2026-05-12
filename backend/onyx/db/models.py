@@ -4171,8 +4171,9 @@ class FileContent(Base):
 class Skill(Base):
     """A custom (admin-uploaded) skill.
 
-    Skills are a universal primitive. Edition-specific behavior belongs in the
-    API/consumer layers, not in this persistence model.
+    Skill metadata is shared schema state. Group-based grants use user_group,
+    which is available in the base migration chain even though its ORM model
+    currently lives in the Enterprise Edition section below.
     """
 
     __tablename__ = "skill"
