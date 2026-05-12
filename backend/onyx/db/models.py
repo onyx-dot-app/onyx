@@ -5818,3 +5818,59 @@ class HookExecutionLog(Base):
     )
 
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
+
+
+class ExternalApp(Base):
+    __tablename__ = "external_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    upstream_urls: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+    auth_template: Mapped[dict[str, str]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=dict
+    )
+    organisation_credentials: Mapped[dict[str, str]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=dict
+    )
+
+    user_credentials: Mapped[list["ExternalAppUserCredentials"]] = relationship(
+        "ExternalAppUserCredentials",
+        back_populates="external_app",
+        cascade="all, delete-orphan",
+    )
+
+
+class ExternalAppUserCredentials(Base):
+    __tablename__ = "external_app_user_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_credentials: Mapped[dict[str, str]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=dict
+    )
+
+    external_app: Mapped["ExternalApp"] = relationship(
+        "ExternalApp", back_populates="user_credentials"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_app_id",
+            "user_id",
+            name="uq_external_app_user_credentials_app_user",
+        ),
+    )
