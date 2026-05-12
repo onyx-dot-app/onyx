@@ -1728,14 +1728,29 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
         <span class="file-ref">backend/onyx/db/skill.py</span>:
         <ul>
           <li>
-            <code>list_skills_for_user(user, db)</code> — mirror
-            <code>fetch_persona_by_id_for_user</code> at
-            <span class="file-ref">backend/onyx/db/persona.py:81</span>.
+            <code>list_skills_for_user(user, db)</code> — public OR group-grant,
+            filtered to
+            <strong><code>enabled = True AND deleted_at IS NULL</code></strong
+            >. Mirror <code>fetch_persona_by_id_for_user</code> at
+            <span class="file-ref">backend/onyx/db/persona.py:81</span>. This is
+            the materializer's source — disabled/soft-deleted skills never make
+            it into <code>/skills/</code>.
           </li>
           <li>
-            <code>fetch_skill_for_user</code>,
-            <code>fetch_skill_for_admin</code>,
-            <code>list_skills_for_admin</code>.
+            <code>fetch_skill_for_user(skill_id, user, db)</code> — same
+            <code>enabled = True AND deleted_at IS NULL</code> filter as
+            <code>list_skills_for_user</code>.
+          </li>
+          <li>
+            <code>fetch_skill_for_admin(skill_id, db)</code> —
+            <code>deleted_at IS NULL</code> only (admins need disabled skills to
+            re-enable them). Engineer-only undelete bypasses this with a raw
+            query.
+          </li>
+          <li>
+            <code>list_skills_for_admin(db)</code> —
+            <code>deleted_at IS NULL</code> only (admin UI shows disabled skills
+            so they can be re-enabled). Soft-deleted hidden by default.
           </li>
           <li>
             <code>create_skill</code>,
@@ -2169,7 +2184,12 @@ def materialize_skills(
         built-ins are skipped silently; admins see them as "Needs setup" in the
         admin UI.
       </li>
-      <li><code>customs = list_skills_for_user(user, db_session)</code>.</li>
+      <li>
+        <code>customs = list_skills_for_user(user, db_session)</code> — single
+        SQL query, public-OR-group-grant, filtered to
+        <code>enabled = True AND deleted_at IS NULL</code>.
+        Disabled/soft-deleted skills never reach the materialized set.
+      </li>
       <li>
         For each built-in: <code>shutil.copytree(source_dir, dest/slug)</code>.
         If <code>SKILL.md.template</code> present: render via
