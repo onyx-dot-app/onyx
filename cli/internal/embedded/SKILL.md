@@ -86,7 +86,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
 | `--raw`                 | bool   | Output full API response (results with scores, links, document IDs, citation mapping) |
 | `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
-| `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY) |
+| `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY, ignored with --raw) |
 
 ### Ask a question
 

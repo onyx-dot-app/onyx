@@ -154,7 +154,7 @@ full response is saved to a temp file.`,
 	cmd.Flags().BoolVar(&searchRaw, "raw", false, "Output full API response (results with scores, links, document IDs, citation mapping)")
 	cmd.Flags().BoolVar(&searchNoQueryExpansion, "no-query-expansion", false, "Skip LLM query expansion (faster, less comprehensive)")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
-		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY)")
+		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY, ignored with --raw)")
 
 	return cmd
 }
