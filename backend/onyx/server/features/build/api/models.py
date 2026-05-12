@@ -322,3 +322,51 @@ class PptxPreviewResponse(BaseModel):
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== External App Models =====
+class UpsertExternalAppRequest(BaseModel):
+    """Create or update an external app.
+
+    If `id` is provided, the row with that id is updated; otherwise a new
+    row is inserted. `upstream_urls` is a list of regex patterns matched by
+    the egress proxy against outbound request URLs.
+    """
+
+    id: int | None = None
+    name: str
+    description: str
+    upstream_urls: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+
+
+class ExternalAppAdminResponse(BaseModel):
+    """Admin-facing view of an external app (includes org credentials)."""
+
+    id: int
+    name: str
+    description: str
+    upstream_urls: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+
+
+class UpsertUserCredentialsRequest(BaseModel):
+    """User-supplied credentials for a specific external app."""
+
+    user_credentials: dict[str, Any]
+
+
+class ExternalAppUserResponse(BaseModel):
+    """User-facing view of an external app.
+
+    `is_configured` is true iff the calling user has stored credentials for
+    this app. Org-level credentials and the auth template are intentionally
+    omitted — those are admin-only.
+    """
+
+    id: int
+    name: str
+    description: str
+    is_configured: bool
