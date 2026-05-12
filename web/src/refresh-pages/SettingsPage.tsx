@@ -14,6 +14,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import {
   SvgArrowExchange,
+  SvgCopy,
   SvgKey,
   SvgLock,
   SvgMinusCircle,
@@ -48,6 +49,7 @@ import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
@@ -105,6 +107,39 @@ function PATModal({
   onCreate,
   createdToken,
 }: PATModalProps) {
+  if (createdToken?.token) {
+    return (
+      <Modal open onOpenChange={(open) => !open && onClose()}>
+        <Modal.Content width="sm" height="sm">
+          <Modal.Header
+            title="Access Token"
+            icon={SvgKey}
+            onClose={onClose}
+            description="Save this token before continuing. It won't be shown again."
+          />
+          <Modal.Body>
+            <Code showCopyButton={false}>{createdToken.token}</Code>
+          </Modal.Body>
+          <Modal.Footer>
+            <BasicModalFooter
+              submit={
+                <Button
+                  icon={SvgCopy}
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdToken.token);
+                    toast.success("Token copied to clipboard.");
+                  }}
+                >
+                  Copy Token
+                </Button>
+              }
+            />
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
+    );
+  }
+
   return (
     <ConfirmationModalLayout
       icon={SvgKey}
@@ -112,73 +147,57 @@ function PATModal({
       description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
       onClose={onClose}
       submit={
-        !!createdToken?.token ? (
-          <Button onClick={onClose}>Done</Button>
-        ) : (
-          <Button
-            disabled={isCreating || !newTokenName.trim()}
-            onClick={onCreate}
-          >
-            {isCreating ? "Creating Token..." : "Create Token"}
-          </Button>
-        )
+        <Button
+          disabled={isCreating || !newTokenName.trim()}
+          onClick={onCreate}
+        >
+          {isCreating ? "Creating Token..." : "Create Token"}
+        </Button>
       }
-      hideCancel={!!createdToken}
     >
       <Section gap={1}>
-        {/* Token Creation*/}
-        {!!createdToken?.token ? (
-          <InputVertical title="Token Value" withLabel>
-            <Code>{createdToken.token}</Code>
-          </InputVertical>
-        ) : (
-          <>
-            <InputVertical title="Token Name" withLabel>
-              <InputTypeIn
-                placeholder="Name your token"
-                value={newTokenName}
-                onChange={(e) => setNewTokenName(e.target.value)}
-                variant={isCreating ? "disabled" : undefined}
-                autoComplete="new-password"
-              />
-            </InputVertical>
-            <InputVertical
-              title="Expires in"
-              subDescription={
-                expirationDays === "null"
-                  ? undefined
-                  : (() => {
-                      const expiryDate = new Date();
-                      expiryDate.setUTCDate(
-                        expiryDate.getUTCDate() + parseInt(expirationDays)
-                      );
-                      expiryDate.setUTCHours(23, 59, 59, 999);
-                      return `This token will expire at: ${expiryDate
-                        .toISOString()
-                        .replace("T", " ")
-                        .replace(".999Z", " UTC")}`;
-                    })()
-              }
-              withLabel
-            >
-              <InputSelect
-                value={expirationDays}
-                onValueChange={setExpirationDays}
-                disabled={isCreating}
-              >
-                <InputSelect.Trigger placeholder="Select expiration" />
-                <InputSelect.Content>
-                  <InputSelect.Item value="7">7 days</InputSelect.Item>
-                  <InputSelect.Item value="30">30 days</InputSelect.Item>
-                  <InputSelect.Item value="365">365 days</InputSelect.Item>
-                  <InputSelect.Item value="null">
-                    No expiration
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </InputVertical>
-          </>
-        )}
+        <InputVertical title="Token Name" withLabel>
+          <InputTypeIn
+            placeholder="Name your token"
+            value={newTokenName}
+            onChange={(e) => setNewTokenName(e.target.value)}
+            variant={isCreating ? "disabled" : undefined}
+            autoComplete="new-password"
+          />
+        </InputVertical>
+        <InputVertical
+          title="Expires in"
+          subDescription={
+            expirationDays === "null"
+              ? undefined
+              : (() => {
+                  const expiryDate = new Date();
+                  expiryDate.setUTCDate(
+                    expiryDate.getUTCDate() + parseInt(expirationDays)
+                  );
+                  expiryDate.setUTCHours(23, 59, 59, 999);
+                  return `This token will expire at: ${expiryDate
+                    .toISOString()
+                    .replace("T", " ")
+                    .replace(".999Z", " UTC")}`;
+                })()
+          }
+          withLabel
+        >
+          <InputSelect
+            value={expirationDays}
+            onValueChange={setExpirationDays}
+            disabled={isCreating}
+          >
+            <InputSelect.Trigger placeholder="Select expiration" />
+            <InputSelect.Content>
+              <InputSelect.Item value="7">7 days</InputSelect.Item>
+              <InputSelect.Item value="30">30 days</InputSelect.Item>
+              <InputSelect.Item value="365">365 days</InputSelect.Item>
+              <InputSelect.Item value="null">No expiration</InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputVertical>
       </Section>
     </ConfirmationModalLayout>
   );
