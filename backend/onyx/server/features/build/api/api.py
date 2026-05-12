@@ -36,6 +36,9 @@ from onyx.server.features.build.api.sessions_api import router as sessions_route
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.scheduled_tasks.api import (
+    router as scheduled_tasks_router,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.utils.logger import setup_logger
@@ -67,6 +70,7 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_ena
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
+router.include_router(scheduled_tasks_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
