@@ -257,8 +257,8 @@ class ChunkEnrichmentContext(Protocol):
 
 
 class IndexingBatchAdapter(Protocol):
-    connector_id: int
-    credential_id: int
+    connector_id: int | None
+    credential_id: int | None
 
     def prepare(
         self, documents: list[Document], ignore_time_skip: bool

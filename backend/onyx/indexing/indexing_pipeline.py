@@ -1106,6 +1106,9 @@ def _maybe_push_to_agent_wiki(
     if not AGENT_WIKI_ENABLED or MULTI_TENANT:
         return
 
+    if adapter.connector_id is None or adapter.credential_id is None:
+        return
+
     successfully_indexed = {r.document_id for r in insertion_records}
     if not successfully_indexed:
         return

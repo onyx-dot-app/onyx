@@ -63,6 +63,9 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
 
 
 class UserFileIndexingAdapter:
+    connector_id: int | None = None
+    credential_id: int | None = None
+
     def __init__(self, tenant_id: str, db_session: Session):
         self.tenant_id = tenant_id
         self.db_session = db_session
