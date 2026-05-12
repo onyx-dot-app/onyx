@@ -78,10 +78,11 @@ export function WebProviderSetupModal({
 
   const hasStoredKey =
     (existingProvider?.has_api_key ?? false) || hasSharedApiKey;
+  const initialApiKey = hasStoredKey ? "••••••••••••••••" : "";
   const initialConfig = initialConfigValue ?? "";
 
   const initialValues: FormValues = {
-    api_key: "",
+    api_key: initialApiKey,
     config: initialConfig,
   };
 
@@ -99,7 +100,7 @@ export function WebProviderSetupModal({
     values: FormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = requiresApiKey && values.api_key.trim().length > 0;
+    const apiKeyChanged = requiresApiKey && values.api_key !== initialApiKey;
 
     const config =
       category === "search"
@@ -162,7 +163,6 @@ export function WebProviderSetupModal({
                     <ApiKeyField
                       providerLabel={providerLabel}
                       apiKeyUrl={apiKeyUrl}
-                      isNonRevealable={hasStoredKey}
                     />
                   )}
                   {configField && (
