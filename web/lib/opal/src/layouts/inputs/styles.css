@@ -1,4 +1,4 @@
-@reference '../../../../../src/app/globals.css';
+@reference '../../_reference.css';
 
 .opal-input-label {
   @apply flex-1 self-stretch;

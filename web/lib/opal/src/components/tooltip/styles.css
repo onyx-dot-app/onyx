@@ -1,4 +1,4 @@
-@reference '../../../../../src/app/globals.css';
+@reference '../../_reference.css';
 
 .opal-tooltip {
   z-index: var(--z-tooltip, 1300);

@@ -1,4 +1,4 @@
-@reference '../../../../../src/app/globals.css';
+@reference '../../_reference.css';
 
 /* Imports shared timing tokens (--interactive-duration, --interactive-easing) */
 @import "../../core/interactive/shared.css";

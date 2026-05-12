@@ -1,4 +1,4 @@
-@reference '../../../../../../src/app/globals.css';
+@reference '../../../_reference.css';
 
 /* SelectButton — layout only; colors handled by Interactive.Stateful */
 
