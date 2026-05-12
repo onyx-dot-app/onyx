@@ -81,8 +81,8 @@ func isHTMLResponse(contentType string, body []byte) bool {
 	if strings.Contains(contentType, "text/html") {
 		return true
 	}
-	trimmed := strings.TrimSpace(string(body))
-	return strings.HasPrefix(trimmed, "<!DOCTYPE") || strings.HasPrefix(trimmed, "<html")
+	lower := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html")
 }
 
 func wrapTimeoutError(err error) error {
