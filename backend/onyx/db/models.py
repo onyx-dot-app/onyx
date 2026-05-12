@@ -5908,7 +5908,6 @@ class ExternalApp(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     skill: Mapped["Skill"] = relationship("Skill")
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
