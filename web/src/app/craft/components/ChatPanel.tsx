@@ -29,6 +29,9 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { toast } from "@/hooks/useToast";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
+import ScheduledRunBanner, {
+  useShouldShowChatInput,
+} from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import SuggestionBubbles from "@/app/craft/components/SuggestionBubbles";
@@ -66,6 +69,12 @@ export default function BuildChatPanel({
   const sessionId = useSessionId();
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
+  // Hide the chat input when the active session was created by a scheduled
+  // task — scheduled runs are not interactive. The banner is rendered above
+  // the transcript when a session is from a scheduled task.
+  const showChatInput = useShouldShowChatInput(
+    sessionId ?? existingSessionId ?? null
+  );
   const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
@@ -383,6 +392,10 @@ export default function BuildChatPanel({
           outputPanelOpen ? "w-1/2 pl-4" : "w-full"
         )}
       >
+        {/* Banner shown only when the session was started by a scheduled task. */}
+        <ScheduledRunBanner
+          sessionId={sessionId ?? existingSessionId ?? null}
+        />
         {/* Chat header */}
         <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
           <div className="flex flex-row items-center gap-2 max-w-[75%]">
@@ -435,8 +448,8 @@ export default function BuildChatPanel({
           )}
         </div>
 
-        {/* Input bar at bottom when session exists */}
-        {(hasSession || existingSessionId) && (
+        {/* Input bar at bottom when session exists (hidden for scheduled-run sessions). */}
+        {(hasSession || existingSessionId) && showChatInput && (
           <div className="px-4 pb-8 pt-4 relative">
             {/* Soft fade border at top */}
             <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
