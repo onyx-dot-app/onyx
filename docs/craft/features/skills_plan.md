@@ -200,9 +200,11 @@ class Skill(Base):
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    enabled:   Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    deleted:   Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_public:  Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled:    Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    deleted_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )  # NULL = active; set to now() on soft-delete. Sweep ages blob cleanup off this.
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
@@ -260,15 +262,15 @@ Slug rules:
   - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
-  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch).
+  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant, with `enabled = True AND deleted_at IS NULL` filter (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch).
   - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None`.
   - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — no access filter.
-  - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter.
+  - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter, but still excludes `deleted_at IS NOT NULL` (admins don't see soft-deleted skills in the list; engineer-only undelete via DB).
   - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`.
   - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` (returns old_bundle_file_id so caller can delete the blob after commit).
   - [ ] `patch_skill(skill_id, slug=None, name=None, description=None, is_public=None, enabled=None, db) -> Skill` (partial update).
   - [ ] `replace_skill_grants(skill_id, group_ids, db) -> None` (atomic: delete + insert in one transaction).
-  - [ ] `delete_skill(skill_id, db) -> str` — soft-delete; returns `bundle_file_id` for blob deletion.
+  - [ ] `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob is NOT deleted inline; the sweep (§16) ages out the blob and hard-deletes the row after 14 days.
 
 ---
 
@@ -543,7 +545,7 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 | `PATCH` | `/api/admin/skills/custom/{id}` | JSON: `{slug?, name?, description?, is_public?, enabled?}` | Partial update; doesn't touch bundle or grants |
 | `PUT` | `/api/admin/skills/custom/{id}/bundle` | multipart: bundle | Replace bundle bytes |
 | `PUT` | `/api/admin/skills/custom/{id}/grants` | JSON: `{group_ids}` | Atomic grant replacement |
-| `DELETE` | `/api/admin/skills/custom/{id}` | — | Soft-delete (`deleted=true`) |
+| `DELETE` | `/api/admin/skills/custom/{id}` | — | Soft-delete (sets `deleted_at = now()`) |
 
 **User endpoints** (`/api/skills` — authenticated user):
 
@@ -641,7 +643,7 @@ If DB commit fails, new blobs are orphaned (caught by sweep). If FileStore delet
   - [ ] `PATCH /api/admin/skills/custom/{id}` — call `patch_skill(...)`. Re-validate slug uniqueness if changing.
   - [ ] `PUT /api/admin/skills/custom/{id}/bundle` — full replace flow.
   - [ ] `PUT /api/admin/skills/custom/{id}/grants` — call `replace_skill_grants(...)`.
-  - [ ] `DELETE /api/admin/skills/custom/{id}` — call `delete_skill(...)`. Soft-delete; don't delete blobs (sweep handles it after retention).
+  - [ ] `DELETE /api/admin/skills/custom/{id}` — call `delete_skill(...)`. Sets `deleted_at = now()`; sweep (§16) ages out the blob + row after 14 days.
 - [ ] Implement user router (same file):
   - [ ] `GET /api/skills` — built-ins + customs visible to user.
 - [ ] Define Pydantic response models in the same file.
@@ -1193,18 +1195,33 @@ The skills system changes both the api_server (new endpoints, new materializer, 
 FileStore blobs are saved before the DB row is committed. If a request crashes between save and commit, the blobs are orphaned. Both replace-bundle and delete-skill paths also need to delete old blobs. We need a defensive sweep to catch the rare crash case.
 
 ### Proposed Solution
-Weekly Celery beat task:
+Weekly Celery beat task. Two retention paths converge in one sweep:
+
+1. **Orphan blobs** — FileStore records with `origin=SKILL_BUNDLE` that no `skill` row references (crash between blob save and DB commit). Age off the FileStore record's own `created_at`.
+2. **Aged soft-deletes** — Skill rows with `deleted_at < now() - 14 days`. Delete the row's referenced blob, then hard-delete the row.
 
 ```python
 # backend/onyx/background/celery/tasks/skills/tasks.py
 
+RETENTION = timedelta(days=14)
+
 @shared_task(name="cleanup_orphaned_skill_blobs")
 def cleanup_orphaned_skill_blobs() -> None:
-    """Defensive sweep for FileStore blobs with origin SKILL_BUNDLE
-    older than 14 days that no skill row references."""
+    """Two retention paths:
+    1. Orphan blobs (no skill row references them) — crash recovery.
+    2. Aged soft-deletes (skill.deleted_at older than retention) —
+       finalize cleanup of admin-deleted skills.
+    """
     with get_session_with_current_tenant() as db:
-        for blob in _stale_skill_blobs(db, age_days=14):
-            file_store.delete_file(blob.file_id)
+        # Path 1: orphans
+        for file_id in _orphan_skill_blob_ids(db, older_than=RETENTION):
+            file_store.delete_file(file_id)
+
+        # Path 2: aged soft-deletes
+        for skill in _aged_soft_deleted_skills(db, older_than=RETENTION):
+            file_store.delete_file(skill.bundle_file_id)
+            db.delete(skill)            # hard-delete the row after blob is gone
+        db.commit()
 
 # beat schedule:
 "cleanup-orphaned-skill-blobs": {
@@ -1217,20 +1234,25 @@ def cleanup_orphaned_skill_blobs() -> None:
 Inline cleanup (the primary path) happens in:
 - `POST /api/admin/skills/custom`: if any step after a blob is saved fails, delete the blob before re-raising.
 - `PUT /api/admin/skills/custom/{id}/bundle`: after DB commit succeeds, delete the old blob(s).
-- `DELETE /api/admin/skills/custom/{id}`: soft-delete only; blobs stay for now. **The sweep is the path that eventually deletes blobs for soft-deleted skills.** (Set retention based on `deleted_at`-ish logic — see below.)
+- `DELETE /api/admin/skills/custom/{id}`: sets `deleted_at = now()`. Blob stays on FileStore until aged out by the sweep (≥14 days later).
 
 ### Considerations / Tradeoffs / Decisions
-- **Soft-delete + sweep vs hard-delete + immediate blob cleanup.** Soft-delete preserves the option for undelete (engineer-only in V1). The 14-day retention before sweep gives a recovery window.
-- **Why weekly.** Orphans are rare (only happen on crashes between save + commit). Weekly is conservative; daily would also be fine.
+- **`deleted_at` timestamp, not a bare `deleted` bool.** Earlier draft used a boolean — that can't carry retention age, so the sweep had no way to tell a recently-deleted skill from one deleted a year ago. `deleted_at IS NULL` = active; non-null = soft-deleted at that time. Strictly more information; same query ergonomics (`WHERE deleted_at IS NULL`).
+- **Two retention paths, one sweep.** Conceptually different (crash recovery vs lifecycle cleanup) but the implementation merges naturally — both age out blobs older than 14 days, just keyed off different timestamps. Simpler than two separate tasks.
+- **Hard-delete the row after the soft-delete retention window.** Otherwise soft-deleted rows accumulate indefinitely. After 14 days no one is going to undelete; row is gone, blob is gone.
+- **Soft-delete + sweep vs hard-delete + immediate blob cleanup.** Soft-delete preserves a 14-day undelete window (engineer-only restore via DB). Slightly forgiving for accidental deletions.
+- **Why weekly.** Orphans are rare. Aged soft-deletes accumulate, but a week of stale rows is acceptable; the sweep is idempotent.
 - **`expires=3600` is required** per the `CLAUDE.md` Celery rule.
 - **Task name in `name=` rather than auto-derived.** Stable name across refactors so beat scheduling doesn't break.
 
 ### Todos
 - [ ] Implement `cleanup_orphaned_skill_blobs` in `backend/onyx/background/celery/tasks/skills/tasks.py`.
-- [ ] Implement `_stale_skill_blobs(db, age_days)` — query FileStore records with `origin = SKILL_BUNDLE` and `created_at < now() - age_days` whose IDs aren't referenced in `skill.bundle_file_id` (for any non-deleted skill, OR for deleted-skills-older-than-N-days).
+- [ ] Implement `_orphan_skill_blob_ids(db, older_than)` — FileStore records with `origin = SKILL_BUNDLE`, `created_at < now() - older_than`, whose IDs are not referenced by any `skill.bundle_file_id`.
+- [ ] Implement `_aged_soft_deleted_skills(db, older_than)` — `Skill` rows with `deleted_at IS NOT NULL AND deleted_at < now() - older_than`.
 - [ ] Add beat schedule entry. Confirm `expires=3600` is set.
-- [ ] Unit test: create an orphan blob older than 14 days, run the task, verify deletion.
-- [ ] Integration test: create a skill, soft-delete it, verify the blob is NOT deleted immediately; bump created_at to 14+ days ago, run task, verify deletion.
+- [ ] Unit test: orphan blob older than 14 days → deleted.
+- [ ] Unit test: skill with `deleted_at` older than 14 days → blob deleted AND row hard-deleted.
+- [ ] Integration test: soft-delete a skill, run sweep immediately → blob NOT deleted, row still present with `deleted_at` set; advance time by 15 days → run sweep → blob deleted, row gone.
 
 ---
 

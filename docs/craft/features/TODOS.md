@@ -112,7 +112,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
 - `[TODO]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
 - `[TODO]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
-- `[TODO]` `P1.068` Implement `delete_skill(skill_id, db) -> str` — soft-delete; returns `bundle_file_id`  (deps: P1.015)
+- `[TODO]` `P1.068` Implement `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob NOT removed inline; sweep (P5.031–P5.033) handles it after 14 days.  (deps: P1.015)
 
 ---
 
@@ -317,14 +317,17 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 - `[TODO]` `P5.021` File ticket: **Approval required for any write within classified services**, not just destructive ones — see §18 ask #2
 - `[TODO]` `P5.022` Cross-reference `docs/craft/features/interception.md` from skills_plan §18 once that doc lands
 
-### 5.4 Orphan blob sweep  (spec §16)
+### 5.4 Sweep: orphan blobs + aged soft-deletes  (spec §16)
 
 - `[TODO]` `P5.030` Create `backend/onyx/background/celery/tasks/skills/__init__.py`
 - `[TODO]` `P5.031` Create `backend/onyx/background/celery/tasks/skills/tasks.py` with `@shared_task(name="cleanup_orphaned_skill_blobs")` (must include `expires=3600` per `CLAUDE.md`)
-- `[TODO]` `P5.032` Implement `_stale_skill_blobs(db, age_days=14)` query — FileStore records with origin `SKILL_BUNDLE` older than 14d with no `skill` row reference
-- `[TODO]` `P5.033` Add weekly beat schedule entry
-- `[TODO]` `P5.034` Unit test: orphan blob older than 14 days → deleted by task
-- `[TODO]` `P5.035` Integration test: soft-delete skill → blob NOT immediately deleted; advance time → task deletes it
+- `[TODO]` `P5.032` Implement `_orphan_skill_blob_ids(db, older_than)` — FileStore records with `origin = SKILL_BUNDLE`, `created_at < now() - older_than`, whose IDs are NOT referenced by any `skill.bundle_file_id` (crash-recovery path)
+- `[TODO]` `P5.033` Implement `_aged_soft_deleted_skills(db, older_than)` — `Skill` rows with `deleted_at IS NOT NULL AND deleted_at < now() - older_than` (lifecycle-cleanup path)
+- `[TODO]` `P5.034` Task body: for each orphan blob, delete from FileStore; for each aged soft-deleted skill, delete its `bundle_file_id` blob THEN hard-delete the row
+- `[TODO]` `P5.035` Add weekly beat schedule entry
+- `[TODO]` `P5.036` Unit test: orphan blob older than 14 days → deleted by task
+- `[TODO]` `P5.037` Unit test: skill with `deleted_at` older than 14 days → blob deleted AND row hard-deleted
+- `[TODO]` `P5.038` Integration test: soft-delete a skill, run sweep immediately → blob NOT deleted, row still present with `deleted_at` set; advance time by 15 days → run sweep → blob deleted, row gone
 
 ### 5.5 Per-session skills UI  (spec §11)
 
