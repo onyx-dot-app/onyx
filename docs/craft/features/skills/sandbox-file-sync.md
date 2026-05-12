@@ -13,8 +13,8 @@ A reusable abstraction for pushing files from S3 (or the database) into one or m
 ## Important Notes
 
 - **Single delivery shape.** Each consumer's payload is delivered as a tarball materialized on demand by the api_server. No incremental/delta path in v1. Sources of files (admin-uploaded zips, individual file uploads, indexed docs) are normalized at the ingest boundary, not the delivery boundary.
-- **Push + poll, not push xor poll.** Every bundle gets both. Mutations enqueue an immediate push; an in-pod cron polls every 2 minutes as a safety net for the push-failure tail (~5% — overwhelmingly kubectl-exec into not-Ready pods).
-- **`If-Modified-Since` makes polling cheap.** Each bundle exposes `last_modified()` (an indexed `MAX(updated_at)` query). The tarball endpoint returns `304` when nothing changed, so the steady-state poll cost is one DB query per pod per 2 minutes.
+- **Push + lifecycle triggers, no polling.** Mutations enqueue an immediate push via Celery → kubectl exec. The ~5% push-failure tail (overwhelmingly kubectl-exec into not-Ready pods) is recovered on the next lifecycle transition: session setup, session wakeup (snapshot restore), or a manual "refresh sandbox" button. No background cron in the pod.
+- **`If-Modified-Since` makes every refresh cheap.** Each bundle exposes `last_modified()` (an indexed `MAX(updated_at)` query). The tarball endpoint returns `304` when nothing changed, so duplicate or no-op refreshes (a push that arrives after a manual refresh, a wakeup after a clean shutdown, etc.) cost one DB query.
 - **Two architectural assumptions.** (a) Each user has at most one active sandbox, so user-scoped bundles have no fan-out within a scope. (b) Sandbox pods and the api_server / S3 live in the same region, so intra-region egress is free on AWS and isn't a cost driver.
 - **Builds on the K8s label work from `skills_plan.md` §9.7.** `onyx.app/tenant-id` and `onyx.app/sandbox-id` already planned there are all the labels v1 needs. No new pod labels.
 - **Per-bundle ingest is each feature's problem.** Skills accepts a zip (unpacks to S3 as individual files). user_library accepts individual files. The abstraction only governs delivery from S3 → pod.
@@ -37,9 +37,18 @@ That's the textbook k8s answer for shared content (one EFS/Filestore filesystem,
 - EFS/Filestore adds real infrastructure: provisioning, mount targets per AZ, mount-failure modes at pod boot, per-GB-month cost.
 - The bundle interface tolerates a transport swap later. Bundle authors write `materialize()`; the transport between `materialize()` and the pod's mount path is internal. If `OrgFilesBundle` (admin-uploaded org-wide files — picture multi-GB policy archives) lands and tenant-fan-out costs become measurable, we promote tenant-scoped bundles to a shared-volume transport without changing any bundle implementation.
 
-### Why polling is cheap
+### Refresh triggers
 
-The in-pod 2-min cron only does an indexed `MAX(updated_at)` comparison via `If-Modified-Since` when nothing changed. A pod that polls all day during a quiet period costs us one DB query every 2 minutes — no S3, no tar, no transfer.
+A pod runs `/usr/local/bin/refresh-bundle <key>` in exactly four situations:
+
+| Trigger | How it's invoked |
+|---|---|
+| **Mutation push** (admin uploads skill, user uploads doc) | Celery task `refresh_pod_bundle` kubectl-execs the script |
+| **Session setup** (new sandbox pod boots) | Pod's entrypoint runs the script for each registered bundle before starting the agent |
+| **Session wakeup** (snapshot restored into a fresh pod) | Same entrypoint path — a restored pod is still "freshly booted" from its own perspective; the s5cmd-restored snapshot reflects pre-suspension session state, then bundles refresh against the *current* server state on top of it |
+| **Manual refresh button** | `POST /api/sandbox/{sid}/refresh` → server kubectl-execs the script for each registered bundle on that one pod |
+
+Push covers the happy path. The three lifecycle triggers cover the failure tail: any pod about to do real work (run an agent turn, resume from snapshot, respond to a user click) refreshes first, so stale state never persists across a transition that the user cares about.
 
 ## Implementation Strategy
 
@@ -95,7 +104,7 @@ enqueue_change(t, b, [u])  ───────────► propagate_bundle
 - **`propagate_bundle_change(tenant_id, bundle_key, user_id=None)`** (Celery, in `backend/onyx/background/celery/tasks/sandbox_sync/propagate.py`):
   - Calls `core_v1.list_namespaced_pod(namespace=NS, label_selector=bundle.pod_label_selector(tenant_id, user_id))`.
   - Fans out `refresh_pod_bundle.delay(pod_name, bundle_key)` per pod. `expires=60`.
-- **`refresh_pod_bundle(pod_name, bundle_key)`** (Celery, in `.../refresh.py`): single `kubectl exec` invoking `/usr/local/bin/refresh-bundle <bundle_key>`. Non-zero exit logged; the cron picks up. `expires=120`.
+- **`refresh_pod_bundle(pod_name, bundle_key)`** (Celery, in `.../refresh.py`): single `kubectl exec` invoking `/usr/local/bin/refresh-bundle <bundle_key>`. Non-zero exit logged; the next lifecycle trigger reconciles. `expires=120`. The manual refresh endpoint reuses this exact path (it just invokes the script for a known pod, skipping the `propagate` fan-out).
 
 ### In-pod refresh
 
@@ -119,18 +128,17 @@ refresh-bundle <bundle_key>
   grep -i ^Last-Modified /tmp/$1.headers > /var/lib/sandbox/$1.last-modified
 ```
 
-**Cron loop** in the existing sandbox supervisor process iterates the same hardcoded list:
+**Pod entrypoint** runs the script once per registered bundle before the agent starts. The same entrypoint runs whether the pod is fresh or restored from snapshot — a restored pod is freshly booted from its own perspective, so this single code path covers both session setup and session wakeup:
 
 ```bash
-while true; do
-  for key in skills user_library; do
-    refresh-bundle "$key" || true
-  done
-  sleep 120
+# in the sandbox container entrypoint, before exec'ing the agent
+for key in skills user_library; do
+  refresh-bundle "$key" || echo "warning: initial $key refresh failed"
 done
+exec /usr/local/bin/agent ...
 ```
 
-**Boot:** initial sync is the same script invocation, run once per bundle before the agent starts. No separate init code path.
+If a bundle refresh fails at boot, the pod still starts — the agent gets an empty mount path for that bundle and the next manual refresh / mutation push reconciles. We do not block sandbox provisioning on the api_server being healthy.
 
 ### Tarball endpoint
 
@@ -143,6 +151,17 @@ done
 - Else streams `tar(bundle.materialize(db, ctx))` with `Last-Modified` header set.
 
 That's the whole endpoint. No caching layer, no size threshold, no operational state beyond what's already in Postgres.
+
+### Manual refresh endpoint
+
+`POST /api/sandbox/{sandbox_id}/refresh` in `backend/onyx/server/features/build/sandbox/router.py` (or wherever the existing sandbox-control endpoints live):
+
+- Auth: standard user session — caller must own (or be admin of) the sandbox.
+- Resolves `sandbox_id` → pod name via the sandbox row.
+- For each registered bundle, invokes the same per-pod refresh used by push: `refresh_pod_bundle.delay(pod_name, bundle_key)` (or a sync kubectl-exec, depending on what feels right at implementation time — a few seconds is fine for a user-clicked button).
+- Returns 200 once all refreshes complete (or 202 + a status endpoint if we go async).
+
+The frontend wires this to a "Refresh sandbox" button in the Craft UI's sandbox menu — placed near other sandbox-control actions (restart, suspend) rather than as a primary action.
 
 ### v1 bundle implementations
 
@@ -174,9 +193,9 @@ Both replace bespoke push calls; no other changes to those handlers.
 - **No content_hash, no bundle-version table, no monotonic counter.** `If-Modified-Since` over `MAX(updated_at)` is sufficient.
 - **No Redis debounce in `enqueue_change`.** Bursts are rare in practice; when they happen, the pod's flock + 304 short-circuit absorb them with a few seconds of busy work.
 - **No tarball cache.** Skills bundles materialize in milliseconds; user_library has no fan-out within a user. Caching optimizes a non-problem.
-- **No ConfigMap-driven bundle discovery on the pod.** The bundle list is hardcoded in `refresh-bundle` and the cron loop. Adding `OrgFilesBundle` is a code + image-rebuild change anyway.
+- **No ConfigMap-driven bundle discovery on the pod.** The bundle list is hardcoded in `refresh-bundle` and the pod entrypoint. Adding `OrgFilesBundle` is a code + image-rebuild change anyway.
 - **No delta / incremental push.** Full tarball every time. user_library at scale is fine because of the 304 short-circuit; if a real bundle gets large enough to hurt, add `materialize_delta` then.
-- **No per-bundle delivery mode** (push vs poll). Every bundle does both.
+- **No background polling cron in the pod.** Push covers the happy path; session setup, session wakeup, and manual refresh cover the ~5% push-failure tail. A pod doing nothing isn't checking for updates — when it next does anything user-visible, it refreshes first.
 - **No `onyx.app/user-id` pod label.** Server resolves user from the sandbox row.
 - **No ReadOnlyMany / shared-volume transport.** Direct curl is sufficient given v1 bundle sizes, 1-sandbox-per-user, and intra-region pod placement. Upgrade path exists if `OrgFilesBundle` or scale forces it.
 - **No bundle author UI / marketplace / org_files endpoint.** The interface is ready for `OrgFilesBundle` but no consumer is shipping in v1.
@@ -193,8 +212,10 @@ The dominant test type for this work is **integration**: a real Postgres + Redis
 ### Integration tests (`backend/tests/integration/tests/sandbox_sync/`)
 
 - `test_push_path.py` — provision a sandbox, mutate a skill, assert the pod's `/skills/` reflects the change within ~5s. Verify the kubectl exec actually happened (check propagate + refresh task logs).
-- `test_poll_recovers_from_push_miss.py` — provision a sandbox, mutate a skill, simulate kubectl-exec failure (e.g. block the API or kill the worker mid-task), wait ≤2min, assert the cron tick reconciles.
-- `test_304_short_circuit.py` — provision a sandbox, let it poll, mutate nothing, assert tarball endpoint returns 304 on the next poll and pod state is untouched.
+- `test_boot_refresh.py` — provision a sandbox with skills already present in the DB; before any push fires, assert the pod's `/skills/` contains them. Confirms the entrypoint refresh runs.
+- `test_wakeup_refresh.py` — suspend a sandbox, mutate skills while suspended, resume the sandbox from snapshot. Assert the resumed pod sees the post-mutation skills (entrypoint refresh on the restored pod reconciles against current server state).
+- `test_manual_refresh_recovers_from_push_miss.py` — provision a sandbox, mutate a skill, simulate kubectl-exec failure (block the API or kill the refresh worker mid-task). Call `POST /api/sandbox/{sid}/refresh`. Assert the pod now reflects the mutation.
+- `test_304_short_circuit.py` — mutate nothing between two refreshes (any trigger), assert tarball endpoint returns 304 and pod state is untouched.
 - `test_user_library_per_user_isolation.py` — two users, two sandboxes; mutate user A's library; assert user A's pod gets the new file and user B's pod does not.
 
 ### Unit tests
@@ -221,9 +242,15 @@ backend/onyx/background/celery/tasks/sandbox_sync/                  NEW
 backend/onyx/server/internal/sandbox_bundles.py                     NEW
 └── GET /api/internal/sandbox/{sid}/bundles/{key}/tarball
 
+backend/onyx/server/features/build/sandbox/router.py                +POST /api/sandbox/{sid}/refresh
+
 backend/onyx/server/features/build/sandbox/kubernetes/
 ├── docker/refresh-bundle                                            NEW (in-pod script)
+├── docker/entrypoint.sh                                             +refresh-bundle loop before exec'ing agent
 └── kubernetes_sandbox_manager.py                                    -file-sync sidecar
+
+# Frontend:
+web/src/app/craft/...                                                +Refresh sandbox button in sandbox menu
 
 # Wiring (small, per existing handler):
 backend/onyx/server/admin/skills/*.py                                +enqueue_change(... "skills")
