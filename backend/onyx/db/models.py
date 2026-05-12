@@ -5846,7 +5846,7 @@ class ExternalApp(Base):
     auth_template: Mapped[dict[str, str]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
-    organisation_credentials: Mapped[dict[str, str]] = mapped_column(
+    organization_credentials: Mapped[dict[str, str]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
 

@@ -36,7 +36,7 @@ def upgrade() -> None:
             server_default=sa.text("'{}'::jsonb"),
         ),
         sa.Column(
-            "organisation_credentials",
+            "organization_credentials",
             postgresql.JSONB(),
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
