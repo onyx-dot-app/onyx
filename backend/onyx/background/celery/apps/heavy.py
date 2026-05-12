@@ -134,6 +134,10 @@ celery_app.autodiscover_tasks(
             # Sandbox tasks (file sync, cleanup)
             "onyx.server.features.build.sandbox.tasks",
             "onyx.background.celery.tasks.hierarchyfetching",
+            # Craft scheduled-task dispatcher / executor / sweeper.
+            # V1 colocates these on the `heavy` worker; the `scheduled_tasks`
+            # queue is added below in supervisord / helm / dockerfile.
+            "onyx.background.celery.tasks.scheduled_tasks",
         ]
     )
 )

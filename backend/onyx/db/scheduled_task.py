@@ -20,6 +20,7 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import desc
+from sqlalchemy import literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -285,6 +286,33 @@ def advance_next_run_at(
 # ---------------------------------------------------------------------------
 # Run CRUD
 # ---------------------------------------------------------------------------
+
+
+def has_in_flight_run_for_task(
+    *,
+    db_session: Session,
+    task_id: UUID,
+) -> bool:
+    """Return True if ``task_id`` has a run currently QUEUED or RUNNING.
+
+    Used by the dispatcher to enforce SKIP_IF_RUNNING: when a prior fire is
+    still in flight, the new claim writes a ``skipped`` run row instead of
+    enqueuing the executor.
+    """
+    stmt = (
+        select(literal(1))
+        .where(
+            ScheduledTaskRun.task_id == task_id,
+            ScheduledTaskRun.status.in_(
+                (
+                    ScheduledTaskRunStatus.QUEUED,
+                    ScheduledTaskRunStatus.RUNNING,
+                )
+            ),
+        )
+        .limit(1)
+    )
+    return db_session.execute(stmt).first() is not None
 
 
 def insert_run(
