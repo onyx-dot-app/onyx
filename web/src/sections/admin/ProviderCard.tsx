@@ -2,7 +2,7 @@
 
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
-import { Content, ContentAction } from "@opal/layouts";
+import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable } from "@opal/core";
 import {
@@ -143,14 +143,13 @@ export default function ProviderCard({
                     Set as Default
                   </Button>
                 ) : isSelected ? (
-                  <div className="p-2">
-                    <Content
-                      title={selectedLabel}
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={SvgCheckSquare}
-                    />
-                  </div>
+                  <Button
+                    variant="action"
+                    prominence="tertiary"
+                    rightIcon={SvgCheckSquare}
+                  >
+                    {selectedLabel}
+                  </Button>
                 ) : undefined}
                 {(onDisconnect || onEdit) && (
                   <div className="px-1 pb-1">

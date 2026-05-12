@@ -1,266 +1,196 @@
 "use client";
 
-import { memo, useMemo, type ReactNode, type FunctionComponent } from "react";
-
-import { FormField } from "@/refresh-components/form/FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
-
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgArrowExchange } from "@opal/icons";
-import { markdown } from "@opal/utils";
 import { SvgOnyxLogo } from "@opal/logos";
-import type { IconProps } from "@opal/types";
+import { Button } from "@opal/components";
+import Modal from "@/refresh-components/Modal";
+import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { toast } from "@/hooks/useToast";
+import { MASKED_API_KEY_PLACEHOLDER } from "@/refresh-pages/admin/WebSearchPage/WebProviderModalReducer";
+import {
+  connectProviderFlow,
+  type WebProviderCategory,
+} from "@/refresh-pages/admin/WebSearchPage/connectProviderFlow";
+import { buildSearchProviderConfig } from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
+import { buildContentProviderConfig } from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
+import {
+  ApiKeyField,
+  ConfigTextField,
+} from "@/refresh-pages/admin/WebSearchPage/shared";
 
-export type WebProviderSetupModalProps = {
-  isOpen: boolean;
-  onClose: () => void;
+export interface ExistingProviderInfo {
+  id: number;
+  name: string;
+  has_api_key: boolean;
+}
+
+export interface ConfigFieldSpec {
+  title: string;
+  placeholder: string;
+  subDescription?: string | RichStr;
+}
+
+export interface WebProviderSetupModalProps {
+  providerType: string;
+  category: WebProviderCategory;
   providerLabel: string;
-  providerLogo: ReactNode;
-  description: string;
-  apiKeyValue: string;
-  onApiKeyChange: (value: string) => void;
+  icon?: IconFunctionComponent;
+  apiKeyUrl?: string;
+  existingProvider?: ExistingProviderInfo | null;
   /**
-   * When true, the API key is a stored/masked value from the backend
-   * that cannot actually be revealed. The reveal toggle will be disabled.
+   * When true, an API key is already available via a sibling provider (e.g. Exa
+   * search key shared with Exa content). Affects whether the masked placeholder
+   * is shown as the initial value even when existingProvider is null.
    */
-  isStoredApiKey?: boolean;
-  optionalField?: {
-    label: string;
-    value: string;
-    onChange: (value: string) => void;
-    placeholder: string;
-    description?: ReactNode;
-    showFirst?: boolean;
+  hasSharedApiKey?: boolean;
+  initialConfigValue?: string;
+  requiresApiKey: boolean;
+  configField?: ConfigFieldSpec;
+  mutate: () => Promise<unknown>;
+  onSuccess: () => void;
+}
+
+interface FormValues {
+  api_key: string;
+  config: string;
+}
+
+export function WebProviderSetupModal({
+  providerType,
+  category,
+  providerLabel,
+  icon,
+  apiKeyUrl,
+  existingProvider,
+  hasSharedApiKey = false,
+  initialConfigValue,
+  requiresApiKey,
+  configField,
+  mutate,
+  onSuccess,
+}: WebProviderSetupModalProps) {
+  const onClose = useModalClose();
+  const isEditing = !!existingProvider && existingProvider.id > 0;
+
+  const hasStoredKey =
+    (existingProvider?.has_api_key ?? false) || hasSharedApiKey;
+  const initialApiKey = hasStoredKey ? MASKED_API_KEY_PLACEHOLDER : "";
+  const initialConfig = initialConfigValue ?? "";
+
+  const initialValues: FormValues = {
+    api_key: initialApiKey,
+    config: initialConfig,
   };
-  helperMessage: ReactNode;
-  helperClass: string;
-  isProcessing: boolean;
-  canConnect: boolean;
-  onConnect: () => void;
-  apiKeyAutoFocus?: boolean;
-  hideApiKey?: boolean;
-};
 
-export const WebProviderSetupModal = memo(
-  ({
-    isOpen,
-    onClose,
-    providerLabel,
-    providerLogo,
-    description,
-    apiKeyValue,
-    onApiKeyChange,
-    isStoredApiKey = false,
-    optionalField,
-    helperMessage,
-    helperClass,
-    isProcessing,
-    canConnect,
-    onConnect,
-    apiKeyAutoFocus = true,
-    hideApiKey = false,
-  }: WebProviderSetupModalProps) => {
-    const LogoArrangement = useMemo(() => {
-      const Component: FunctionComponent<IconProps> = () => (
-        <div className="flex items-center gap-1">
-          {providerLogo}
-          <div className="flex items-center justify-center size-4 p-0.5 shrink-0">
-            <SvgArrowExchange className="size-3 text-text-04" />
-          </div>
-          <div className="flex items-center justify-center size-7 p-0.5 shrink-0 overflow-clip">
-            <SvgOnyxLogo size={24} className="shrink-0" />
-          </div>
-        </div>
-      );
-      return Component;
-    }, [providerLogo]);
+  const validationSchema = Yup.object().shape({
+    api_key: requiresApiKey
+      ? Yup.string().required("API key is required")
+      : Yup.string(),
+    config: configField
+      ? Yup.string().required(`${configField.title} is required`)
+      : Yup.string(),
+  });
 
-    return (
-      <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <Modal.Content width="sm" preventAccidentalClose>
-          <Modal.Header
-            icon={LogoArrangement}
-            title={markdown(`Set up *${providerLabel}*`)}
-            description={description}
-            onClose={onClose}
-          />
-          <Modal.Body>
-            {optionalField?.showFirst && (
-              <FormField
-                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
-                state="idle"
-                className="w-full"
-              >
-                <FormField.Label>{optionalField.label}</FormField.Label>
-                <FormField.Control asChild>
-                  <InputTypeIn
-                    placeholder={optionalField.placeholder}
-                    value={optionalField.value}
-                    onChange={(event) =>
-                      optionalField.onChange(event.target.value)
-                    }
-                  />
-                </FormField.Control>
-                {optionalField.description && (
-                  <FormField.Description>
-                    {optionalField.description}
-                  </FormField.Description>
-                )}
-              </FormField>
-            )}
+  async function handleSubmit(
+    values: FormValues,
+    { setSubmitting }: { setSubmitting: (v: boolean) => void }
+  ) {
+    const apiKeyChanged = requiresApiKey && values.api_key !== initialApiKey;
 
-            {!hideApiKey && (
-              <FormField
-                name="api_key"
-                state={
-                  helperClass.includes("status-error") ||
-                  helperClass.includes("error")
-                    ? "error"
-                    : helperClass.includes("green")
-                      ? "success"
-                      : "idle"
-                }
-                className="w-full"
-              >
-                <FormField.Label>API Key</FormField.Label>
-                <FormField.Control asChild>
-                  <PasswordInputTypeIn
-                    data-testid="web-provider-api-key-input"
-                    placeholder="Enter API key"
-                    value={apiKeyValue}
-                    autoFocus={apiKeyAutoFocus}
-                    isNonRevealable={isStoredApiKey}
-                    onFocus={(e) => {
-                      if (isStoredApiKey) {
-                        e.target.select();
-                      }
-                    }}
-                    onChange={(event) => onApiKeyChange(event.target.value)}
-                    showClearButton={false}
-                  />
-                </FormField.Control>
-                {isProcessing ? (
-                  <FormField.APIMessage
-                    state="loading"
-                    messages={{
-                      loading:
-                        typeof helperMessage === "string"
-                          ? helperMessage
-                          : "Validating API key...",
-                    }}
-                  />
-                ) : typeof helperMessage === "string" ? (
-                  <FormField.Message
-                    messages={{
-                      idle:
-                        helperClass.includes("status-error") ||
-                        helperClass.includes("error")
-                          ? ""
-                          : helperClass.includes("green")
-                            ? ""
-                            : helperMessage,
-                      error:
-                        helperClass.includes("status-error") ||
-                        helperClass.includes("error")
-                          ? helperMessage
-                          : "",
-                      success: helperClass.includes("green")
-                        ? helperMessage
-                        : "",
-                    }}
-                  />
-                ) : (
-                  <FormField.Description className={helperClass}>
-                    {helperMessage}
-                  </FormField.Description>
-                )}
-              </FormField>
-            )}
+    const config =
+      category === "search"
+        ? buildSearchProviderConfig(providerType, values.config)
+        : buildContentProviderConfig(providerType, values.config);
 
-            {optionalField && !optionalField.showFirst && (
-              <FormField
-                name={optionalField.label.toLowerCase().replace(/\s+/g, "_")}
-                state={
-                  hideApiKey &&
-                  (helperClass.includes("status-error") ||
-                    helperClass.includes("error"))
-                    ? "error"
-                    : "idle"
-                }
-                className="w-full"
-              >
-                <FormField.Label>{optionalField.label}</FormField.Label>
-                <FormField.Control asChild>
-                  <InputTypeIn
-                    placeholder={optionalField.placeholder}
-                    value={optionalField.value}
-                    onChange={(event) =>
-                      optionalField.onChange(event.target.value)
-                    }
-                  />
-                </FormField.Control>
-                {optionalField.description && (
-                  <FormField.Description>
-                    {optionalField.description}
-                  </FormField.Description>
-                )}
+    const configChanged = values.config !== initialConfig;
 
-                {hideApiKey && (
-                  <>
-                    {isProcessing ? (
-                      <FormField.APIMessage
-                        state="loading"
-                        messages={{
-                          loading:
-                            typeof helperMessage === "string"
-                              ? helperMessage
-                              : "Testing connection...",
-                        }}
-                      />
-                    ) : typeof helperMessage === "string" ? (
-                      <FormField.Message
-                        messages={{
-                          idle:
-                            helperClass.includes("status-error") ||
-                            helperClass.includes("error")
-                              ? ""
-                              : helperClass.includes("green")
-                                ? ""
-                                : "",
-                          error:
-                            helperClass.includes("status-error") ||
-                            helperClass.includes("error")
-                              ? helperMessage
-                              : "",
-                          success: helperClass.includes("green")
-                            ? helperMessage
-                            : "",
-                        }}
-                      />
-                    ) : null}
-                  </>
-                )}
-              </FormField>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button prominence="secondary" type="button" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!canConnect || isProcessing}
-              type="button"
-              onClick={onConnect}
-            >
-              {isProcessing ? "Connecting..." : "Connect"}
-            </Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
-    );
+    try {
+      await connectProviderFlow({
+        category,
+        providerType,
+        existingProviderId: existingProvider?.id ?? null,
+        existingProviderName: existingProvider?.name ?? null,
+        existingProviderHasApiKey:
+          (existingProvider?.has_api_key ?? false) || hasSharedApiKey,
+        displayName: providerLabel,
+        providerRequiresApiKey: requiresApiKey,
+        apiKeyChangedForProvider: apiKeyChanged,
+        apiKey: values.api_key,
+        config,
+        configChanged,
+        onValidating: () => {},
+        onSaving: () => {},
+        onError: (message) => toast.error(message),
+        onClose: onSuccess,
+        mutate,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
-);
 
-WebProviderSetupModal.displayName = "WebProviderSetupModal";
+  const hasNoFields = !requiresApiKey && !configField;
+
+  return (
+    <Modal open onOpenChange={onClose}>
+      <Modal.Content width="sm" preventAccidentalClose>
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+        >
+          {({ isSubmitting, dirty, isValid }) => (
+            <Form>
+              <Modal.Header
+                icon={icon}
+                moreIcon1={SvgArrowExchange}
+                moreIcon2={SvgOnyxLogo}
+                title={
+                  isEditing
+                    ? `Configure ${providerLabel}`
+                    : `Set up ${providerLabel}`
+                }
+                onClose={onClose}
+              />
+              {!hasNoFields && (
+                <Modal.Body>
+                  {requiresApiKey && (
+                    <ApiKeyField
+                      providerLabel={providerLabel}
+                      apiKeyUrl={apiKeyUrl}
+                    />
+                  )}
+                  {configField && (
+                    <ConfigTextField
+                      title={configField.title}
+                      placeholder={configField.placeholder}
+                      subDescription={configField.subDescription}
+                    />
+                  )}
+                </Modal.Body>
+              )}
+              <Modal.Footer>
+                <Button prominence="secondary" type="button" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    (!hasNoFields && (!dirty || !isValid)) || isSubmitting
+                  }
+                  icon={isSubmitting ? SimpleLoader : undefined}
+                >
+                  {isEditing ? "Update" : "Connect"}
+                </Button>
+              </Modal.Footer>
+            </Form>
+          )}
+        </Formik>
+      </Modal.Content>
+    </Modal>
+  );
+}
