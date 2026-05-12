@@ -1,0 +1,384 @@
+# Scheduled Tasks
+
+## Objective
+
+Implement the **Scheduled Tasks** product surface in
+[`docs/product/scheduled-tasks.md`](../../product/scheduled-tasks.md): a user
+saves a prompt + schedule, and the system runs the prompt as Craft on a
+timer. Every fire creates a brand-new Craft session, executes the agent
+headlessly, and records what happened.
+
+V1 = schedule-only, single-user, no event triggers, no live-attach. The bar:
+a user creates a task in `/craft/v1/tasks`, sees it fire without their
+browser open, and clicks any past run to open the completed session.
+
+## Issues to Address
+
+1. **No headless run path.** `SessionManager._stream_cli_agent_response`
+   (`session/manager.py:1146`) yields SSE to an HTTP client. Scheduled runs
+   need to drain the agent without an attached browser while still
+   persisting everything `send_message` persists.
+2. **No durable "prompt + schedule" record** and **no run history.** A run
+   IS a session, but we still need a small "run" row tying the fired
+   session back to the task with status/timing.
+3. **No scheduler.** `DynamicTenantScheduler` (`apps/beat.py:274`) handles
+   per-tenant task families, not per-row cron entries. We need a DB-driven
+   dispatch loop with `SELECT FOR UPDATE SKIP LOCKED`.
+4. **One sandbox per user.** `Sandbox` is `user_id`-unique
+   (`models.py:5217`). A scheduled fire mid-interactive-use must not
+   trample the active session's workspace.
+5. **Schedule expression non-trivial.** Three editor modes (interval,
+   daily/weekly, raw cron) compile to one canonical form; timezones (incl.
+   DST) must be respected.
+6. **Approvals propagate.** A run may hit the approval boundary — the row
+   needs `awaiting_approval` and a resume hook. Approval *mechanics* are
+   owned by the approvals project; V1 only exposes the state.
+7. **Scheduled-run sessions would leak into the Craft sidebar.** The
+   sidebar query (`get_user_build_sessions`, `build_session.py:82`) lists
+   every `BuildSession` for the user. Each fire creates one, so without a
+   filter the sidebar fills up with scheduled runs. The sidebar must show
+   interactive sessions only.
+
+## Important Notes
+
+- **A run IS a `BuildSession`.** `scheduled_task_run.session_id` is a FK to
+  `build_session.id`. Clicking a finished run opens the existing session
+  view — no new transcript UI. Settled in the main plan (decision 3).
+- **Every fire creates a fresh session** via the existing
+  `SessionManager.create_session__no_commit` path, so sandbox provisioning,
+  workspace setup, skills materialization, AGENTS.md generation, and packet
+  logging run unchanged.
+- **Headless executor reuses `send_message`'s persistence half.** Split
+  `_stream_cli_agent_response` into `_yield_acp_events` (pure ACP generator)
+  + `_persist_acp_events` (`BuildStreamingState` consumer writing
+  `BuildMessage` rows). SSE endpoint composes the pair with an SSE
+  formatter; executor wraps it with a drain-to-completion. Identical
+  transcripts, no duplicated code.
+- **Per-sandbox Redis lease** keyed on `sandbox_id` serializes interactive
+  and scheduled prompts inside one pod. `awaiting_approval` releases the
+  lease (humans shouldn't block CPU); resume reacquires.
+- **One beat task + DB dispatch.** `dispatch_due_scheduled_tasks` runs every
+  30 s per tenant. Each tick: `SELECT FROM scheduled_task WHERE status=active
+  AND deleted=false AND next_run_at <= now() FOR UPDATE SKIP LOCKED`,
+  insert `queued` run rows, advance `next_run_at` via `croniter`, enqueue
+  `run_scheduled_task(run_id)` on a new `scheduled_tasks` queue
+  (`expires=900`). Same pattern as `check-for-indexing` / `check-for-pruning`.
+- **Schedule storage:** `(cron_expression, IANA timezone, editor_mode)`.
+  All three editor modes compile to cron on save. `croniter` +
+  `ZoneInfo(timezone)` handles DST. `editor_mode` is a UI hint only.
+  `next_run_at` recomputed on every fire and every edit; pause sets it to
+  NULL.
+- **Concurrency:** `SKIP_IF_RUNNING` for recurring fires (prior run still
+  in flight → write `skipped` row with `skip_reason`, still advance
+  `next_run_at`), `QUEUE_ONE` for Run Now (works when paused, doesn't
+  touch `next_run_at`).
+- **Runs execute as the task author.**
+  `create_session__no_commit(user_id=task.user_id)` — skills, Onyx search,
+  OAuth grants, approval policies all flow through the same user-scoped
+  paths the interactive UI uses.
+- **Soft-delete preserves history.** `deleted=true` stops dispatch; runs
+  and sessions stay so users can open past runs from the task's run
+  history.
+- **`BuildSession.origin` keeps scheduled runs out of the sidebar.** New
+  enum column (`INTERACTIVE | SCHEDULED`, default `INTERACTIVE`, server
+  default `'interactive'` for existing rows). Set at session-create time
+  by the executor; the sidebar query filters `origin = INTERACTIVE`.
+  Covers both scheduled fires and Run Now (both go through the executor
+  with `origin=SCHEDULED`). A column beats a `NOT EXISTS` against
+  `scheduled_task_run` because the dispatcher writes its run row before
+  the executor creates the session — a join-based filter would briefly
+  leak. Future non-interactive origins (eval runs, automation) reuse the
+  same seam.
+- **No retries in V1.** Failed = one row; user clicks Run now or waits.
+- **Notifications piggyback on the existing `Notification` model.** Two new
+  types (`SCHEDULED_TASK_FAILED`, `SCHEDULED_TASK_AWAITING_APPROVAL`). No
+  email, no Slack (product req 9).
+- **Stuck-run sweeper** (hourly): `queued > 15 min` and `running > budget`
+  → `failed (stuck)`. Catches dead workers.
+- **Out of scope:** live-attach, event triggers, shared tasks, templates,
+  retry policy, budget caps, run diffing, calendar view, auto-disable on
+  N failures, external task-management API.
+
+## Approaches Considered
+
+- **Per-task entries in `DynamicTenantScheduler`** — rejected: scheduler
+  reloads on every CRUD, built for per-tenant task families, doesn't scale
+  to N user rows.
+- **Long-lived sleep threads per task in a worker** — rejected: no
+  crash-safety; doesn't fit Onyx's thread-pool Celery model where time
+  limits are disabled (CLAUDE.md).
+- **Hijack SSE endpoint for "detached" runs** — rejected: HTTP request
+  scope ends before the agent finishes; a dedicated Celery task is the
+  natural place to own headless execution.
+- **Inline runs as JSONB on the task row** — rejected: contention, no FK
+  for `session_id`, hard to paginate/filter.
+- **Winner: two tables + DB-driven dispatcher + fresh `BuildSession` per
+  fire + headless executor reusing `send_message`'s persistence.**
+  Smallest surface, reuses every Craft primitive, crash-safe, matches Onyx
+  idiom.
+
+## Architecture
+
+```
+Beat (30s, per tenant)                Celery queue "scheduled_tasks"
+──────────────────────                ────────────────────────────────
+dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
+  BEGIN;                                if run.status != 'queued': return
+   SELECT FROM scheduled_task           mark 'running'
+     WHERE active AND due               acquire Redis sandbox lease
+     FOR UPDATE SKIP LOCKED;            session = SessionManager
+   for each row:                          .create_session__no_commit(
+     ├─ if prior run in flight                user_id=task.user_id)
+     │     → insert skipped row         run.session_id ← session.id
+     ├─ insert queued run               for event in _yield_acp_events(
+     ├─ next_run_at = croniter             session, task.prompt):
+     │     .next(now, tz=task.tz)         _persist_acp_events([event])
+     └─ enqueue run_scheduled_task(       if budget exceeded → failed
+            run_id, expires=900)          if approval required →
+  COMMIT;                                      awaiting_approval; release
+                                       mark succeeded / failed; release
+Stuck-run sweep (hourly)               emit Notification if failed
+──────────────────────                          │
+cleanup_stuck_scheduled_runs                    ▼
+  queued > 15m → failed (stuck)        BuildMessage rows (existing tables,
+  running > budget → failed (timeout)   written by shared persist consumer)
+```
+
+## Relevant Files / Onyx Subsystems
+
+**Modify:**
+
+- `backend/onyx/db/models.py` — add `ScheduledTask`, `ScheduledTaskRun`,
+  related enums near `BuildSession` (`models.py:5151`); add
+  `SessionOrigin` enum + `BuildSession.origin` column; two new
+  `NotificationType` values.
+- `backend/onyx/server/features/build/db/build_session.py:82` —
+  `get_user_build_sessions` adds `BuildSession.origin == INTERACTIVE` to
+  the filter. Replace the existing user-created index with
+  `(user_id, origin, created_at desc)` so the sidebar stays a single
+  index scan.
+- `SessionManager.create_session__no_commit` (`session/manager.py:383`) —
+  add an `origin: SessionOrigin = INTERACTIVE` parameter; pass through
+  to the `BuildSession` row. Executor calls with `origin=SCHEDULED`.
+- `backend/onyx/server/features/build/session/manager.py:1146` — split
+  `_stream_cli_agent_response` into `_yield_acp_events` +
+  `_persist_acp_events`. SSE endpoint composes the pair; no behavior change
+  for interactive callers.
+- `backend/onyx/server/features/build/api/api.py:64` — mount
+  `scheduled_tasks_router` under existing `/build` prefix.
+- `backend/onyx/background/celery/tasks/beat_schedule.py:200` — add the
+  two beat templates.
+- `backend/onyx/configs/constants.py` — new `OnyxCeleryTask`,
+  `OnyxCeleryQueues.SCHEDULED_TASKS`, `NotificationType` values.
+- Celery worker config — register `scheduled_tasks` queue on the existing
+  `heavy` worker for V1.
+
+**New (backend):**
+
+- `backend/onyx/db/scheduled_task.py` — DB ops mirroring `db/persona.py`:
+  list/fetch/create/update/soft-delete + `claim_due_scheduled_tasks`
+  (the FOR UPDATE SKIP LOCKED), `insert_run`, `mark_run_status`,
+  `list_runs_for_task`, `find_stuck_runs`.
+- `backend/onyx/server/features/build/scheduled_tasks/api.py` — FastAPI
+  router (handlers are thin validator + DB-op calls).
+- `.../scheduled_tasks/schedule.py` — pure helpers `compile_to_cron`,
+  `compute_next_run_at`, `human_readable`. Wraps `croniter` +
+  `cron-descriptor`. No DB access.
+- `.../scheduled_tasks/executor.py` — `run_scheduled_task(run_id)` body.
+- `.../scheduled_tasks/sandbox_lease.py` — Redis-lock wrapper keyed on
+  `sandbox_id`; acquired by both the interactive `send_message` path and
+  the executor.
+- `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py` —
+  `@shared_task` definitions (each enqueue uses `expires=`; per-run timeout
+  enforced inside the task body via monotonic budget check).
+- `backend/alembic/versions/<new>.py` — schema migration.
+
+**New (frontend):**
+
+- `web/src/app/craft/v1/tasks/{page.tsx, new/page.tsx, [id]/edit/page.tsx,
+  [id]/page.tsx}` — list, create, edit, detail.
+- `web/src/components/craft/tasks/{ScheduleEditor, RunHistoryTable}.tsx`.
+- `web/src/components/craft/session/ScheduledRunBanner.tsx` — banner in the
+  existing session view.
+- Add "Scheduled Tasks" entry to the Craft left nav.
+
+## Data Model
+
+```python
+class SessionOrigin(str, Enum):              # interactive, scheduled
+                                             # added to BuildSession; default INTERACTIVE
+
+class ScheduledTaskStatus(str, Enum):       # active, paused
+class ScheduledTaskRunStatus(str, Enum):    # queued, running, succeeded,
+                                            # failed, skipped, awaiting_approval
+class ScheduledTaskTriggerSource(str, Enum): # scheduled, manual_run_now
+
+class ScheduledTask(Base):
+    __tablename__ = "scheduled_task"
+    id, user_id (FK user, CASCADE)
+    name (str), prompt (text)
+    cron_expression (str), timezone (IANA str), editor_mode (str)
+    status (enum, default ACTIVE)
+    next_run_at (DateTime tz, nullable)      # dispatcher's only read field
+    deleted (bool, default False)
+    created_at, updated_at
+    runs ← back-populated, cascade all,delete-orphan
+    __table_args__ = (
+        Index("ix_scheduled_task_dispatch", "status", "deleted", "next_run_at"),
+        Index("ix_scheduled_task_user_created", "user_id", desc("created_at")),
+    )
+
+class ScheduledTaskRun(Base):
+    __tablename__ = "scheduled_task_run"
+    id, task_id (FK scheduled_task, CASCADE)
+    session_id (FK build_session, SET NULL)   # populated after executor creates session
+    status (enum, default QUEUED), trigger_source (enum)
+    skip_reason / error_class / error_detail (nullable)
+    started_at (default now), finished_at (nullable)
+    summary (str, ~120 chars of final agent message)
+    __table_args__ = (
+        Index("ix_scheduled_task_run_task_started", "task_id", desc("started_at")),
+        Index("ix_scheduled_task_run_status", "status"),
+    )
+```
+
+`next_run_at` is the only field the dispatcher reads — pause sets it NULL,
+edit recomputes, `deleted=true` excludes from claims. `session_id` is
+nullable for the brief moment between dispatcher INSERT and executor's
+session create. No `attempts` counter (no retries in V1).
+
+## API Spec
+
+All endpoints raise `OnyxError`; typed FastAPI returns. Mounted at
+`/api/build/scheduled-tasks` (existing `/build` prefix,
+`require_onyx_craft_enabled` gating). Scoped to the authenticated user; no
+admin view in V1.
+
+- `GET    /scheduled-tasks` — list payload (id, name, human-readable
+  schedule, status, next_run_at, last_run summary).
+- `POST   /scheduled-tasks` — create. Compiles editor input → cron,
+  validates timezone via `ZoneInfo`. Optional `run_immediately`.
+- `GET    /scheduled-tasks/{id}` — task + next 3 fire times for UI preview.
+- `PATCH  /scheduled-tasks/{id}` — partial edit. Recomputes `next_run_at` on
+  schedule/timezone change. `paused` → NULL; resume → recompute. In-flight
+  runs untouched.
+- `DELETE /scheduled-tasks/{id}` — soft-delete.
+- `POST   /scheduled-tasks/{id}/run-now` — inserts `manual_run_now` run,
+  enqueues executor. Works when paused. Doesn't touch `next_run_at`.
+- `GET    /scheduled-tasks/{id}/runs` — paginated, 50/page, `cursor=`,
+  newest first.
+- `GET    /build/sessions/{id}/scheduled-run-context` — optional task name +
+  id + scheduled `started_at` if the session is from a scheduled run; 404
+  otherwise. Used by the session-view banner.
+
+No live-attach endpoint in V1.
+
+## Schedule Semantics
+
+5-field cron + IANA timezone, stored canonical. Editor mode is a UI hint.
+
+- *Interval (N min/hr/day):* `*/N * * * *` / `0 */N * * *` / `M H */N * *`
+  (M:H is the editor's required time-of-day for day-cadence).
+- *Daily/weekly:* `M H * * <weekdays>` (e.g. `0 9 * * 1,3,5`).
+- *Advanced:* user-typed, validated via `croniter`.
+
+`compute_next_run_at` = `croniter(cron,
+after).get_next(datetime, tzinfo=ZoneInfo(tz))`. Stored UTC; compared UTC
+in dispatch. `ZoneInfo` handles DST — a 9 AM PT weekly fire stays 9 AM
+local across PST/PDT.
+
+Pause mid-fire: in-flight run completes, `next_run_at`→NULL. Resume:
+recompute from resume time (no backfire). Past-due tasks fire once and
+advance forward (standard cron). Cron with no future fires → reject at
+PATCH/POST.
+
+## Run Lifecycle
+
+```
+queued ─► running ─► succeeded
+            │   └─► failed (executor crash | budget | ACP error)
+            └─► awaiting_approval ─► (approvals project resumes) ─► running ─► ...
+
+dispatcher also writes: skipped (prior run still in flight; next_run_at advances)
+```
+
+`awaiting_approval` releases the sandbox lease. Resume mechanics owned by
+approvals project; until that ships, treat as terminal-for-display.
+
+## UI
+
+- **List (`/craft/v1/tasks`):** name, schedule, status, last_run (relative
+  time + success/failure icon), next_run, row actions (Run now,
+  Pause/Resume, Edit, Delete). Empty state shows three starter prompts
+  from the product doc.
+- **Editor (`/new`, `/:id/edit`):** single form, three-tab segmented
+  control for schedule mode. Prompt field reuses the Craft chat input
+  (product req 10). Live "next 3 runs" preview computed client-side via
+  `cron-parser`.
+- **Detail (`/:id`):** header (name, schedule, status toggle, next_run,
+  action buttons) + paginated run history table. Row click → session view
+  for `succeeded`/`failed`; non-clickable with tooltip for
+  `queued`/`running`/`awaiting_approval`/`skipped`.
+- **Session view banner:** when the scheduled-run-context endpoint returns
+  a result, render "This session was started by scheduled task X at Y. ←
+  Back to task." above the transcript; hide the chat input (scheduled
+  runs aren't interactive).
+- **Notifications:** two new bell entries — "Task X failed", "Task X needs
+  approval" — deep-linking to the run row.
+- **Mobile:** list/detail tolerable; editor explicitly requires desktop
+  (product req 8).
+
+## Cleanup / Migrations
+
+- One Alembic migration: two new tables, two new enum types, new
+  notification-type values, `BuildSession.origin` column
+  (`server_default='interactive'` so existing rows backfill cleanly), and
+  the replacement `(user_id, origin, created_at desc)` index on
+  `build_session`. No data migration.
+- Beat schedule grows two entries: `dispatch-due-scheduled-tasks` (30 s,
+  `expires=60`, MEDIUM, `scheduled_tasks` queue) and
+  `cleanup-stuck-scheduled-runs` (hourly, `expires=3600`, LOW, HEAVY).
+- New `scheduled_tasks` Celery queue on the `heavy` worker for V1.
+
+## Tests
+
+**External-dependency unit (the bulk of the value):**
+
+- `test_dispatch.py`: due tasks claimed and run-rows inserted; two parallel
+  ticks claim each row once (FOR UPDATE SKIP LOCKED); prior in-flight run
+  → `skipped` row, `next_run_at` still advances; paused / soft-deleted
+  tasks not claimed.
+- `test_sidebar_filter.py`: create one interactive session and one
+  scheduled-run session for the same user; `get_user_build_sessions`
+  returns only the interactive one. Verifies the sidebar query, the
+  default column value, and the executor's `origin=SCHEDULED` wiring.
+- `test_executor.py`: synthetic ACP event stream → run transitions
+  `queued→running→succeeded`, `session_id` populated, `summary` set,
+  `BuildMessage` rows written via shared `_persist_acp_events`. Separately:
+  timeout → `failed`; approval-required → `awaiting_approval` (lease
+  released); idempotency (calling twice on `succeeded` is a no-op).
+- `test_schedule.py`: `compile_to_cron` + `compute_next_run_at` for each
+  editor input; weekly 9 AM PT fires 9 AM local across PST/PDT.
+
+**Integration (one E2E):** `test_scheduled_task_e2e.py` — create task,
+force-tick dispatcher, poll run to terminal, assert session created with
+the prompt as first user message, messages shaped identically to an
+interactive run, summary set, session-context endpoint returns the task.
+
+**Playwright (one):** `scheduled-tasks.spec.ts` — log in, create task,
+Run Now, wait for `succeeded`, click row, confirm session view + banner.
+Pause → resume; verify `next_run_at`.
+
+**Unit (small):** pure-function tests of `compile_to_cron` /
+`human_readable`.
+
+**Manual smoke (before merging):**
+
+- Every-2-min task vs Onyx-search prompt; walk away 6 min; confirm three
+  runs with complete sessions and sensible summaries.
+- `Europe/London` Mon/Wed/Fri 9 AM — verify `next_run_at` is right across
+  BST and a force-tick at 9 AM fires.
+- Pause mid-fire: in-flight completes, no new fire; resume → next fires.
+- Approval boundary: run sits `awaiting_approval`, notification appears,
+  interactive Craft on the same sandbox still usable (lease released).
+- Kill worker mid-run: stuck-run sweeper moves to `failed` within an hour.
