@@ -43,8 +43,7 @@ function stripReferenceDirectives(source) {
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
   const raw = readFileSync(file, "utf8");
-  const cleaned =
-    file === referenceCss ? raw : stripReferenceDirectives(raw);
+  const cleaned = file === referenceCss ? raw : stripReferenceDirectives(raw);
   return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });
 
