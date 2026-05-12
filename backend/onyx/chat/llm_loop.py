@@ -25,6 +25,7 @@ from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
+from onyx.configs.chat_configs import MAX_TOOL_RESULT_TOKENS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
@@ -623,6 +624,29 @@ def _create_context_files_message(
     )
 
 
+def _truncate_tool_result(
+    result: str,
+    token_counter: Callable[[str], int],
+    max_tokens: int,
+) -> str:
+    token_count = token_counter(result)
+    if token_count <= max_tokens:
+        return result
+    # Binary-search for the longest prefix that fits within max_tokens.
+    lo, hi = 0, len(result)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if token_counter(result[:mid]) <= max_tokens:
+            lo = mid
+        else:
+            hi = mid - 1
+    truncated = result[:lo]
+    return (
+        truncated
+        + f"\n\n[TRUNCATED: response was {token_count} tokens, showing first {max_tokens}]"
+    )
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -1139,7 +1163,11 @@ def run_llm_loop(
                     tc = tool_response.tool_call
                     assert tc is not None  # Already filtered above
 
-                    tool_response_message = tool_response.llm_facing_response
+                    tool_response_message = _truncate_tool_result(
+                        tool_response.llm_facing_response,
+                        token_counter,
+                        MAX_TOOL_RESULT_TOKENS,
+                    )
                     tool_response_token_count = token_counter(tool_response_message)
 
                     tool_response_msg = ChatMessageSimple(
