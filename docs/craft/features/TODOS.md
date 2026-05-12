@@ -68,8 +68,8 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.3 BuiltinSkillRegistry  (spec §4)
 
-- `[TODO]` `P1.020` Define `SkillRequirement` dataclass in `registry.py`  (deps: P1.011)
-- `[TODO]` `P1.021` Define `BuiltinSkill` dataclass in `registry.py`  (deps: P1.011)
+- `[TODO]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
+- `[TODO]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
 - `[TODO]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
 - `[TODO]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
 - `[TODO]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)

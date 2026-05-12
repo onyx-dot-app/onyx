@@ -294,20 +294,27 @@ A process-wide singleton populated at app boot. Each registration captures a `(s
 ```python
 # backend/onyx/skills/registry.py
 
-@dataclass(frozen=True)
-class SkillRequirement:
+class SkillRequirement(BaseModel):
+    """Org-level dependency a built-in skill needs to be usable.
+    Frozen — registered at app boot, never mutated."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     key: str                                 # stable id, e.g. "image_generation_provider"
     name: str                                # human label, e.g. "Image generation provider"
     description: str                         # what's missing + where to set it up
     configure_url: str                       # e.g. "/admin/configuration/image-generation"
-    check: Callable[[Session], bool]         # returns True if satisfied; cheap
+    check: Callable[[Session], bool]         # cheap; returns True if satisfied
+                                              # (arbitrary_types_allowed=True covers Callable + Session)
 
-@dataclass(frozen=True)
-class BuiltinSkill:
+class BuiltinSkill(BaseModel):
+    """In-memory entry in the BuiltinSkillRegistry. Populated at boot from
+    on-disk source directories."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     slug: str
     source_dir: Path
-    name: str
-    description: str
+    name: str                                # from SKILL.md frontmatter
+    description: str                         # from SKILL.md frontmatter
     has_template: bool
     requirements: tuple[SkillRequirement, ...] = ()   # all must be satisfied
 
@@ -368,6 +375,7 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
 - **Why frontmatter parsing at registration, not materialization.** Lets the admin UI show built-in name/description without reading from disk on every request.
 - **Slug collision = fail loud at boot.** Deploy-time bug; operator must fix.
 - **`requirements` is structured, not a bare callable.** Letting the admin UI render *what's missing* and *where to fix it* requires more than a bool. A `SkillRequirement` carries enough metadata for the badge, the drawer detail, and the deep-link CTA. A future `is_disabled_by_admin(db)` flavor can be added the same way without changing call sites.
+- **Pydantic, not `@dataclass`.** Both `SkillRequirement` and `BuiltinSkill` use `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` to match the codebase convention (Pydantic models dominate ~96% of backend type definitions). `arbitrary_types_allowed` is required because `Callable` and `Session` aren't Pydantic-native. Frozen gives immutability + hashability for set membership without needing `__hash__` boilerplate.
 - **Checks must be cheap and side-effect-free.** They run on every session-start materialization and every `GET /api/admin/skills`. Confirmed: all V1 checks are single-row DB lookups (`get_default_image_generation_config(db)`, `fetch_existing_llm_providers(db, ...)`) — sub-millisecond.
 - **Checks come from the feature module that owns the dependency.** `get_default_image_generation_config` lives in `backend/onyx/db/image_generation.py`; the registration module just composes them. Keeps coupling sane and tests independent.
 - **OR composition for "either of these works".** If a skill needs *one of N* providers, the requirement's `check` is `lambda db: provider_a(db) or provider_b(db)`. Single requirement, composed boolean — keeps the admin UI clean (one "Needs setup" entry, not N).

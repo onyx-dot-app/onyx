@@ -1784,16 +1784,20 @@ class Skill__UserGroup(Base): ... # skill_id, user_group_id (composite PK)</code
       needs to run).
     </p>
 
-    <pre><code>@dataclass(frozen=True)
-class SkillRequirement:
+    <pre><code>class SkillRequirement(BaseModel):
+    """Org-level dependency a built-in needs. Registered at app boot, frozen."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     key: str                                 # stable id, e.g. "image_generation_provider"
     name: str                                # human label
     description: str                         # what's missing + where to set it up
     configure_url: str                       # admin route to fix it
-    check: Callable[[Session], bool]         # returns True iff satisfied; cheap
+    check: Callable[[Session], bool]         # cheap; returns True iff satisfied
 
-@dataclass(frozen=True)
-class BuiltinSkill:
+class BuiltinSkill(BaseModel):
+    """In-memory registry entry. Built at boot from on-disk source dirs."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
     slug: str
     source_dir: Path
     name: str
@@ -1871,6 +1875,20 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
       Considerations / Tradeoffs / Decisions
     </div>
     <ul>
+      <li>
+        <strong>Pydantic, not <code>@dataclass</code>.</strong> Both
+        <code>SkillRequirement</code> and <code>BuiltinSkill</code> use
+        <code>BaseModel</code> with
+        <code
+          >model_config = ConfigDict(frozen=True,
+          arbitrary_types_allowed=True)</code
+        >
+        to match the codebase convention (Pydantic ~96% of backend type
+        definitions). <code>arbitrary_types_allowed</code> is needed for
+        <code>Callable</code> and <code>Session</code>;
+        <code>frozen</code> gives immutability + hashability without
+        boilerplate.
+      </li>
       <li>
         <strong>Checks must be cheap and side-effect-free.</strong> They run on
         every session-start materialization and every
