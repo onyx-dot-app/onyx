@@ -363,9 +363,9 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 ### 5.5 Per-session skills UI  (spec §11)
 
-- `[TODO]` `P5.040` `SkillsPanel.tsx` in Craft session UI — fetches `/api/build/sessions/{id}/skills`, renders read-only list  (deps: P3.051)
+- `[TODO]` `P5.040` `SkillsPanel.tsx` in Craft session UI — fetches `/api/build/sessions/{id}/skills`, renders read-only list  (deps: P3.061)
 - `[TODO]` `P5.041` Skill card sub-component: icon + name + description + source badge
-- `[TODO]` `P5.042` Click card → drawer showing rendered SKILL.md preview via `GET .../skills/{slug}/content`  (deps: P3.052)
+- `[TODO]` `P5.042` Click card → drawer showing rendered SKILL.md preview via `GET .../skills/{slug}/content`  (deps: P3.062)
 - `[TODO]` `P5.043` Inline mention: pattern-match OpenCode tool-use/file-read events on `^\.agents/skills/([a-z][a-z0-9-]{0,63})/SKILL\.md$`; render "Using `<slug>`" pill at matching position in chat stream
 - `[TODO]` `P5.044` Mount `SkillsPanel` in Craft session UI shell
 
