@@ -38,8 +38,10 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `padding` | `PaddingVariants` | `"sm"` | Padding preset |
-| `rounding` | `RoundingVariants` | `"lg"` | Border-radius preset |
+| `padding` | `PaddingVariants` | `"md"` | Padding preset |
+| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
+| `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
+| `borderColor` | `Extract<ColorTypes, "default" \| "interactive">` | `"default"` | `"default"` → always `border-01`; `"interactive"` → `border-01` at rest, `--interactive-foreground` when selected |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
 | `children` | `React.ReactNode` | — | Card content |
 
@@ -71,14 +73,13 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 | `filled` | `background-tint-00` | `text-04` / icon `text-03` |
 | `selected` | `action-link-01` | `action-link-05` |
 
-The selected state also gets a `border-action-link-05` via SelectCard's CSS.
-
 ## CSS
 
 SelectCard's stylesheet (`styles.css`) provides:
 
-- `w-full overflow-clip border` on all states
-- `border-action-link-05` when `data-interactive-state="selected"`
+- `w-full overflow-clip` base styles
+- Border style via `data-border` (`none` / `dashed` / `solid`)
+- Border color via `data-border-color` (`default` → `border-01` always; `interactive` → `border-01` for `empty`/`filled`, `--interactive-foreground` for `selected`)
 
 All background and foreground colors come from the Interactive.Stateful CSS, not from SelectCard.
 
