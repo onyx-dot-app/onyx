@@ -43,6 +43,28 @@ class GitbookApiClient:
     def get_page_content(self, space_id: str, page_id: str) -> dict[str, Any]:
         return self.get(f"/spaces/{space_id}/content/page/{page_id}")
 
+    def get_space(self, space_id: str) -> dict[str, Any]:
+        return self.get(f"/spaces/{space_id}")
+
+
+def _build_public_page_url(page: dict[str, Any], public_space_url: str | None) -> str:
+    page_urls = page.get("urls", {})
+    page_public_url = (
+        page_urls.get("published")
+        or page_urls.get("public")
+        or page_urls.get("location")
+    )
+    if page_public_url:
+        return page_public_url
+
+    page_path = page.get("path")
+    if public_space_url and page_path:
+        normalized_space_url = public_space_url.rstrip("/") + "/"
+        normalized_page_path = page_path.lstrip("/")
+        return urljoin(normalized_space_url, normalized_page_path)
+
+    return page_urls.get("app", "")
+
 
 def _extract_text_from_document(document: dict[str, Any]) -> str:
     """Extract text content from GitBook document structure by parsing the document nodes
@@ -178,7 +200,10 @@ def _extract_text_from_document(document: dict[str, Any]) -> str:
 
 
 def _convert_page_to_document(
-    client: GitbookApiClient, space_id: str, page: dict[str, Any]
+    client: GitbookApiClient,
+    space_id: str,
+    page: dict[str, Any],
+    public_space_url: str | None,
 ) -> Document:
     page_id = page["id"]
     page_content = client.get_page_content(space_id, page_id)
@@ -187,7 +212,7 @@ def _convert_page_to_document(
         id=f"gitbook-{space_id}-{page_id}",
         sections=[
             TextSection(
-                link=page.get("urls", {}).get("app", ""),
+                link=_build_public_page_url(page, public_space_url),
                 text=_extract_text_from_document(page_content),
             )
         ],
@@ -231,6 +256,14 @@ class GitbookConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("GitBook")
 
         try:
+            space = self.client.get_space(self.space_id)
+            space_urls = space.get("urls", {})
+            public_space_url = (
+                space_urls.get("published")
+                or space_urls.get("public")
+                or space_urls.get("location")
+            )
+
             content = self.client.get(f"/spaces/{self.space_id}/content/pages")
             pages: list[dict[str, Any]] = content.get("pages", [])
             current_batch: list[Document | HierarchyNode] = []
@@ -256,7 +289,12 @@ class GitbookConnector(LoadConnector, PollConnector):
                     continue
 
                 current_batch.append(
-                    _convert_page_to_document(self.client, self.space_id, page)
+                    _convert_page_to_document(
+                        self.client,
+                        self.space_id,
+                        page,
+                        public_space_url,
+                    )
                 )
 
                 if len(current_batch) >= self.batch_size:
