@@ -221,7 +221,7 @@ The frontend wires this to a "Refresh sandbox" button in the Craft UI's sandbox 
 - `cache_on_mutation = False` (default) — no fan-out within a user (1 sandbox/user), so write-through adds work without benefit.
 - `materialize`: lists enabled docs for the user from Postgres (`Document` table, filtering `sync_disabled`), streams each from its existing storage location (the path the indexing pipeline already writes to — not FileStore; user_library predates that primitive and uses its own layout). The bundle interface doesn't care which storage source the bytes come from.
 - `pod_label_selector(tenant_id, user_id)`: `onyx.app/tenant-id={tenant_id}`. (Server filters per-sandbox by `user_id` at materialize time; no `onyx.app/user-id` label needed since the tarball endpoint resolves user from the sandbox row.)
-- `last_modified`: `SELECT MAX(updated_at) FROM document WHERE user_id=... AND sync_disabled=false`.
+- `last_modified`: `SELECT MAX(updated_at) FROM document WHERE user_id=...`. **Important:** do **not** filter by `sync_disabled=false` here even though `materialize` does. A disable event bumps the row's `updated_at` (SQLAlchemy `onupdate=func.now()`), and `last_modified` needs to see that bump so the pod re-fetches and the materialize call drops the now-disabled doc. Filtering by `sync_disabled` here would hide every event that *removes* a doc from the materialized set, returning a stale 304 and leaving the disabled doc in the pod's tarball. Same hazard applies to any future flag that affects materialization. **Invariant:** every mutation that affects `materialize`'s output must touch the row's `updated_at`; hard-delete (no row left to bump) is out of scope for v1 — if it lands, add a `user_library_state.last_modified` ticker bumped by an app-level helper on every mutation.
 
 ### Wiring at event sites
 
@@ -264,6 +264,7 @@ The dominant test type for this work is **integration**: a real Postgres + Redis
 - `test_manual_refresh_recovers_from_push_miss.py` — provision a sandbox, mutate a skill, simulate kubectl-exec failure (block the API or kill the refresh worker mid-task). Call `POST /api/sandbox/{sid}/refresh`. Assert the pod now reflects the mutation.
 - `test_304_short_circuit.py` — mutate nothing between two refreshes (any trigger), assert tarball endpoint returns 304 and pod state is untouched.
 - `test_user_library_per_user_isolation.py` — two users, two sandboxes; mutate user A's library; assert user A's pod gets the new file and user B's pod does not.
+- `test_user_library_disable_invalidates_cache.py` — regression test for the "removal events go missing" bug. Seed two docs for a user, provision a sandbox, let it pull the tarball (records `If-Modified-Since`). Disable one doc (`sync_disabled = True`). Trigger a refresh. Assert the tarball endpoint returns 200 (not 304) AND the pod's `user_library/` no longer contains the disabled doc. This guards the invariant that `last_modified` is not filtered by `sync_disabled` — if someone re-adds that filter "to optimize," this test fails.
 - `test_skills_writethrough_cache.py` — provision two sandboxes in the same tenant, instrument `SkillsBundle.materialize` with a call counter, upload a skill. After all pods finish refreshing, assert `materialize` ran exactly once (the upload-time call) and that subsequent pod tarball requests hit the Redis cache.
 
 ### Unit tests
