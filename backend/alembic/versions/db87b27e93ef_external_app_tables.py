@@ -73,11 +73,6 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_external_app_user_credential_external_app_id",
-        "external_app_user_credential",
-        ["external_app_id"],
-    )
-    op.create_index(
         "ix_external_app_user_credential_user_id",
         "external_app_user_credential",
         ["user_id"],
@@ -87,10 +82,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(
         "ix_external_app_user_credential_user_id",
-        table_name="external_app_user_credential",
-    )
-    op.drop_index(
-        "ix_external_app_user_credential_external_app_id",
         table_name="external_app_user_credential",
     )
     op.drop_table("external_app_user_credential")

@@ -5852,7 +5852,6 @@ class ExternalAppUserCredential(Base):
         Integer,
         ForeignKey("external_app.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
