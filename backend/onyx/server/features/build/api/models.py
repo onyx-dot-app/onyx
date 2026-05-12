@@ -333,7 +333,8 @@ class UpsertExternalAppRequest(BaseModel):
 
     If `id` is provided, the row with that id is updated; otherwise a new
     row is inserted. `upstream_urls` is a list of regex patterns matched by
-    the egress proxy against outbound request URLs.
+    the egress proxy against outbound request URLs. `enabled` is the kill
+    switch the proxy checks before injecting credentials.
     """
 
     id: int | None = None
@@ -342,6 +343,7 @@ class UpsertExternalAppRequest(BaseModel):
     upstream_urls: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
+    enabled: bool
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -353,6 +355,7 @@ class ExternalAppAdminResponse(BaseModel):
     upstream_urls: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
+    enabled: bool
 
 
 class UpsertUserCredentialsRequest(BaseModel):
