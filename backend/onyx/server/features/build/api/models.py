@@ -349,6 +349,7 @@ class UpsertExternalAppRequest(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
+    enabled: bool
 
 
 class ExternalAppAdminResponse(BaseModel):
