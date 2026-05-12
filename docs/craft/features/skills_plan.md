@@ -56,6 +56,18 @@ Each session, the materializer resolves the available built-ins + the user's acc
 
 Universal primitive at `backend/onyx/skills/`. Craft consumer adapter at `backend/onyx/server/features/build/skills/`. Persona/Chat are not wired up in V1 — but the primitive is consumer-blind so they can adopt later without schema changes.
 
+#### Three-tier authorship model
+
+The product's long-term model has **three** authorship tiers. V1 ships only the first two:
+
+| Tier | Status in V1 | Author | Default visibility | Sharing |
+|---|---|---|---|---|
+| **Built-in** | ✅ Ships in V1 | Onyx engineering (deploy artifact) | Org-wide if its requirements are satisfied | n/a |
+| **Custom (admin-authored)** | ✅ Ships in V1 | Tenant admin | Admin chooses at upload (private / org-wide / specific groups) | Admin controls via grants |
+| **User-authored** | ❌ Deferred to V1.5 | Any tenant user | Private to author | Author shares with specific groups/users; can request admin promotion → admin-authored |
+
+The data model and API shape leave room for V1.5 without schema migration: the `source` discriminator extends to `"user"`, the deleted `Skill__User` join comes back, and `author_user_id` already captures authorship in V1. The full V1.5 deferral entry is in §19.
+
 ### Considerations / Tradeoffs / Decisions
 - **Universal-from-day-one vs Craft-now-refactor-later.** Chose universal. The cost is one extra module path; the savings are avoiding a future migration of customer-facing API routes when Persona/Chat adopts skills.
 - **No admin toggle for built-ins in V1.** Customers can't disable a built-in for their org without unsetting the underlying dependency (e.g. `GEMINI_API_KEY`). Accepted because the alternative (per-org `org_enabled` state) doubles the admin surface and creates a registry-vs-DB drift class of bugs. Reversible later via a `builtin_skill_org_state` table.
@@ -185,7 +197,7 @@ class Skill(Base):
     bundle_sha256:     Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
-    owner_user_id: Mapped[UUID | None] = mapped_column(
+    author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -252,7 +264,7 @@ Slug rules:
   - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None`.
   - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — no access filter.
   - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter.
-  - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, owner_user_id, db) -> Skill`.
+  - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`.
   - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` (returns old_bundle_file_id so caller can delete the blob after commit).
   - [ ] `patch_skill(skill_id, slug=None, name=None, description=None, is_public=None, enabled=None, db) -> Skill` (partial update).
   - [ ] `replace_skill_grants(skill_id, group_ids, db) -> None` (atomic: delete + insert in one transaction).
@@ -577,7 +589,7 @@ class CustomSkillAdmin(BaseModel):
     bundle_sha256: str
     bundle_size_bytes: int
     granted_group_ids: list[int]
-    owner_user_id: UUID | None
+    author_user_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -1105,7 +1117,7 @@ Visibility picker (radio + group + user multi-select) is reused across upload mo
 - **Unified list vs two sections.** Considered separating built-ins and customs into two sections. Chose unified with badges — ChatGPT-Apps-style — for cohesion. The absence of an action menu signals "this isn't user-controllable" without needing a second section.
 - **Frontmatter pre-fill is convenience, not authority.** Admin can edit pre-filled values before submitting. After submit, the DB row is the source of truth.
 - **No "default visibility" — admin chooses at upload time.** Silent defaults create accidental over- or under-sharing. Forcing a choice adds one click per upload (low friction).
-- **No audit log in V1.** "Who uploaded what when" is satisfied by `created_at`/`updated_at`/`owner_user_id`. Detailed change history (slug renames, grant edits) is V2.
+- **No audit log in V1.** "Who uploaded what when" is satisfied by `created_at`/`updated_at`/`author_user_id`. Detailed change history (slug renames, grant edits) is V2.
 - **No bulk operations.** "Grant skill X to N groups at once" is the picker. "Delete N skills" isn't a workflow we've heard demand for.
 
 ### Todos
@@ -1309,7 +1321,9 @@ A skill bundle ships arbitrary files into `.agents/skills/<slug>/` and the agent
 
 ### Threat model
 
-Skill upload is a privileged action. The threat actors, in rough order of likelihood:
+Skill upload is a **privileged action in V1** — admin RBAC bounds who can introduce executable code. This bound goes away when user-authored skills land in V1.5 (see §19); the threat model rewrites at that point to include "any tenant user can author skills that run in other users' sessions" as a first-class attacker. Below covers V1 only.
+
+The threat actors, in rough order of likelihood:
 
 1. **Compromised admin account** — credentials phished or session hijacked. Most realistic entry path.
 2. **Confused admin** — uploads a bundle from an untrusted source (someone Slack-DM'd them a `deal-summary.zip`). Historically common in plugin ecosystems.
@@ -1338,7 +1352,7 @@ Skill upload is a privileged action. The threat actors, in rough order of likeli
 - Bundle validator blocks symlinks, path traversal, oversized files, `.template` files.
 - Admin-only upload route.
 - Per-tenant blob isolation via FileStore prefixing.
-- Audit trail on each `skill` row: `owner_user_id`, `bundle_sha256`, `created_at`, `updated_at`.
+- Audit trail on each `skill` row: `author_user_id`, `bundle_sha256`, `created_at`, `updated_at`.
 
 **From the sandbox (must be verified — see checklist below):**
 - Pod runs as non-root, dropped capabilities, read-only rootfs.
@@ -1434,7 +1448,8 @@ Items knowingly punted; each is reversible without breaking V1.
 | Deferred | When | How to add later |
 |---|---|---|
 | Shared/bundled `SkillRequirement` modules | When 5+ skills depend on the same configuration surface | Today each skill declares its requirements independently — fine when most skills need different things, but if e.g. five skills all need a configured Gemini provider, factor a shared `requirements.py` module that exports `IMAGE_GEN_PROVIDER`, `LLM_PROVIDER`, etc. The data model stays the same; only the registration code dedupes. |
-| Per-user skill grants (`Skill__User` table) | When customers report friction with "share with one teammate" via a single-member group workaround | Add a `skill__user (skill_id, user_id)` join table, an `Individual users` picker in the admin grants editor, an OR branch in `list_skills_for_user`'s access query, and `user_ids` to the POST/PUT bodies + `granted_user_ids` to `CustomSkillAdmin`. Migration is additive; no V1 schema disruption. |
+| Per-user skill grants (`Skill__User` table) | When customers report friction with "share with one teammate" via a single-member group workaround, or when user-authored skills (below) land. | Add a `skill__user (skill_id, user_id)` join table, an `Individual users` picker in the grants editor, an OR branch in `list_skills_for_user`'s access query, and `user_ids` to the POST/PUT bodies + `granted_user_ids` to `CustomSkillAdmin`. Migration is additive; no V1 schema disruption. |
+| **User-authored skills (third tier)** | V1.5 — when product wants users to author + share their own skills without admin involvement. | Big lift. Adds: (1) user-side `POST /api/skills` upload endpoint with per-user quota + rate limit, (2) `Skill__User` brought back from the cut above for user→user sharing, (3) `source = "user"` value on the manifest discriminator (already designed in V1), (4) skill promotion workflow — new `skill_promotion_request` table, request/approve endpoints, admin pending-promotions UI tab, (5) slug-namespace decision: stay tenant-global (simplest; user-authored shares a namespace with admin customs), or move to per-author namespace (more flexible, more complex), (6) **threat-model rewrite** — user-authored shifts the security model from "bounded by admin RBAC" to "any tenant user can introduce code that runs in other users' sessions." Lateral attacker model becomes first-class; §18 needs a real expansion. Interception layer still bounds external exfil but not within-tenant abuse. (7) User-facing "My skills" page + authorship indicator on the skills panel. ~+4-6 weeks of work after V1 ships. |
 | Per-org built-in toggle (`org_enabled`) | When first customer asks | Add `builtin_skill_org_state (slug, enabled)` table in private schema. Admin UI gains a toggle on built-in rows. Materializer filters by it. |
 | Per-session user opt-out / pinning | When skill counts grow | Add `build_session__skill_opt_out (session_id, slug)` table. Materializer subtracts these at session start. Panel gains toggles. |
 | AGENTS.md threshold + discovery fallback | When skill counts hit ~50+ | Restore the `BUILD_SKILLS_INLINE_LIMIT` mechanism from `skills.md`. |
@@ -1457,7 +1472,7 @@ These lenses were considered during planning and intentionally not written up in
 - **Performance at scale.** Per-session FileStore reads grow with custom-skill count; snapshots grow proportionally. Probably fine for V1 expected scale (≤20 customs per tenant). Worth a back-of-envelope check during load testing rather than a design constraint.
 - **Accessibility.** Admin UI mockups inherit Onyx tokens but haven't been audited for WCAG AA contrast, modal focus management, screen-reader semantics, or keyboard navigation through the visibility radio + chip pickers. Should be a checklist item during frontend implementation, not a design-time concern.
 - **DX for built-in authors.** Adding a built-in is "drop a directory + add a `register()` call + redeploy." Clean, but the local iteration loop (rendering `SKILL.md.template` with a fake render context, smoke-testing scripts) is undocumented. Address in a contributor doc when the second built-in lands.
-- **Compliance / data handling.** Retention of soft-deleted skill rows is indefinite (only blobs are swept). GDPR user-deletion sets `owner_user_id` to NULL but keeps the skill (org-owned, intentional). SOC 2 audit trail for upload/replace/delete events should land in Onyx's existing audit log infra rather than a parallel store — confirm during implementation.
+- **Compliance / data handling.** Retention of soft-deleted skill rows is indefinite (only blobs are swept). GDPR user-deletion sets `author_user_id` to NULL but keeps the skill (org-owned, intentional). SOC 2 audit trail for upload/replace/delete events should land in Onyx's existing audit log infra rather than a parallel store — confirm during implementation.
 - **Cross-feature naming hygiene.** Skills are not Tools (the persona-attached `Tool` model). Worth one doc-comment in the universal layer pointing this out so future contributors don't conflate them.
 
 If any of these turn out to actually block V1, lift them into a numbered section. Until then, they're tracked here for posterity.

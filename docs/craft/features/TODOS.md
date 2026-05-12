@@ -108,7 +108,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)`  (deps: P1.060)
 - `[TODO]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — no access filter  (deps: P1.015)
 - `[TODO]` `P1.063` Implement `list_skills_for_admin(db)` — no access filter  (deps: P1.015)
-- `[TODO]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, owner_user_id, db) -> Skill`  (deps: P1.015)
+- `[TODO]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`  (deps: P1.015)
 - `[TODO]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
 - `[TODO]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
 - `[TODO]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
