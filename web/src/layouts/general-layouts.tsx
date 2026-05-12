@@ -72,9 +72,7 @@ function AttachmentItemLayout({
             </Truncated>
           </div>
         )}
-        {rightChildren && (
-          <div className="shrink-0 px-1">{rightChildren}</div>
-        )}
+        {rightChildren && <div className="shrink-0 px-1">{rightChildren}</div>}
       </Section>
     </Section>
   );

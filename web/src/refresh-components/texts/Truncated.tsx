@@ -85,10 +85,7 @@ export default function Truncated({
   return (
     <>
       <Tooltip tooltip={tooltipContent} side={side} sideOffset={sideOffset}>
-        <div
-          ref={visibleRef}
-          className="grow overflow-hidden text-left w-full"
-        >
+        <div ref={visibleRef} className="grow overflow-hidden text-left w-full">
           <div onPointerMove={blockPointerWhenInert}>{text}</div>
         </div>
       </Tooltip>

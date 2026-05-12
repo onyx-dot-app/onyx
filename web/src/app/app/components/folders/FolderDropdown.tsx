@@ -49,7 +49,9 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                 className={cn("mr-1 transition-all", isOpen && "rotate-90")}
               />
               <div className="flex items-center">
-                <span className="text-sm font-medium">{folder.folder_name}</span>
+                <span className="text-sm font-medium">
+                  {folder.folder_name}
+                </span>
               </div>
             </button>
           </div>

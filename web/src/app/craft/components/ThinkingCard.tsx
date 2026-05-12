@@ -85,7 +85,9 @@ export default function ThinkingCard({
                 "italic"
               )}
             >
-              <p className="whitespace-pre-wrap wrap-break-word m-0">{content}</p>
+              <p className="whitespace-pre-wrap wrap-break-word m-0">
+                {content}
+              </p>
             </div>
           </div>
         </CollapsibleContent>

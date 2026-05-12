@@ -305,10 +305,7 @@ function SettingsBody(
   props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
 ) {
   return (
-    <div
-      className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full"
-      {...props}
-    />
+    <div className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full" {...props} />
   );
 }
 

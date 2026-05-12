@@ -50,10 +50,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
       />
     </div>
   ) : (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("shrink-0", className)}
-    />
+    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
   );
 
   const renderNameAndPoweredBy = (opts: {
@@ -99,10 +96,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
   return applicationName ? (
     renderNameAndPoweredBy({ includeLogo: true, includeName: true })
   ) : folded ? (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("shrink-0", className)}
-    />
+    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
   ) : (
     <SvgOnyxLogoTyped size={resolvedSize} className={className} />
   );

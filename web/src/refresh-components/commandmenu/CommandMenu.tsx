@@ -773,10 +773,7 @@ function CommandMenuFooterAction({
 }: CommandMenuFooterActionProps) {
   return (
     <div className="flex items-center gap-1" aria-label={label}>
-      <Icon
-        className="w-3.5 h-3.5 stroke-text-02"
-        aria-hidden="true"
-      />
+      <Icon className="w-3.5 h-3.5 stroke-text-02" aria-hidden="true" />
       <Text mainUiBody text03>
         {label}
       </Text>

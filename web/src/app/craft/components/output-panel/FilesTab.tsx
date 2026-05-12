@@ -538,10 +538,7 @@ function FileTreeNode({
                   />
                 )
               ) : (
-                <FileIcon
-                  size={16}
-                  className="stroke-text-03 shrink-0 mx-1"
-                />
+                <FileIcon size={16} className="stroke-text-03 shrink-0 mx-1" />
               )}
 
               {/* Name */}

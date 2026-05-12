@@ -252,10 +252,7 @@ export default function LineItem({
           )}
         >
           <Icon
-            className={cn(
-              "h-4 w-4",
-              strokeIcon && iconClassNames[variant]
-            )}
+            className={cn("h-4 w-4", strokeIcon && iconClassNames[variant])}
           />
         </div>
       )}

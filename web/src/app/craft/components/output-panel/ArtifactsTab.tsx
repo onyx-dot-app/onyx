@@ -232,15 +232,9 @@ function OutputEntryRow({
       >
         {entry.is_directory ? (
           expanded ? (
-            <SvgChevronDown
-              size={16}
-              className="stroke-text-03 shrink-0"
-            />
+            <SvgChevronDown size={16} className="stroke-text-03 shrink-0" />
           ) : (
-            <SvgChevronRight
-              size={16}
-              className="stroke-text-03 shrink-0"
-            />
+            <SvgChevronRight size={16} className="stroke-text-03 shrink-0" />
           )
         ) : (
           <div className="w-4 shrink-0" />
