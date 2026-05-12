@@ -105,9 +105,30 @@ describe("InviteOnlyCard", () => {
     await user.click(screen.getByRole("switch"));
 
     await waitFor(() => {
-      expect(mockToastError).toHaveBeenCalledWith("Failed to update settings");
+      expect(mockToastError).toHaveBeenCalledWith("boom");
     });
     expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("falls back to generic message when error has no detail", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({}),
+    } as Response);
+
+    const user = userEvent.setup();
+    render(<InviteOnlyCard />);
+
+    await user.click(screen.getByRole("switch"));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith("Request failed");
+    });
     consoleErrorSpy.mockRestore();
   });
 });

@@ -40,7 +40,11 @@ export default function InviteOnlyCard() {
         toast.success("Settings updated");
       } catch (err) {
         console.error("Failed to update invite_only_enabled", err);
-        toast.error("Failed to update settings");
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Failed to update settings";
+        toast.error(message);
       }
     },
     [settings]
