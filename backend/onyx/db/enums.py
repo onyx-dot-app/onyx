@@ -268,10 +268,50 @@ class BuildSessionStatus(str, PyEnum):
     IDLE = "idle"
 
 
+class SessionOrigin(str, PyEnum):
+    """How a BuildSession was created.
+
+    INTERACTIVE: session started by a user in the Craft UI.
+    SCHEDULED:   session started by the scheduled-tasks executor (or any
+                 future non-interactive caller). Sessions with this origin
+                 are excluded from the Craft sidebar list.
+    """
+
+    INTERACTIVE = "interactive"
+    SCHEDULED = "scheduled"
+
+
 class SharingScope(str, PyEnum):
     PRIVATE = "private"
     PUBLIC_ORG = "public_org"
     PUBLIC_GLOBAL = "public_global"
+
+
+class ScheduledTaskStatus(str, PyEnum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+
+
+class ScheduledTaskRunStatus(str, PyEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    AWAITING_APPROVAL = "awaiting_approval"
+
+    def is_terminal(self) -> bool:
+        """Terminal statuses produce no further state transitions in V1."""
+        return self in (
+            ScheduledTaskRunStatus.SUCCEEDED,
+            ScheduledTaskRunStatus.FAILED,
+            ScheduledTaskRunStatus.SKIPPED,
+        )
+
+
+class ScheduledTaskTriggerSource(str, PyEnum):
+    SCHEDULED = "scheduled"
+    MANUAL_RUN_NOW = "manual_run_now"
 
 
 class SandboxStatus(str, PyEnum):
