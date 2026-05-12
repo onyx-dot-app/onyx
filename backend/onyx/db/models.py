@@ -5850,15 +5850,15 @@ class ExternalApp(Base):
         postgresql.JSONB(), nullable=False, default=dict
     )
 
-    user_credentials: Mapped[list["ExternalAppUserCredentials"]] = relationship(
-        "ExternalAppUserCredentials",
+    user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
+        "ExternalAppUserCredential",
         back_populates="external_app",
         cascade="all, delete-orphan",
     )
 
 
-class ExternalAppUserCredentials(Base):
-    __tablename__ = "external_app_user_credentials"
+class ExternalAppUserCredential(Base):
+    __tablename__ = "external_app_user_credential"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     external_app_id: Mapped[int] = mapped_column(
@@ -5885,6 +5885,6 @@ class ExternalAppUserCredentials(Base):
         UniqueConstraint(
             "external_app_id",
             "user_id",
-            name="uq_external_app_user_credentials_app_user",
+            name="uq_external_app_user_credential_app_user",
         ),
     )
