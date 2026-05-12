@@ -6,6 +6,7 @@ import {
   SvgSearxng,
   SvgSerper,
 } from "@opal/logos";
+import { markdown } from "@opal/utils";
 import type {
   WebSearchProviderType,
   WebContentProviderType,
@@ -15,6 +16,7 @@ import type {
   ContentProviderLike,
   SearchProviderDetail,
   ContentProviderDetail,
+  ConfigFieldSpec,
 } from "@/lib/webSearch/types";
 
 // ── Search provider registry ──────────────────────────────────────────────────
@@ -354,4 +356,44 @@ export function getSingleContentConfigFieldValueForForm(
     getStoredContentConfigValue(providerType, requiredKey, provider?.config) ||
     defaultValue
   );
+}
+
+// ── Config field specs ────────────────────────────────────────────────────────
+
+export function getSearchConfigField(
+  providerType: string
+): ConfigFieldSpec | undefined {
+  if (providerType === "google_pse") {
+    return {
+      title: "Search Engine ID",
+      placeholder: "Enter your search engine ID",
+      subDescription: markdown(
+        "Paste your [search engine ID](https://programmablesearchengine.google.com/controlpanel/all) to use for web search."
+      ),
+    };
+  }
+  if (providerType === "searxng") {
+    return {
+      title: "SearXNG Base URL",
+      placeholder: "https://your-searxng-instance.com",
+      subDescription: markdown(
+        "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
+      ),
+    };
+  }
+  return undefined;
+}
+
+export function getContentConfigField(
+  providerType: string
+): ConfigFieldSpec | undefined {
+  if (providerType === "firecrawl") {
+    return {
+      title: "API Base URL",
+      placeholder: "https://api.firecrawl.dev/v2/scrape",
+      defaultValue: "https://api.firecrawl.dev/v2/scrape",
+      subDescription: "Your Firecrawl API base URL.",
+    };
+  }
+  return undefined;
 }

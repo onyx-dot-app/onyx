@@ -16,10 +16,7 @@ import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button, MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import {
-  WebProviderSetupModal,
-  type ConfigFieldSpec,
-} from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
+import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -28,7 +25,6 @@ import {
   getSearchProviderDisplayLabel,
   isBuiltInSearchProviderType,
   isSearchProviderConfigured,
-  searchProviderRequiresApiKey,
   CONTENT_PROVIDER_DETAILS,
   CONTENT_PROVIDER_ORDER,
   getCurrentContentProviderType,
@@ -52,44 +48,6 @@ import type {
 const NO_DEFAULT_VALUE = "__none__";
 
 const route = ADMIN_ROUTES.WEB_SEARCH;
-
-function getSearchConfigField(
-  providerType: string
-): ConfigFieldSpec | undefined {
-  if (providerType === "google_pse") {
-    return {
-      title: "Search Engine ID",
-      placeholder: "Enter your search engine ID",
-      subDescription: markdown(
-        "Paste your [search engine ID](https://programmablesearchengine.google.com/controlpanel/all) to use for web search."
-      ),
-    };
-  }
-  if (providerType === "searxng") {
-    return {
-      title: "SearXNG Base URL",
-      placeholder: "https://your-searxng-instance.com",
-      subDescription: markdown(
-        "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
-      ),
-    };
-  }
-  return undefined;
-}
-
-function getContentConfigField(
-  providerType: string
-): ConfigFieldSpec | undefined {
-  if (providerType === "firecrawl") {
-    return {
-      title: "API Base URL",
-      placeholder: "https://api.firecrawl.dev/v2/scrape",
-      defaultValue: "https://api.firecrawl.dev/v2/scrape",
-      subDescription: "Your Firecrawl API base URL.",
-    };
-  }
-  return undefined;
-}
 
 // ---------------------------------------------------------------------------
 // WebSearchDisconnectModal
@@ -245,13 +203,11 @@ function WebSearchDisconnectModal({
 type ActiveSearchProviderState = {
   providerType: WebSearchProviderType;
   provider: WebSearchProviderView | null;
-  hasSharedKey: boolean;
 };
 
 type ActiveContentProviderState = {
   providerType: WebContentProviderType;
   provider: WebContentProviderView | null;
-  hasSharedKey: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -288,23 +244,31 @@ export default function WebSearchPage() {
   const exaContentProvider = contentProviders.find(
     (p) => p.provider_type === "exa"
   );
-  const hasSharedExaKey = !!(
-    exaSearchProvider?.masked_api_key || exaContentProvider?.masked_api_key
-  );
-
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
     const hasStoredKey = !!provider?.masked_api_key;
     const isExa = providerType === "exa";
-    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
+    const sharedExaMaskedKey =
+      isExa && !hasStoredKey
+        ? exaContentProvider?.masked_api_key ?? null
+        : null;
 
-    setActiveSearchProvider({
-      providerType,
-      provider: provider ?? null,
-      hasSharedKey: canUseSharedExaKey,
-    });
+    const effectiveProvider: WebSearchProviderView | null =
+      provider ??
+      (sharedExaMaskedKey
+        ? {
+            id: -1,
+            name: "Exa",
+            provider_type: "exa",
+            is_active: false,
+            config: null,
+            masked_api_key: sharedExaMaskedKey,
+          }
+        : null);
+
+    setActiveSearchProvider({ providerType, provider: effectiveProvider });
     searchSetupModal.toggle(true);
   };
 
@@ -312,16 +276,7 @@ export default function WebSearchPage() {
     providerType: WebContentProviderType,
     provider?: WebContentProviderView
   ) => {
-    const realProvider = provider && provider.id > 0 ? provider : null;
-    const providerRequiresApiKey = providerType !== "onyx_web_crawler";
-    const hasSharedKey =
-      providerRequiresApiKey && !realProvider && !!provider?.masked_api_key;
-
-    setActiveContentProvider({
-      providerType,
-      provider: realProvider,
-      hasSharedKey,
-    });
+    setActiveContentProvider({ providerType, provider: provider ?? null });
     contentSetupModal.toggle(true);
   };
 
@@ -431,7 +386,7 @@ export default function WebSearchPage() {
     );
 
     return [...ordered, ...additional];
-  }, [contentProviders, hasSharedExaKey]);
+  }, [contentProviders, exaSearchProvider, exaContentProvider]);
 
   const currentContentProviderType =
     getCurrentContentProviderType(contentProviders);
@@ -794,34 +749,7 @@ export default function WebSearchPage() {
           <WebProviderSetupModal
             providerType={activeSearchProvider.providerType}
             category="search"
-            providerLabel={getSearchProviderDisplayLabel(
-              activeSearchProvider.providerType
-            )}
-            icon={
-              SEARCH_PROVIDER_DETAILS[activeSearchProvider.providerType]?.logo
-            }
-            apiKeyUrl={
-              SEARCH_PROVIDER_DETAILS[activeSearchProvider.providerType]
-                ?.apiKeyUrl
-            }
-            existingProvider={
-              activeSearchProvider.provider
-                ? {
-                    id: activeSearchProvider.provider.id,
-                    name: activeSearchProvider.provider.name,
-                    masked_api_key:
-                      activeSearchProvider.provider.masked_api_key,
-                    config: activeSearchProvider.provider.config,
-                  }
-                : null
-            }
-            hasSharedApiKey={activeSearchProvider.hasSharedKey}
-            requiresApiKey={searchProviderRequiresApiKey(
-              activeSearchProvider.providerType
-            )}
-            configField={getSearchConfigField(
-              activeSearchProvider.providerType
-            )}
+            provider={activeSearchProvider.provider}
             mutate={async () => {
               await mutateSearchProviders();
               if (activeSearchProvider.providerType === "exa") {
@@ -838,31 +766,7 @@ export default function WebSearchPage() {
           <WebProviderSetupModal
             providerType={activeContentProvider.providerType}
             category="content"
-            providerLabel={
-              CONTENT_PROVIDER_DETAILS[activeContentProvider.providerType]
-                ?.label ?? activeContentProvider.providerType
-            }
-            icon={
-              CONTENT_PROVIDER_DETAILS[activeContentProvider.providerType]?.logo
-            }
-            existingProvider={
-              activeContentProvider.provider
-                ? {
-                    id: activeContentProvider.provider.id,
-                    name: activeContentProvider.provider.name,
-                    masked_api_key:
-                      activeContentProvider.provider.masked_api_key,
-                    config: activeContentProvider.provider.config,
-                  }
-                : null
-            }
-            hasSharedApiKey={activeContentProvider.hasSharedKey}
-            requiresApiKey={
-              activeContentProvider.providerType !== "onyx_web_crawler"
-            }
-            configField={getContentConfigField(
-              activeContentProvider.providerType
-            )}
+            provider={activeContentProvider.provider}
             mutate={async () => {
               await mutateContentProviders();
               if (activeContentProvider.providerType === "exa") {

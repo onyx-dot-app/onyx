@@ -1,4 +1,4 @@
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 // ── Provider type literals ────────────────────────────────────────────────────
 
@@ -81,6 +81,15 @@ export type ProviderUpsertPayload = {
   config: Record<string, string>;
   activate: boolean;
 };
+
+// ── Config field spec ─────────────────────────────────────────────────────────
+
+export interface ConfigFieldSpec {
+  title: string;
+  placeholder: string;
+  subDescription?: string | RichStr;
+  defaultValue?: string;
+}
 
 // ── Provider detail registry types ───────────────────────────────────────────
 

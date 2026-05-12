@@ -2,7 +2,6 @@
 
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
@@ -15,27 +14,23 @@ import {
   buildContentProviderConfig,
   getSingleConfigFieldValueForForm,
   getSingleContentConfigFieldValueForForm,
+  getSearchConfigField,
+  getContentConfigField,
+  searchProviderRequiresApiKey,
+  getSearchProviderDisplayLabel,
+  SEARCH_PROVIDER_DETAILS,
+  CONTENT_PROVIDER_DETAILS,
 } from "@/lib/webSearch/utils";
 import { connectProviderFlow } from "@/lib/webSearch/svc";
-import type { WebProviderCategory } from "@/lib/webSearch/types";
+import type {
+  WebProviderCategory,
+  WebSearchProviderView,
+  WebContentProviderView,
+} from "@/lib/webSearch/types";
 import {
   ApiKeyField,
   ConfigTextField,
 } from "@/refresh-pages/admin/WebSearchPage/shared";
-
-export interface ExistingProviderInfo {
-  id: number;
-  name: string;
-  masked_api_key: string | null;
-  config: Record<string, string> | null;
-}
-
-export interface ConfigFieldSpec {
-  title: string;
-  placeholder: string;
-  subDescription?: string | RichStr;
-  defaultValue?: string;
-}
 
 interface FormValues {
   api_key: string;
@@ -45,18 +40,7 @@ interface FormValues {
 export interface WebProviderSetupModalProps {
   providerType: string;
   category: WebProviderCategory;
-  providerLabel: string;
-  icon?: IconFunctionComponent;
-  apiKeyUrl?: string;
-  existingProvider?: ExistingProviderInfo | null;
-  /**
-   * When true, an API key is already available via a sibling provider (e.g. Exa
-   * search key shared with Exa content). Skips the required-key validation and
-   * renders the API key field in non-revealable mode.
-   */
-  hasSharedApiKey?: boolean;
-  requiresApiKey: boolean;
-  configField?: ConfigFieldSpec;
+  provider: WebSearchProviderView | WebContentProviderView | null;
   mutate: () => Promise<unknown>;
   onSuccess: () => void;
 }
@@ -64,30 +48,50 @@ export interface WebProviderSetupModalProps {
 export function WebProviderSetupModal({
   providerType,
   category,
-  providerLabel,
-  icon,
-  apiKeyUrl,
-  existingProvider,
-  hasSharedApiKey = false,
-  requiresApiKey,
-  configField,
+  provider,
   mutate,
   onSuccess,
 }: WebProviderSetupModalProps) {
   const onClose = useModalClose();
-  const isEditing = !!existingProvider && existingProvider.id > 0;
 
-  const hasStoredKey = !!existingProvider?.masked_api_key || hasSharedApiKey;
-  const initialApiKey =
-    existingProvider?.masked_api_key ?? (hasSharedApiKey ? "••••••••••••" : "");
+  const isEditing = !!provider && provider.id > 0;
+  const hasStoredKey = !!provider?.masked_api_key;
+
+  const requiresApiKey =
+    category === "search"
+      ? searchProviderRequiresApiKey(providerType)
+      : providerType !== "onyx_web_crawler";
+
+  const configField =
+    category === "search"
+      ? getSearchConfigField(providerType)
+      : getContentConfigField(providerType);
+
+  const providerLabel =
+    category === "search"
+      ? getSearchProviderDisplayLabel(providerType, provider?.name)
+      : CONTENT_PROVIDER_DETAILS[providerType]?.label ?? providerType;
+
+  const icon =
+    category === "search"
+      ? SEARCH_PROVIDER_DETAILS[
+          providerType as keyof typeof SEARCH_PROVIDER_DETAILS
+        ]?.logo
+      : CONTENT_PROVIDER_DETAILS[providerType]?.logo;
+
+  const apiKeyUrl =
+    category === "search"
+      ? SEARCH_PROVIDER_DETAILS[
+          providerType as keyof typeof SEARCH_PROVIDER_DETAILS
+        ]?.apiKeyUrl
+      : undefined;
+
+  const initialApiKey = provider?.masked_api_key ?? "";
 
   const initialConfig = configField
     ? (category === "search"
-        ? getSingleConfigFieldValueForForm(providerType, existingProvider)
-        : getSingleContentConfigFieldValueForForm(
-            providerType,
-            existingProvider
-          )) ||
+        ? getSingleConfigFieldValueForForm(providerType, provider)
+        : getSingleContentConfigFieldValueForForm(providerType, provider)) ||
       configField.defaultValue ||
       ""
     : "";
@@ -124,8 +128,9 @@ export function WebProviderSetupModal({
       await connectProviderFlow({
         category,
         providerType,
-        existingProviderId: existingProvider?.id ?? null,
-        existingProviderName: existingProvider?.name ?? null,
+        existingProviderId: provider && provider.id > 0 ? provider.id : null,
+        existingProviderName:
+          provider && provider.id > 0 ? provider.name : null,
         existingProviderHasApiKey: hasStoredKey,
         displayName: providerLabel,
         providerRequiresApiKey: requiresApiKey,
