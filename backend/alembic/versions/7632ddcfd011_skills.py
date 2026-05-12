@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("is_public", sa.Boolean(), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False),
-        sa.Column("deleted", sa.Boolean(), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -54,7 +54,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ux_skill_slug", "skill", ["slug"], unique=True)
+    op.create_index(
+        "ux_skill_slug",
+        "skill",
+        ["slug"],
+        unique=True,
+        postgresql_where=sa.text("deleted_at IS NULL"),
+    )
 
     op.create_table(
         "skill__user_group",

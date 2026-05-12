@@ -177,7 +177,7 @@ We need persistence for custom skills (admin-uploaded). Built-ins are code-resid
 
 ### Proposed Solution
 
-Three tables in the per-tenant (private) schema, plus two new `FileOrigin` enum values.
+Two tables in the per-tenant (private) schema, plus one new `FileOrigin` application value.
 
 ```python
 # backend/onyx/db/models.py
@@ -1245,7 +1245,7 @@ The skills system changes both the api_server (new endpoints, new materializer, 
 4. Wait one release cycle for confidence.
 5. Remove the flag and the legacy `ln -sf` code.
 
-**Migration**: single Alembic revision creating `skill`, `skill__user_group`, and the two new `FileOrigin` enum values. Run with `alembic -n schema_private upgrade head` for EE.
+**Migration**: single Alembic revision creating `skill`, `skill__user_group`, and the new `FileOrigin.SKILL_BUNDLE` application value. Run with `alembic -n schema_private upgrade head` for EE.
 
 ### Considerations / Tradeoffs / Decisions
 - **Why feature-flag rather than coordinated deploy.** Coordinated deploys are fragile (rolling restarts cross boundaries). The flag lets us roll images at our convenience and flip atomically.
