@@ -19,8 +19,7 @@ func newChatCmd() *cobra.Command {
 		Long: `Launch the interactive terminal UI for chatting with your Onyx agent.
 This is the default command when a terminal is present. On first run,
 an interactive setup wizard will guide you through configuration.`,
-		Example: `  onyx-cli chat
-  onyx-cli`,
+		Example: `  onyx-cli chat`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Load()
 

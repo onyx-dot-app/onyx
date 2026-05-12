@@ -49,7 +49,11 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	reader := bufio.NewReader(os.Stdin)
 
 	// Server URL
-	serverURL := prompt(reader, "  Onyx server URL", cfg.ServerURL)
+	serverURL, ok := prompt(reader, "  Onyx server URL", cfg.ServerURL)
+	if !ok {
+		fmt.Println("\n  " + dimStyle.Render("Cancelled."))
+		return nil
+	}
 	if serverURL == "" {
 		return nil
 	}
@@ -64,7 +68,11 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	fmt.Println("  " + dimStyle.Render("in your browser, or paste your PAT below."))
 	fmt.Println()
 
-	apiKey := promptSecret("  Personal access token", cfg.APIKey)
+	apiKey, ok := promptSecret("  Personal access token", cfg.APIKey)
+	if !ok {
+		fmt.Println("\n  " + dimStyle.Render("Cancelled."))
+		return nil
+	}
 
 	if apiKey == "" {
 		// Open browser to PAT page
@@ -74,7 +82,11 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 		fmt.Println("  " + dimStyle.Render("Copy your personal access token, then paste it here."))
 		fmt.Println()
 
-		apiKey = promptSecret("  Personal access token", "")
+		apiKey, ok = promptSecret("  Personal access token", "")
+		if !ok {
+			fmt.Println("\n  " + dimStyle.Render("Cancelled."))
+			return nil
+		}
 		if apiKey == "" {
 			fmt.Println("\n  " + redStyle.Render("No personal access token provided. Exiting."))
 			return nil
@@ -83,8 +95,8 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 
 	// Test connection
 	cfg = config.OnyxCliConfig{
-		ServerURL:        serverURL,
-		APIKey:           apiKey,
+		ServerURL:      serverURL,
+		APIKey:         apiKey,
 		DefaultAgentID: cfg.DefaultAgentID,
 	}
 
@@ -108,7 +120,7 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 	return &cfg
 }
 
-func promptSecret(label, defaultVal string) string {
+func promptSecret(label, defaultVal string) (string, bool) {
 	if defaultVal != "" {
 		fmt.Printf("%s %s: ", label, dimStyle.Render("[hidden]"))
 	} else {
@@ -116,18 +128,18 @@ func promptSecret(label, defaultVal string) string {
 	}
 
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println() // ReadPassword doesn't echo a newline
+	fmt.Println()
 	if err != nil {
-		return defaultVal
+		return "", false
 	}
 	line := strings.TrimSpace(string(password))
 	if line == "" {
-		return defaultVal
+		return defaultVal, true
 	}
-	return line
+	return line, true
 }
 
-func prompt(reader *bufio.Reader, label, defaultVal string) string {
+func prompt(reader *bufio.Reader, label, defaultVal string) (string, bool) {
 	if defaultVal != "" {
 		fmt.Printf("%s %s: ", label, dimStyle.Render("["+defaultVal+"]"))
 	} else {
@@ -135,15 +147,14 @@ func prompt(reader *bufio.Reader, label, defaultVal string) string {
 	}
 
 	line, err := reader.ReadString('\n')
-	// ReadString may return partial data along with an error (e.g. EOF without newline)
 	line = strings.TrimSpace(line)
 	if line != "" {
-		return line
+		return line, true
 	}
 	if err != nil {
-		return defaultVal
+		return "", false
 	}
-	return defaultVal
+	return defaultVal, true
 }
 
 func printQuickStart() {
@@ -166,4 +177,3 @@ func printQuickStart() {
 	}
 	fmt.Println()
 }
-
