@@ -370,11 +370,12 @@ def handle_message(
                 )
                 return False
             else:
-                # Promotion may have happened — invalidate the license cache so
-                # the middleware re-reads used_seats on the next request.
-                if existing_user is not None and existing_user.account_type == (
-                    AccountType.EXT_PERM_USER
-                ):
+                # Invalidate the license cache whenever the call consumed
+                # a seat: brand-new BOT insert OR EXT_PERM_USER -> BOT.
+                consumed_seat = existing_user is None or (
+                    existing_user.account_type == AccountType.EXT_PERM_USER
+                )
+                if consumed_seat:
                     invalidate_fn = fetch_ee_implementation_or_noop(
                         "onyx.db.license",
                         "invalidate_license_cache",
