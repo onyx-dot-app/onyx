@@ -295,8 +295,8 @@ class SandboxStatus(str, PyEnum):
 
 
 class PatType(str, PyEnum):
-    USER = "user"
-    CRAFT = "craft"
+    USER = "USER"
+    CRAFT = "CRAFT"
 
 
 class ArtifactType(str, PyEnum):

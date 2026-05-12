@@ -19,7 +19,7 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "personal_access_token",
-        sa.Column("pat_type", sa.String(), nullable=False, server_default="user"),
+        sa.Column("pat_type", sa.String(), nullable=False, server_default="USER"),
     )
     op.add_column(
         "sandbox",
