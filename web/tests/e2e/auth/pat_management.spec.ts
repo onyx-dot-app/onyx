@@ -69,7 +69,7 @@ test("PAT Complete Workflow", async ({ page }, testInfo) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
   // Copy the newly created token via the footer "Copy Token" button
-  await page.locator('button:has-text("Copy Token")').first().click();
+  await page.getByRole("button", { name: "Copy Token" }).click();
 
   // Wait a moment for clipboard to be written and verify
   await page.waitForTimeout(500);
