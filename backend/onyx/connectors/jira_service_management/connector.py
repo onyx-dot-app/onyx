@@ -1,6 +1,7 @@
 from datetime import datetime
 from datetime import timezone
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 
@@ -11,6 +12,10 @@ class JiraServiceManagementConnector(JiraConnector):
     Keeps Jira connector behavior, but scopes default search to JSM projects
     when a custom JQL query is not provided.
     """
+
+    @property
+    def document_source(self) -> DocumentSource:
+        return DocumentSource.JIRA_SERVICE_MANAGEMENT
 
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
