@@ -28,6 +28,21 @@ def get_external_apps(
     return list(db_session.scalars(stmt).all())
 
 
+def get_user_credentials_by_app_id(
+    *,
+    db_session: Session,
+    user_id: UUID,
+) -> dict[int, ExternalAppUserCredential]:
+    """Return mapping from external_app_id -> the user's credential row.
+
+    Apps the user has never configured are simply absent from the mapping.
+    """
+    stmt = select(ExternalAppUserCredential).where(
+        ExternalAppUserCredential.user_id == user_id
+    )
+    return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
+
+
 def create_external_app__no_commit(
     *,
     db_session: Session,
@@ -118,9 +133,7 @@ def upsert_external_app_user_credential__no_commit(
 
     Raises OnyxError(NOT_FOUND) if no app with `external_app_id` exists.
     """
-    app = get_external_app_by_id(
-        db_session=db_session, external_app_id=external_app_id
-    )
+    app = get_external_app_by_id(db_session=db_session, external_app_id=external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
