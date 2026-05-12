@@ -5881,7 +5881,7 @@ class ExternalAppUserCredential(Base):
         nullable=False,
         index=True,
     )
-    user_credentials: Mapped[dict[str, str]] = mapped_column(
+    user_credentials: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
 
