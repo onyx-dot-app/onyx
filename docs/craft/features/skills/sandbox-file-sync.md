@@ -17,7 +17,7 @@ A reusable abstraction for pushing files from S3 (or the database) into one or m
 - **`If-Modified-Since` makes every refresh cheap.** Each bundle exposes `last_modified()` (an indexed `MAX(updated_at)` query). The tarball endpoint returns `304` when nothing changed, so duplicate or no-op refreshes (a push that arrives after a manual refresh, a wakeup after a clean shutdown, etc.) cost one DB query.
 - **Two architectural assumptions.** (a) Each user has at most one active sandbox, so user-scoped bundles have no fan-out within a scope. (b) Sandbox pods and the api_server / S3 live in the same region, so intra-region egress is free on AWS and isn't a cost driver.
 - **Builds on the K8s label work from `skills_plan.md` §9.7.** `onyx.app/tenant-id` and `onyx.app/sandbox-id` already planned there are all the labels v1 needs. No new pod labels.
-- **Per-bundle ingest is each feature's problem.** Skills accepts a zip (unpacks to S3 as individual files). user_library accepts individual files. The abstraction only governs delivery from S3 → pod.
+- **Per-bundle ingest is each feature's problem; source storage reuses existing primitives.** Skills accepts a zip and stores it as a single blob in **OnyxFileStore** (`FileOrigin.SKILL_BUNDLE`, one per custom skill; built-ins stay on-disk in the repo). user_library reads from the existing indexed-document storage that the indexing pipeline already populates. No new S3 bucket, no new IAM. The abstraction only governs delivery from source → pod.
 
 ## Distribution Model
 
@@ -207,14 +207,19 @@ The frontend wires this to a "Refresh sandbox" button in the Craft UI's sandbox 
 **`SkillsBundle`** (`backend/onyx/sandbox_sync/bundles/skills.py`):
 
 - `cache_on_mutation = True` — tenant fan-out benefits from write-through caching.
-- `materialize`: walks built-in skills on disk + custom skills from Postgres/`FileStore`, applies template rendering for built-ins that declare a template. Replaces the rendering/discovery work currently in `skills_plan.md` §9.
+- `materialize`:
+  - Walks built-in skills on disk (`docker/skills/` in the Onyx repo) and yields each file as a `BundleEntry`.
+  - For each custom skill row, reads its zip blob from FileStore via `file_store.read_file(skill.bundle_file_id)`, iterates the zip members in-memory, and yields each member as a `BundleEntry` under `{skill_slug}/`. No on-disk unpack — the zip is streamed straight into the output tar.
+  - Applies template rendering for built-ins that declare a template. Replaces the rendering/discovery work currently in `skills_plan.md` §9.
 - `pod_label_selector(tenant_id, _)`: `onyx.app/tenant-id={tenant_id}`.
 - `last_modified`: `SELECT MAX(updated_at) FROM skill WHERE tenant_id=...`.
+
+**Skill upload handler** (`backend/onyx/server/admin/skills/api.py`, per `skills_plan.md` §3): on `POST /api/admin/skills/upload`, the handler validates the zip, calls `file_store.save_file(zip_bytes, display_name=skill_name, file_origin=FileOrigin.SKILL_BUNDLE, file_type="application/zip")` → receives a `file_id`, writes the `skill` row with `bundle_file_id=file_id`, then calls `enqueue_change(db, tenant_id, "skills")`. Tenant isolation is automatic via FileStore's `get_current_tenant_id()`.
 
 **`UserLibraryBundle`** (`backend/onyx/sandbox_sync/bundles/user_library.py`):
 
 - `cache_on_mutation = False` (default) — no fan-out within a user (1 sandbox/user), so write-through adds work without benefit.
-- `materialize`: lists enabled docs for the user from Postgres (`Document` table, filtering `sync_disabled`), streams each from S3.
+- `materialize`: lists enabled docs for the user from Postgres (`Document` table, filtering `sync_disabled`), streams each from its existing storage location (the path the indexing pipeline already writes to — not FileStore; user_library predates that primitive and uses its own layout). The bundle interface doesn't care which storage source the bytes come from.
 - `pod_label_selector(tenant_id, user_id)`: `onyx.app/tenant-id={tenant_id}`. (Server filters per-sandbox by `user_id` at materialize time; no `onyx.app/user-id` label needed since the tarball endpoint resolves user from the sandbox row.)
 - `last_modified`: `SELECT MAX(updated_at) FROM document WHERE user_id=... AND sync_disabled=false`.
 
@@ -239,6 +244,7 @@ Both replace bespoke push calls; no other changes to those handlers.
 - **No background polling cron in the pod.** Push covers the happy path; session setup, session wakeup, and manual refresh cover the ~5% push-failure tail. A pod doing nothing isn't checking for updates — when it next does anything user-visible, it refreshes first.
 - **No `onyx.app/user-id` pod label.** Server resolves user from the sandbox row.
 - **No ReadOnlyMany / shared-volume transport.** Direct curl is sufficient given v1 bundle sizes, 1-sandbox-per-user, and intra-region pod placement. Upgrade path exists if `OrgFilesBundle` or scale forces it.
+- **No new S3 bucket, no new IAM, no new storage primitive.** Custom skill blobs ride on the existing **OnyxFileStore** (`FileOrigin.SKILL_BUNDLE`, tenant-isolated automatically via FileStore's key-prefix scheme). user_library reads from the existing indexed-document storage. Built-in skills stay on-disk in the Onyx repo. The bundle abstraction is storage-agnostic — `materialize()` is opaque, so each bundle reads from whatever its source-of-truth already is.
 - **No bundle author UI / marketplace / org_files endpoint.** The interface is ready for `OrgFilesBundle` but no consumer is shipping in v1.
 
 ## Tests
