@@ -1,5 +1,4 @@
 from enum import Enum as PyEnum
-from typing import Any
 from typing import cast
 from typing import Literal
 
@@ -141,24 +140,27 @@ def register_tenant_users(
     # Use existing price to preserve the customer's current plan
     current_price_id = subscription_item.price.id
 
-    modify_kwargs: dict[str, Any] = {
-        "items": [
-            {
-                "id": subscription_item.id,
-                "price": current_price_id,
-                "quantity": number_of_users,
-            }
-        ],
-        "metadata": {"tenant_id": str(tenant_id)},
-    }
-    if idempotency_key is not None:
-        modify_kwargs["idempotency_key"] = idempotency_key
+    items = [
+        {
+            "id": subscription_item.id,
+            "price": current_price_id,
+            "quantity": number_of_users,
+        }
+    ]
+    metadata = {"tenant_id": str(tenant_id)}
 
-    updated_subscription = stripe.Subscription.modify(
+    if idempotency_key is None:
+        return stripe.Subscription.modify(
+            stripe_subscription_id,
+            items=items,
+            metadata=metadata,
+        )
+    return stripe.Subscription.modify(
         stripe_subscription_id,
-        **modify_kwargs,
+        items=items,
+        metadata=metadata,
+        idempotency_key=idempotency_key,
     )
-    return updated_subscription
 
 
 def _seat_billing_idempotency_key(tenant_id: str, target_quantity: int) -> str:
