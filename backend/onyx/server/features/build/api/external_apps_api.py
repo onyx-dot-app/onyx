@@ -1,13 +1,3 @@
-"""API endpoints for External Apps (admin management + per-user credentials).
-
-Admin routes (POST/GET/DELETE /admin/apps) manage the org-wide app catalog
-and shared organization-level credentials. User routes (/apps, /apps/{id}/
-credentials) let an individual user view available apps and store their
-per-user credentials for apps they want to use.
-
-All handlers are currently stubs.
-"""
-
 from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
