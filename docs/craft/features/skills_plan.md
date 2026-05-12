@@ -270,10 +270,10 @@ Slug rules:
   - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
-  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant, with `enabled = True AND deleted_at IS NULL` filter (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch).
-  - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None`.
-  - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — no access filter.
-  - [ ] `list_skills_for_admin(db) -> list[Skill]` — no access filter, but still excludes `deleted_at IS NOT NULL` (admins don't see soft-deleted skills in the list; engineer-only undelete via DB).
+  - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant, with **`enabled = True AND deleted_at IS NULL`** filter (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch). This is the materializer's source — disabled or soft-deleted skills never make it into `/skills/`.
+  - [ ] `fetch_skill_for_user(skill_id, user, db) -> Skill | None` — same `enabled = True AND deleted_at IS NULL` filter as `list_skills_for_user`. A user can't reach a disabled/deleted skill via single-item fetch either.
+  - [ ] `fetch_skill_for_admin(skill_id, db) -> Skill | None` — **`deleted_at IS NULL`** only (no `enabled` filter; admins need to fetch disabled skills to re-enable them). Engineer-only undelete bypasses this helper with a raw query.
+  - [ ] `list_skills_for_admin(db) -> list[Skill]` — **`deleted_at IS NULL`** only (no `enabled` filter; the admin UI displays disabled skills so admins can re-enable them). Soft-deleted rows are hidden by default; engineer-only undelete bypasses this helper.
   - [ ] `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`.
   - [ ] `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` (returns old_bundle_file_id so caller can delete the blob after commit).
   - [ ] `patch_skill(skill_id, slug=None, name=None, description=None, is_public=None, enabled=None, db) -> Skill` (partial update).
@@ -504,7 +504,7 @@ Algorithm:
 
 1. Ensure `dest_path` exists and is empty.
 2. `builtins = BuiltinSkillRegistry.instance().list_satisfied(db_session)` — only built-ins whose requirements all check True. Unsatisfied built-ins are skipped silently; admins see them as "Needs setup" in the admin UI.
-3. `customs = list_skills_for_user(user, db_session)` — single SQL query, public-OR-group-OR-direct.
+3. `customs = list_skills_for_user(user, db_session)` — single SQL query, public-OR-group-grant, filtered to `enabled = True AND deleted_at IS NULL`. Disabled or soft-deleted skills never reach the materialized set.
 4. For each built-in:
    - `shutil.copytree(source_dir, dest_path/slug)`.
    - If `SKILL.md.template` exists in the copied directory:
