@@ -250,6 +250,25 @@ def format_embedding_error(
     )
 
 
+def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
+    """Normalize Cohere's embed response across SDK versions.
+
+    v3 models return ``response.embeddings`` as a flat ``list[list[float]]``.
+    v4 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
+    the embeddings under ``float_`` (and possibly other per-type buckets when
+    ``embedding_types`` is set). We always read the float bucket here since
+    we never request alternate types.
+    """
+    if isinstance(response_embeddings, list):
+        return cast(list[Embedding], response_embeddings)
+
+    float_embeddings = getattr(response_embeddings, "float_", None)
+    if isinstance(float_embeddings, list):
+        return cast(list[Embedding], float_embeddings)
+
+    raise RuntimeError("Unsupported Cohere embedding response format.")
+
+
 # Custom exception for authentication errors
 class AuthenticationError(Exception):
     """Raised when authentication fails with a provider."""
@@ -322,7 +341,7 @@ class CloudEmbedding:
                 input_type=embedding_type,
                 truncate="END",
             )
-            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+            final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
 
     async def _embed_voyage(

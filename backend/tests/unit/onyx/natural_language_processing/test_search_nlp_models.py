@@ -73,6 +73,66 @@ async def test_openai_embedding(
 
 
 @pytest.mark.asyncio
+async def test_cohere_embed_supports_v3_response_format(
+    sample_embeddings: list[list[float]],
+) -> None:
+    """v3 models hand back ``response.embeddings`` as a flat ``list[list[float]]``."""
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.CohereAsyncClient"
+    ) as mock_cohere:
+        mock_client = AsyncMock()
+        mock_cohere.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.embeddings = sample_embeddings
+        mock_client.embed = AsyncMock(return_value=mock_response)
+
+        embedding = CloudEmbedding("fake-key", EmbeddingProvider.COHERE)
+        try:
+            result = await embedding._embed_cohere(
+                ["test1", "test2"],
+                "embed-english-v3.0",
+                "search_document",
+            )
+        finally:
+            await embedding.aclose()
+
+        assert result == sample_embeddings
+
+
+@pytest.mark.asyncio
+async def test_cohere_embed_supports_v4_response_format(
+    sample_embeddings: list[list[float]],
+) -> None:
+    """v4 models hand back ``response.embeddings`` as an EmbedByTypeResponseEmbeddings
+    object with the float bucket on ``.float_``."""
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.CohereAsyncClient"
+    ) as mock_cohere:
+        mock_client = AsyncMock()
+        mock_cohere.return_value = mock_client
+
+        embeddings_by_type = MagicMock()
+        embeddings_by_type.float_ = sample_embeddings
+
+        mock_response = MagicMock()
+        mock_response.embeddings = embeddings_by_type
+        mock_client.embed = AsyncMock(return_value=mock_response)
+
+        embedding = CloudEmbedding("fake-key", EmbeddingProvider.COHERE)
+        try:
+            result = await embedding._embed_cohere(
+                ["test1", "test2"],
+                "embed-v4.0",
+                "search_document",
+            )
+        finally:
+            await embedding.aclose()
+
+        assert result == sample_embeddings
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_handling() -> None:
     with patch(
         "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"
