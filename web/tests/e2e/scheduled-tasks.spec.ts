@@ -117,10 +117,11 @@ test.describe("Scheduled Tasks", () => {
         // Confirm session view rendered with the banner + back-to-task link.
         await expect(page.getByTestId("scheduled-run-banner")).toBeVisible();
         await expect(page.getByTestId("back-to-task-button")).toBeVisible();
-        // Chat input should be hidden for scheduled-run sessions.
+        // Chat input remains available so users can send follow-ups on
+        // scheduled-run sessions.
         await expect(
           page.locator('[placeholder*="conversation"], [placeholder*="task"]')
-        ).toBeHidden();
+        ).toBeVisible();
         // Back to task.
         await page.goBack();
         await page.waitForURL(/\/craft\/v1\/tasks\/[^/]+$/);

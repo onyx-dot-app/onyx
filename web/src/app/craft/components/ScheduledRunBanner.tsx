@@ -56,21 +56,3 @@ export default function ScheduledRunBanner({
     </div>
   );
 }
-
-/**
- * Companion hook for callers that need to know whether to hide the chat
- * input (scheduled runs aren't interactive). Returns ``true`` while the
- * scheduled-run-context fetch hasn't returned 200; once the banner data
- * arrives, returns ``false``.
- */
-export function useShouldShowChatInput(sessionId: string | null): boolean {
-  const { data, isLoading } = useSWR<ScheduledRunContextResponse | null>(
-    sessionId ? ["scheduled-run-context", sessionId] : null,
-    () => fetchScheduledRunContext(sessionId as string),
-    { revalidateOnFocus: false, shouldRetryOnError: false }
-  );
-  // While loading: show the input (don't flash hide/show). On 404 (data ===
-  // null): show. On 200 (data set): hide.
-  if (isLoading) return true;
-  return !data;
-}
