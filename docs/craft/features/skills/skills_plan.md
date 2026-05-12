@@ -11,7 +11,7 @@ This document is structured so implementation can begin section-by-section with 
 
 > **Three invariants the whole design respects:**
 >
-> 1. **Skill content AND inventory are live.** Admin uploads propagate to all sessions (new + existing) within ~5 min. The agent learns about new skills on its next turn — OpenCode rescans `.agents/skills/` per turn and re-exposes the inventory via its native `skill` tool (§10). No AGENTS.md regeneration needed for skill changes.
+> 1. **Skill content AND inventory are live.** Admin uploads propagate to all active sandbox pods in seconds via the generic bundle pipeline (event-driven push — see `sandbox-file-sync.md`). Lifecycle triggers (session setup, snapshot restore, manual refresh) reconcile any push that didn't land. The agent learns about new skills on its next turn — OpenCode rescans `.agents/skills/` per turn and re-exposes the inventory via its native `skill` tool (§10). No AGENTS.md regeneration needed for skill changes.
 > 2. **Bundle is content; DB row is metadata.** Slug, name, description, grants are admin-controlled in DB. The bundle is just the agent-facing instructions and supporting files.
 > 3. **Universal layer is consumer-blind.** `backend/onyx/skills/` knows nothing about sessions, sandboxes, or `.agents/skills`. Consumers translate their state into the materializer's inputs and choose the destination path.
 
@@ -573,7 +573,8 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/internal/sandbox/{sandbox_id}/skills-tarball` | Stream tarball of materialized skills for the sandbox's user. Called by the in-pod refresh loop every ~5 min and on resume. Runs `materialize_skills(...)` into a temp dir, streams `application/x-tar`. See §9. |
+| `GET` | `/api/internal/sandbox/{sandbox_id}/bundles/skills/tarball` | Stream tarball of materialized skills for the sandbox's user. Implemented as the generic bundle tarball endpoint (see `sandbox-file-sync.md`); skills is the first consumer. Runs `SkillsBundle.materialize(...)` via `materialize_skills(...)` from §6 and streams `application/x-tar`. Honors `If-Modified-Since`. See §9. |
+| `POST` | `/api/sandbox/{sandbox_id}/refresh` | User-triggered "refresh sandbox" — server kubectl-execs `refresh-bundle skills` (and any other registered bundles) for the target pod. Defined by the bundle abstraction (see `sandbox-file-sync.md`). |
 
 **Response models** (FastAPI returns these directly via typed function signatures):
 
@@ -751,12 +752,14 @@ def get_session_skills(session_id: UUID, ...) -> SkillsManifest:
 
 ---
 
-## 9. Sandbox delivery — pod-level `/skills/` with periodic refresh
+## 9. Sandbox delivery — pod-level `/skills/` refreshed via the generic bundle pipeline
 
 ### Context
-Skills are not per-session user data — they're shared infrastructure that should reflect the **current admin state**, not whatever was current when a session started. Earlier drafts put skill content into each session's workspace (and therefore into snapshots), which froze skills at session start and made admin uploads fail to reach existing sessions. The right model: **skills live at a pod-level path mounted into the sandbox, refreshed periodically from api_server, and symlinked into each session.**
+Skills are not per-session user data — they're shared infrastructure that should reflect the **current admin state**, not whatever was current when a session started. Earlier drafts put skill content into each session's workspace (and therefore into snapshots), which froze skills at session start and made admin uploads fail to reach existing sessions. The right model: **skills live at a pod-level path mounted into the sandbox, refreshed on-demand from api_server, and symlinked into each session.**
 
 (One pod = one sandbox = one user. Sessions are conversations within a sandbox. `sandbox_id ≠ session_id` — confirmed against `kubernetes_sandbox_manager.py:367`.)
+
+The delivery mechanism (tarball endpoint, in-pod refresh script, Celery push pipeline, lifecycle triggers, write-through cache) is **not skills-specific**. It's the generic **Sandbox File Sync bundle abstraction** described in [`sandbox-file-sync.md`](./sandbox-file-sync.md). Skills is the first consumer of that pipeline; user_library and future org-wide admin files follow the same shape. This section captures only the skills-specific surface area.
 
 ### Proposed Solution
 
@@ -765,7 +768,7 @@ Skills are not per-session user data — they're shared infrastructure that shou
 ```
 ┌─────────────────────── pod (sandbox, one user) ──────────────────────┐
 │                                                                       │
-│   /skills/                  ← pod-level mount, refreshed every 5 min  │
+│   /skills/                  ← pod-level mount, refreshed via bundle   │
 │      pptx/                                                            │
 │         SKILL.md                                                      │
 │         scripts/...                                                   │
@@ -786,70 +789,55 @@ Skills are not per-session user data — they're shared infrastructure that shou
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Snapshots only carry user files + AGENTS.md + the bare symlink. **Skill content is never in a snapshot.** On resume, the symlink is reconstructed; skills come from current admin state.
+Snapshots only carry user files + AGENTS.md + the bare symlink. **Skill content is never in a snapshot.** On resume, the symlink is reconstructed; skills come from current admin state — which means the pod's entrypoint runs `refresh-bundle skills` before the agent starts (covered by the bundle pipeline's session-setup / session-wakeup triggers).
 
-#### 9.2 The materializer runs on the api_server side
+#### 9.2 SkillsBundle — the skills-specific bundle implementation
 
-A new internal endpoint streams a current snapshot of materialized skills for a given sandbox:
+The generic bundle pipeline delegates "what to put in the tarball" to a bundle class. For skills, that's `SkillsBundle` (in `backend/onyx/sandbox_sync/bundles/skills.py`), implementing the `SandboxBundle` interface from `sandbox-file-sync.md`:
 
 ```python
-# backend/onyx/server/features/skills/api.py (internal router)
+class SkillsBundle(SandboxBundle):
+    bundle_key = "skills"
+    mount_path = "/skills/"
+    cache_on_mutation = True    # tenant fan-out → write-through cache helps
 
-@router.get("/api/internal/sandbox/{sandbox_id}/skills-tarball", response_class=StreamingResponse)
-def get_skills_tarball(sandbox_id: UUID, ...) -> StreamingResponse:
-    """Stream a tarball of materialized skills for this sandbox's user.
+    def materialize(self, db, ctx):
+        """Yield BundleEntry for every file the agent should see under /skills/.
 
-    Called by the sandbox refresh loop every ~5 min, and by snapshot
-    restore. Auth: pod-issued token (one per sandbox at provisioning).
-    """
-    user = _user_for_sandbox(sandbox_id, db)
-    render_ctx = SkillRenderContext(user_name=user.name, ...,
-                                    extra={"accessible_sources": render_accessible_cc_pairs(user, db)})
+        Walks built-in skills on disk (the source tree in the Onyx repo) and
+        custom skills (zip blobs in OnyxFileStore, one per skill). For each
+        custom skill, reads its zip via file_store.read_file(bundle_file_id),
+        streams members directly into the output tar — no on-disk unpack.
+        Applies per-user template rendering (see §6 — materialize_skills)
+        for built-ins that declare a template.
+        """
+        ...
 
-    with tempfile.TemporaryDirectory() as staging:
-        materialize_skills(Path(staging), user, db, render_ctx)
-        return StreamingResponse(_tar_stream(staging), media_type="application/x-tar")
+    def pod_label_selector(self, tenant_id, user_id):
+        # Tenant-wide push: all pods in the tenant see the same skills
+        # (filtered per-pod by user grants at materialize time via ctx.user_id).
+        return f"onyx.app/tenant-id={tenant_id}"
+
+    def last_modified(self, db, ctx):
+        return db.query(func.max(Skill.updated_at)).filter(
+            Skill.tenant_id == ctx.tenant_id
+        ).scalar()
 ```
 
-This is the same `materialize_skills(...)` from §6 — just running on api_server, with output streamed to the pod.
+The tarball endpoint (`GET /api/internal/sandbox/{sandbox_id}/bundles/skills/tarball`), in-pod refresh script (`/usr/local/bin/refresh-bundle skills`), Celery push tasks (`propagate_bundle_change` + `refresh_pod_bundle`), pod entrypoint refresh, manual refresh button, and write-through tarball cache **all live in the bundle pipeline** — see `sandbox-file-sync.md`. The skills implementation contributes only the `SkillsBundle` class plus the call to `enqueue_change(db, tenant_id, "skills")` at every skill admin mutation.
 
-#### 9.3 Pod-side refresh script
+#### 9.3 Refresh triggers (recap)
 
-Baked into the sandbox image at `/usr/local/bin/refresh-skills`:
+Per the bundle pipeline, `/skills/` is refreshed in four situations — no background polling:
 
-```sh
-#!/bin/sh
-set -eu
-NEXT=/skills.next
-PREV=/skills.prev
-DEST=/skills
+| Trigger | How |
+|---|---|
+| Skill admin mutation | `enqueue_change` populates the write-through cache, then Celery fan-out kubectl-execs `refresh-bundle skills` on every tenant pod |
+| Pod boot (session setup) | Pod entrypoint runs `refresh-bundle skills` before exec'ing the agent |
+| Snapshot restore (session wakeup) | Same entrypoint code path — a restored pod is freshly booted from its own perspective |
+| User clicks "refresh sandbox" | `POST /api/sandbox/{sid}/refresh` kubectl-execs `refresh-bundle skills` on the target pod |
 
-mkdir -p "$NEXT"
-curl -fsS -H "Authorization: Bearer $SANDBOX_TOKEN" \
-     "$ONYX_API_URL/api/internal/sandbox/$SANDBOX_ID/skills-tarball" \
-   | tar -xz -C "$NEXT"
-
-# Atomic swap: rename DEST → PREV, NEXT → DEST. POSIX rename is atomic
-# within a filesystem. Readers mid-stat get either old or new, never a torn dir.
-[ -e "$DEST" ] && mv "$DEST" "$PREV"
-mv "$NEXT" "$DEST"
-rm -rf "$PREV" || true
-```
-
-Driven by two triggers:
-
-1. **Event push from api_server (primary)** — see §9.7. Most refreshes happen via kubectl-exec triggered immediately on admin mutations. End-to-end ~1-3 seconds.
-2. **Background sleep loop (safety net)** — catches anything the push missed (Celery broker blip, pod restart mid-push, exec timeout):
-
-   ```sh
-   # in /usr/local/bin/refresh-loop, started by the container entrypoint
-   while true; do
-     /usr/local/bin/refresh-skills 2>&1 | logger -t skills-refresh || true
-     sleep 300
-   done &
-   ```
-
-First refresh runs synchronously as an initContainer (or as the first iteration before sessions can start), so `/skills/` exists by the time any session symlinks into it.
+End-to-end propagation on the happy path: ~1–3 seconds from skill mutation to all tenant pods. The lifecycle triggers recover the ~5% push-failure tail (kubectl-exec into not-Ready pods, etc.).
 
 #### 9.4 Per-session setup — just a symlink
 
@@ -869,7 +857,9 @@ Called from `setup_session_workspace` **and** from `_regenerate_session_config` 
 
 No more tarball-into-pod for session setup. No more `materialize_for_session` invoked on the api_server during session creation — `materialize_skills` runs only when the refresh endpoint is called.
 
-#### 9.5 Dockerfile changes
+#### 9.5 Dockerfile changes (skills-specific)
+
+The shared `refresh-bundle` script and entrypoint hooks are owned by the bundle pipeline (see `sandbox-file-sync.md` files manifest). The skills-specific Dockerfile changes are:
 
 ```dockerfile
 # REMOVE (legacy):
@@ -877,136 +867,78 @@ COPY skills/ /workspace/skills/
 RUN mkdir -p /workspace/skills
 
 # ADD:
-COPY refresh-skills /usr/local/bin/refresh-skills
-COPY refresh-loop /usr/local/bin/refresh-loop
-RUN chmod +x /usr/local/bin/refresh-skills /usr/local/bin/refresh-loop
-RUN mkdir -p /skills
+RUN mkdir -p /skills    # mount path; refresh-bundle populates it
 ```
 
-The on-disk source at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/` **stays** — still read at runtime by the api_server during the materialization step.
+The on-disk source at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/` **stays** — still read at runtime by the api_server side of `SkillsBundle.materialize` (built-in skill source-of-truth).
 
-#### 9.6 Pod auth for the refresh endpoint
+#### 9.6 Pod auth, scope, and path contract
 
-The pod needs to identify itself to api_server. Simplest model: a short-lived bearer token minted at sandbox provisioning, injected as an env var (`SANDBOX_TOKEN`). The token claims `(sandbox_id, exp)` and api_server validates against the active-sandbox table.
+- **Auth.** The pod uses the existing sandbox bearer token (same one the bundle pipeline already requires; see `sandbox-file-sync.md`). No skills-specific token.
+- **Scope decision: tenant-wide push.** `SkillsBundle.pod_label_selector` returns `onyx.app/tenant-id={tenant_id}` — every active pod in the tenant gets the refresh. Pods whose user doesn't have access to a particular skill just receive a tarball where that skill is absent (filtered per-sandbox by `ctx.user_id` at materialize time). Simpler than computing the "affected users" set on the api_server side, and avoids races where access changes between the access query and the push.
+- **Path contract.** `.agents/skills/` (not `.opencode/skills/`) — OpenCode's discovery walks `.agents/skills/`, `.opencode/skills/`, and `.claude/skills/` (per [OpenCode docs](https://opencode.ai/docs/skills/)). `.agents/` is the agent-runtime-agnostic choice and stays the cross-runtime contract.
 
-If Onyx already has a pod→api_server auth path (likely — pods do call back to api_server today), reuse it. Worth confirming during implementation.
+#### 9.7 Hooking skill mutations into the bundle pipeline
 
-#### 9.7 Event-driven push on admin mutations
+Every skill admin mutation calls `enqueue_change(db, tenant_id, "skills")` after the DB commit. With `SkillsBundle.cache_on_mutation = True`, `enqueue_change` synchronously materializes the new tarball into Redis (the write-through cache from `sandbox-file-sync.md`) and then enqueues the propagate task. By the time any tenant pod curls the tarball endpoint, the cache key already exists — 1 materialization for the entire fan-out.
 
-Polling alone would leave a 5-minute window where an admin change isn't yet visible. We close that window by pushing on every skill mutation.
-
-**Flow:**
-
-```
-Admin endpoint (POST/PUT/PATCH/DELETE)
-    └─ on DB commit success, enqueue Celery task:
-       propagate_skill_change(tenant_id)
-            └─ enumerate active sandbox pods for the tenant via K8s label selector
-                └─ for each pod, enqueue:
-                   refresh_pod_skills(pod_name)  [parallel via Celery workers]
-                       └─ kubectl exec <pod> -- /usr/local/bin/refresh-skills
-```
-
-Implementation:
+Five touch points in `backend/onyx/server/features/skills/api.py`:
 
 ```python
-# backend/onyx/background/celery/tasks/skills/tasks.py
-
-@shared_task(name="propagate_skill_change", expires=60)
-def propagate_skill_change(tenant_id: str) -> None:
-    """Fan out a skill-refresh push to every active sandbox pod in the tenant.
-
-    Tenant-wide push (not user-scoped): each pod fetches an access-filtered
-    tarball, so unaffected users' tarballs are unchanged — the api_server can
-    respond 304 to those (optional optimization). Simpler than computing
-    affected-users on the api_server side.
-    """
-    pod_names = _list_active_sandbox_pods_for_tenant(tenant_id)
-    for pod_name in pod_names:
-        celery_app.send_task("refresh_pod_skills", args=[pod_name], expires=60)
-
-@shared_task(name="refresh_pod_skills", expires=60)
-def refresh_pod_skills(pod_name: str) -> None:
-    """kubectl exec the refresh script. Failures are logged and swallowed —
-    the in-pod sleep loop catches missed events within its 5-min interval."""
-    try:
-        k8s_client.exec_in_pod(
-            pod_name=pod_name,
-            command=["/usr/local/bin/refresh-skills"],
-            container="sandbox",
-            timeout=10,
-        )
-    except Exception as e:
-        logger.warning("skill push failed pod=%s tenant=%s: %s", pod_name, ..., e)
-
-
-def _list_active_sandbox_pods_for_tenant(tenant_id: str) -> list[str]:
-    """K8s label selector on the sandbox namespace."""
-    resp = k8s_core_api.list_namespaced_pod(
-        namespace=SANDBOX_NAMESPACE,
-        label_selector=f"onyx.app/tenant-id={tenant_id}",
-    )
-    return [p.metadata.name for p in resp.items if p.status.phase == "Running"]
-```
-
-Endpoint hooks — five touch points in `backend/onyx/server/features/skills/api.py`:
-
-```python
-# After every commit on any of these:
+# After successful commit on:
 #   POST   /api/admin/skills/custom
 #   PATCH  /api/admin/skills/custom/{id}
 #   PUT    /api/admin/skills/custom/{id}/bundle
 #   PUT    /api/admin/skills/custom/{id}/grants
 #   DELETE /api/admin/skills/custom/{id}
 
-celery_app.send_task(
-    "propagate_skill_change",
-    args=[str(tenant_id)],
-    expires=60,  # if not processed in 60s, polling catches anyway
-)
+from onyx.sandbox_sync.enqueue import enqueue_change
+enqueue_change(db, tenant_id, "skills")
 ```
 
-**Pod labels** — sandbox provisioning sets `onyx.app/tenant-id` on each pod (per `kubernetes_sandbox_manager.py:619`, which already sets `onyx.app/sandbox-id`). Single-line addition.
-
-**Scope decision: tenant-wide push.** Push to every active pod in the tenant, regardless of who currently has access. Pods whose user doesn't have access just fetch a tarball that didn't change. Simpler than computing the "affected users" set on the api_server side, avoids race conditions where access changes between the access query and the push, and `kubectl exec` of a no-op script is cheap (~200ms).
-
-**Why `.agents/skills/` and not `.opencode/skills/`?** Unchanged from before — OpenCode's discovery walks `.agents/skills/`, `.opencode/skills/`, and `.claude/skills/` (per [OpenCode docs](https://opencode.ai/docs/skills/)). `.agents/` is the agent-runtime-agnostic choice.
+Pod labels: sandbox provisioning sets `onyx.app/tenant-id` (per `kubernetes_sandbox_manager.py:619`, beside the existing `onyx.app/sandbox-id`). Single-line addition. Same label is shared with future bundles.
 
 ### Considerations / Tradeoffs / Decisions
 
 - **Why pod-level `/skills/` instead of per-session materialization.** Lets admin uploads/grants/deletes propagate to all sessions (new and existing). Sessions don't carry skill content into snapshots → snapshots stay small. Per-user template rendering still works because one pod = one user.
-- **Push on admin mutations + polling safety net.** Two triggers: event-driven push on every skill mutation (typical propagation ~1-3 sec), polling sleep loop at 5-min cadence as safety net (catches missed events from broker blips, transient kubectl-exec failures, pod restart mid-push). Push is the primary path; polling is the floor.
-- **Why kubectl exec push instead of Redis pub/sub.** No new long-running pod-side components. Reuses the `/usr/local/bin/refresh-skills` script we already need. Failures are recoverable via polling. Pub/sub adds reconnect handling + a persistent subscriber for marginal latency improvement over kubectl-exec's ~200ms.
+- **Why the bundle abstraction owns delivery.** Skills is one of several systems that need "files materialized on api_server, delivered to running sandbox pods" — user_library has the same shape, future org-wide admin files will too. Building a skills-only pipeline (the earlier draft of this section did) duplicated infrastructure each consumer would inevitably need. The bundle abstraction in `sandbox-file-sync.md` is that infrastructure; skills is the first consumer.
+- **Why `cache_on_mutation = True`.** Skills fan out tenant-wide. Without a write-through cache, N tenant pods curling the tarball endpoint simultaneously after an admin mutation would each trigger an independent materialize. Write-through populates the cache once at the mutation site (before the propagate task is enqueued), so the fan-out becomes 1 materialize + N cache reads. See `sandbox-file-sync.md` §"Write-through tarball cache."
 - **Materializer runs on api_server, not in the pod.** The pod only needs to extract a tarball — no FileStore access, no DB queries, no bundle validation. The sandbox image stays minimal. Bundle blobs never traverse a fan-out path.
-- **Atomic rename pattern.** `mv NEXT DEST` is atomic within a filesystem (POSIX guarantee). Mid-rename, a reader's `cat /skills/X/SKILL.md` either resolves to the old version (if the dentry walk happened before rename) or the new (if after) — never a torn read. This is the standard "live-update a directory under concurrent reads" pattern.
+- **Atomic rename pattern.** Handled by the generic `refresh-bundle` script — readers see strictly old or strictly new, never partial.
 - **AGENTS.md regen on resume happens but no longer matters for skills.** `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736-1809` regenerates AGENTS.md on snapshot restore. We add one line to also (re)create the `.agents/skills` symlink. AGENTS.md itself no longer carries skill information (§10) — OpenCode's per-turn `skill` tool rescan handles inventory. The symlink is the only skill-related restore step.
-- **First-refresh bootstrap via initContainer.** Pod can't start serving sessions until `/skills/` exists. The synchronous first refresh in an initContainer makes pod startup predictable (one extra HTTP call + tar extract — ~500 ms total).
-- **Local backend.** For dev, the local sandbox manager runs the refresh as a subprocess of the same Python process — same script, no kubectl needed. Or even simpler: dev-mode skips refresh and reads `/skills/` directly from the api_server's host FS via a bind mount.
-- **What if api_server is briefly unavailable mid-refresh?** Script exits non-zero, loop sleeps, retries on next tick. Pod keeps serving the previous `/skills/`. Self-healing.
-- **No need for a manual refresh button.** Earlier drafts proposed an admin "Apply changes now" button for urgent cases. Push on every mutation makes this unnecessary — every mutation IS an apply-now event.
+- **Pod boot is the bootstrap.** Pod entrypoint runs `refresh-bundle skills` before exec'ing the agent (per `sandbox-file-sync.md`). No separate initContainer needed; the same code path serves both fresh provisioning and snapshot restore.
+- **Local backend.** Dev-mode skips the kubectl-exec path; the local sandbox manager invokes `refresh-bundle skills` as a subprocess (same script, no kubectl needed). Or even simpler: dev-mode reads `/skills/` directly from the api_server's host FS via a bind mount.
+- **Self-healing when api_server is briefly unavailable.** A failed `refresh-bundle` call exits non-zero; the next lifecycle trigger (manual refresh button, next session setup) reconciles. The pod keeps serving its current `/skills/` in the meantime.
+- **Manual refresh button (changed from earlier drafts).** Earlier drafts argued no manual button was needed because polling caught everything. With polling removed in favor of lifecycle triggers (per `sandbox-file-sync.md`), the user-facing "Refresh sandbox" button **is** that lifecycle trigger for an active session. Wired in the Craft sandbox menu next to other sandbox-control actions.
 
 ### Todos
-- [ ] Add `GET /api/internal/sandbox/{sandbox_id}/skills-tarball` to `backend/onyx/server/features/skills/api.py` — runs `materialize_skills(...)` into a temp dir, streams tarball. Auth via pod token.
-- [ ] Implement pod token minting at sandbox provisioning (or reuse existing pod→api_server auth path if one exists).
-- [ ] Add `refresh-skills` and `refresh-loop` scripts to `backend/onyx/server/features/build/sandbox/kubernetes/docker/`.
-- [ ] Edit Dockerfile: drop `COPY skills/`, drop `mkdir -p /workspace/skills`, add `COPY refresh-skills` + `COPY refresh-loop`, add `mkdir -p /skills`.
-- [ ] Add an initContainer to the pod spec that runs `refresh-skills` synchronously before the sandbox container starts.
-- [ ] Update sandbox entrypoint to background `refresh-loop`.
+
+**Generic bundle pipeline** (owned by `sandbox-file-sync.md` — included here for sequencing visibility; implement these first, skills depends on them):
+- [ ] Stand up `backend/onyx/sandbox_sync/` (bundle ABC, registry, enqueue, tarball builder, cache) per `sandbox-file-sync.md` files manifest.
+- [ ] Stand up `backend/onyx/background/celery/tasks/sandbox_sync/` (propagate, refresh tasks).
+- [ ] Add `GET /api/internal/sandbox/{sid}/bundles/{key}/tarball` endpoint.
+- [ ] Add `POST /api/sandbox/{sid}/refresh` endpoint.
+- [ ] Add `refresh-bundle` in-pod script + entrypoint hook that iterates registered bundles before exec'ing the agent.
+- [ ] Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning (`kubernetes_sandbox_manager.py:619`, beside the existing `onyx.app/sandbox-id` label).
+- [ ] Frontend "Refresh sandbox" button wired to `POST /api/sandbox/{sid}/refresh`.
+
+**Skills consumer of the bundle pipeline:**
+- [ ] Implement `SkillsBundle` in `backend/onyx/sandbox_sync/bundles/skills.py`: `cache_on_mutation = True`, `materialize` walks built-ins on disk + reads custom skill zip blobs from FileStore (streaming members directly into the tar), `pod_label_selector` returns `onyx.app/tenant-id={tenant_id}`, `last_modified` returns `MAX(skill.updated_at) WHERE tenant_id=...`.
+- [ ] Register `SkillsBundle` in `backend/onyx/sandbox_sync/bundles/__init__.py`.
+- [ ] Reuse `materialize_skills(...)` from §6 inside `SkillsBundle.materialize` — same rendering / template logic, just plumbed through the bundle interface instead of writing to a temp dir.
+- [ ] Hook `enqueue_change(db, tenant_id, "skills")` at the 5 mutation endpoints after their respective commits: POST custom, PATCH custom, PUT bundle, PUT grants, DELETE custom.
+- [ ] Edit Dockerfile: drop `COPY skills/`, drop `mkdir -p /workspace/skills`, add `mkdir -p /skills` (the mount path the bundle pipeline writes to).
 - [ ] Implement `_setup_session_skills_symlink(session_path)` (one helper for both K8s and local backends).
 - [ ] Call `_setup_session_skills_symlink(...)` from `setup_session_workspace` (replaces the old skill-materialization step).
 - [ ] Call `_setup_session_skills_symlink(...)` from `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` so resumed sessions also get the symlink. AGENTS.md regen is already there.
 - [ ] Verify snapshot tarball **excludes** `/skills/` (it's a separate mount; should be naturally excluded, but confirm).
 - [ ] Remove `directory_manager.setup_skills(...)` and its callers (we no longer materialize per-session).
-- [ ] Local backend: implement an equivalent refresh path — a subprocess that calls `materialize_skills` directly to a host path that the sandbox bind-mounts.
+- [ ] Local backend: invoke `refresh-bundle skills` as a subprocess (or bind-mount the host `/skills/` directly for dev). Same code path; no kubectl needed.
 - [ ] Add a feature flag `SKILLS_MATERIALIZATION_V2_ENABLED` for staged rollout (see §15).
-- [ ] **Event-driven push (§9.7):**
-  - [ ] Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning (`kubernetes_sandbox_manager.py:619`, beside the existing `onyx.app/sandbox-id` label).
-  - [ ] Implement `propagate_skill_change(tenant_id)` Celery task in `backend/onyx/background/celery/tasks/skills/tasks.py`. `expires=60`.
-  - [ ] Implement `refresh_pod_skills(pod_name)` Celery task. `expires=60`. Swallow exec errors with a `logger.warning` — polling is the safety net.
-  - [ ] Implement `_list_active_sandbox_pods_for_tenant(tenant_id)` using k8s label selector on `onyx.app/tenant-id=<id>` + phase=Running.
-  - [ ] Hook `celery_app.send_task("propagate_skill_change", args=[str(tenant_id)], expires=60)` at the 5 mutation endpoints after their respective commits: POST custom, PATCH custom, PUT bundle, PUT grants, DELETE custom.
-  - [ ] Integration test: admin upload → assert push enqueued → assert pod's `/skills/` reflects new content within ~3 sec (test infra mocks kubectl exec or uses a real test pod).
-  - [ ] Failure test: simulate kubectl-exec failure → assert polling catches the change on next tick.
+
+**Tests:**
+- [ ] Integration test (skills-specific): admin upload → assert pod's `/skills/` reflects new content within ~5 sec. The bundle pipeline's own tests (push path, lifecycle triggers, 304, write-through cache) live in `backend/tests/integration/tests/sandbox_sync/`.
+- [ ] Failure test: simulate kubectl-exec failure → assert manual refresh or next lifecycle trigger reconciles.
 - [ ] Update existing integration tests for sandbox setup that referenced the old skills path.
 
 ---
@@ -1103,15 +1035,16 @@ Earlier drafts split propagation into two cadences: live `/skills/` content (~1-
 
 ### Proposed Solution
 
-**One cadence, one mechanism.** Everything is live within ~5 minutes:
+**One mechanism: the generic bundle pipeline (`sandbox-file-sync.md`), with skills as its first consumer.** Everything is live in seconds on the happy path; lifecycle triggers (session setup, snapshot restore, manual refresh) reconcile the failure tail without polling.
 
 | Layer | Live? | How |
 |---|---|---|
-| **`/skills/` content** (SKILL.md + scripts + supporting files) | ✅ ~1-3 sec typical; ≤5 min worst case | Event-driven push from api_server on every admin mutation (§9.7), with a 5-min polling sleep loop as safety net (§9.3) |
+| **`/skills/` content** (SKILL.md + scripts + supporting files) | ✅ ~1-3 sec typical via push | Event-driven push from api_server on every admin mutation — `enqueue_change(db, tenant_id, "skills")` triggers write-through cache + tenant fan-out via the generic bundle pipeline (`sandbox-file-sync.md`). |
+| **Push-failure recovery** | ✅ on next lifecycle event | Pod entrypoint runs `refresh-bundle skills` on session setup and snapshot restore; user can also click "Refresh sandbox" in the Craft UI. No background polling. |
 | **Agent inventory awareness** | ✅ next turn after content refresh | OpenCode's native `skill` tool rescans `.agents/skills/` per turn and re-exposes the inventory in the tool description |
 | **Session snapshot** | n/a | Doesn't include `/skills/` content — skills are pod-level infra, not session data |
 
-End-to-end behavior: admin uploads a new skill → Celery `propagate_skill_change` fans out kubectl-exec refresh-skills to every active pod in the tenant (~1-3 sec) → next turn in any active session sees the new skill in OpenCode's `skill` tool description → agent can invoke immediately.
+End-to-end behavior: admin uploads a new skill → `enqueue_change` materializes the tarball once and writes it to Redis, then fans out kubectl-exec refresh-bundle to every active pod in the tenant (~1-3 sec, all hitting the cache) → next turn in any active session sees the new skill in OpenCode's `skill` tool description → agent can invoke immediately.
 
 ### Behavioral implications
 
@@ -1134,7 +1067,7 @@ For deletes:
 ### Considerations / Tradeoffs / Decisions
 
 - **Why no boundary-stable inventory anymore.** The earlier "AGENTS.md regenerated only at session boundaries" model was designed to prevent the agent's *list of available skills* from shifting mid-conversation. Investigation showed this was based on a wrong assumption — OpenCode doesn't use AGENTS.md for skill awareness in the first place. The agent's inventory comes from OpenCode's `skill` tool, which is per-turn already. So we're not adding mid-conversation drift; we're just acknowledging it was already happening at the OpenCode layer.
-- **Typical propagation: 1-3 sec via push.** The 5-min polling cadence is the safety net for missed events, not the primary path. No manual "Apply changes now" button needed — every admin mutation IS an apply-now event.
+- **Typical propagation: 1-3 sec via push.** Lifecycle triggers (session setup, snapshot restore, manual "Refresh sandbox" button) recover the ~5% push-failure tail. No background polling.
 - **No skill-immutability invariant.** Earlier drafts had "Sessions are skill-immutable after start" — fully reversed.
 - **Snapshot size impact.** Snapshots no longer carry skill content. Customs at 10+ MiB × 20 per tenant × every snapshot — storage cost is gone.
 - **Mid-conversation user-visible behavior.** A user's agent might confidently invoke `deal-summary` in turn 5 using SKILL.md content read earlier; admin deletes it; turn 6 the skill is gone from inventory. Agent gets a missing-dir error on next attempt and reports it. This is essentially the same behavior we'd have had at the boundary model — admins were never going to delete skills "carefully" relative to in-flight conversations.
@@ -1144,7 +1077,7 @@ For deletes:
 
 ### Todos
 - [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` from the top of the doc.
-- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push; ≤5 min safety net via polling; OpenCode rescans per turn)."`
+- [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push through the bundle pipeline; lifecycle triggers — session setup, snapshot restore, manual refresh — reconcile the failure tail; OpenCode rescans per turn)."`
 - [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few seconds."
 - [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
 - [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. (AGENTS.md regen there is no longer needed for skill purposes — see §10.)
@@ -1410,7 +1343,7 @@ Per `CLAUDE.md`: prefer external-dependency unit tests when mocking is needed; p
 - `test_live_skill_propagation.py`:
   - Start session A, agent reads `.agents/skills/<custom-X>/SKILL.md` (recorded for diff).
   - Admin replaces X's bundle.
-  - Wait for next refresh tick (≤ 5 min; in test, trigger refresh manually).
+  - Wait for the push to land (~3 sec). If kubectl-exec is mocked / blocked in test infra, call `POST /api/sandbox/{sid}/refresh` to trigger the manual refresh path explicitly.
   - Re-read `.agents/skills/<custom-X>/SKILL.md` from session A → matches **new** bundle.
   - In the same conversation, AGENTS.md still reflects the original inventory.
   - Resume session A (snapshot + restore) → AGENTS.md regenerated → new inventory visible.

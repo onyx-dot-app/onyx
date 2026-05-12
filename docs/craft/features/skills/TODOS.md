@@ -167,37 +167,43 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 - `[TODO]` `P3.010` Implement `render_accessible_cc_pairs(user, db)` helper — confirm/reuse from `search.md`; if new, implement using existing `get_connector_credential_pairs_for_user`
 
-### 3.3 Internal sandbox-tarball endpoint  (spec §9)
+### 3.3 Generic bundle pipeline (`sandbox-file-sync.md`)
 
-- `[TODO]` `P3.020` Add `GET /api/internal/sandbox/{sandbox_id}/skills-tarball` to `backend/onyx/server/features/skills/api.py` — runs `materialize_skills(...)` into a temp dir, streams `application/x-tar`  (deps: P1.051, P3.010)
-- `[TODO]` `P3.021` Implement pod-token auth for `/api/internal/sandbox/*` — bearer token minted at sandbox provisioning, validated against active-sandbox table. If Onyx already has a pod→api_server auth path, reuse it.
-- `[TODO]` `P3.022` Inject `SANDBOX_TOKEN` + `SANDBOX_ID` + `ONYX_API_URL` env vars into the sandbox pod spec at provisioning (`kubernetes_sandbox_manager.py` — pod creation).
+These tasks stand up the reusable bundle abstraction. Skills is the first consumer (§3.4–§3.4b); user_library and future org-files plug in later via the same interface. Implement these before §3.4.
 
-### 3.4 In-pod refresh script + loop  (spec §9)
+- `[TODO]` `P3.020` Create `backend/onyx/sandbox_sync/` package: `bundle.py` (`SandboxBundle` ABC, `BundleEntry`, `SandboxContext`), `registry.py` (`BundleRegistry`), `tarball.py` (streaming tar builder over BundleEntry iterator).
+- `[TODO]` `P3.021` Implement `backend/onyx/sandbox_sync/enqueue.py` — `enqueue_change(db, tenant_id, bundle_key, user_id=None)`. If the bundle's `cache_on_mutation=True`, synchronously materialize and write tarball bytes to Redis under `bundle:tar:{tenant}:{bundle_key}:{last_modified_iso}` with 15-min TTL, then enqueue `propagate_bundle_change`.
+- `[TODO]` `P3.022` Implement `backend/onyx/sandbox_sync/cache.py` — Redis-backed tarball cache (get / materialize_and_store) + hit/miss metrics.
+- `[TODO]` `P3.023` Implement Celery `@shared_task(name="propagate_bundle_change", expires=60)` in `backend/onyx/background/celery/tasks/sandbox_sync/propagate.py` — calls `bundle.pod_label_selector(...)`, lists pods, fans out `refresh_pod_bundle.delay(pod, bundle_key)` per pod.
+- `[TODO]` `P3.024` Implement Celery `@shared_task(name="refresh_pod_bundle", expires=120)` in `backend/onyx/background/celery/tasks/sandbox_sync/refresh.py` — single `kubectl exec` invoking `/usr/local/bin/refresh-bundle <bundle_key>`. Log non-zero exit and bail (lifecycle triggers reconcile).
+- `[TODO]` `P3.025` Add `GET /api/internal/sandbox/{sandbox_id}/bundles/{bundle_key}/tarball` to `backend/onyx/server/internal/sandbox_bundles.py`. Resolves sandbox → `SandboxContext`. `If-Modified-Since` → 304 short-circuit. On a populated cache key (write-through bundles), stream cached bytes. Else stream `tar(bundle.materialize(...))`. Always sets `Last-Modified`.
+- `[TODO]` `P3.026` Add `POST /api/sandbox/{sandbox_id}/refresh` to the existing sandbox router. Auth via standard user session. Resolves sandbox → pod name. Invokes `refresh_pod_bundle` (or sync kubectl-exec) for each registered bundle.
+- `[TODO]` `P3.027` Implement pod-token auth for `/api/internal/sandbox/*` — bearer token minted at sandbox provisioning, validated against active-sandbox table. If Onyx already has a pod→api_server auth path, reuse it.
+- `[TODO]` `P3.028` Inject `SANDBOX_TOKEN` + `SANDBOX_ID` + `ONYX_API_URL` env vars into the sandbox pod spec at provisioning (`kubernetes_sandbox_manager.py` — pod creation).
+- `[TODO]` `P3.029` Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning, alongside the existing `onyx.app/sandbox-id` (`kubernetes_sandbox_manager.py:619`). Shared across all bundle consumers.
 
-- `[TODO]` `P3.030` Create `backend/onyx/server/features/build/sandbox/kubernetes/docker/refresh-skills` — POSIX-sh script: curl tarball → extract to `/skills.next/` → atomic rename to `/skills/`. No external deps beyond `curl` + `tar` (both standard in the sandbox base image).
-- `[TODO]` `P3.031` Create `refresh-loop` — `while true; do refresh-skills; sleep 300; done` wrapper. Polling is the safety net; event-driven push (§3.4b) is the primary path.
-- `[TODO]` `P3.032` Add initContainer to the sandbox pod spec that runs `refresh-skills` synchronously before the sandbox container starts (guarantees `/skills/` exists before sessions can use it).
-- `[TODO]` `P3.033` Update sandbox entrypoint to background `refresh-loop &`.
-- `[TODO]` `P3.034` Mount a pod-level emptyDir volume at `/skills/` in the pod spec.
+### 3.4 In-pod refresh-bundle script + entrypoint hook (`sandbox-file-sync.md`)
 
-### 3.4b Event-driven push  (spec §9.7)
+- `[TODO]` `P3.030` Create `backend/onyx/server/features/build/sandbox/kubernetes/docker/refresh-bundle` — POSIX-sh script. Hardcoded case statement maps bundle_key → mount_path (`skills` → `/skills`, `user_library` → `/workspace/files/user_library`). Uses `flock` for race safety, sends `If-Modified-Since` header from `/var/lib/sandbox/<key>.last-modified`, on 200 extracts to sibling dir + atomic `mv`-swap, writes the new `Last-Modified` response header back to the sentinel file.
+- `[TODO]` `P3.031` Update the sandbox container entrypoint to run `refresh-bundle skills && refresh-bundle user_library` (iterating the registered bundles) before `exec`ing the agent. Same code path serves both fresh boot and snapshot restore.
+- `[TODO]` `P3.032` Mount a pod-level emptyDir volume at `/skills/` in the pod spec. (user_library still mounts at its existing path.)
+- `[TODO]` `P3.033` Frontend "Refresh sandbox" button in the Craft sandbox menu, wired to `POST /api/sandbox/{sid}/refresh`. Place near other sandbox-control actions, not as a primary action.
 
-Primary propagation path. ~1-3 sec typical end-to-end. Polling (§3.4) is the safety net.
+### 3.4b Skills consumer of the bundle pipeline (`spec §9.7`)
 
-- `[TODO]` `P3.035` Add `onyx.app/tenant-id=<id>` label to sandbox pods at provisioning, alongside the existing `onyx.app/sandbox-id` (`kubernetes_sandbox_manager.py:619`).
-- `[TODO]` `P3.036` Create `backend/onyx/background/celery/tasks/skills/__init__.py` + `tasks.py` if not already created by Phase 5 sweep.
-- `[TODO]` `P3.037` Implement `_list_active_sandbox_pods_for_tenant(tenant_id) -> list[str]` using k8s label selector `onyx.app/tenant-id={id}` + phase=Running.  (deps: P3.035)
-- `[TODO]` `P3.038` Implement `@shared_task(name="propagate_skill_change", expires=60)` — calls `_list_active_sandbox_pods_for_tenant`, then `send_task("refresh_pod_skills", ...)` per pod.  (deps: P3.037)
-- `[TODO]` `P3.039` Implement `@shared_task(name="refresh_pod_skills", expires=60)` — kubectl-exec into the named pod and run `/usr/local/bin/refresh-skills`. Swallow exec errors with `logger.warning` (polling catches misses).
-- `[TODO]` `P3.040x` Hook `celery_app.send_task("propagate_skill_change", args=[str(tenant_id)], expires=60)` at the 5 mutation endpoints AFTER their respective commits:
+The skills-specific consumer plugged into the generic pipeline from §3.3. ~1-3 sec end-to-end on the happy path; lifecycle triggers reconcile the ~5% push-failure tail.
+
+- `[TODO]` `P3.035` Implement `SkillsBundle` in `backend/onyx/sandbox_sync/bundles/skills.py`: `bundle_key = "skills"`, `mount_path = "/skills/"`, `cache_on_mutation = True`. `materialize` walks built-ins on disk + reads custom skill zip blobs from FileStore (via `file_store.read_file(skill.bundle_file_id)`, streaming members directly into the output tar — no on-disk unpack). Applies template rendering via `materialize_skills(...)` from §6. `pod_label_selector(tenant_id, _)` returns `onyx.app/tenant-id={tenant_id}`. `last_modified` returns `SELECT MAX(updated_at) FROM skill WHERE tenant_id=...`.  (deps: P3.020–P3.025)
+- `[TODO]` `P3.036` Register `SkillsBundle` in `backend/onyx/sandbox_sync/bundles/__init__.py` (called at import time).
+- `[TODO]` `P3.040x` Hook `enqueue_change(db, tenant_id, "skills")` at the 5 mutation endpoints AFTER their respective commits:
   - POST `/api/admin/skills/custom`
   - PATCH `/api/admin/skills/custom/{id}`
   - PUT `/api/admin/skills/custom/{id}/bundle`
   - PUT `/api/admin/skills/custom/{id}/grants`
   - DELETE `/api/admin/skills/custom/{id}`
-- `[TODO]` `P3.041x` Integration test: admin upload → wait ≤5 sec → assert pod's `/skills/` reflects new content AND agent's `skill` tool lists it on the next turn.
-- `[TODO]` `P3.042x` Failure test: simulate kubectl-exec failure during push → assert polling catches the change on next tick (use a 10-sec poll interval for the test to keep it fast).
+- `[TODO]` `P3.041x` Integration test: admin upload → wait ~5 sec → assert pod's `/skills/` reflects new content AND agent's `skill` tool lists it on the next turn.
+- `[TODO]` `P3.042x` Failure test: simulate kubectl-exec failure during push → call `POST /api/sandbox/{sid}/refresh` → assert pod reconciles.
+- `[TODO]` `P3.042y` Write-through cache test: provision two sandboxes in same tenant, instrument `SkillsBundle.materialize` with a call counter, upload a skill. After all pods finish refreshing, assert `materialize` ran exactly once (the upload-time call) and the second pod served from cache.
 
 ### 3.5 Per-session symlink  (spec §9)
 
@@ -208,7 +214,7 @@ Primary propagation path. ~1-3 sec typical end-to-end. Polling (§3.4) is the sa
 
 ### 3.6 Local backend refresh path  (spec §9)
 
-- `[TODO]` `P3.050` For dev/local: implement a subprocess equivalent of `refresh-skills` that calls `materialize_skills` directly into a host path; bind-mount that path into the sandbox container at `/skills/`. Alternative: dev can run an entirely in-process refresh loop.
+- `[TODO]` `P3.050` For dev/local: invoke `refresh-bundle skills` as a subprocess (same script, no kubectl needed). Alternative: bind-mount a host path that the materializer writes to directly into the sandbox container at `/skills/`.
 - `[TODO]` `P3.051` Verify the local backend's session-setup uses `_setup_session_skills_symlink(...)`.
 
 ### 3.7 Panel data source  (spec §11)
@@ -240,7 +246,7 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 - `[TODO]` `P3.090` Remove `COPY skills/ /workspace/skills/` from `backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile:99`
 - `[TODO]` `P3.091` Remove `RUN mkdir -p /workspace/skills` from same Dockerfile
-- `[TODO]` `P3.092` Add `COPY refresh-skills /usr/local/bin/refresh-skills` + `COPY refresh-loop /usr/local/bin/refresh-loop` + `chmod +x` + `RUN mkdir -p /skills`
+- `[TODO]` `P3.092` Add `COPY refresh-bundle /usr/local/bin/refresh-bundle` + `chmod +x` + `RUN mkdir -p /skills` (refresh-bundle is the shared in-pod script from `sandbox-file-sync.md`, not skills-specific)
 - `[TODO]` `P3.093` Update sandbox image build pipeline (the on-disk skills dir in the Onyx repo stays — read at runtime by api_server materializer)
 
 ### 3.11 Integration tests
@@ -374,7 +380,7 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 - `[TODO]` `P6.001` Confirm snapshot tarball **excludes** `/skills/` (it's a separate pod-level mount, not part of `/workspace/sessions/`). Verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
 - `[TODO]` `P6.002` Verify resume path does NOT re-materialize per-session. The pod's `/skills/` is kept fresh by the background refresh loop; resume just needs the symlink (P3.042).
-- `[TODO]` `P6.003` Add invariant docstring to `backend/onyx/skills/__init__.py`: `"Skill content is live (≤5 min propagation); AGENTS.md skill list is stable within a session."`
+- `[TODO]` `P6.003` Add invariant docstring to `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push through the bundle pipeline; lifecycle triggers — session setup, snapshot restore, manual refresh — reconcile the failure tail; OpenCode rescans per turn)."`
 - `[TODO]` `P6.004` Integration test `test_snapshot_excludes_skills.py`: pause session A → inspect snapshot tar, confirm no `/skills/` content; resume → `.agents/skills` is a symlink to `/skills/` resolving to current admin state
 
 ### 6.2 Multi-tenant test  (spec §14)
