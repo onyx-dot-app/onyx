@@ -80,12 +80,6 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.tasks.tasks import (
     _get_disabled_user_library_paths,
 )
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import (
-    acquire_sandbox_lease,
-)
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import (
-    SandboxLeaseAcquisitionError,
-)
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -1495,148 +1489,111 @@ class SessionManager:
                 },
             )
 
-            # Acquire the per-sandbox lease for the duration of the agent
-            # run. Serializes the interactive path with the headless
-            # scheduled-tasks executor: while a scheduled run is in flight
-            # the interactive call waits up to 30s; if it can't acquire we
-            # surface an error to the user. TTL is generous (2h) so
-            # long-running interactive turns don't expire mid-stream.
-            interactive_lease_token = f"interactive:{session_id}"
-            try:
-                lease_cm = acquire_sandbox_lease(
-                    sandbox_id=sandbox_id,
-                    owner_token=interactive_lease_token,
-                    ttl_seconds=2 * 60 * 60,
-                    wait_seconds=30.0,
-                )
-            except SandboxLeaseAcquisitionError as e:
-                error_packet = ErrorPacket(
-                    message=(
-                        "Another run is currently using this sandbox. "
-                        "Please retry in a moment."
+            # Drive the agent. `_yield_acp_events` is a pure ACP generator;
+            # `_persist_acp_event` applies the persistence side effects. The
+            # SSE formatting + packet-logger book-keeping happen here.
+            for acp_event in self._yield_acp_events(
+                sandbox_id, session_id, user_message_content
+            ):
+                # Handle SSE keepalive - send comment to keep connection alive.
+                if isinstance(acp_event, SSEKeepalive):
+                    # SSE comments start with : and are ignored by EventSource
+                    # but keep the HTTP connection alive.
+                    packet_logger.log_sse_emit("keepalive", session_id)
+                    yield ": keepalive\n\n"
+                    continue
+
+                # Persistence first so DB writes precede the SSE emit (matches
+                # the prior in-loop ordering, which interleaved them).
+                self._persist_acp_event(session_id, state, acp_event)
+                events_emitted += 1
+
+                # SSE-only branches: log + serialize for the HTTP client.
+                if isinstance(acp_event, AgentMessageChunk):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
                     )
-                )
-                packet_logger.log("error", error_packet.model_dump())
-                logger.warning("Sandbox lease unavailable: %s", e)
-                yield self._format_packet_event(error_packet)
-                return
+                    event_data["type"] = "agent_message_chunk"
+                    packet_logger.log("agent_message_chunk", event_data)
+                    packet_logger.log_sse_emit("agent_message_chunk", session_id)
+                    yield self._serialize_acp_event(acp_event, "agent_message_chunk")
 
-            with lease_cm:
-                # Drive the agent. `_yield_acp_events` is a pure ACP generator;
-                # `_persist_acp_event` applies the persistence side effects. The
-                # SSE formatting + packet-logger book-keeping happen here.
-                for acp_event in self._yield_acp_events(
-                    sandbox_id, session_id, user_message_content
-                ):
-                    # Handle SSE keepalive - send comment to keep connection alive.
-                    if isinstance(acp_event, SSEKeepalive):
-                        # SSE comments start with : and are ignored by EventSource
-                        # but keep the HTTP connection alive.
-                        packet_logger.log_sse_emit("keepalive", session_id)
-                        yield ": keepalive\n\n"
-                        continue
+                elif isinstance(acp_event, AgentThoughtChunk):
+                    packet_logger.log(
+                        "agent_thought_chunk",
+                        acp_event.model_dump(mode="json", by_alias=True),
+                    )
+                    packet_logger.log_sse_emit("agent_thought_chunk", session_id)
+                    yield self._serialize_acp_event(acp_event, "agent_thought_chunk")
 
-                    # Persistence first so DB writes precede the SSE emit (matches
-                    # the prior in-loop ordering, which interleaved them).
-                    self._persist_acp_event(session_id, state, acp_event)
-                    events_emitted += 1
+                elif isinstance(acp_event, ToolCallStart):
+                    packet_logger.log(
+                        "tool_call_start",
+                        acp_event.model_dump(mode="json", by_alias=True),
+                    )
+                    packet_logger.log_sse_emit("tool_call_start", session_id)
+                    yield self._serialize_acp_event(acp_event, "tool_call_start")
 
-                    # SSE-only branches: log + serialize for the HTTP client.
-                    if isinstance(acp_event, AgentMessageChunk):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "agent_message_chunk"
-                        packet_logger.log("agent_message_chunk", event_data)
-                        packet_logger.log_sse_emit("agent_message_chunk", session_id)
-                        yield self._serialize_acp_event(
-                            acp_event, "agent_message_chunk"
-                        )
+                elif isinstance(acp_event, ToolCallProgress):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "tool_call_progress"
+                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+                    packet_logger.log("tool_call_progress", event_data)
+                    packet_logger.log_sse_emit("tool_call_progress", session_id)
+                    yield self._serialize_acp_event(acp_event, "tool_call_progress")
 
-                    elif isinstance(acp_event, AgentThoughtChunk):
-                        packet_logger.log(
-                            "agent_thought_chunk",
-                            acp_event.model_dump(mode="json", by_alias=True),
-                        )
-                        packet_logger.log_sse_emit("agent_thought_chunk", session_id)
-                        yield self._serialize_acp_event(
-                            acp_event, "agent_thought_chunk"
-                        )
+                elif isinstance(acp_event, AgentPlanUpdate):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "agent_plan_update"
+                    event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+                    packet_logger.log("agent_plan_update", event_data)
+                    packet_logger.log_sse_emit("agent_plan_update", session_id)
+                    yield self._serialize_acp_event(acp_event, "agent_plan_update")
 
-                    elif isinstance(acp_event, ToolCallStart):
-                        packet_logger.log(
-                            "tool_call_start",
-                            acp_event.model_dump(mode="json", by_alias=True),
-                        )
-                        packet_logger.log_sse_emit("tool_call_start", session_id)
-                        yield self._serialize_acp_event(acp_event, "tool_call_start")
+                elif isinstance(acp_event, CurrentModeUpdate):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "current_mode_update"
+                    packet_logger.log("current_mode_update", event_data)
+                    packet_logger.log_sse_emit("current_mode_update", session_id)
+                    yield self._serialize_acp_event(acp_event, "current_mode_update")
 
-                    elif isinstance(acp_event, ToolCallProgress):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "tool_call_progress"
-                        event_data["timestamp"] = datetime.now(
-                            tz=timezone.utc
-                        ).isoformat()
-                        packet_logger.log("tool_call_progress", event_data)
-                        packet_logger.log_sse_emit("tool_call_progress", session_id)
-                        yield self._serialize_acp_event(acp_event, "tool_call_progress")
+                elif isinstance(acp_event, PromptResponse):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "prompt_response"
+                    packet_logger.log("prompt_response", event_data)
+                    packet_logger.log_sse_emit("prompt_response", session_id)
+                    yield self._serialize_acp_event(acp_event, "prompt_response")
 
-                    elif isinstance(acp_event, AgentPlanUpdate):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "agent_plan_update"
-                        event_data["timestamp"] = datetime.now(
-                            tz=timezone.utc
-                        ).isoformat()
-                        packet_logger.log("agent_plan_update", event_data)
-                        packet_logger.log_sse_emit("agent_plan_update", session_id)
-                        yield self._serialize_acp_event(acp_event, "agent_plan_update")
+                elif isinstance(acp_event, ACPError):
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = "error"
+                    packet_logger.log("error", event_data)
+                    packet_logger.log_sse_emit("error", session_id)
+                    yield self._serialize_acp_event(acp_event, "error")
 
-                    elif isinstance(acp_event, CurrentModeUpdate):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "current_mode_update"
-                        packet_logger.log("current_mode_update", event_data)
-                        packet_logger.log_sse_emit("current_mode_update", session_id)
-                        yield self._serialize_acp_event(
-                            acp_event, "current_mode_update"
-                        )
+                else:
+                    # Unrecognized packet type - log it but don't stream to frontend.
+                    event_type_name = type(acp_event).__name__
+                    event_data = acp_event.model_dump(
+                        mode="json", by_alias=True, exclude_none=False
+                    )
+                    event_data["type"] = f"unrecognized_{event_type_name.lower()}"
+                    packet_logger.log(
+                        f"unrecognized_{event_type_name.lower()}", event_data
+                    )
 
-                    elif isinstance(acp_event, PromptResponse):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "prompt_response"
-                        packet_logger.log("prompt_response", event_data)
-                        packet_logger.log_sse_emit("prompt_response", session_id)
-                        yield self._serialize_acp_event(acp_event, "prompt_response")
-
-                    elif isinstance(acp_event, ACPError):
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = "error"
-                        packet_logger.log("error", event_data)
-                        packet_logger.log_sse_emit("error", session_id)
-                        yield self._serialize_acp_event(acp_event, "error")
-
-                    else:
-                        # Unrecognized packet type - log it but don't stream to frontend.
-                        event_type_name = type(acp_event).__name__
-                        event_data = acp_event.model_dump(
-                            mode="json", by_alias=True, exclude_none=False
-                        )
-                        event_data["type"] = f"unrecognized_{event_type_name.lower()}"
-                        packet_logger.log(
-                            f"unrecognized_{event_type_name.lower()}", event_data
-                        )
-
-                # Flush any pending accumulated chunks at end of stream.
-                self._finalize_persist(session_id, state)
+            # Flush any pending accumulated chunks at end of stream.
+            self._finalize_persist(session_id, state)
 
             # Log streaming completion
             packet_logger.log_raw(

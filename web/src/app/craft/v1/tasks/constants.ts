@@ -2,24 +2,25 @@
  * Constants for the Scheduled Tasks UI.
  */
 
+import type { Route } from "next";
 import type {
   EditorMode,
   EditorPayload,
 } from "@/app/craft/v1/tasks/interfaces";
 
-export const TASKS_PATH = "/craft/v1/tasks";
-export const NEW_TASK_PATH = `${TASKS_PATH}/new`;
+export const TASKS_PATH = "/craft/v1/tasks" as Route;
+export const NEW_TASK_PATH = `${TASKS_PATH}/new` as Route;
 
-export function taskDetailPath(taskId: string): string {
-  return `${TASKS_PATH}/${taskId}`;
+export function taskDetailPath(taskId: string): Route {
+  return `${TASKS_PATH}/${taskId}` as Route;
 }
 
-export function taskEditPath(taskId: string): string {
-  return `${TASKS_PATH}/${taskId}/edit`;
+export function taskEditPath(taskId: string): Route {
+  return `${TASKS_PATH}/${taskId}/edit` as Route;
 }
 
-export function buildSessionPath(sessionId: string): string {
-  return `/craft/v1?sessionId=${sessionId}`;
+export function buildSessionPath(sessionId: string): Route {
+  return `/craft/v1?sessionId=${sessionId}` as Route;
 }
 
 // Default page size for run history.

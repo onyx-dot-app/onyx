@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Tooltip } from "@opal/components";
+import { Button, Table, createTableColumns } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
-import { cn } from "@opal/utils";
 import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import {
@@ -28,17 +27,72 @@ interface RunHistoryTableProps {
   taskId: string;
 }
 
-const CLICKABLE_STATUSES: ReadonlySet<ScheduledTaskRunStatus> = new Set([
-  "succeeded",
-  "failed",
-]);
+const CLICKABLE_STATUSES: ReadonlySet<ScheduledTaskRunStatus> =
+  new Set<ScheduledTaskRunStatus>(["succeeded", "failed"]);
 
-const ROW_BLOCKED_TOOLTIP: Partial<Record<ScheduledTaskRunStatus, string>> = {
-  queued: "Run not started yet.",
-  running: "Run in progress — sessions can be opened once it finishes.",
-  awaiting_approval: "Awaiting approval — open after the run resumes.",
-  skipped: "Skipped — no session was created.",
-};
+const tc = createTableColumns<ScheduledRunSummary>();
+
+function buildColumns() {
+  return [
+    tc.column("started_at", {
+      header: "Started",
+      weight: 22,
+      enableSorting: false,
+      cell: (value) => (
+        <div className="flex flex-col gap-0.5">
+          <Text mainUiBody text05 nowrap>
+            {formatAbsolute(value)}
+          </Text>
+          <Text secondaryBody text03>
+            {formatRelativeShort(value)}
+          </Text>
+        </div>
+      ),
+    }),
+    tc.column("status", {
+      header: "Status",
+      weight: 14,
+      enableSorting: false,
+      cell: (status) => (
+        // Wrapper exposes the status to Playwright (and lets the row's
+        // ``onRowClick`` still navigate via event bubbling).
+        <div data-run-status={status}>
+          <RunStatusBadge status={status} />
+        </div>
+      ),
+    }),
+    tc.displayColumn({
+      id: "duration",
+      header: "Duration",
+      width: { weight: 12 },
+      cell: (row) => (
+        <Text mainUiBody text03 nowrap>
+          {formatRunDuration(row.started_at, row.finished_at)}
+        </Text>
+      ),
+    }),
+    tc.displayColumn({
+      id: "summary",
+      header: "Summary",
+      width: { weight: 38 },
+      cell: (row) => (
+        <Text mainUiBody text03>
+          {row.summary ?? row.skip_reason ?? row.error_class ?? "—"}
+        </Text>
+      ),
+    }),
+    tc.column("trigger_source", {
+      header: "Trigger",
+      weight: 14,
+      enableSorting: false,
+      cell: (value) => (
+        <Text mainUiBody text03 nowrap>
+          {value === "manual_run_now" ? "Run Now" : "Schedule"}
+        </Text>
+      ),
+    }),
+  ];
+}
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const router = useRouter();
@@ -78,6 +132,10 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     void mutate();
   }, [mutate]);
 
+  const columns = useMemo(() => buildColumns(), []);
+
+  const allRuns = pages.flat();
+
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
@@ -104,8 +162,6 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     );
   }
 
-  const allRuns = pages.flat();
-
   if (allRuns.length === 0) {
     return (
       <Text mainUiBody text03 className="py-6 text-center">
@@ -116,79 +172,18 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   }
 
   return (
-    <Section gap={0.5}>
-      {/* Header */}
-      <div className="grid grid-cols-[1.2fr_0.8fr_0.6fr_2fr_0.6fr] gap-3 px-3 py-2 border-b border-border-01">
-        <Text figureSmallLabel text03>
-          Started
-        </Text>
-        <Text figureSmallLabel text03>
-          Status
-        </Text>
-        <Text figureSmallLabel text03>
-          Duration
-        </Text>
-        <Text figureSmallLabel text03>
-          Summary
-        </Text>
-        <Text figureSmallLabel text03>
-          Trigger
-        </Text>
-      </div>
-      {/* Rows */}
-      {allRuns.map((run) => {
-        const clickable =
-          CLICKABLE_STATUSES.has(run.status) && !!run.session_id;
-        const blockTooltip = ROW_BLOCKED_TOOLTIP[run.status];
-
-        const rowContent = (
-          <div
-            className={cn(
-              "grid grid-cols-[1.2fr_0.8fr_0.6fr_2fr_0.6fr] gap-3 px-3 py-3 rounded-08 border border-transparent",
-              clickable
-                ? "hover:bg-background-tint-01 hover:border-border-02 cursor-pointer"
-                : "cursor-not-allowed opacity-80"
-            )}
-            data-testid={`run-row-${run.id}`}
-            data-run-status={run.status}
-            onClick={() => {
-              if (!clickable || !run.session_id) return;
-              router.push(buildSessionPath(run.session_id));
-            }}
-          >
-            <div className="flex flex-col">
-              <Text mainUiBody text05>
-                {formatAbsolute(run.started_at)}
-              </Text>
-              <Text secondaryBody text03>
-                {formatRelativeShort(run.started_at)}
-              </Text>
-            </div>
-            <div className="flex items-center">
-              <RunStatusBadge status={run.status} />
-            </div>
-            <Text mainUiBody text03>
-              {formatRunDuration(run.started_at, run.finished_at)}
-            </Text>
-            <Text mainUiBody text03 className="truncate">
-              {run.summary ?? run.skip_reason ?? run.error_class ?? "—"}
-            </Text>
-            <Text mainUiBody text03>
-              {run.trigger_source === "manual_run_now" ? "Run Now" : "Schedule"}
-            </Text>
-          </div>
-        );
-
-        if (!clickable && blockTooltip) {
-          return (
-            <Tooltip key={run.id} tooltip={blockTooltip} side="top">
-              {rowContent}
-            </Tooltip>
-          );
-        }
-        return <div key={run.id}>{rowContent}</div>;
-      })}
-
+    <Section gap={0.5} alignItems="stretch">
+      <Table
+        data={allRuns}
+        columns={columns}
+        getRowId={(row) => row.id}
+        selectionBehavior="single-select"
+        onRowClick={(row) => {
+          if (CLICKABLE_STATUSES.has(row.status) && row.session_id) {
+            router.push(buildSessionPath(row.session_id));
+          }
+        }}
+      />
       {nextCursor && (
         <div className="flex justify-center pt-2">
           <Button

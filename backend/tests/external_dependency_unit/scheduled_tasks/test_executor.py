@@ -9,9 +9,9 @@ What they verify:
   origin, BuildMessage rows written via shared persistence consumer,
   summary populated, session_id set on the run.
 - Approval gate: stream emits a `RequestPermissionRequest` → run ends
-  in AWAITING_APPROVAL, sandbox lease released, notification emitted.
+  in AWAITING_APPROVAL, notification emitted.
 - Failure path: stream raises mid-iteration → run ends in FAILED,
-  notification of type SCHEDULED_TASK_FAILED, lease released.
+  notification of type SCHEDULED_TASK_FAILED.
 - Idempotency: pre-mark run as SUCCEEDED → executor no-ops.
 """
 
@@ -46,7 +46,6 @@ from onyx.db.models import ScheduledTask
 from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import insert_run
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import is_sandbox_leased
 
 
 def _make_chunk(text: str) -> AgentMessageChunk:
@@ -184,7 +183,7 @@ class TestExecutorHappyPath:
         self,
         db_session: Session,
         queued_run: tuple[ScheduledTask, UUID],
-        running_sandbox: Sandbox,
+        running_sandbox: Sandbox,  # noqa: ARG002
         stub_acp_stream: Callable[[list[Any]], None],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
@@ -235,16 +234,13 @@ class TestExecutorHappyPath:
         )
         assert "Hello from the agent." in final_agent_text
 
-        # Lease released — sandbox available again.
-        assert not is_sandbox_leased(running_sandbox.id)
-
 
 class TestExecutorApprovalGate:
-    def test_approval_required_releases_lease_and_marks_awaiting(
+    def test_approval_required_marks_awaiting(
         self,
         db_session: Session,
         queued_run: tuple[ScheduledTask, UUID],
-        running_sandbox: Sandbox,
+        running_sandbox: Sandbox,  # noqa: ARG002
         stub_acp_stream: Callable[[list[Any]], None],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
@@ -265,10 +261,6 @@ class TestExecutorApprovalGate:
         assert run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
         assert run.session_id is not None
 
-        # Lease was released early so the interactive UI can use the
-        # sandbox while the run is paused.
-        assert not is_sandbox_leased(running_sandbox.id)
-
         # AWAITING_APPROVAL notification was emitted.
         notifications = list(
             db_session.execute(
@@ -287,7 +279,7 @@ class TestExecutorFailure:
         self,
         db_session: Session,
         queued_run: tuple[ScheduledTask, UUID],
-        running_sandbox: Sandbox,
+        running_sandbox: Sandbox,  # noqa: ARG002
         stub_acp_stream: Callable[[list[Any]], None],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
@@ -307,9 +299,6 @@ class TestExecutorFailure:
         assert run.error_class == "RuntimeError"
         assert run.error_detail is not None
         assert "blew up" in run.error_detail
-
-        # Lease released even on failure.
-        assert not is_sandbox_leased(running_sandbox.id)
 
         notifications = list(
             db_session.execute(

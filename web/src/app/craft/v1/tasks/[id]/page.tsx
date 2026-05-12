@@ -4,10 +4,8 @@ import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Divider, Tooltip } from "@opal/components";
+import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -31,10 +29,6 @@ import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/interfaces";
-import {
-  formatAbsolute,
-  formatRelativeShort,
-} from "@/app/craft/v1/tasks/utils";
 
 export default function ScheduledTaskDetailPage() {
   const params = useParams<{ id: string }>();
@@ -128,6 +122,7 @@ export default function ScheduledTaskDetailPage() {
         rightChildren={
           data ? (
             <div className="flex items-center gap-2">
+              <TaskStatusBadge status={data.status} />
               <Button
                 icon={SvgPlayCircle}
                 variant="default"
@@ -181,79 +176,7 @@ export default function ScheduledTaskDetailPage() {
             Failed to load scheduled task.
           </Text>
         ) : (
-          <Section gap={1}>
-            <Card>
-              <div className="flex items-center gap-2">
-                <TaskStatusBadge status={data.status} />
-                <Text mainUiBody text03>
-                  {data.timezone}
-                </Text>
-              </div>
-              <Divider />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div>
-                  <Text figureSmallLabel text03>
-                    Next run
-                  </Text>
-                  <Tooltip
-                    tooltip={
-                      data.next_run_at
-                        ? formatAbsolute(data.next_run_at)
-                        : undefined
-                    }
-                    side="top"
-                  >
-                    <Text mainUiBody text05>
-                      {data.next_run_at
-                        ? formatRelativeShort(data.next_run_at)
-                        : "—"}
-                    </Text>
-                  </Tooltip>
-                </div>
-                <div>
-                  <Text figureSmallLabel text03>
-                    Last run
-                  </Text>
-                  <Text mainUiBody text05>
-                    {data.last_run
-                      ? formatRelativeShort(data.last_run.started_at)
-                      : "—"}
-                  </Text>
-                </div>
-              </div>
-              <Divider />
-              <Text figureSmallLabel text03>
-                Prompt
-              </Text>
-              <pre className="whitespace-pre-wrap font-main-ui-body text-text-05 bg-background-tint-01 rounded-08 p-3">
-                {data.prompt}
-              </pre>
-              {data.next_runs.length > 0 && (
-                <>
-                  <Divider />
-                  <Text figureSmallLabel text03>
-                    Upcoming
-                  </Text>
-                  <ul className="flex flex-col gap-1">
-                    {data.next_runs.map((iso, i) => (
-                      <li key={iso}>
-                        <Text mainUiBody text05>
-                          {i + 1}. {formatAbsolute(iso)}
-                        </Text>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </Card>
-
-            <Card>
-              <Text mainUiAction text05>
-                Run history
-              </Text>
-              <RunHistoryTable taskId={data.id} />
-            </Card>
-          </Section>
+          <RunHistoryTable taskId={data.id} />
         )}
       </SettingsLayouts.Body>
 

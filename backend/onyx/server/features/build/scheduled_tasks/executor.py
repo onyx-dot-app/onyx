@@ -11,23 +11,19 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
    marked it failed).
 2. Transition QUEUED -> RUNNING.
-3. Acquire the per-sandbox Redis lease so the executor serializes with
-   the interactive ``send_message`` path. If the sandbox is busy, write
-   a ``SKIPPED (skip_reason=sandbox_busy)`` row and return.
-4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
+3. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
-5. Drive the agent via the shared ``_yield_acp_events`` generator,
+4. Drive the agent via the shared ``_yield_acp_events`` generator,
    persisting each event with ``_persist_acp_event``. Enforce a 30 min
    monotonic budget (Celery thread-pool time limits are silently
    disabled — see CLAUDE.md).
-6. On ``RequestPermissionRequest`` (approval gate): release the lease
-   immediately, mark ``AWAITING_APPROVAL``, emit a notification, return
-   without writing a terminal status. Resume mechanics are owned by the
-   approvals project; until that ships these runs are
-   "terminal-for-display".
-7. On clean stream completion: ``_finalize_persist``, derive a
+5. On ``RequestPermissionRequest`` (approval gate): mark
+   ``AWAITING_APPROVAL``, emit a notification, return without writing a
+   terminal status. Resume mechanics are owned by the approvals project;
+   until that ships these runs are "terminal-for-display".
+6. On clean stream completion: ``_finalize_persist``, derive a
    ~120-char summary, mark ``SUCCEEDED``.
-8. On any exception inside the drive loop: mark ``FAILED`` with the
+7. On any exception inside the drive loop: mark ``FAILED`` with the
    exception class/detail and emit a notification. We deliberately
    swallow the exception so Celery doesn't retry (no retries in V1).
 """
@@ -52,15 +48,6 @@ from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import (
-    acquire_sandbox_lease,
-)
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import (
-    release_sandbox_lease,
-)
-from onyx.server.features.build.scheduled_tasks.sandbox_lease import (
-    SandboxLeaseAcquisitionError,
-)
 from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
@@ -73,19 +60,6 @@ logger = setup_logger()
 # slightly larger threshold (45 min) so a hung run that fails to honor the
 # budget still gets cleaned up out-of-band.
 DEFAULT_EXECUTOR_BUDGET_SECONDS = 30 * 60
-
-# Mirrors the interactive lease TTL (`SessionManager._stream_cli_agent_response`
-# uses 2h). Keep this in sync if the budget changes — the lease must outlive
-# any single run.
-EXECUTOR_LEASE_TTL_SECONDS = 2 * 60 * 60
-
-# Sandbox lease wait_seconds for the executor.
-#
-# Why 0 (non-blocking): if the interactive UI is mid-prompt on the user's
-# only sandbox, the spec mandates writing a `SKIPPED (sandbox_busy)` row
-# rather than queueing behind the interactive turn. The next scheduled
-# fire will retry.
-EXECUTOR_LEASE_WAIT_SECONDS = 0.0
 
 # Summary length on the run row (per spec: ~120 chars of final agent
 # message).
@@ -252,54 +226,24 @@ def run_scheduled_task_logic(
         )
         db_session.commit()
 
-    # Phase 2: acquire the lease, then drive the agent. The lease and DB
-    # session live across the same scope; we open a fresh session inside
-    # because the agent drive can be long-running and we don't want a
-    # single open transaction for the duration.
-    lease_token = f"scheduled:{run_id}"
+    # Phase 2: drive the agent. We open a fresh session inside the drive
+    # because the agent loop can be long-running and we don't want a
+    # single open transaction for the duration. Multiple scheduled runs
+    # can execute against the same sandbox concurrently — there is no
+    # serialization with the interactive `send_message` path.
     try:
-        try:
-            lease_cm = acquire_sandbox_lease(
-                sandbox_id=sandbox_id,
-                owner_token=lease_token,
-                ttl_seconds=EXECUTOR_LEASE_TTL_SECONDS,
-                wait_seconds=EXECUTOR_LEASE_WAIT_SECONDS,
-            )
-        except SandboxLeaseAcquisitionError:
-            # The interactive UI is using the sandbox. Write a skipped row
-            # so the user can see what happened; the next scheduled fire
-            # will try again.
-            with get_session_with_current_tenant() as db_session:
-                mark_run_status(
-                    db_session=db_session,
-                    run_id=run_id,
-                    status=ScheduledTaskRunStatus.SKIPPED,
-                    skip_reason="sandbox_busy",
-                )
-                db_session.commit()
-            logger.info(
-                "Scheduled run %s skipped — sandbox %s busy (lease held).",
-                run_id,
-                sandbox_id,
-            )
-            return
-
-        with lease_cm:
-            _drive_agent_with_lease(
-                run_id=run_id,
-                task_id=task_id,
-                task_user_id=task_user_id,
-                task_name=task_name,
-                task_prompt=task_prompt,
-                sandbox_id=sandbox_id,
-                budget_seconds=budget_seconds,
-            )
-        # If the drive paused on an approval gate, the lease was already
-        # released early inside `_drive_agent_with_lease`. The `with`
-        # block's `__exit__` sees `lock.owned() == False` and no-ops.
+        _drive_agent(
+            run_id=run_id,
+            task_id=task_id,
+            task_user_id=task_user_id,
+            task_name=task_name,
+            task_prompt=task_prompt,
+            sandbox_id=sandbox_id,
+            budget_seconds=budget_seconds,
+        )
     except Exception:
         # Catch-all: anything that escapes the inner drive (e.g. session
-        # creation failure, lease teardown error). Translate to FAILED.
+        # creation failure). Translate to FAILED.
         logger.exception("Unexpected error executing scheduled run %s", run_id)
         with get_session_with_current_tenant() as db_session:
             try:
@@ -327,7 +271,7 @@ def run_scheduled_task_logic(
                 )
 
 
-def _drive_agent_with_lease(
+def _drive_agent(
     *,
     run_id: UUID,
     task_id: UUID,
@@ -337,16 +281,15 @@ def _drive_agent_with_lease(
     sandbox_id: UUID,
     budget_seconds: int,
 ) -> bool:
-    """Drive the agent under an already-acquired sandbox lease.
+    """Drive the agent for a single scheduled run.
 
     Creates the BuildSession, persists the user prompt, iterates ACP
     events with the shared persistence consumer, and writes the terminal
     run status.
 
     Returns:
-        ``True`` if the run paused on an approval gate (lease was
-        released early, run status is AWAITING_APPROVAL). ``False``
-        otherwise (run status is terminal).
+        ``True`` if the run paused on an approval gate (run status is
+        AWAITING_APPROVAL). ``False`` otherwise (run status is terminal).
     """
     # We open a single session for the whole drive so that the
     # `_persist_acp_event` calls (which write `BuildMessage` rows) and the
@@ -398,10 +341,9 @@ def _drive_agent_with_lease(
             for acp_event in session_manager._yield_acp_events(
                 sandbox_id, session_id, task_prompt
             ):
-                # Approval gate: release the lease, mark
-                # awaiting_approval, return. Resume mechanics are owned
-                # by the approvals project; this is "terminal for
-                # display" until it ships.
+                # Approval gate: mark awaiting_approval, return. Resume
+                # mechanics are owned by the approvals project; this is
+                # "terminal for display" until it ships.
                 if isinstance(acp_event, RequestPermissionRequest):
                     approval_required = True
                     break
@@ -431,8 +373,6 @@ def _drive_agent_with_lease(
                 session_manager._persist_acp_event(session_id, state, acp_event)
                 final_event_count += 1
 
-            # Approval branch: release lease BEFORE marking the row so a
-            # downstream resume reacquires cleanly.
             if approval_required:
                 # Capture the summary BEFORE finalize_persist — the
                 # finalize call clears `state.message_chunks` so we'd
@@ -442,9 +382,6 @@ def _drive_agent_with_lease(
                 # what the agent has said before pausing.
                 session_manager._finalize_persist(session_id, state)
                 db_session.commit()
-                # Release the lease early. The `with` block in the caller
-                # will see `lock.owned() == False` and no-op.
-                release_sandbox_lease(sandbox_id, f"scheduled:{run_id}")
                 summary = summary_from_chunks or _summary_from_session_messages(
                     session_id, db_session
                 )

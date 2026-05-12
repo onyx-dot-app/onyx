@@ -134,19 +134,19 @@ Beat (30s, per tenant)                Celery "scheduled_tasks" queue
 dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
   BEGIN;                                if run.status != 'queued': return
    SELECT FROM scheduled_task           mark 'running'
-     WHERE active AND due               acquire Redis sandbox lease
-     FOR UPDATE SKIP LOCKED;            session = SessionManager
-   for each row:                          .create_session__no_commit(
-     ├─ if prior run in flight                user_id=task.user_id)
-     │     → insert skipped row         run.session_id ← session.id
-     ├─ insert queued run               for event in _yield_acp_events(
-     ├─ next_run_at = croniter             session, task.prompt):
-     │     .next(now, tz=task.tz)         _persist_acp_events([event])
-     └─ enqueue run_scheduled_task(       if budget exceeded → failed
-            run_id, expires=900)          if approval required →
-  COMMIT;                                      awaiting_approval; release
-                                       mark succeeded / failed; release
-Stuck-run sweep (hourly)               emit Notification if failed
+     WHERE active AND due               session = SessionManager
+     FOR UPDATE SKIP LOCKED;              .create_session__no_commit(
+   for each row:                              user_id=task.user_id)
+     ├─ if prior run in flight         run.session_id ← session.id
+     │     → insert skipped row         for event in _yield_acp_events(
+     ├─ insert queued run                  session, task.prompt):
+     ├─ next_run_at = croniter             _persist_acp_events([event])
+     │     .next(now, tz=task.tz)        if budget exceeded → failed
+     └─ enqueue run_scheduled_task(       if approval required →
+            run_id, expires=900)              awaiting_approval
+  COMMIT;                                mark succeeded / failed
+                                       emit Notification if failed
+Stuck-run sweep (hourly)
 ──────────────────────                          │
 cleanup_stuck_scheduled_runs                    ▼
   queued > 15m → failed (stuck)        BuildMessage rows (existing tables,
@@ -206,9 +206,6 @@ cleanup_stuck_scheduled_runs                    ▼
   `compute_next_run_at`, `human_readable`. Wraps `croniter` +
   `cron-descriptor`. No DB access.
 - `.../scheduled_tasks/executor.py` — `run_scheduled_task(run_id)` body.
-- `.../scheduled_tasks/sandbox_lease.py` — Redis-lock wrapper keyed on
-  `sandbox_id`; acquired by both the interactive `send_message` path and
-  the executor.
 - `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py` —
   `@shared_task` definitions (each enqueue uses `expires=`; per-run timeout
   enforced inside the task body via monotonic budget check).
@@ -335,8 +332,12 @@ queued ─► running ─► succeeded
 dispatcher also writes: skipped (prior run still in flight; next_run_at advances)
 ```
 
-`awaiting_approval` releases the sandbox lease. Resume mechanics owned by
-approvals project; until that ships, treat as terminal-for-display.
+Resume mechanics for `awaiting_approval` are owned by the approvals
+project; until that ships, treat as terminal-for-display.
+
+Multiple scheduled runs and the interactive `send_message` path can
+execute against the same sandbox concurrently — there is no
+serialization lease.
 
 ## UI
 
