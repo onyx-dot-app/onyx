@@ -1,3 +1,4 @@
+from enum import Enum as PyEnum
 from typing import cast
 from typing import Literal
 
@@ -21,6 +22,11 @@ from shared_configs.contextvars import get_current_tenant_id
 stripe.api_key = STRIPE_SECRET_KEY
 
 logger = setup_logger()
+
+
+class SeatBillingDeclineReason(str, PyEnum):
+    CARD_DECLINED = "card_declined"
+    SUBSCRIPTION_INVALID = "subscription_invalid"
 
 
 def fetch_stripe_checkout_session(
@@ -162,16 +168,12 @@ def _seat_billing_idempotency_key(tenant_id: str, target_quantity: int) -> str:
 def attempt_seat_billing_increase(
     tenant_id: str,
     target_quantity: int,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, SeatBillingDeclineReason | None]:
     """Set Stripe seat quantity to ``target_quantity``.
 
-    Returns ``(False, reason)`` for billing declines the caller should
-    surface as signup failures:
-      - ``"card_declined"`` — Stripe ``CardError``
-      - ``"subscription_invalid"`` — Stripe ``InvalidRequestError``
-
-    Other Stripe errors propagate (fail closed). No-op when current
-    quantity already ``>= target_quantity``.
+    On decline returns ``(False, SeatBillingDeclineReason.X)``. Other
+    Stripe errors propagate (fail closed). No-op when current quantity
+    is already ``>= target_quantity``.
 
     NOT a concurrency serializer — the idempotency key only dedupes
     HTTP retries. For cap enforcement under concurrency call
@@ -182,7 +184,7 @@ def attempt_seat_billing_increase(
         response = fetch_tenant_stripe_information(tenant_id)
         stripe_subscription_id = cast(str, response.get("stripe_subscription_id"))
         if not stripe_subscription_id:
-            return False, "subscription_invalid"
+            return False, SeatBillingDeclineReason.SUBSCRIPTION_INVALID
 
         subscription = stripe.Subscription.retrieve(stripe_subscription_id)
         subscription_item = subscription["items"]["data"][0]
@@ -202,14 +204,14 @@ def attempt_seat_billing_increase(
             tenant_id,
             e.user_message or str(e),
         )
-        return False, "card_declined"
+        return False, SeatBillingDeclineReason.CARD_DECLINED
     except stripe.InvalidRequestError as e:
         logger.warning(
             "Stripe rejected seat-billing increase for tenant %s: %s",
             tenant_id,
             str(e),
         )
-        return False, "subscription_invalid"
+        return False, SeatBillingDeclineReason.SUBSCRIPTION_INVALID
 
 
 def enforce_cloud_seat_limit(
@@ -231,7 +233,8 @@ def enforce_cloud_seat_limit(
     if is_tenant_on_trial_fn(tenant):
         return
 
-    # Local import — billing module must load on CE without EE tenants on path.
+    # Local import avoids circular import with user_mapping (which calls
+    # back into this module from add_users_to_tenant).
     from ee.onyx.server.tenants.user_mapping import get_tenant_count
 
     if db_session is not None:
@@ -250,12 +253,12 @@ def enforce_cloud_seat_limit(
     if success:
         return
 
-    if reason == "card_declined":
+    if reason == SeatBillingDeclineReason.CARD_DECLINED:
         message = (
             "Could not add a new seat: your payment method was declined. "
             "Please update your billing details and try again."
         )
-    elif reason == "subscription_invalid":
+    elif reason == SeatBillingDeclineReason.SUBSCRIPTION_INVALID:
         message = (
             "Could not add a new seat: this tenant does not have an active "
             "subscription. Please contact your Onyx administrator."

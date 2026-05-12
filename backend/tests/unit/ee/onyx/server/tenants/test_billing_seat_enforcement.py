@@ -16,6 +16,7 @@ import stripe
 from ee.onyx.server.tenants.billing import _seat_billing_idempotency_key
 from ee.onyx.server.tenants.billing import attempt_seat_billing_increase
 from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
+from ee.onyx.server.tenants.billing import SeatBillingDeclineReason
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -110,7 +111,7 @@ class TestAttemptSeatBillingIncrease:
 
         success, reason = attempt_seat_billing_increase("tenant_a", target_quantity=5)
 
-        assert (success, reason) == (False, "card_declined")
+        assert (success, reason) == (False, SeatBillingDeclineReason.CARD_DECLINED)
 
     @patch(f"{_BILLING}.register_tenant_users")
     @patch(f"{_BILLING}.stripe.Subscription.retrieve")
@@ -129,7 +130,10 @@ class TestAttemptSeatBillingIncrease:
 
         success, reason = attempt_seat_billing_increase("tenant_a", target_quantity=5)
 
-        assert (success, reason) == (False, "subscription_invalid")
+        assert (success, reason) == (
+            False,
+            SeatBillingDeclineReason.SUBSCRIPTION_INVALID,
+        )
 
     @patch(f"{_BILLING}.fetch_tenant_stripe_information")
     def test_missing_subscription_returns_subscription_invalid(
@@ -140,7 +144,10 @@ class TestAttemptSeatBillingIncrease:
 
         success, reason = attempt_seat_billing_increase("tenant_a", target_quantity=5)
 
-        assert (success, reason) == (False, "subscription_invalid")
+        assert (success, reason) == (
+            False,
+            SeatBillingDeclineReason.SUBSCRIPTION_INVALID,
+        )
 
 
 class TestEnforceCloudSeatLimit:
@@ -181,8 +188,8 @@ class TestEnforceCloudSeatLimit:
     @pytest.mark.parametrize(
         "reason,expected_in_message",
         [
-            ("card_declined", "payment method was declined"),
-            ("subscription_invalid", "active subscription"),
+            (SeatBillingDeclineReason.CARD_DECLINED, "payment method was declined"),
+            (SeatBillingDeclineReason.SUBSCRIPTION_INVALID, "active subscription"),
         ],
     )
     @patch(f"{_BILLING}.acquire_seat_lock")
