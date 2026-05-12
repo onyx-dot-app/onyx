@@ -87,6 +87,11 @@ export interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
+export interface JiraServiceManagementCredentialJson {
+  jira_user_email: string | null;
+  jira_api_token: string;
+}
+
 export interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -309,6 +314,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   } as JiraCredentialJson,
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  } as JiraServiceManagementCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
@@ -515,6 +524,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // Jira
   jira_user_email: "Jira User Email (required for Jira Cloud)",
   jira_api_token: "API or Personal Access Token",
+
+  // Jira Service Management (uses same credential fields as Jira)
 
   // Productboard
   productboard_access_token: "Productboard Access Token",

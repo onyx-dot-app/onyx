@@ -254,6 +254,7 @@ class DocumentSource(str, Enum):
     HIGHSPOT = "highspot"
     DRUPAL_WIKI = "drupal_wiki"
 
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
@@ -728,4 +729,5 @@ project management, and collaboration tools into a single, customizable platform
     DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
     DocumentSource.IMAP: "imap - email data",
     DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "jira service management data (service requests, incidents, problems, changes, SLAs)",
 }
