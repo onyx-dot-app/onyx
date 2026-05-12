@@ -98,7 +98,6 @@ func Execute() error {
 	rootCmd.AddCommand(newAskCmd(ios))
 	rootCmd.AddCommand(newSearchCmd(ios))
 	rootCmd.AddCommand(newAgentsCmd(ios))
-	rootCmd.AddCommand(newConfigureCmd(ios))
 	rootCmd.AddCommand(newValidateConfigCmd(ios))
 	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newInstallSkillCmd(ios))
