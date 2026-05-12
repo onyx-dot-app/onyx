@@ -5829,10 +5829,10 @@ class ExternalApp(Base):
     upstream_urls: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
     )
-    auth_template: Mapped[dict[str, str]] = mapped_column(
+    auth_template: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
-    organization_credentials: Mapped[dict[str, str]] = mapped_column(
+    organization_credentials: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
