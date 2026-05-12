@@ -1,7 +1,7 @@
 "use client";
 
 import { OnSubmitProps } from "@/hooks/useChatController";
-import { useCurrentAgent } from "@/hooks/useAgents";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
 

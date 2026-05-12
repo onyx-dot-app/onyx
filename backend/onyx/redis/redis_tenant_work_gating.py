@@ -13,18 +13,18 @@ from typing import cast
 
 from prometheus_client import Counter
 from prometheus_client import Gauge
-from redis.client import Redis
 
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 
-# Unprefixed key. `TenantRedis._prefixed` prepends `cloud:` at call time so
-# the full rendered key is `cloud:active_tenants`.
+# Unprefixed key. `TenantRedisClient` prepends `cloud:` at call time so the full
+# rendered key is `cloud:active_tenants`.
 _SET_KEY = "active_tenants"
 
 
@@ -66,7 +66,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def _client() -> Redis:
+def _client() -> TenantRedisClient:
     return get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
 
@@ -122,7 +122,7 @@ def observe_active_set_size() -> int | None:
     if not MULTI_TENANT:
         return None
     try:
-        size = cast(int, _client().zcard(_SET_KEY))
+        size = _client().zcard(_SET_KEY)
         _active_set_size.set(size)
         return size
     except Exception:
@@ -184,11 +184,7 @@ def cleanup_expired(ttl_seconds: int) -> int:
 
     cutoff_ms = _now_ms() - (ttl_seconds * 1000)
     try:
-        removed = cast(
-            int,
-            _client().zremrangebyscore(_SET_KEY, min="-inf", max=f"({cutoff_ms}"),
-        )
-        return removed
+        return _client().zremrangebyscore(_SET_KEY, min="-inf", max=f"({cutoff_ms}")
     except Exception:
         logger.exception("cleanup_expired failed")
         return 0

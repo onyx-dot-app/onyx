@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -83,7 +83,7 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalPersonaSnapshot | undefined;
+  selectedAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;

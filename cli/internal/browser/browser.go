@@ -1,5 +1,5 @@
-// Package util provides shared utility functions.
-package util
+// Package browser provides a helper to open URLs in the user's default browser.
+package browser
 
 import (
 	"os/exec"

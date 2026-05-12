@@ -62,6 +62,7 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
+from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
@@ -72,6 +73,8 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.federated_connectors.federated_retrieval import (
     get_federated_retrieval_functions,
@@ -558,6 +561,28 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 else build_access_filters_for_user(self.user, db_session)
             )
 
+            # Validate document-set access for user-supplied filters.
+            if (
+                self.user_selected_filters
+                and self.user_selected_filters.document_set
+                and not self.bypass_acl
+                and self.user
+            ):
+                requested = self.user_selected_filters.document_set
+                accessible = filter_document_set_names_by_user_access(
+                    db_session=db_session,
+                    document_set_names=requested,
+                    user=self.user,
+                )
+                unauthorized = sorted(
+                    name for name in requested if name not in accessible
+                )
+                if unauthorized:
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        f"User does not have access to document sets: {unauthorized}",
+                    )
+
             # SearchSettings → materialise EmbeddingModel while session is
             # open (forces lazy-load of cloud_provider properties)
             search_settings = get_current_search_settings(db_session)
@@ -968,7 +993,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             rich_response=SearchDocsResponse(
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
-                displayed_docs=final_ui_docs or None,
+                displayed_docs=final_ui_docs,
             ),
             # The LLM facing response typically includes less docs to cut down on noise and token usage
             llm_facing_response=docs_str,

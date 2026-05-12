@@ -26,6 +26,8 @@ export const SWR_KEYS = {
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   personaLabels: "/api/persona/labels",
+  adminAgents: "/api/admin/agents",
+  adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",

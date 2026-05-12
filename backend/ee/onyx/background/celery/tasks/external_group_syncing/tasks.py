@@ -65,6 +65,7 @@ from onyx.redis.redis_connector_ext_group_sync import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
@@ -262,7 +263,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
 def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,  # noqa: ARG001
     tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
@@ -670,8 +671,8 @@ def _timed_perform_external_group_sync(
 def validate_external_group_sync_fences(
     tenant_id: str,
     celery_app: Celery,  # noqa: ARG001
-    r: Redis,  # noqa: ARG001
-    r_replica: Redis,
+    r: TenantRedisClient,  # noqa: ARG001
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:

@@ -3,9 +3,9 @@
 import { useMemo, useState, useRef } from "react";
 import AgentCard from "@/sections/agents/AgentCard";
 import { useUser } from "@/providers/UserProvider";
-import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
-import { useAgents } from "@/hooks/useAgents";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { checkUserOwnsAgent } from "@/lib/agents/utils";
+import { useAgents } from "@/lib/agents/hooks";
+import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
@@ -19,7 +19,7 @@ import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 interface AgentsSectionProps {
   title: string;
   description?: string;
-  agents: MinimalPersonaSnapshot[];
+  agents: MinimalAgent[];
 }
 
 function AgentsSection({ title, description, agents }: AgentsSectionProps) {

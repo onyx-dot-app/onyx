@@ -1,9 +1,7 @@
 import asyncio
-import functools
 import json
 import ssl
 import threading
-from collections.abc import Callable
 from typing import Any
 from typing import cast
 from typing import Optional
@@ -35,6 +33,7 @@ from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 from onyx.redis.iam_auth import configure_redis_iam_auth
 from onyx.redis.iam_auth import create_redis_ssl_context_if_iam
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 from shared_configs.contextvars import get_current_tenant_id
@@ -62,171 +61,6 @@ def _client_retry_kwargs() -> dict[str, Any]:
     }
 
 
-class TenantRedis(redis.Redis):
-    def __init__(self, tenant_id: str, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.tenant_id: str = tenant_id
-
-    def _prefixed(self, key: str | bytes | memoryview) -> str | bytes | memoryview:
-        prefix: str = f"{self.tenant_id}:"
-        if isinstance(key, str):
-            if key.startswith(prefix):
-                return key
-            else:
-                return prefix + key
-        elif isinstance(key, bytes):
-            prefix_bytes = prefix.encode()
-            if key.startswith(prefix_bytes):
-                return key
-            else:
-                return prefix_bytes + key
-        elif isinstance(key, memoryview):
-            key_bytes = key.tobytes()
-            prefix_bytes = prefix.encode()
-            if key_bytes.startswith(prefix_bytes):
-                return key
-            else:
-                return memoryview(prefix_bytes + key_bytes)
-        else:
-            raise TypeError(f"Unsupported key type: {type(key)}")
-
-    def _prefix_method(self, method: Callable) -> Callable:
-        @functools.wraps(method)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if "name" in kwargs:
-                kwargs["name"] = self._prefixed(kwargs["name"])
-            elif len(args) > 0:
-                args = (self._prefixed(args[0]),) + args[1:]
-            return method(*args, **kwargs)
-
-        return wrapper
-
-    def _prefix_scan_iter(self, method: Callable) -> Callable:
-        @functools.wraps(method)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # Prefix the match pattern if provided
-            if "match" in kwargs:
-                kwargs["match"] = self._prefixed(kwargs["match"])
-            elif len(args) > 0:
-                args = (self._prefixed(args[0]),) + args[1:]
-
-            # Get the iterator
-            iterator = method(*args, **kwargs)
-
-            # Remove prefix from returned keys
-            prefix = f"{self.tenant_id}:".encode()
-            prefix_len = len(prefix)
-
-            for key in iterator:
-                if isinstance(key, bytes) and key.startswith(prefix):
-                    yield key[prefix_len:]
-                else:
-                    yield key
-
-        return wrapper
-
-    def _prefix_keys_arg(self, keys: Any) -> Any:
-        # BLPOP/BRPOP accept either a single key or an iterable of keys.
-        if isinstance(keys, (str, bytes, memoryview)):
-            return self._prefixed(keys)
-        return [self._prefixed(k) for k in keys]
-
-    def _prefix_blpop(self, method: Callable) -> Callable:
-        @functools.wraps(method)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if "keys" in kwargs:
-                kwargs["keys"] = self._prefix_keys_arg(kwargs["keys"])
-            elif len(args) > 0:
-                args = (self._prefix_keys_arg(args[0]),) + args[1:]
-            result = method(*args, **kwargs)
-            if result is None:
-                return None
-            # BLPOP/BRPOP returns (key, value). Strip our prefix from the key
-            # so callers see the same name they passed in, matching the symmetry
-            # of _prefix_scan_iter.
-            key, value = result[0], result[1]
-            if isinstance(key, bytes):
-                prefix_bytes = f"{self.tenant_id}:".encode()
-                if key.startswith(prefix_bytes):
-                    key = key[len(prefix_bytes) :]
-            elif isinstance(key, str):
-                prefix_str = f"{self.tenant_id}:"
-                if key.startswith(prefix_str):
-                    key = key[len(prefix_str) :]
-            return (key, value)
-
-        return wrapper
-
-    def _prefix_eval(self, method: Callable) -> Callable:
-        # EVAL/EVALSHA signature: (script, numkeys, *keys_and_args). The next
-        # ``numkeys`` positional args after ``numkeys`` are keys; everything
-        # else (script, numkeys, trailing args) is left untouched.
-        @functools.wraps(method)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if len(args) < 2 or not isinstance(args[1], int) or args[1] <= 0:
-                return method(*args, **kwargs)
-            numkeys = args[1]
-            keys_end = 2 + numkeys
-            prefixed = tuple(self._prefixed(k) for k in args[2:keys_end])
-            new_args = args[:2] + prefixed + args[keys_end:]
-            return method(*new_args, **kwargs)
-
-        return wrapper
-
-    def __getattribute__(self, item: str) -> Any:
-        original_attr = super().__getattribute__(item)
-        methods_to_wrap = [
-            "lock",
-            "unlock",
-            "get",
-            "set",
-            "setex",
-            "delete",
-            "exists",
-            "incrby",
-            "hset",
-            "hget",
-            "getset",
-            "owned",
-            "reacquire",
-            "create_lock",
-            "startswith",
-            "smembers",
-            "sismember",
-            "sadd",
-            "srem",
-            "scard",
-            "zadd",
-            "zrange",
-            "zrevrange",
-            "zrangebyscore",
-            "zremrangebyscore",
-            "zscore",
-            "zcard",
-            "hexists",
-            "hdel",
-            "ttl",
-            "pttl",
-            "expire",
-            "expireat",
-            "pexpire",
-            "pexpireat",
-            "hmget",
-            "incr",
-            "rpush",
-        ]  # Regular methods that need simple prefixing
-
-        if item == "scan_iter" or item == "sscan_iter":
-            return self._prefix_scan_iter(original_attr)
-        elif item in ("blpop", "brpop"):
-            return self._prefix_blpop(original_attr)
-        elif item in ("eval", "evalsha"):
-            return self._prefix_eval(original_attr)
-        elif item in methods_to_wrap and callable(original_attr):
-            return self._prefix_method(original_attr)
-        return original_attr
-
-
 class RedisPool:
     _instance: Optional["RedisPool"] = None
     _lock: threading.Lock = threading.Lock()
@@ -247,14 +81,16 @@ class RedisPool:
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
         )
 
-    def get_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(
-            tenant_id, connection_pool=self._pool, **_client_retry_kwargs()
+    def get_client(self, tenant_id: str) -> TenantRedisClient:
+        return TenantRedisClient(
+            tenant_id,
+            redis.Redis(connection_pool=self._pool, **_client_retry_kwargs()),
         )
 
-    def get_replica_client(self, tenant_id: str) -> Redis:
-        return TenantRedis(
-            tenant_id, connection_pool=self._replica_pool, **_client_retry_kwargs()
+    def get_replica_client(self, tenant_id: str) -> TenantRedisClient:
+        return TenantRedisClient(
+            tenant_id,
+            redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs()),
         )
 
     def get_raw_client(self) -> Redis:
@@ -363,7 +199,7 @@ def get_redis_client(
     *,
     #  This argument will be deprecated in the future
     tenant_id: str | None = None,
-) -> Redis:
+) -> TenantRedisClient:
     """
     Returns a Redis client with tenant-specific key prefixing.
 
@@ -383,7 +219,7 @@ def get_redis_replica_client(
     *,
     # this argument will be deprecated in the future
     tenant_id: str | None = None,
-) -> Redis:
+) -> TenantRedisClient:
     """
     Returns a Redis replica client with tenant-specific key prefixing.
 
@@ -399,7 +235,7 @@ def get_redis_replica_client(
     return redis_pool.get_replica_client(tenant_id)
 
 
-def get_shared_redis_client() -> Redis:
+def get_shared_redis_client() -> TenantRedisClient:
     """
     Returns a Redis client with a shared namespace prefix.
 
@@ -412,7 +248,7 @@ def get_shared_redis_client() -> Redis:
     return redis_pool.get_client(DEFAULT_REDIS_PREFIX)
 
 
-def get_shared_redis_replica_client() -> Redis:
+def get_shared_redis_replica_client() -> TenantRedisClient:
     """
     Returns a Redis replica client with a shared namespace prefix.
 
@@ -626,15 +462,19 @@ async def retrieve_ws_token_data(token: str) -> dict | None:
         return None
 
 
-def redis_lock_dump(lock: RedisLock, r: Redis) -> None:
-    # diagnostic logging for lock errors
+def redis_lock_dump(lock: RedisLock, r: TenantRedisClient) -> None:
+    # Diagnostic logging for lock errors. `lock.name` is the prefixed name so we
+    # read through the raw client to avoid the prefix being applied a second
+    # time (idempotent prefixing handles it either way, but the raw client is
+    # the more honest call here).
     name = lock.name
-    ttl = r.ttl(name)
+    raw = r.raw_client
+    ttl = raw.ttl(name)
     locked = lock.locked()
     owned = lock.owned()
     local_token: str | None = lock.local.token
 
-    remote_token_raw = r.get(lock.name)
+    remote_token_raw = raw.get(name)
     if remote_token_raw:
         remote_token_bytes = cast(bytes, remote_token_raw)
         remote_token = remote_token_bytes.decode("utf-8")

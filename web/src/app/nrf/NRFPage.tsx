@@ -17,12 +17,12 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import useAgentController from "@/hooks/useAgentController";
+import { useAgentController } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -95,10 +95,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: undefined,
-      onAgentSelect: () => {},
-    });
+    useAgentController(undefined, () => {});
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats

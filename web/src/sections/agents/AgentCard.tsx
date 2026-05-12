@@ -1,22 +1,22 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
+import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import {
-  checkUserOwnsAgent,
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
@@ -38,7 +38,7 @@ import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
-  agent: MinimalPersonaSnapshot;
+  agent: MinimalAgent;
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {

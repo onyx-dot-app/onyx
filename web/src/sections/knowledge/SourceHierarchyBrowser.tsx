@@ -43,7 +43,7 @@ import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
-import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
+import { AgentAttachedDocument } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -137,7 +137,7 @@ export interface SourceHierarchyBrowserProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }

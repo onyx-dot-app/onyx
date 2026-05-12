@@ -15,7 +15,6 @@ from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy import exists
 from sqlalchemy import select
@@ -119,6 +118,7 @@ from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
 from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
@@ -740,7 +740,7 @@ def _kickoff_indexing_tasks(
     search_settings: SearchSettings,
     cc_pair_ids: list[int],
     secondary_index_building: bool,
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> _KickoffResult:

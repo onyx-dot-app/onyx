@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
 import { Checkbox } from "@opal/components";

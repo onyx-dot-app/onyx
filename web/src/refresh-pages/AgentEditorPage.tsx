@@ -6,8 +6,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
-import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
+import { FullAgent } from "@/lib/agents/types";
+import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -68,13 +68,10 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents } from "@/hooks/useAgents";
-import {
-  createPersona,
-  updatePersona,
-  PersonaUpsertParameters,
-} from "@/app/admin/agents/lib";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useAgents } from "@/lib/agents/hooks";
+import { createAgent, updateAgent } from "@/lib/agents/svc";
+import { AgentUpsertParameters } from "@/lib/agents/types";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
@@ -88,7 +85,7 @@ import {
   deleteAgent,
   updateAgentFeaturedStatus,
   updateAgentSharedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
@@ -99,7 +96,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 interface AgentIconEditorProps {
-  existingAgent?: FullPersona | null;
+  existingAgent?: FullAgent | null;
 }
 
 function FormWarningsEffect() {
@@ -434,7 +431,7 @@ function MCPServerCard({
   );
 }
 
-function StarterMessages() {
+function AgentStarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
   const { values } = useFormikContext<{
@@ -478,7 +475,7 @@ function StarterMessages() {
 }
 
 export interface AgentEditorPageProps {
-  agent?: FullPersona;
+  agent?: FullAgent;
   refreshAgent?: () => void;
 }
 
@@ -793,7 +790,7 @@ export default function AgentEditorPage({
         }));
 
       // Send null instead of empty array if no starter messages
-      const finalStarterMessages =
+      const finalAgentStarterMessages =
         starterMessages.length > 0 ? starterMessages : null;
 
       // Always look up tools in availableTools to ensure we can find all tools
@@ -852,7 +849,7 @@ export default function AgentEditorPage({
       });
 
       // Build submission data
-      const submissionData: PersonaUpsertParameters = {
+      const submissionData: AgentUpsertParameters = {
         name: values.name,
         description: values.description,
         document_set_ids: values.enable_knowledge
@@ -861,7 +858,7 @@ export default function AgentEditorPage({
         is_public: values.is_public,
         default_model_configuration_id:
           (values as any).default_model_configuration_id ?? null,
-        starter_messages: finalStarterMessages,
+        starter_messages: finalAgentStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
         tool_ids: toolIds,
@@ -889,9 +886,9 @@ export default function AgentEditorPage({
       // Call API
       let personaResponse;
       if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+        personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
-        personaResponse = await createPersona(submissionData);
+        personaResponse = await createAgent(submissionData);
       }
 
       // Handle response
@@ -931,16 +928,19 @@ export default function AgentEditorPage({
   async function handleDeleteAgent() {
     if (!existingAgent) return;
 
-    const error = await deleteAgent(existingAgent.id);
-
-    if (error) {
-      toast.error(`Failed to delete agent: ${error}`);
-    } else {
+    try {
+      await deleteAgent(existingAgent.id);
       toast.success("Agent deleted successfully");
-
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
+    } catch (e) {
+      console.error("Delete agent error:", e);
+      toast.error(
+        `Failed to delete agent: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -1364,7 +1364,7 @@ export default function AgentEditorPage({
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
                         >
-                          <StarterMessages />
+                          <AgentStarterMessages />
                         </InputVertical>
                       </GeneralLayouts.Section>
 

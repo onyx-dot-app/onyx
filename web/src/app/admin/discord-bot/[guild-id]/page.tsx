@@ -24,8 +24,8 @@ import {
 } from "@/app/admin/discord-bot/lib";
 import { DiscordChannelsTable } from "@/app/admin/discord-bot/[guild-id]/DiscordChannelsTable";
 import { DiscordChannelConfig } from "@/app/admin/discord-bot/types";
-import { useAdminAgents } from "@/hooks/useAgents";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { useAdminAgents } from "@/lib/agents/hooks";
+import { Agent } from "@/lib/agents/types";
 
 interface Props {
   params: Promise<{ "guild-id": string }>;
@@ -41,7 +41,7 @@ function GuildDetailContent({
   disabled,
 }: {
   guildId: number;
-  personas: Persona[];
+  personas: Agent[];
   localChannels: DiscordChannelConfig[];
   onChannelUpdate: (
     channelId: number,
@@ -157,9 +157,11 @@ export default function Page({ params }: Props) {
     error: channelsError,
     refreshChannels,
   } = useDiscordChannels(guildId);
-  const { agents, isLoading: personasLoading } = useAdminAgents({
-    includeDefault: true,
-  });
+  const { agents, isLoading: personasLoading } = useAdminAgents(
+    false,
+    false,
+    true
+  );
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Local state for channel configurations
@@ -343,7 +345,7 @@ export default function Page({ params }: Props) {
         }
       />
       <SettingsLayouts.Body>
-        {/* Default Persona Selector */}
+        {/* Default Agent Selector */}
         <Card variant={!guild?.enabled ? "disabled" : "primary"}>
           <ContentAction
             title="Default Agent"

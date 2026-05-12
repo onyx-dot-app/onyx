@@ -80,6 +80,10 @@ The search API returns retrieved documents with citations — not an LLM-generat
 - **User-facing agents decide what to do with search results.** Fewer options if given a pre-digested answer.
 - The existing `ask` command already provides the "give me an LLM answer" path. `search` is the complementary primitive: retrieval without generation.
 
+### Note: LLM-Facing Output Format
+
+`search-requirements.md` describes the search output as "a single markdown blob to stdout." The actual `SearchTool` implementation (`convert_inference_sections_to_llm_string()`) produces a JSON string — `json.dumps({"results": [...]})` with fields like `document` (citation ID), `title`, `content`, `source_type`. This is what chat-flow LLM consumers already see. We use the same JSON format for consistency: the search API returns it as `llm_facing_text`, and the CLI prints it to stdout by default. The requirements doc is preserved as-is for historical reference.
+
 ### Consumer Note: Onyx MCP Server
 
 The new search API (Part 2) should also become the backend for the Onyx MCP server's search tool. The MCP server currently calls the EE `send_search_query` endpoint (Search Mode parity). Once the chat-mode search API exists, the MCP server should switch to it — giving MCP consumers the same search quality upgrade. This is out of scope for this project but is a direct beneficiary.
@@ -89,11 +93,11 @@ The new search API (Part 2) should also become the backend for the Onyx MCP serv
 ## Dependencies Between Parts
 
 ```
-Part 1 (CLI refactor)  ──────────────────────────────────────┐
+Part 1 (CLI refactor)  ✅ COMPLETE ──────────────────────────┐
                                                               │
-Part 2 (Search API)  ─────────────────────────────────────────┤
+Part 2 (Search API)  ✅ COMPLETE ─────────────────────────────┤
                                                               ▼
-Part 3 (CLI search command)  ──► depends on Part 1 + Part 2
+Part 3 (CLI search command)  ✅ COMPLETE ──► depends on Part 1 + Part 2
                                                               │
                                                               ▼
 Part 4 (Craft integration)   ──► depends on Part 1 + Part 2 + Part 3
@@ -103,7 +107,13 @@ Parts 1 and 2 are independent and can be developed in parallel. Part 3 requires 
 
 ---
 
-## Part 1: Agent-First CLI Refactor
+## Part 1: Agent-First CLI Refactor (COMPLETE)
+
+> **Status: Implemented.** Part 1 introduced several patterns that Parts 2-4 should be aware of:
+> - **IOStreams abstraction** — All command output flows through an `IOStreams` struct (Stdout/Stderr writers, IsInteractive flag, MaxOutput limit). New commands should accept `IOStreams` rather than writing to `os.Stdout` directly.
+> - **Relative URL paths** — API client methods use relative paths (e.g., `"/chat/send-message-simple-api"`), not absolute URLs. The base URL is joined at request time.
+> - **Shared command helpers** — Common patterns (output formatting, error handling, JSON marshaling, TTY gating) are factored into helper functions under `cli/cmd/`. New commands should reuse these rather than reimplementing.
+> - **Python integration tests** — CLI integration tests live in `cli/tests/` and are written in Python (pytest). They invoke the compiled binary as a subprocess and assert on stdout, stderr, and exit codes. Parts 2-4 should follow this pattern.
 
 ### Objective
 
@@ -137,7 +147,7 @@ Non-interactive mode output must be optimized for LLM consumption:
 Agents must not be able to configure the CLI — they cannot set the Onyx URL, API key, or any other persistent setting. Configuration is a human operation:
 
 - The `configure` command is gated behind interactive mode (requires TTY). Without a TTY, it fails with a clear error.
-- Inside Craft sandboxes, the CLI is configured entirely via environment variables (`ONYX_SERVER_URL`, `ONYX_API_KEY`). No config file is created, read, or needed.
+- Inside Craft sandboxes, the CLI is configured entirely via environment variables (`ONYX_SERVER_URL`, `ONYX_PAT`). No config file is created, read, or needed.
 - The `validate-config` command remains available in non-interactive mode (read-only, useful for health checks).
 - Outside of Craft (e.g., a developer using onyx-cli with Claude Code), the config file works as it does today.
 
@@ -154,7 +164,7 @@ Agents can see all CLI commands, but human-only commands are gated behind the TU
 
 Agents use both exit codes and error messages. Exit codes tell the agent (and scripts) that something failed; the stderr error message tells the agent *what* failed and *what to do about it*. Both matter:
 
-- The existing exit code set (`NotConfigured=1`, `BadRequest=2`, `AuthFailure=3`, `Unreachable=4`) must be extended to cover the full surface of failures an agent might encounter (rate limited, search-specific errors, etc.).
+- The exit code set is: `Success=0`, `General=1`, `BadRequest=2`, `NotConfigured=3`, `AuthFailure=4`, `Unreachable=5`, `RateLimited=6`, `Timeout=7`, `ServerError=8`, `NotAvailable=9`.
 - Every non-zero exit must print a clear, actionable error message to stderr — not just an error code or generic "request failed." The message should help an agent understand the problem and either fix it or ask the user for help (e.g., `"authentication failed: PAT expired, ask the user to generate a new one"`).
 
 #### R1.6: Version and capability discovery
@@ -177,7 +187,14 @@ The CLI's `install-skill` command installs a `SKILL.md` for agent harnesses (Cla
 
 ---
 
-## Part 2: Search API
+## Part 2: Search API (COMPLETE)
+
+> **Status: Implemented.** Key implementation details for Parts 3-4:
+> - **Endpoint** — `POST /api/search`, routed through `backend/onyx/server/features/search/api.py` with request/response models in `models.py`.
+> - **NullEmitter** — `SearchTool` requires an `Emitter`; a no-op `NullEmitter` in `backend/onyx/chat/emitter.py` satisfies this for non-chat callers.
+> - **Integration tests** — `backend/tests/integration/tests/search/test_search_api.py`.
+> - **`message_history` support** — Added beyond the original plan. Callers with conversation context can pass it in for better query expansion (resolves pronouns, follow-ups, etc.).
+> - **Field naming** — LLM override fields use `provider`/`model`, consistent with the rest of the API surface.
 
 ### Objective
 
@@ -261,7 +278,7 @@ The response includes both structured data (for programmatic consumers) and an L
       "updated_at": "2026-03-12T00:00:00Z"
     }
   ],
-  "llm_facing_text": "[1] Enterprise Sales Playbook (Google Drive, 2026-03-12)\n...",
+  "llm_facing_text": "{\"results\": [{\"document\": 1, \"title\": \"Enterprise Sales Playbook\", \"source_type\": \"google_drive\", \"content\": \"...\"}]}",
   "citation_mapping": { "1": "google_drive__abc123" },
   "query_expansion": {
     "semantic_queries": ["..."],
@@ -271,7 +288,7 @@ The response includes both structured data (for programmatic consumers) and an L
 ```
 
 - `results`: The full ranked result set with all metadata. Derived from `SearchDocsResponse.search_docs` / `displayed_docs`.
-- `llm_facing_text`: The same citation-rich markdown string that `SearchTool` produces as its `llm_facing_response`. Ready to paste into an LLM context window.
+- `llm_facing_text`: The same citation-rich JSON string that `SearchTool` produces as its `llm_facing_response` — a `{"results": [...]}` object where each result has fields like `document` (citation ID), `title`, `content`, `source_type`, etc. Ready to paste into an LLM context window.
 - `citation_mapping`: Maps citation numbers to document IDs, matching the chat tool's behavior.
 - `query_expansion`: What queries the LLM expanded the original into. Useful for debugging and transparency.
 
@@ -305,7 +322,13 @@ The search endpoint lives under `/api/search` (not `/api/build/...` or `/api/cha
 
 ---
 
-## Part 3: CLI Search Command & Agent Tool Surface
+## Part 3: CLI Search Command & Agent Tool Surface (COMPLETE)
+
+> **Status: Implemented.** Key implementation details for Part 4:
+> - **Two commands** — Resolved as separate `search` and `ask` commands. `search` returns retrieved documents with citations; `ask` returns LLM-generated answers. Different backends, different output shapes and cost profiles.
+> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff), `--limit` (max results), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of `llm_facing_text`).
+> - **Default output** — `onyx-cli search` prints `llm_facing_text` (the citation-rich JSON string from `SearchTool`) to stdout. Non-TTY output is truncated to 4096 bytes with a temp file for overflow.
+> - **5-minute timeout** — `doJSONLong()` helper uses a 5-minute HTTP timeout since `SearchTool.run()` includes multiple LLM calls.
 
 ### Objective
 
@@ -324,18 +347,13 @@ The CLI must expose the Part 2 search API's full capabilities through command-li
 - Structured JSON output as an alternative to the default
 - Controls for skipping LLM query expansion / document selection (trade quality for speed/cost)
 
-#### R3.2: Command design — open question
+#### R3.2: Command design — two commands
 
-Whether search-results and LLM-generated-answers are exposed as two separate commands or a single command with a mode flag is an implementation decision. Key considerations:
+Two separate commands: `search` for retrieved results and `ask` for LLM-generated answers. They have different backends (search API vs chat endpoint), different output shapes, and different cost profiles. `ask` already existed; `search` is the new primitive that returns retrieval without generation.
 
-- **Two commands** (e.g., `search` for results, `ask` for answers): clearer semantics, different backends (search API vs chat endpoint), different output shapes and cost profiles. `ask` already exists.
-- **One command with a flag** (e.g., `search --answer`): simpler agent surface (one tool to learn, one SKILL.md entry), shared flags like `--source`/`--days` apply to both modes. But the command silently switches between very different code paths.
+#### R3.3: Default output is LLM-facing JSON
 
-The implementation plan for this part should make and justify this decision.
-
-#### R3.3: Default output is LLM-facing markdown
-
-When not in JSON mode, the command prints the `llm_facing_text` from the API response to stdout. This is citation-rich markdown that an agent can directly consume and cite from. Progress/status goes to stderr.
+When not in JSON mode, the command prints the `llm_facing_text` from the API response to stdout. This is a JSON string containing citation-tagged search results (with document IDs, titles, content, source types, etc.) that an agent can directly consume and cite from. Progress/status goes to stderr.
 
 In JSON mode, the command prints the full structured API response.
 
@@ -350,15 +368,15 @@ The CLI should have a clear, final set of agent-usable commands. All agent-usabl
 
 Existing commands should be reviewed for consistency with the new search command(s) — flag naming, output format, error format, and truncation behavior should be uniform across the agent-usable surface.
 
-#### R3.5: Persona/agent discovery
+#### R3.5: Persona/agent scoping
 
-Agents need a way to list available personas with enough information to choose one for a scoped search (ID, name, description, attached document sets, search start date). This may be a standalone command or a flag on another command — the implementation plan should decide.
+Persona scoping is exposed as `--agent-id` on the `search` command. When specified, the search inherits the persona's configured document set filters, search start date, and attached documents. No standalone discovery command — agents learn about available personas from the `company-search` SKILL.md or from the user.
 
 ### Key Challenges
 
 - **Command structure**: The search/ask split is a UX decision that affects how agents discover and use the CLI. The implementation plan must justify the chosen structure.
 - **Flag design**: Flags must map cleanly to the API's parameters while being intuitive on the command line.
-- **Output format stability**: Agents will parse this output. The markdown format must be stable. The JSON format must be a documented, versioned contract.
+- **Output format stability**: Agents will parse this output. The LLM-facing JSON format must be stable. The full structured JSON response must be a documented, versioned contract.
 - **Consistency across commands**: All agent-usable commands should feel like they're from the same tool.
 
 ---
@@ -367,19 +385,24 @@ Agents need a way to list available personas with enough information to choose o
 
 ### Objective
 
-Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: minting session-scoped PATs, bundling the CLI binary, creating a CLI skill, populating it with the user's available sources, and tearing down the file sync infrastructure.
+Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI binary, creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
 
 ### Requirements
 
-#### R4.1: Session-scoped PAT lifecycle
+#### R4.1: Per-user PAT lifecycle
 
-Each Craft session gets a dedicated PAT that exists only for the session's lifetime. This follows the existing pattern of internal service authentication — the Discord bot service already hits the API server directly with a "service account" API key and tenant context is handled there. Craft PATs work the same way: provisioned per session, scoped to the session's user.
+> **Revised from initial design.** The original design specified per-session PATs minted and revoked with each session. During implementation planning, this was changed to per-user PATs stored encrypted at rest — eliminating ~100x PAT row accumulation and all session lifecycle complexity. See [4-craft-search-proposal.md](4-craft-search-proposal.md) for the full rationale.
 
-- **Provisioning**: At session creation, mint a new PAT scoped to the session's user. The PAT name should identify it as session-bound (e.g., `craft-session-{session_id}`). The PAT's permissions are the same as the user's — no elevation, no restriction beyond what the user already has. (PAT scopes will be addressed later by the Permissions system, not this project.)
-- **Injection**: For this version, the PAT value (the raw token, not the hash) is injected directly into the sandbox environment as `ONYX_API_KEY`. The CLI reads this env var for authentication. The backend URL is injected as `ONYX_SERVER_URL`, pointing at the internal Kube service address (not the public nginx URL, which is irrelevant inside the cluster). Long-term, the raw PAT will not be exposed to the sandbox at all — the egress interception proxy (Craft V1 project #4) will inject credentials server-side on outbound requests, so the sandbox never sees secrets. This direct env var injection is the interim approach until that proxy layer is in place.
-- **Deprovisioning**: When the session ends (user closes it, idle timeout, explicit cleanup), the PAT is revoked. Revoked PATs immediately stop working — any in-flight search requests fail with an auth error.
-- **Expiration**: Session PATs should have a time-based expiration as a safety net (e.g., 24 hours), independent of session lifecycle. If the session cleanup path fails, the PAT still expires.
-- **Audit**: Session PATs are distinguishable from user-created PATs in the PAT list. Users should see them (transparency) but they should be clearly labeled as session-managed and not manually editable.
+Each user's Craft sandbox gets a single PAT that persists across sessions and pod restarts. The PAT is stored encrypted on the `Sandbox` row and injected as a pod-level env var at provisioning time.
+
+- **One PAT per user**, distinguished by a `PatType` enum (`USER`, `CRAFT`) column on `PersonalAccessToken`. The enum uses `name == value` (uppercase), consistent with `AccountType` and `ProcessingMode`. The `server_default` backfills existing rows as `USER` automatically. No name-prefix conventions.
+- **Stored encrypted** on the `Sandbox` row using the existing `EncryptedString` column type (same infrastructure as LLM API keys, connector credentials, OAuth tokens). Decrypted at pod provisioning time. This is necessary because PATs are hashed (SHA256) in the `personal_access_token` table — the raw token can't be recovered from the hash, but the sandbox needs it re-injected on every pod provisioning.
+- **Injected as a pod-level env var** (`ONYX_PAT`) in the K8s pod spec at provisioning time. All sessions in the pod inherit it automatically — no per-session token injection or shared files. `ONYX_SERVER_URL` points at the internal Kube service address (configured via `SANDBOX_API_SERVER_URL`, no default — must be set per deployment).
+- **30-day expiry** as a safety net. At each pod provisioning, `ensure_sandbox_pat()` checks if the stored PAT is still valid. If expired (user was away for 30+ days), it mints a new one. No proactive rotation, no revocation on sleep or termination — pods don't live long enough for the PAT to expire mid-session (1-hour idle timeout << 30-day expiry).
+- **Hidden from user's PAT list and protected from deletion.** `GET /user/pats` and `DELETE /user/pats/{id}` filter by `PatType.USER` at the DB query layer so CRAFT PATs are invisible and unrevocable through the user-facing API. `create_pat()` and `revoke_pat()` flush (not commit) — callers own the transaction boundary.
+- **Future-compatible with egress proxy.** The `encrypted_pat` column is the single source of truth. Today it's read at pod provisioning and set as an env var. When the egress interception proxy ships (Craft V1 project #4), the proxy reads from the same column and injects credentials server-side — the env var goes away, the sandbox never sees the raw token, and the DB storage is unchanged.
+
+The security boundary is the pod, which is already one-per-user. Per-session PATs don't add security within the same pod. PAT scopes will be addressed later by the Permissions system, not this project.
 
 #### R4.2: CLI binary bundling
 
@@ -388,7 +411,7 @@ The onyx-cli binary must be available inside the sandbox:
 - The binary is included in the sandbox Docker image. This is a build-time dependency, not a runtime download.
 - The binary version is pinned to the Onyx release. There is no version mismatch between the CLI and the backend it talks to.
 - The binary is on `$PATH` inside the sandbox so the agent can invoke it as `onyx-cli` without a full path.
-- The binary works without a config file — it reads `ONYX_API_KEY` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
+- The binary works without a config file — it reads `ONYX_PAT` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
 
 #### R4.3: CLI skill creation
 
@@ -415,17 +438,31 @@ The skill's source list is populated from the user's actual connector access:
 - The list is a snapshot at session creation — not refreshed mid-session. Connector changes take effect on the next session.
 - If the user has no connected sources, the skill still renders but the source list says so explicitly. The agent should not hallucinate sources.
 
-#### R4.5: Decommission file sync
+#### R4.5: Decommission file sync and rework user library delivery
 
-Remove the legacy `files/` corpus sync infrastructure (the search tool replaces it):
+Remove the legacy `files/` corpus sync infrastructure (search replaces it) and replace the file-sync sidecar with a lightweight user library sync mechanism.
 
-- **Remove the `files/` directory from sandbox workspace setup.** No more symlink to persistent document storage or demo data.
-- **Remove `PersistentDocumentWriter`** and any Celery tasks that sync documents to persistent storage for sandbox consumption. (Verify no other consumer depends on this path first.)
-- **Remove `build_knowledge_sources_section`** and the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`. The knowledge sources section is replaced by the `company-search` skill's SKILL.md.
-- **Remove `CONNECTOR_INFO` dict** that was only used by the knowledge sources section builder.
-- **Remove `/workspace/files` allowlist rules** from `opencode_config.py`.
-- **Remove the Kubernetes init container** that synced corpus from S3 into the pod (if one exists).
-- **Update `AGENTS.template.md`** to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
+> **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
+
+**File sync removal:**
+- Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
+- Remove the S3 file-sync sidecar container (`s5cmd sync` at pod start). Search replaces connector document access entirely.
+- Remove `build_knowledge_sources_section()`, the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`, `generate_agents_md.py` from the sandbox image, and the `CONNECTOR_INFO` dict.
+- Remove `/workspace/files` and `/workspace/demo_data` allowlist rules from `opencode_config.py`.
+- Update `AGENTS.template.md` to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
+
+**User library rework:**
+
+User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They still need direct file access.
+
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at:
+- **Session setup/resume** — populates the directory, catching files uploaded while the pod was sleeping.
+- **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately.
+
+Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`s5cmd sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+
+**PersistentDocumentWriter:** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
+
 - **Preserve `attachments/`** — user-uploaded session files are still read via normal file operations and are not part of this removal.
 
 #### R4.6: Validation at session start
@@ -436,16 +473,16 @@ Before the agent begins working, verify the search tool is functional:
 - If validation fails (PAT invalid, backend unreachable, search endpoint not available), the session should surface a clear error rather than letting the agent discover the tool is broken mid-task.
 - This uses the capability discovery from Part 1 (R1.6).
 
-#### R4.7: Demo data path
+#### R4.7: Demo data removal
 
-If removing the `files/` infrastructure also removes the only path that demo data uses, demo data goes too. The main plan explicitly permits this: "Remove the legacy files/ corpus directory and demo-data path as part of search/control-plane work." If demo data has an independent path that survives, leave it alone.
+The `files/` infrastructure is the only delivery mechanism for demo data. Removing file sync removes demo data access. Demo data (`demo_data.zip` in the Docker image, `/workspace/demo_data/` directory, demo-data symlink path) is explicitly removed as part of the file sync decommission in R4.5.
 
 ### Key Challenges
 
-- **PAT lifecycle reliability**: The PAT must be revoked when the session ends. If the cleanup path fails (crash, timeout, orphaned sandbox), the time-based expiration is the safety net. But there should also be a periodic sweep that revokes PATs for sessions that no longer exist.
-- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox. This is a Craft-specific networking concern that the CLI itself doesn't care about.
+- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_ONYX_SERVER_URL` config.
 - **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. This data may not exist today and may need to be added to connector metadata or crafted per source type.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. Be aware this will happen and consider whether the deploy sequence matters (deploy search tool before removing file sync, or accept a brief gap).
+- **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) provides both paths before PR 3 (file sync removal) removes the old one.
 
 ---
 
@@ -462,11 +499,11 @@ Each part owns its own tests (detailed in part-specific implementation plans), b
 
 ### Security Boundaries
 
-- The sandbox never receives long-lived user credentials. The session PAT is short-lived, scoped, and auto-revoked.
+- The sandbox receives a per-user PAT with a 30-day expiry. The raw token is stored encrypted at rest on the `Sandbox` row (using `EncryptedString`) and injected as a pod-level env var. When the egress proxy ships, the sandbox will no longer see the raw token at all.
 - The CLI config file is not created inside the sandbox. Configuration is env-var-only.
 - The search API enforces the same ACL path as chat search. Cross-tenant leakage is tested.
-- PATs are stored hashed in the database. The raw token exists only in the sandbox environment and the minting response.
-- PAT scopes are out of scope for this project; they will be addressed by the Permissions system. Session PATs currently have the same permissions as the user.
+- PATs are stored hashed in the `personal_access_token` table. The raw token additionally exists encrypted on the `Sandbox` row (for re-injection) and in the pod environment.
+- PAT scopes are out of scope for this project; they will be addressed by the Permissions system. Craft PATs currently have the same permissions as the user.
 
 ### Repo Conventions
 

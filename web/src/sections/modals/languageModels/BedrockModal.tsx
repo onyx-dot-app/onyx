@@ -153,13 +153,8 @@ function BedrockModalInternals({
             title="Authentication Method"
             subDescription="Choose how Onyx should authenticate with Bedrock."
           >
-            <InputSelect
-              value={authMethod || AUTH_METHOD_ACCESS_KEY}
-              onValueChange={(value) =>
-                formikProps.setFieldValue(FIELD_BEDROCK_AUTH_METHOD, value)
-              }
-            >
-              <InputSelect.Trigger defaultValue={AUTH_METHOD_IAM} />
+            <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
+              <InputSelect.Trigger />
               <InputSelect.Content>
                 <InputSelect.Item
                   value={AUTH_METHOD_IAM}
@@ -180,7 +175,7 @@ function BedrockModalInternals({
                   Long-term API Key
                 </InputSelect.Item>
               </InputSelect.Content>
-            </InputSelect>
+            </InputSelectField>
           </InputVertical>
         </Section>
       </InputPadder>
@@ -281,7 +276,7 @@ export default function BedrockModal({
         (existingLlmProvider?.custom_config?.AWS_REGION_NAME as string) ?? "",
       BEDROCK_AUTH_METHOD:
         (existingLlmProvider?.custom_config?.BEDROCK_AUTH_METHOD as string) ??
-        "access_key",
+        AUTH_METHOD_ACCESS_KEY,
       AWS_ACCESS_KEY_ID:
         (existingLlmProvider?.custom_config?.AWS_ACCESS_KEY_ID as string) ?? "",
       AWS_SECRET_ACCESS_KEY:

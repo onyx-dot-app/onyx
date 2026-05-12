@@ -20,7 +20,7 @@ import {
   buildImmediateMessages,
   buildEmptyMessage,
 } from "@/app/app/services/messageTree";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -62,7 +62,7 @@ import {
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePinnedAgents } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -71,7 +71,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
@@ -109,8 +109,8 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAgent: MinimalPersonaSnapshot | undefined;
-  availableAgents: MinimalPersonaSnapshot[];
+  liveAgent: MinimalAgent | undefined;
+  availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;

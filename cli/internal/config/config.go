@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
 	EnvServerURL      = "ONYX_SERVER_URL"
-	EnvAPIKey         = "ONYX_API_KEY"
+	EnvAPIKey         = "ONYX_PAT"
 	EnvAgentID        = "ONYX_PERSONA_ID"
 	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
 	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
@@ -35,7 +36,7 @@ type OnyxCliConfig struct {
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:      "https://cloud.onyx.app",
+		ServerURL:      "https://cloud.onyx.app/api",
 		APIKey:         "",
 		DefaultAgentID: 0,
 	}
@@ -50,9 +51,21 @@ func (f Features) StreamMarkdownEnabled() bool {
 	return true
 }
 
-// IsConfigured returns true if the config has an API key.
+// IsConfigured returns true if the config has a personal access token (PAT).
 func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
+}
+
+// WebOrigin strips any API path suffix from a server URL, returning the web
+// app origin suitable for browser URLs (e.g., /admin/indexing/status).
+func WebOrigin(serverURL string) string {
+	u := strings.TrimRight(serverURL, "/")
+	for _, suffix := range []string{"/api/v1", "/api"} {
+		if strings.HasSuffix(u, suffix) {
+			return u[:len(u)-len(suffix)]
+		}
+	}
+	return u
 }
 
 // ConfigDir returns ~/.config/onyx-cli

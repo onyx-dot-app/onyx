@@ -270,6 +270,142 @@ def _make_doc(
     )
 
 
+# ---------------------------------------------------------------------------
+# _maybe_push_to_agent_wiki
+# ---------------------------------------------------------------------------
+
+_PATCH_AGENT_WIKI_ENABLED = "onyx.indexing.indexing_pipeline.AGENT_WIKI_ENABLED"
+_PATCH_AGENT_WIKI_MAX_CHARS = "onyx.indexing.indexing_pipeline.AGENT_WIKI_MAX_DOC_CHARS"
+_PATCH_MULTI_TENANT = "onyx.indexing.indexing_pipeline.MULTI_TENANT"
+_PATCH_GET_CC_PAIR = "onyx.indexing.indexing_pipeline.get_connector_credential_pair"
+_PATCH_GET_SESSION_AW = (
+    "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
+)
+
+
+def _make_adapter(connector_id: int = 1, credential_id: int = 1) -> MagicMock:
+    adapter = MagicMock()
+    adapter.connector_id = connector_id
+    adapter.credential_id = credential_id
+    return adapter
+
+
+def _make_cc_pair(is_public: bool) -> MagicMock:
+    from onyx.db.enums import AccessType
+
+    cc_pair = MagicMock()
+    cc_pair.access_type = AccessType.PUBLIC if is_public else AccessType.PRIVATE
+    return cc_pair
+
+
+def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
+    from onyx.document_index.interfaces import DocumentInsertionRecord
+
+    return [
+        DocumentInsertionRecord(document_id=d, already_existed=False) for d in doc_ids
+    ]
+
+
+_PATCH_RUN_IN_BACKGROUND = "onyx.indexing.indexing_pipeline.run_in_background"
+
+
+def test_agent_wiki_push_skipped_when_disabled() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, False),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_for_non_public_connector() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_skipped_for_oversized_doc() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    big_doc = _make_doc(
+        doc_id="big",
+        sections=[TextSection(text="x" * 100, link="http://example.com")],
+    )
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_AGENT_WIKI_MAX_CHARS, 50),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [big_doc], _make_insertion_records(["big"])
+        )
+    mock_run.assert_not_called()
+
+
+def test_agent_wiki_push_enqueues_for_public_doc() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_to_agent_wiki
+
+    doc = _make_doc(doc_id="doc1")
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(_PATCH_AGENT_WIKI_ENABLED, True),
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=ctx),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_RUN_IN_BACKGROUND) as mock_run,
+    ):
+        _maybe_push_to_agent_wiki(
+            _make_adapter(), [doc], _make_insertion_records(["doc1"])
+        )
+    mock_run.assert_called_once()
+    kwargs = mock_run.call_args.kwargs
+    assert kwargs["doc_id"] == "doc1"
+    assert kwargs["content"] == "Hello"
+
+
 def test_document_ingestion_hook_skipped_passes_through() -> None:
     doc = _make_doc()
     with (

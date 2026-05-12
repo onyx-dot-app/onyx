@@ -59,7 +59,7 @@ import {
 } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
