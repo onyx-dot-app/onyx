@@ -5,7 +5,7 @@ import { ensureHrefProtocol, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { OpenButton } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";

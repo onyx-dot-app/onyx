@@ -439,8 +439,9 @@ def run_deep_research_llm_loop(
                 if timed_out or is_last_cycle:
                     if timed_out:
                         logger.info(
-                            f"Deep research exceeded {DEEP_RESEARCH_FORCE_REPORT_SECONDS}s "
-                            f"(elapsed: {elapsed_seconds:.1f}s), forcing final report generation"
+                            "Deep research exceeded %ss (elapsed: %ss), forcing final report generation",
+                            DEEP_RESEARCH_FORCE_REPORT_SECONDS,
+                            format(elapsed_seconds, ".1f"),
                         )
                     report_turn_index = (
                         orchestrator_start_turn_index + cycle + reasoning_cycles
@@ -632,7 +633,7 @@ def run_deep_research_llm_loop(
                     for tool_call in tool_calls:
                         if tool_call.tool_name != RESEARCH_AGENT_TOOL_NAME:
                             logger.warning(
-                                f"Unexpected tool call: {tool_call.tool_name}"
+                                "Unexpected tool call: %s", tool_call.tool_name
                             )
                             continue
 
@@ -735,7 +736,8 @@ def run_deep_research_llm_loop(
                             # synthetic failure response so the invariant holds and the LLM
                             # knows the call failed.
                             logger.error(
-                                f"Research agent call at tab_index {tab_index} failed; emitting synthetic failure response"
+                                "Research agent call at tab_index %s failed; emitting synthetic failure response",
+                                tab_index,
                             )
                             failed_tool_call = research_agent_calls[tab_index]
                             failure_message = "Research agent call failed. Try a different approach or continue without this result."

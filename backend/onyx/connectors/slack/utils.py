@@ -206,7 +206,7 @@ class SlackTextCleaner:
                 # message indexing path continues with the id in place of
                 # the display name (ONYX-BACKEND-H6FN).
                 logger.warning(
-                    f"Error fetching data for user {user_id}: {e.response['error']}"
+                    "Error fetching data for user %s: %s", user_id, e.response["error"]
                 )
                 self._id_to_name_map[user_id] = user_id
 
@@ -231,7 +231,9 @@ class SlackTextCleaner:
                 # only fires on unexpected errors (e.g. malformed response);
                 # still defensive, but not actionable per-message — warn.
                 logger.warning(
-                    f"Unable to replace user ID with username for user_id '{user_id}': {e}"
+                    "Unable to replace user ID with username for user_id '%s': %s",
+                    user_id,
+                    e,
                 )
 
         return message

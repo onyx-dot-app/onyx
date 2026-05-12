@@ -155,7 +155,7 @@ def drain_processing_loop(tenant_id: str) -> None:
                 redis_locking=False,
             )
         except Exception:
-            logger.exception(f"Failed to process user file {file_id}")
+            logger.exception("Failed to process user file %s", file_id)
 
 
 def drain_delete_loop(tenant_id: str) -> None:
@@ -178,7 +178,7 @@ def drain_delete_loop(tenant_id: str) -> None:
                 redis_locking=False,
             )
         except Exception:
-            logger.exception(f"Failed to delete user file {file_id}")
+            logger.exception("Failed to delete user file %s", file_id)
             failed.add(file_id)
 
 
@@ -202,5 +202,5 @@ def drain_project_sync_loop(tenant_id: str) -> None:
                 redis_locking=False,
             )
         except Exception:
-            logger.exception(f"Failed to sync user file {file_id}")
+            logger.exception("Failed to sync user file %s", file_id)
             failed.add(file_id)

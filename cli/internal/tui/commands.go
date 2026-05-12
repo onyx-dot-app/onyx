@@ -8,9 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
+	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
-	"github.com/onyx-dot-app/onyx/cli/internal/util"
 )
 
 // handleSlashCommand dispatches slash commands and returns updated model + cmd.
@@ -43,15 +43,14 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdSessions(m)
 
 	case "/configure":
-		m.viewport.addInfo("Run 'onyx-cli configure' to change connection settings.")
-		return m, nil
+		return enterConfigureMode(m)
 
 	case "/clear", "/new":
 		return cmdNew(m)
 
 	case "/connectors":
-		url := m.config.ServerURL + "/admin/indexing/status"
-		if util.OpenBrowser(url) {
+		url := config.WebOrigin(m.config.ServerURL) + "/admin/indexing/status"
+		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
 			m.viewport.addWarning("Failed to open browser. Visit: " + url)
@@ -59,8 +58,8 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/settings":
-		url := m.config.ServerURL + "/app/settings/general"
-		if util.OpenBrowser(url) {
+		url := config.WebOrigin(m.config.ServerURL) + "/app/settings/general"
+		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
 			m.viewport.addWarning("Failed to open browser. Visit: " + url)
@@ -68,7 +67,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/experiments":
-		m.viewport.addInfo(m.experimentsText())
+		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
 		return m, nil
 
 	case "/quit":
@@ -196,7 +195,7 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 }
 
 // loadAgentsCmd returns a tea.Cmd that loads agents from the API.
-func loadAgentsCmd(client *api.Client) tea.Cmd {
+func loadAgentsCmd(client api.ClientAPI) tea.Cmd {
 	return func() tea.Msg {
 		agents, err := client.ListAgents(context.Background())
 		return InitDoneMsg{Agents: agents, Err: err}

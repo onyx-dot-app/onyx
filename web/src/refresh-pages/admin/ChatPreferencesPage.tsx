@@ -10,7 +10,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -21,6 +20,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgOrganization,
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -37,7 +37,6 @@ import {
 } from "@/providers/SettingsProvider";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { EmptyMessageCard } from "@opal/components";
 import { QueryHistoryType, Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
@@ -47,18 +46,27 @@ import {
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
+import {
+  EmptyMessageCard,
+  Button,
+  Divider,
+  Text,
+  Card,
+  MessageCard,
+  Tooltip,
+} from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -292,12 +300,11 @@ function NumericLimitField({
         variant={isOverMax ? "error" : undefined}
         rightSection={
           (value || "") !== defaultValue ? (
-            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
-              <IconButton
+            <Hoverable.Item group="numericLimit" variant="appear-on-hover">
+              <Button
                 icon={SvgRefreshCw}
                 tooltip="Restore default"
-                internal
-                type="button"
+                prominence="internal"
                 onClick={handleRestore}
               />
             </Hoverable.Item>
@@ -371,6 +378,7 @@ export default function ChatPreferencesPage() {
   const router = useRouter();
   const settings = useSettingsContext();
   const s = settings.settings;
+  const enterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -419,6 +427,9 @@ export default function ChatPreferencesPage() {
   );
   const codeInterpreterTool = availableTools.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const codingAgentTool = availableTools.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
 
   // Connectors
@@ -554,23 +565,37 @@ export default function ChatPreferencesPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <Disabled
-                disabled={uniqueSources.length === 0}
-                allowClick
-                tooltip="Set up connectors to use Search Mode"
+                disabled={!enterpriseEnabled || uniqueSources.length === 0}
+                allowClick={enterpriseEnabled}
+                tooltip={
+                  !enterpriseEnabled
+                    ? "Search Mode is an Enterprise Plan feature."
+                    : "Set up connectors to use Search Mode"
+                }
               >
                 <InputHorizontal
                   title="Search Mode"
-                  tag={{ title: "beta", color: "blue" }}
+                  tag={
+                    !enterpriseEnabled
+                      ? {
+                          title: "Enterprise Plan",
+                          color: "amber",
+                          icon: SvgOrganization,
+                        }
+                      : { title: "beta", color: "blue" }
+                  }
                   description="UI mode for quick document search across your organization."
-                  disabled={uniqueSources.length === 0}
+                  disabled={!enterpriseEnabled || uniqueSources.length === 0}
                   withLabel
                 >
                   <Switch
-                    checked={s.search_ui_enabled ?? true}
+                    checked={
+                      enterpriseEnabled ? s.search_ui_enabled ?? true : false
+                    }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
                     }}
-                    disabled={uniqueSources.length === 0}
+                    disabled={!enterpriseEnabled || uniqueSources.length === 0}
                   />
                 </InputHorizontal>
               </Disabled>
@@ -858,6 +883,30 @@ export default function ChatPreferencesPage() {
                           </InputHorizontal>
                         </Card>
                       </Disabled>
+
+                      <Disabled disabled={!codingAgentTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Coding Agent"
+                            description="Investigate a GitHub repository and answer questions about its code."
+                            disabled={!codingAgentTool}
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                codingAgentTool
+                                  ? isToolEnabled(codingAgentTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codingAgentTool &&
+                                void toggleTool(codingAgentTool.id, checked)
+                              }
+                              disabled={!codingAgentTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
                     </Section>
 
                     {/* Separator between built-in tools and MCP/OpenAPI tools */}
@@ -914,40 +963,61 @@ export default function ChatPreferencesPage() {
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
                   <Section>
-                    <InputHorizontal
-                      title="Keep Chat History"
-                      description="Specify how long Onyx should retain chats in your organization."
-                      withLabel
+                    <Disabled
+                      disabled={!enterpriseEnabled}
+                      tooltip="Chat history retention is an Enterprise Plan feature."
                     >
-                      <InputSelect
-                        value={
-                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                      <InputHorizontal
+                        title="Keep Chat History"
+                        description="Specify how long Onyx should retain chats in your organization."
+                        tag={
+                          !enterpriseEnabled
+                            ? {
+                                title: "Enterprise Plan",
+                                color: "amber",
+                                icon: SvgOrganization,
+                              }
+                            : undefined
                         }
-                        onValueChange={(value) => {
-                          void saveSettings({
-                            maximum_chat_retention_days:
-                              value === "forever" ? null : parseInt(value, 10),
-                          });
-                        }}
+                        disabled={!enterpriseEnabled}
+                        withLabel
                       >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          <InputSelect.Item value="forever">
-                            Forever
-                          </InputSelect.Item>
-                          <InputSelect.Item value="7">7 days</InputSelect.Item>
-                          <InputSelect.Item value="30">
-                            30 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="90">
-                            90 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="365">
-                            365 days
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
+                        <InputSelect
+                          value={
+                            s.maximum_chat_retention_days?.toString() ??
+                            "forever"
+                          }
+                          onValueChange={(value) => {
+                            void saveSettings({
+                              maximum_chat_retention_days:
+                                value === "forever"
+                                  ? null
+                                  : parseInt(value, 10),
+                            });
+                          }}
+                          disabled={!enterpriseEnabled}
+                        >
+                          <InputSelect.Trigger />
+                          <InputSelect.Content>
+                            <InputSelect.Item value="forever">
+                              Forever
+                            </InputSelect.Item>
+                            <InputSelect.Item value="7">
+                              7 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="30">
+                              30 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="90">
+                              90 days
+                            </InputSelect.Item>
+                            <InputSelect.Item value="365">
+                              365 days
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
+                      </InputHorizontal>
+                    </Disabled>
 
                     <InputHorizontal
                       title="Query History Visibility"
@@ -1024,23 +1094,6 @@ export default function ChatPreferencesPage() {
                 </Card>
 
                 <Card border="solid" rounding="lg">
-                  <InputHorizontal
-                    title="Image Extraction & Analysis"
-                    description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
-                    withLabel
-                  >
-                    <Switch
-                      checked={s.image_extraction_and_analysis_enabled ?? true}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({
-                          image_extraction_and_analysis_enabled: checked,
-                        });
-                      }}
-                    />
-                  </InputHorizontal>
-                </Card>
-
-                <Card border="solid" rounding="lg">
                   <Section>
                     <InputHorizontal
                       title="Allow Anonymous Users"
@@ -1111,52 +1164,76 @@ export default function ChatPreferencesPage() {
               }
             }}
           >
-            {({ dirty, isSubmitting, submitForm }) => (
-              <Form>
-                <Modal.Header
-                  icon={SvgAddLines}
-                  title="System Prompt"
-                  description="This base prompt is prepended to all chats, agents, and projects."
-                  onClose={() => setSystemPromptModalOpen(false)}
-                />
-                <Modal.Body>
-                  <Section gap={0.25} alignItems="start">
-                    <InputTextAreaField
-                      name="system_prompt"
-                      placeholder="Enter your system prompt..."
-                      rows={8}
-                      maxRows={20}
-                      autoResize
-                    />
-                    <Text font="secondary-body" color="text-03">
-                      {markdown(
-                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
-                      )}
-                    </Text>
-                  </Section>
-                  <MessageCard
-                    title="Modify with caution."
-                    description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                    padding="xs"
+            {({ dirty, isSubmitting, submitForm, setFieldValue }) => {
+              const defaultPrompt =
+                defaultAgentConfig?.default_system_prompt ?? "";
+
+              const handleRestore = () => {
+                void setFieldValue("system_prompt", defaultPrompt);
+              };
+
+              return (
+                <Form>
+                  <Modal.Header
+                    icon={SvgAddLines}
+                    title="System Prompt"
+                    description="This base prompt is prepended to all chats, agents, and projects."
+                    onClose={() => setSystemPromptModalOpen(false)}
                   />
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    prominence="secondary"
-                    onClick={() => setSystemPromptModalOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    prominence="primary"
-                    onClick={submitForm}
-                    disabled={!dirty || isSubmitting}
-                  >
-                    Save
-                  </Button>
-                </Modal.Footer>
-              </Form>
-            )}
+                  <Modal.Body>
+                    <Section gap={0.25} alignItems="start">
+                      <Hoverable.Root group="systemPromptRestore" width="full">
+                        <InputTextAreaField
+                          name="system_prompt"
+                          placeholder="Enter your system prompt..."
+                          rows={8}
+                          maxRows={20}
+                          autoResize
+                          rightSection={
+                            <Hoverable.Item
+                              group="systemPromptRestore"
+                              variant="appear-on-hover"
+                            >
+                              <Button
+                                icon={SvgRefreshCw}
+                                tooltip="Restore default"
+                                prominence="internal"
+                                onClick={handleRestore}
+                              />
+                            </Hoverable.Item>
+                          }
+                        />
+                      </Hoverable.Root>
+                      <Text font="secondary-body" color="text-03">
+                        {markdown(
+                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used.\n`{{REMINDER_TAG_DESCRIPTION}}` - Instructions for how to interpret system reminders in user messages."
+                        )}
+                      </Text>
+                    </Section>
+                    <MessageCard
+                      title="Modify with caution."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                      padding="xs"
+                    />
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setSystemPromptModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      prominence="primary"
+                      onClick={submitForm}
+                      disabled={!dirty || isSubmitting}
+                    >
+                      Save
+                    </Button>
+                  </Modal.Footer>
+                </Form>
+              );
+            }}
           </Formik>
         </Modal.Content>
       </Modal>

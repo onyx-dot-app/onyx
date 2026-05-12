@@ -12,7 +12,6 @@ import json
 import os
 import logging
 
-
 # revision identifiers, used by Alembic.
 revision = "62c3a055a141"
 down_revision = "3fc5d75723b3"
@@ -37,15 +36,11 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # Get all FILE connectors with their configs
-    file_connectors = conn.execute(
-        sa.text(
-            """
+    file_connectors = conn.execute(sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'FILE'
-        """
-        )
-    ).fetchall()
+        """)).fetchall()
 
     for connector_id, config in file_connectors:
         # Parse config if it's a string
@@ -59,13 +54,11 @@ def upgrade() -> None:
         file_names = []
         for file_id in file_locations:
             result = conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     SELECT display_name
                     FROM file_record
                     WHERE file_id = :file_id
-                """
-                ),
+                """),
                 {"file_id": file_id},
             ).fetchone()
 
@@ -80,13 +73,11 @@ def upgrade() -> None:
 
         # Update the connector
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE connector
                 SET connector_specific_config = :new_config
                 WHERE id = :connector_id
-            """
-            ),
+            """),
             {"connector_id": connector_id, "new_config": json.dumps(new_config)},
         )
 
@@ -96,15 +87,11 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     # Remove file_names from all FILE connectors
-    file_connectors = conn.execute(
-        sa.text(
-            """
+    file_connectors = conn.execute(sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'FILE'
-        """
-        )
-    ).fetchall()
+        """)).fetchall()
 
     for connector_id, config in file_connectors:
         # Parse config if it's a string
@@ -118,13 +105,11 @@ def downgrade() -> None:
 
             # Update the connector
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE connector
                     SET connector_specific_config = :new_config
                     WHERE id = :connector_id
-                """
-                ),
+                """),
                 {
                     "connector_id": connector_id,
                     "new_config": json.dumps(new_config),

@@ -449,6 +449,6 @@ def test_content_provider(
         ) from e
 
     logger.info(
-        f"Web content provider test succeeded for {request.provider_type.value}."
+        "Web content provider test succeeded for %s.", request.provider_type.value
     )
     return {"status": "ok"}

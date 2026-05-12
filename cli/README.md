@@ -3,7 +3,7 @@
 [![Release CLI](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml/badge.svg)](https://github.com/onyx-dot-app/onyx/actions/workflows/release-cli.yml)
 [![PyPI](https://img.shields.io/pypi/v/onyx-cli.svg)](https://pypi.org/project/onyx-cli/)
 
-A terminal interface for chatting with your [Onyx](https://github.com/onyx-dot-app/onyx) agent. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI framework.
+A CLI for querying enterprise knowledge from [Onyx](https://github.com/onyx-dot-app/onyx). Includes an interactive chat TUI for humans and non-interactive commands for AI agents and scripts.
 
 ## Installation
 
@@ -25,23 +25,30 @@ Run the interactive setup:
 onyx-cli configure
 ```
 
-This prompts for your Onyx server URL and API key, tests the connection, and saves config to `~/.config/onyx-cli/config.json`.
+This prompts for your Onyx server URL and personal access token (PAT), tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
 
 Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | Server base URL (default: `https://cloud.onyx.app`) |
-| `ONYX_API_KEY` | Yes | API key for authentication |
+| `ONYX_SERVER_URL` | No | API base URL (default: `https://cloud.onyx.app/api`) |
+| `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
+| `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
+| `ONYX_SSH_HOST_KEY` | No | Path to SSH host key for `serve` command |
 
 ## Usage
 
-### Interactive chat (default)
+### Interactive chat (default with terminal)
 
 ```shell
 onyx-cli
+onyx-cli chat --no-stream-markdown
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--no-stream-markdown` | Disable progressive markdown rendering during streaming |
 
 ### One-shot question
 
@@ -54,7 +61,10 @@ onyx-cli ask --json "Hello"
 | Flag | Description |
 |------|-------------|
 | `--agent-id <int>` | Agent ID to use (overrides default) |
-| `--json` | Output raw NDJSON events instead of plain text |
+| `--json` | Output NDJSON stream events instead of plain text |
+| `--prompt <string>` | Question text (use with piped stdin context) |
+| `--quiet` | Buffer output and print once at end |
+| `--max-output <int>` | Max bytes before truncating (0 to disable) |
 
 ### List agents
 
@@ -74,31 +84,91 @@ ssh your-host -p 2222
 ```
 
 Clients can either:
-- paste an API key at the login prompt, or
-- skip the prompt by sending `ONYX_API_KEY` over SSH:
+- paste a personal access token (PAT) at the login prompt, or
+- skip the prompt by sending `ONYX_PAT` over SSH:
 
 ```shell
-export ONYX_API_KEY=your-key
-ssh -o SendEnv=ONYX_API_KEY your-host -p 2222
+export ONYX_PAT=your-pat
+ssh -o SendEnv=ONYX_PAT your-host -p 2222
 ```
 
 Useful hardening flags:
+- `--host-key` (default `~/.config/onyx-cli/host_ed25519`)
 - `--idle-timeout` (default `15m`)
 - `--max-session-timeout` (default `8h`)
 - `--rate-limit-per-minute` (default `20`)
 - `--rate-limit-burst` (default `40`)
+- `--rate-limit-cache` (default `4096`)
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `chat` | Launch the interactive chat TUI (default) |
-| `ask` | Ask a one-shot question (non-interactive) |
-| `agents` | List available agents |
-| `serve` | Serve the interactive chat TUI over SSH |
-| `configure` | Configure server URL and API key |
-| `validate-config` | Validate configuration and test connection |
-| `install-skill` | Install the agent skill file into a project |
+| Command | Mode | Description |
+|---------|------|-------------|
+| `chat` | Interactive | Launch the interactive chat TUI (requires terminal) |
+| `ask` | Agent / Script | Ask a question and print the answer to stdout |
+| `agents` | Agent / Script | List available agents (ID, name, description) |
+| `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
+| `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
+| `experiments` | Agent / Script | List experimental features and their status |
+| `configure` | Interactive | Configure server URL and PAT (requires terminal) |
+| `serve` | Interactive | Serve the Onyx TUI over SSH |
+
+### Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--version`, `-v` | Print client and server version information |
+| `--debug` | Run in debug mode (verbose logging) |
+
+## Agent / Non-Interactive Use
+
+When called without a TTY (e.g., by an AI agent or piped into another command), onyx-cli adjusts its behavior:
+
+- **No subcommand**: prints help and exits 0 (instead of launching the TUI)
+- **Results to stdout**, progress/errors to stderr
+- **No ANSI codes** or interactive prompts
+- **`ask` output truncated** to 4096 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+
+### Configuration
+
+If a human has already run `onyx-cli configure`, the CLI works out of the box — no additional setup needed. Environment variables can override the config file or serve as an alternative when no config file exists:
+
+```shell
+export ONYX_SERVER_URL="https://your-onyx-server.com/api"
+export ONYX_PAT="your-pat"
+```
+
+### Exit Codes
+
+| Code | Name | When |
+|------|------|------|
+| 0 | Success | Command completed |
+| 1 | General | Unknown error |
+| 2 | BadRequest | Invalid arguments |
+| 3 | NotConfigured | Missing config/PAT |
+| 4 | AuthFailure | Invalid PAT (401/403) |
+| 5 | Unreachable | Server unreachable |
+| 6 | RateLimited | Server returned 429 |
+| 7 | Timeout | Request timed out |
+| 8 | ServerError | Server returned 5xx |
+| 9 | NotAvailable | Feature/endpoint doesn't exist |
+
+### Skill File
+
+Install the bundled SKILL.md so AI coding agents can discover the CLI:
+
+```shell
+onyx-cli install-skill
+onyx-cli install-skill --global
+onyx-cli install-skill --copy
+onyx-cli install-skill --agent claude-code
+```
+
+| Flag | Description |
+|------|-------------|
+| `--global`, `-g` | Install to home directory instead of project |
+| `--copy` | Copy files instead of symlinking |
+| `--agent`, `-a` | Target specific agents (e.g. `claude-code`; can be repeated) |
 
 ## Slash Commands (in TUI)
 
@@ -144,7 +214,7 @@ go test ./...
 go build -o onyx-cli .
 
 # Lint
-staticcheck ./...
+golangci-lint run ./...
 ```
 
 ## Publishing to PyPI

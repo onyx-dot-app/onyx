@@ -17,6 +17,7 @@ import {
   SvgKey,
   SvgLock,
   SvgMinusCircle,
+  SvgPlusCircle,
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
@@ -40,7 +41,6 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button, Divider } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -770,6 +770,7 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserPasteAsTile,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
@@ -887,6 +888,19 @@ function ChatPreferencesSettings() {
             <Switch
               checked={smoothStreamingEnabled}
               onCheckedChange={setSmoothStreamingEnabled}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Collapse Large Pastes"
+            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            withLabel
+          >
+            <Switch
+              checked={user?.preferences?.paste_as_tile ?? false}
+              onCheckedChange={(checked) => {
+                updateUserPasteAsTile(checked);
+              }}
             />
           </InputHorizontal>
 
@@ -1454,15 +1468,16 @@ function AccountsAccessSettings() {
                         variant="internal"
                       />
                     )}
-                    <CreateButton
-                      onClick={() => setShowCreateModal(true)}
-                      secondary={false}
-                      internal
-                      transient={showCreateModal}
-                      rightIcon
-                    >
-                      New Access Token
-                    </CreateButton>
+                    <div className="shrink-0">
+                      <Button
+                        rightIcon={SvgPlusCircle}
+                        prominence="internal"
+                        interaction={showCreateModal ? "active" : "rest"}
+                        onClick={() => setShowCreateModal(true)}
+                      >
+                        New Access Token
+                      </Button>
+                    </div>
                   </Section>
 
                   <Section gap={0.25}>

@@ -10,18 +10,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/onyx-dot-app/onyx/cli/internal/api"
-	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/overflow"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 const defaultMaxOutputBytes = 4096
 
-func newAskCmd() *cobra.Command {
+func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
 		askAgentID int
 		askJSON    bool
@@ -32,7 +30,7 @@ func newAskCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "ask [question]",
-		Short: "Ask a one-shot question (non-interactive)",
+		Short: "Ask a question and print the answer to stdout",
 		Long: `Send a one-shot question to an Onyx agent and print the response.
 
 The question can be provided as a positional argument, via --prompt, or piped
@@ -49,16 +47,16 @@ to a temp file. Set --max-output 0 to disable truncation.`,
   cat error.log | onyx-cli ask --prompt "Find the root cause"
   echo "what is onyx?" | onyx-cli ask`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.Load()
-			if !cfg.IsConfigured() {
-				return exitcodes.New(exitcodes.NotConfigured, "onyx CLI is not configured\n  Run: onyx-cli configure")
+			cfg, client, err := requireClient()
+			if err != nil {
+				return err
 			}
 
 			if askJSON && askQuiet {
 				return exitcodes.New(exitcodes.BadRequest, "--json and --quiet cannot be used together")
 			}
 
-			question, err := resolveQuestion(args, askPrompt)
+			question, err := resolveQuestion(ios, args, askPrompt)
 			if err != nil {
 				return err
 			}
@@ -71,7 +69,6 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			client := api.NewClient(cfg)
 			parentID := -1
 			ch := client.SendMessageStream(
 				ctx,
@@ -83,7 +80,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			)
 
 			// Determine truncation threshold.
-			isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+			isTTY := ios.IsStdoutTTY
 			truncateAt := 0 // 0 means no truncation
 			if cmd.Flags().Changed("max-output") {
 				truncateAt = maxOutput
@@ -97,7 +94,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 
 			// Overflow writer: tees to stdout and optionally to a temp file.
 			// In quiet mode, buffer everything and print once at the end.
-			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet}
+			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet, Out: ios.Out, ErrOut: ios.ErrOut}
 
 			for event := range ch {
 				if e, ok := event.(models.SessionCreatedEvent); ok {
@@ -116,9 +113,13 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					if err != nil {
 						return fmt.Errorf("error marshaling event: %w", err)
 					}
-					fmt.Println(string(data))
-					if _, ok := event.(models.ErrorEvent); ok {
-						lastErr = fmt.Errorf("%s", event.(models.ErrorEvent).Error)
+					fmt.Fprintln(ios.Out, string(data))
+					if errEvt, ok := event.(models.ErrorEvent); ok {
+						if errEvt.StatusCode != 0 {
+							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", errEvt.Error)
+						} else {
+							lastErr = exitcodes.New(exitcodes.General, errEvt.Error)
+						}
 					}
 					if _, ok := event.(models.StopEvent); ok {
 						gotStop = true
@@ -132,32 +133,35 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				case models.SearchStartEvent:
 					if isTTY && !askQuiet {
 						if e.IsInternetSearch {
-							fmt.Fprintf(os.Stderr, "\033[2mSearching the web...\033[0m\n")
+							fmt.Fprintf(ios.ErrOut, "\033[2mSearching the web...\033[0m\n")
 						} else {
-							fmt.Fprintf(os.Stderr, "\033[2mSearching documents...\033[0m\n")
+							fmt.Fprintf(ios.ErrOut, "\033[2mSearching documents...\033[0m\n")
 						}
 					}
 				case models.SearchQueriesEvent:
 					if isTTY && !askQuiet {
 						for _, q := range e.Queries {
-							fmt.Fprintf(os.Stderr, "\033[2m  → %s\033[0m\n", q)
+							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", q)
 						}
 					}
 				case models.SearchDocumentsEvent:
 					if isTTY && !askQuiet && len(e.Documents) > 0 {
-						fmt.Fprintf(os.Stderr, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
+						fmt.Fprintf(ios.ErrOut, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
 					}
 				case models.ReasoningStartEvent:
 					if isTTY && !askQuiet {
-						fmt.Fprintf(os.Stderr, "\033[2mThinking...\033[0m\n")
+						fmt.Fprintf(ios.ErrOut, "\033[2mThinking...\033[0m\n")
 					}
 				case models.ToolStartEvent:
 					if isTTY && !askQuiet && e.ToolName != "" {
-						fmt.Fprintf(os.Stderr, "\033[2mUsing %s...\033[0m\n", e.ToolName)
+						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", e.ToolName)
 					}
 				case models.ErrorEvent:
 					ow.Finish()
-					return fmt.Errorf("%s", e.Error)
+					if e.StatusCode != 0 {
+						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", e.Error)
+					}
+					return exitcodes.New(exitcodes.General, e.Error)
 				case models.StopEvent:
 					ow.Finish()
 					return nil
@@ -179,14 +183,14 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				return lastErr
 			}
 			if !gotStop {
-				return fmt.Errorf("stream ended unexpectedly")
+				return exitcodes.New(exitcodes.General, "stream ended unexpectedly")
 			}
 			return nil
 		},
 	}
 
 	cmd.Flags().IntVar(&askAgentID, "agent-id", 0, "Agent ID to use")
-	cmd.Flags().BoolVar(&askJSON, "json", false, "Output raw JSON events")
+	cmd.Flags().BoolVar(&askJSON, "json", false, "Output NDJSON stream events instead of plain text")
 	cmd.Flags().BoolVarP(&askQuiet, "quiet", "q", false, "Buffer output and print once at end (no streaming)")
 	cmd.Flags().StringVar(&askPrompt, "prompt", "", "Question text (use with piped stdin context)")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
@@ -195,10 +199,10 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 }
 
 // resolveQuestion builds the final question string from args, --prompt, and stdin.
-func resolveQuestion(args []string, prompt string) (string, error) {
+func resolveQuestion(ios *iostreams.IOStreams, args []string, prompt string) (string, error) {
 	hasArg := len(args) > 0
 	hasPrompt := prompt != ""
-	hasStdin := !term.IsTerminal(int(os.Stdin.Fd()))
+	hasStdin := !ios.IsStdinTTY
 
 	if hasArg && hasPrompt {
 		return "", exitcodes.New(exitcodes.BadRequest, "specify the question as an argument or --prompt, not both")
@@ -207,7 +211,7 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 	var stdinContent string
 	if hasStdin {
 		const maxStdinBytes = 10 * 1024 * 1024 // 10MB
-		data, err := io.ReadAll(io.LimitReader(os.Stdin, maxStdinBytes))
+		data, err := io.ReadAll(io.LimitReader(ios.In, maxStdinBytes))
 		if err != nil {
 			return "", fmt.Errorf("failed to read stdin: %w", err)
 		}
@@ -231,4 +235,3 @@ func resolveQuestion(args []string, prompt string) (string, error) {
 		return "", exitcodes.New(exitcodes.BadRequest, "no question provided\n  Usage: onyx-cli ask \"your question\"\n  Or:    echo \"context\" | onyx-cli ask --prompt \"your question\"")
 	}
 }
-

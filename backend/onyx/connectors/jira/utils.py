@@ -145,7 +145,7 @@ def get_comment_strs(
 
             comment_strs.append(body_text)
         except Exception as e:
-            logger.error(f"Failed to process comment due to an error: {e}")
+            logger.error("Failed to process comment due to an error: %s", e)
             continue
 
     return comment_strs
@@ -182,7 +182,7 @@ class CustomFieldExtractor:
             else:
                 return str(value)
         except Exception as e:
-            logger.error(f"Error processing custom field value {value}: {e}")
+            logger.error("Error processing custom field value %s: %s", value, e)
             return ""
 
     @staticmethod

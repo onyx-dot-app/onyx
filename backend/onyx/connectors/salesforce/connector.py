@@ -306,11 +306,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 num_csvs += 1
                 num_bytes += file_size
                 logger.info(
-                    f"CSV download: object_type={object_type} path={csv_path} bytes={file_size}"
+                    "CSV download: object_type=%s path=%s bytes=%s",
+                    object_type,
+                    csv_path,
+                    file_size,
                 )
 
         logger.info(
-            f"CSV download total: total_csvs={num_csvs} total_bytes={num_bytes}"
+            "CSV download total: total_csvs=%s total_bytes=%s", num_csvs, num_bytes
         )
 
     @staticmethod
@@ -339,12 +342,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
         # This takes 10-70 minutes first time (idk why the range is so big)
         total_types = len(object_type_to_csv_path)
-        logger.info(f"Starting to process {total_types} object types")
+        logger.info("Starting to process %s object types", total_types)
 
         for i, (object_type, csv_paths) in enumerate(
             object_type_to_csv_path.items(), 1
         ):
-            logger.info(f"Processing object type {object_type} ({i}/{total_types})")
+            logger.info(
+                "Processing object type %s (%s/%s)", object_type, i, total_types
+            )
             # If path is None, it means it failed to fetch the csv
             if csv_paths is None:
                 continue
@@ -354,10 +359,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 num_records = 0
 
                 logger.debug(
-                    f"Processing CSV: object_type={object_type} "
-                    f"csv={csv_path} "
-                    f"len={Path(csv_path).stat().st_size} "
-                    f"records={num_records}"
+                    "Processing CSV: object_type=%s csv=%s len=%s records=%s",
+                    object_type,
+                    csv_path,
+                    Path(csv_path).stat().st_size,
+                    num_records,
                 )
 
                 with open(csv_path, "r", newline="", encoding="utf-8") as f:
@@ -376,15 +382,16 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 sf_db.flush()
 
                 logger.debug(
-                    f"Added {len(new_ids)} new/updated records for {object_type}"
+                    "Added %s new/updated records for %s", len(new_ids), object_type
                 )
 
                 logger.info(
-                    f"Processed CSV: object_type={object_type} "
-                    f"csv={csv_path} "
-                    f"len={Path(csv_path).stat().st_size} "
-                    f"records={num_records} "
-                    f"db_len={sf_db.file_size}"
+                    "Processed CSV: object_type=%s csv=%s len=%s records=%s db_len=%s",
+                    object_type,
+                    csv_path,
+                    Path(csv_path).stat().st_size,
+                    num_records,
+                    sf_db.file_size,
                 )
                 os.remove(csv_path)
 
@@ -469,10 +476,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             processed = examined_ids - 1
             if now - last_log_time > SalesforceConnector.LOG_INTERVAL:
                 logger.info(
-                    f"Processing stats: {type_to_processed} "
-                    f"file_size={sf_db.file_size} "
-                    f"processed={processed} "
-                    f"remaining={len(changed_ids_to_type) - processed}"
+                    "Processing stats: %s file_size=%s processed=%s remaining=%s",
+                    type_to_processed,
+                    sf_db.file_size,
+                    processed,
+                    len(changed_ids_to_type) - processed,
                 )
                 last_log_time = now
 
@@ -481,7 +489,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             parent_object = sf_db.get_record(parent_id, parent_type)
             if not parent_object:
                 logger.warning(
-                    f"Failed to get parent object {parent_id} for {parent_type}"
+                    "Failed to get parent object %s for %s", parent_id, parent_type
                 )
                 continue
 
@@ -556,12 +564,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             )
 
             total_types = len(object_type_to_csv_paths)
-            logger.info(f"Starting to process {total_types} object types")
+            logger.info("Starting to process %s object types", total_types)
 
             for i, (object_type, csv_paths) in enumerate(
                 object_type_to_csv_paths.items(), 1
             ):
-                logger.info(f"Processing object type {object_type} ({i}/{total_types})")
+                logger.info(
+                    "Processing object type %s (%s/%s)", object_type, i, total_types
+                )
                 # If path is None, it means it failed to fetch the csv
                 if csv_paths is None:
                     continue
@@ -575,10 +585,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                             num_records += 1
 
                     logger.debug(
-                        f"Processing CSV: object_type={object_type} "
-                        f"csv={csv_path} "
-                        f"len={Path(csv_path).stat().st_size} "
-                        f"records={num_records}"
+                        "Processing CSV: object_type=%s csv=%s len=%s records=%s",
+                        object_type,
+                        csv_path,
+                        Path(csv_path).stat().st_size,
+                        num_records,
                     )
 
                     new_ids = sf_db.update_from_csv(
@@ -591,15 +602,16 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                     sf_db.flush()
 
                     logger.debug(
-                        f"Added {len(new_ids)} new/updated records for {object_type}"
+                        "Added %s new/updated records for %s", len(new_ids), object_type
                     )
 
                     logger.info(
-                        f"Processed CSV: object_type={object_type} "
-                        f"csv={csv_path} "
-                        f"len={Path(csv_path).stat().st_size} "
-                        f"records={num_records} "
-                        f"db_len={sf_db.file_size}"
+                        "Processed CSV: object_type=%s csv=%s len=%s records=%s db_len=%s",
+                        object_type,
+                        csv_path,
+                        Path(csv_path).stat().st_size,
+                        num_records,
+                        sf_db.file_size,
                     )
 
                     os.remove(csv_path)
@@ -607,9 +619,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
             gc.collect()
 
-            logger.info(f"Found {len(changed_ids_to_type)} total updated records")
+            logger.info("Found %s total updated records", len(changed_ids_to_type))
             logger.info(
-                f"Starting to process parent objects of types: {ctx.parent_types}"
+                "Starting to process parent objects of types: %s", ctx.parent_types
             )
 
             # Step 3 - extract and index docs
@@ -629,13 +641,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             raise
         finally:
             logger.info(
-                f"Final processing stats: "
-                f"examined={examined_ids} "
-                f"parents_changed={parents_changed} "
-                f"remaining={len(changed_ids_to_type) - examined_ids}"
+                "Final processing stats: examined=%s parents_changed=%s remaining=%s",
+                examined_ids,
+                parents_changed,
+                len(changed_ids_to_type) - examined_ids,
             )
 
-            logger.info(f"Top level object types processed: {type_to_processed}")
+            logger.info("Top level object types processed: %s", type_to_processed)
 
             sf_db.close()
 
@@ -673,9 +685,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             )
             gc.collect()
 
-            logger.info(f"Found {len(changed_ids_to_type)} total updated records")
+            logger.info("Found %s total updated records", len(changed_ids_to_type))
             logger.info(
-                f"Starting to process parent objects of types: {ctx.parent_types}"
+                "Starting to process parent objects of types: %s", ctx.parent_types
             )
 
             # Step 3 - extract and index docs
@@ -850,9 +862,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 processed = num_examined
                 if now - last_log_time > SalesforceConnector.LOG_INTERVAL:
                     logger.info(
-                        f"Processing stats: {type_to_processed} "
-                        f"processed={processed} "
-                        f"remaining={len(changed_ids_to_type) - processed}"
+                        "Processing stats: %s processed=%s remaining=%s",
+                        type_to_processed,
+                        processed,
+                        len(changed_ids_to_type) - processed,
                     )
                     last_log_time = now
 
@@ -862,13 +875,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             raise
         finally:
             logger.info(
-                f"Final processing stats: "
-                f"processed={processed} "
-                f"remaining={len(changed_ids_to_type) - processed} "
-                f"parents_changed={parents_changed}"
+                "Final processing stats: processed=%s remaining=%s parents_changed=%s",
+                processed,
+                len(changed_ids_to_type) - processed,
+                parents_changed,
             )
 
-            logger.info(f"Top level object types processed: {type_to_processed}")
+            logger.info("Top level object types processed: %s", type_to_processed)
 
             sf_db.close()
 
@@ -927,9 +940,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 #     'is_custom': sobject['custom']
                 # }
 
-        logger.info(f"Describe: num_prefixes={len(prefix_to_type)}")
+        logger.info("Describe: num_prefixes=%s", len(prefix_to_type))
 
-        logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+        logger.info(
+            "Parent object types: num=%s list=%s", len(parent_types), parent_types
+        )
         for parent_type in parent_types:
             # parent_onyx_sf_type = OnyxSalesforceType(parent_type, sf_client)
 
@@ -954,17 +969,19 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
                 # Use only the specified fields
                 type_to_queryable_fields[parent_type] = field_set
-                logger.info(f"Using custom fields for {parent_type}: {field_set}")
+                logger.info("Using custom fields for %s: %s", parent_type, field_set)
             else:
                 # Use all queryable fields
                 type_to_queryable_fields[parent_type] = (
                     sf_client.get_queryable_fields_by_type(parent_type)
                 )
-                logger.info(f"Using all fields for {parent_type}")
+                logger.info("Using all fields for %s", parent_type)
 
             child_types_all = sf_client.get_children_of_sf_type(parent_type)
-            logger.debug(f"Found {len(child_types_all)} child types for {parent_type}")
-            logger.debug(f"child types: {child_types_all}")
+            logger.debug(
+                "Found %s child types for %s", len(child_types_all), parent_type
+            )
+            logger.debug("child types: %s", child_types_all)
 
             child_types_working = child_types_all.copy()
             if associations_config is not None:
@@ -975,7 +992,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 for k in associations_config:
                     if k not in child_types_working:
                         any_not_found = True
-                        logger.warning(f"Association {k} not found in {parent_type}")
+                        logger.warning("Association %s not found in %s", k, parent_type)
                 if any_not_found:
                     queryable_fields = sf_client.get_queryable_fields_by_type(
                         parent_type
@@ -1035,11 +1052,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
             child_types.update(child_types_working.keys())
             logger.info(
-                f"Child object types: parent={parent_type} num={len(child_types_working)} list={child_types_working.keys()}"
+                "Child object types: parent=%s num=%s list=%s",
+                parent_type,
+                len(child_types_working),
+                child_types_working.keys(),
             )
 
         logger.info(
-            f"Final child object types: num={len(child_types)} list={child_types}"
+            "Final child object types: num=%s list=%s", len(child_types), child_types
         )
 
         all_types: set[str] = set(parent_types)
@@ -1049,7 +1069,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
         all_types.add(USER_OBJECT_TYPE)  # Always add User for permissioning purposes
         all_types.add(ACCOUNT_OBJECT_TYPE)  # Always add Account for reference purposes
 
-        logger.info(f"All object types: num={len(all_types)} list={all_types}")
+        logger.info("All object types: num=%s list=%s", len(all_types), all_types)
 
         # Ensure User and Account have queryable fields if they weren't already processed
         essential_types = [USER_OBJECT_TYPE, ACCOUNT_OBJECT_TYPE]

@@ -6,10 +6,15 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gitlab.connector import GitlabConnector
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.GITLAB_ACCESS_TOKEN)
 
 
 @pytest.fixture
-def gitlab_connector() -> GitlabConnector:
+def gitlab_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GitlabConnector:
     connector = GitlabConnector(
         project_owner="onyx2895818",
         project_name="onyx",
@@ -19,10 +24,7 @@ def gitlab_connector() -> GitlabConnector:
     )
     # Ensure GITLAB_ACCESS_TOKEN and optionally GITLAB_URL are set in the environment
     gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
-    gitlab_token = os.environ.get("GITLAB_ACCESS_TOKEN")
-
-    if not gitlab_token:
-        pytest.skip("GITLAB_ACCESS_TOKEN environment variable not set.")
+    gitlab_token = test_secrets[TestSecret.GITLAB_ACCESS_TOKEN]
 
     connector.load_credentials(
         {
@@ -79,9 +81,10 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             assert section.text == "This MR implements the awesome feature"
             assert doc.primary_owners is not None
             assert len(doc.primary_owners) == 1
-            assert (
-                doc.primary_owners[0].display_name == "Test"
-            )  # Adjust if author changes
+            # GitLab masks `name` as "****" for blocked/bot users; the
+            # connector falls back to `username` in that case.
+            assert doc.primary_owners[0].display_name
+            assert doc.primary_owners[0].display_name != "****"
             assert doc.id == section.link
             validated_mr = True
         elif doc.id == target_issue_id and doc_type == "ISSUE":
@@ -93,9 +96,8 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             )
             assert doc.primary_owners is not None
             assert len(doc.primary_owners) == 1
-            assert (
-                doc.primary_owners[0].display_name == "Test"
-            )  # Adjust if author changes
+            assert doc.primary_owners[0].display_name
+            assert doc.primary_owners[0].display_name != "****"
             assert doc.id == section.link
             validated_issue = True
         elif (

@@ -104,7 +104,7 @@ class ImageGenerationConfigView(BaseModel):
     model_configuration_id: int
     model_name: str  # From model_configuration.name
     llm_provider_id: int  # From model_configuration.llm_provider_id
-    llm_provider_name: str  # From model_configuration.llm_provider.name
+    llm_provider_name: str | None  # From model_configuration.llm_provider.name
     is_default: bool
 
     @classmethod

@@ -60,6 +60,7 @@ from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.deletion_metrics import inc_deletion_blocked
 from onyx.server.metrics.deletion_metrics import inc_deletion_completed
 from onyx.server.metrics.deletion_metrics import inc_deletion_fence_reset
@@ -386,7 +387,7 @@ def try_generate_document_cc_pair_cleanup_tasks(
 def monitor_connector_deletion_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,  # noqa: ARG001
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
@@ -591,8 +592,8 @@ def monitor_connector_deletion_taskset(
 
 def validate_connector_deletion_fences(
     tenant_id: str,
-    r: Redis,
-    r_replica: Redis,
+    r: TenantRedisClient,
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -633,7 +634,7 @@ def validate_connector_deletion_fence(
     tenant_id: str,
     key_bytes: bytes,
     queued_upsert_tasks: set[str],
-    r: Redis,
+    r: TenantRedisClient,
 ) -> None:
     """Checks for the error condition where an indexing fence is set but the associated celery tasks don't exist.
     This can happen if the indexing worker hard crashes or is terminated.
@@ -717,8 +718,7 @@ def validate_connector_deletion_fence(
     for member in r.sscan_iter(redis_connector.delete.taskset_key):
         tasks_scanned += 1
 
-        member_bytes = cast(bytes, member)
-        member_str = member_bytes.decode("utf-8")
+        member_str = member.decode("utf-8")
         if member_str in queued_upsert_tasks:
             continue
 

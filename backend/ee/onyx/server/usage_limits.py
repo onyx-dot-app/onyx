@@ -33,6 +33,6 @@ def is_tenant_on_trial(tenant_id: str) -> bool:
         return False
 
     except Exception as e:
-        logger.warning(f"Failed to fetch billing info for trial check: {e}")
+        logger.warning("Failed to fetch billing info for trial check: %s", e)
         # Default to trial limits on error (more restrictive = safer)
         return True

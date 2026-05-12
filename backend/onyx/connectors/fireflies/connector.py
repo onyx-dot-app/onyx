@@ -8,6 +8,7 @@ from typing import List
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -184,12 +185,15 @@ class FirefliesConnector(PollConnector, LoadConnector):
                         "query": _FIREFLIES_API_QUERY,
                         "variables": variables,
                     },
+                    timeout=REQUEST_TIMEOUT_SECONDS,
                 )
                 if response.status_code < 500 or attempt == _FIREFLIES_MAX_RETRIES - 1:
                     break
                 logger.warning(
-                    f"Fireflies returned {response.status_code} on attempt "
-                    f"{attempt + 1}/{_FIREFLIES_MAX_RETRIES}, retrying"
+                    "Fireflies returned %s on attempt %s/%s, retrying",
+                    response.status_code,
+                    attempt + 1,
+                    _FIREFLIES_MAX_RETRIES,
                 )
                 time.sleep(_FIREFLIES_RETRY_BASE_DELAY_SECONDS * (2**attempt))
 

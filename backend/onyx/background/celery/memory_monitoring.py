@@ -64,10 +64,16 @@ def emit_process_memory(
         metadata_str = f" {metadata_str}" if metadata_str else ""
 
         memory_logger.info(
-            f"PROCESS_MEMORY process_name={process_name} pid={pid} "
-            f"rss_mb={memory_info.rss / (1024 * 1024):.2f} "
-            f"vms_mb={memory_info.vms / (1024 * 1024):.2f} "
-            f"cpu={cpu_percent:.2f}{metadata_str}"
+            "PROCESS_MEMORY process_name=%s pid=%s "
+            "rss_mb=%s "
+            "vms_mb=%s "
+            "cpu=%s%s",
+            process_name,
+            pid,
+            format(memory_info.rss / (1024 * 1024), ".2f"),
+            format(memory_info.vms / (1024 * 1024), ".2f"),
+            format(cpu_percent, ".2f"),
+            metadata_str,
         )
     except Exception:
         logger.exception("Error monitoring process memory.")

@@ -9,7 +9,6 @@ Create Date: 2026-01-31 17:00:45.176604
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "cbc03e08d0f3"
 down_revision = "be87a654d5af"
@@ -94,14 +93,10 @@ def upgrade() -> None:
     )
 
     # 4. Create unique index on constant to enforce singleton pattern.
-    op.execute(
-        sa.text(
-            """
+    op.execute(sa.text("""
             CREATE UNIQUE INDEX idx_opensearch_tenant_migration_singleton
             ON opensearch_tenant_migration_record ((true))
-            """
-        )
-    )
+            """))
 
 
 def downgrade() -> None:

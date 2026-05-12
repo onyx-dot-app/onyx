@@ -18,7 +18,6 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
-from redis import Redis
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import ConnectionErrorRetryHandler
@@ -68,6 +67,7 @@ from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -157,7 +157,7 @@ def get_channel_messages(
             channel=channel["id"],
             is_private=channel["is_private"],
         )
-        logger.info(f"Successfully joined '{channel['name']}'")
+        logger.info("Successfully joined '%s'", channel["name"])
 
     for result in make_paginated_slack_api_call(
         client.conversations_history,
@@ -419,12 +419,12 @@ def _get_messages(
             )
         except SlackApiError as e:
             if e.response["error"] == "is_archived":
-                logger.warning(f"Channel {channel['name']} is archived. Skipping.")
+                logger.warning("Channel %s is archived. Skipping.", channel["name"])
                 return [], False
 
-            logger.exception(f"Error joining channel {channel['name']}")
+            logger.exception("Error joining channel %s", channel["name"])
             raise
-        logger.info(f"Successfully joined '{channel['name']}'")
+        logger.info("Successfully joined '%s'", channel["name"])
 
     response = client.conversations_history(
         channel=channel["id"],
@@ -624,7 +624,7 @@ def _process_message(
             failure=None,
         )
     except Exception as e:
-        logger.exception(f"Error processing message {message['ts']}")
+        logger.exception("Error processing message %s", message["ts"])
         return ProcessedSlackMessage(
             doc=None,
             thread_or_message_ts=thread_or_message_ts,
@@ -747,7 +747,7 @@ class SlackConnector(
 
     @staticmethod
     def make_slack_web_client(
-        prefix: str, token: str, max_retry_count: int, r: Redis
+        prefix: str, token: str, max_retry_count: int, r: TenantRedisClient
     ) -> WebClient:
         delay_lock = SlackConnector.make_delay_lock(prefix)
         delay_key = SlackConnector.make_delay_key(prefix)
@@ -844,7 +844,7 @@ class SlackConnector(
             auth_response = self.client.auth_test()
             self._workspace_url = auth_response.get("url")
         except Exception as e:
-            logger.warning(f"Failed to get workspace URL from auth_test: {e}")
+            logger.warning("Failed to get workspace URL from auth_test: %s", e)
             self._workspace_url = None
 
     def retrieve_all_slim_docs_perm_sync(
@@ -901,7 +901,9 @@ class SlackConnector(
                 raw_channels, self.channels, self.channel_regex_enabled
             )
             logger.info(
-                f"Channels - initial checkpoint: all={len(raw_channels)} post_filtering={len(filtered_channels)}"
+                "Channels - initial checkpoint: all=%s post_filtering=%s",
+                len(raw_channels),
+                len(filtered_channels),
             )
 
             checkpoint.channel_ids = [c["id"] for c in filtered_channels]
@@ -928,10 +930,10 @@ class SlackConnector(
                 num_channels_remaining += 1
 
         logger.info(
-            f"Channels - current status: "
-            f"processed={len(final_channel_ids) - num_channels_remaining} "
-            f"remaining={num_channels_remaining} "
-            f"total={len(final_channel_ids)}"
+            "Channels - current status: processed=%s remaining=%s total=%s",
+            len(final_channel_ids) - num_channels_remaining,
+            num_channels_remaining,
+            len(final_channel_ids),
         )
 
         channel = checkpoint.current_channel
@@ -966,7 +968,10 @@ class SlackConnector(
                 )
 
             logger.debug(
-                f"Getting messages for channel {channel} within range {oldest} - {latest}"
+                "Getting messages for channel %s within range %s - %s",
+                channel,
+                oldest,
+                latest,
             )
 
             message_batch, has_more_in_channel = _get_messages(
@@ -974,7 +979,11 @@ class SlackConnector(
             )
 
             logger.info(
-                f"Retrieved messages: {len(message_batch)=} {channel=} {oldest=} {latest=}"
+                "Retrieved messages: len(message_batch)=%r channel=%r oldest=%r latest=%r",
+                len(message_batch),
+                channel,
+                oldest,
+                latest,
             )
 
             # message_batch[0] is the newest message (Slack returns newest to oldest)
@@ -1061,7 +1070,10 @@ class SlackConnector(
             )
 
             logger.info(
-                f"Current channel processing stats: {range_start=} range_end={end} percent_complete={range_percent_complete=:.2f}"
+                "Current channel processing stats: range_start=%r range_end=%s percent_complete=range_percent_complete=%s",
+                range_start,
+                end,
+                format(range_percent_complete, ".2f"),
             )
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
@@ -1117,14 +1129,14 @@ class SlackConnector(
                 channels_processed / len(final_channel_ids) * 100.0
             )
             logger.info(
-                f"All channels processing stats: "
-                f"processed={len(final_channel_ids) - num_channels_remaining} "
-                f"remaining={num_channels_remaining} "
-                f"total={len(final_channel_ids)} "
-                f"percent_complete={channels_percent_complete:.2f}"
+                "All channels processing stats: processed=%s remaining=%s total=%s percent_complete=%s",
+                len(final_channel_ids) - num_channels_remaining,
+                num_channels_remaining,
+                len(final_channel_ids),
+                format(channels_percent_complete, ".2f"),
             )
         except Exception as e:
-            logger.exception(f"Error processing channel {channel['name']}")
+            logger.exception("Error processing channel %s", channel["name"])
             yield ConnectorFailure(
                 failed_entity=EntityFailure(
                     entity_id=channel["id"],
@@ -1225,8 +1237,8 @@ class SlackConnector(
                 # Handle rate limiting specifically
                 retry_after = int(e.response.headers.get("Retry-After", 1))
                 logger.warning(
-                    f"Slack API rate limited during validation. Retry suggested after {retry_after} seconds. "
-                    "Proceeding with validation, but be aware that connector operations might be throttled."
+                    "Slack API rate limited during validation. Retry suggested after %s seconds. Proceeding with validation, but be aware that connector operations might be throttled.",
+                    retry_after,
                 )
                 # Continue validation without failing - the connector is likely valid but just rate limited
                 return
@@ -1242,6 +1254,14 @@ class SlackConnector(
             elif slack_error == "not_authed":
                 raise CredentialExpiredError(
                     f"Invalid or expired Slack bot token ({slack_error})."
+                )
+            elif slack_error == "account_inactive":
+                raise CredentialExpiredError(
+                    f"Slack workspace or bot user is deactivated ({slack_error})."
+                )
+            elif slack_error == "token_revoked":
+                raise CredentialExpiredError(
+                    f"Slack bot token has been revoked ({slack_error})."
                 )
             raise UnexpectedValidationError(
                 f"Unexpected Slack error '{slack_error}' during settings validation."

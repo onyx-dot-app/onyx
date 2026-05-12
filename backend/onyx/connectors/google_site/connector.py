@@ -96,7 +96,7 @@ class GoogleSitesConnector(LoadConnector):
                     + "This page will not have a working link.\n\n"
                     + f"# of broken links so far - {count}"
                 )
-            logger.info(f"Path to page: {path}")
+            logger.info("Path to page: %s", path)
             # cleanup the hidden `Skip to main content` and `Skip to navigation` that
             # appears at the top of every page
             for div in soup.find_all("div", attrs={"data-is-touch-wrapper": "true"}):

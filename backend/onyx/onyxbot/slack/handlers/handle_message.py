@@ -7,6 +7,7 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
+from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackChannelConfig
 from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
@@ -62,7 +63,7 @@ def schedule_feedback_reminder(
             message_ts=details.msg_to_respond,  # ty: ignore[invalid-argument-type]
         )
     except SlackApiError as e:
-        logger.error(f"Unable to generate the feedback reminder permalink: {e}")
+        logger.error("Unable to generate the feedback reminder permalink: %s", e)
         return None
 
     now = datetime.datetime.now()
@@ -87,7 +88,7 @@ def schedule_feedback_reminder(
             "scheduled_message_id"
         ]
     except SlackApiError as e:
-        logger.error(f"Unable to generate the feedback reminder message: {e}")
+        logger.error("Unable to generate the feedback reminder message: %s", e)
         return None
 
 
@@ -107,6 +108,26 @@ def remove_scheduled_feedback_reminder(
             logger.info(
                 "Unable to delete the scheduled message. It must have already been posted"
             )
+
+
+def _resolve_allowlist_user_ids(
+    channel_conf: ChannelConfig | None,
+    client: WebClient,
+) -> tuple[list[str] | None, list[str]]:
+    """Resolve `respond_member_group_list` (emails + group names) to Slack user IDs.
+
+    Returns (resolved_user_ids, missing_entries). `resolved_user_ids` is `None`
+    when no allowlist is configured, meaning the bot has no invocation gate or
+    response-visibility scope for the channel.
+    """
+    allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    if not allowlist:
+        return None, []
+
+    user_ids, missing_ids = fetch_slack_user_ids_from_emails(allowlist, client)
+    group_user_ids, missing = fetch_user_ids_from_groups(missing_ids, client)
+    resolved = list(set(user_ids + group_user_ids))
+    return resolved, missing
 
 
 def handle_message(
@@ -132,6 +153,45 @@ def handle_message(
     is_slash_command = message_info.is_slash_command
     is_bot_dm = message_info.is_bot_dm
 
+    channel_conf: ChannelConfig | None = (
+        slack_channel_config.channel_config
+        if slack_channel_config and slack_channel_config.channel_config
+        else None
+    )
+
+    # Resolve the allowlist once. Drives both the invocation gate (who can
+    # trigger the bot) and the response-visibility scope (who sees responses).
+    # `None` means no allowlist configured -> no gate, no visibility scoping.
+    allowed_user_ids, missing_allowlist_entries = _resolve_allowlist_user_ids(
+        channel_conf, client
+    )
+    if missing_allowlist_entries:
+        logger.warning(
+            "Failed to find these users/groups in respond_member_group_list: %s",
+            missing_allowlist_entries,
+        )
+        if allowed_user_ids is not None and not allowed_user_ids:
+            # Allowlist is configured but every entry failed to resolve — bot is
+            # silent to everyone until lookups recover. Surface at ERROR so it
+            # alerts instead of hiding in WARN noise.
+            logger.error(
+                "respond_member_group_list is configured but no entries resolved; "
+                "OnyxBot will be silent in this channel until lookups recover"
+            )
+
+    # Invocation gate: drop non-allowlisted senders before emitting telemetry or
+    # creating a Slack-user account row (which would consume a license seat).
+    # Applies even to direct @-tags / DMs — this is a license-seat gate, not a
+    # content filter.
+    if allowed_user_ids is not None and (
+        sender_id is None or sender_id not in allowed_user_ids
+    ):
+        logger.info(
+            "Skipping message: sender %s is not in respond_member_group_list",
+            sender_id,
+        )
+        return False
+
     action = "slack_message"
     if is_slash_command:
         action = "slack_slash_message"
@@ -149,11 +209,8 @@ def handle_message(
         ]
 
     respond_tag_only = False
-    respond_member_group_list = None
 
-    channel_conf = None
-    if slack_channel_config and slack_channel_config.channel_config:
-        channel_conf = slack_channel_config.channel_config
+    if channel_conf:
         if not bypass_filters and "answer_filters" in channel_conf:
             if (
                 "questionmark_prefilter" in channel_conf["answer_filters"]
@@ -165,13 +222,12 @@ def handle_message(
                 return False
 
         logger.info(
-            "Found slack bot config for channel. Restricting bot to use document "
-            f"sets: {document_set_names}, "
-            f"validity checks enabled: {channel_conf.get('answer_filters', 'NA')}"
+            "Found slack bot config for channel. Restricting bot to use document sets: %s, validity checks enabled: %s",
+            document_set_names,
+            channel_conf.get("answer_filters", "NA"),
         )
 
         respond_tag_only = channel_conf.get("respond_tag_only") or False
-        respond_member_group_list = channel_conf.get("respond_member_group_list", None)
 
     # Only default config can be disabled.
     # If channel config is disabled, bot should not respond to this message (including DMs)
@@ -184,19 +240,8 @@ def handle_message(
         logger.info("Skipping message: OnyxBot only responds to tags in this channel")
         return False
 
-    # List of user id to send message to, if None, send to everyone in channel
-    send_to: list[str] | None = None
-    missing_users: list[str] | None = None
-    if respond_member_group_list:
-        send_to, missing_ids = fetch_slack_user_ids_from_emails(
-            respond_member_group_list, client
-        )
-
-        user_ids, missing_users = fetch_user_ids_from_groups(missing_ids, client)
-        send_to = list(set(send_to + user_ids)) if send_to else user_ids
-
-        if missing_users:
-            logger.warning(f"Failed to find these users/groups: {missing_users}")
+    # Reuses the resolved allowlist as the ephemeral response-visibility scope.
+    send_to: list[str] | None = allowed_user_ids
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
@@ -213,7 +258,7 @@ def handle_message(
     try:
         send_msg_ack_to_user(message_info, client)
     except SlackApiError as e:
-        logger.error(f"Was not able to react to user message due to: {e}")
+        logger.error("Was not able to react to user message due to: %s", e)
 
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
@@ -229,7 +274,9 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked new Slack user {message_info.email}: {seat_result.error_message}"
+                        "Blocked new Slack user %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
                     )
                     respond_in_thread_or_channel(
                         client=client,
@@ -257,7 +304,9 @@ def handle_message(
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
-                        f"Blocked inactive Slack user {message_info.email}: {seat_result.error_message}"
+                        "Blocked inactive Slack user %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
                     )
                     respond_in_thread_or_channel(
                         client=client,
@@ -280,7 +329,7 @@ def handle_message(
                     None,
                 )
                 invalidate_license_cache_fn()
-                logger.info(f"Reactivated inactive Slack user {message_info.email}")
+                logger.info("Reactivated inactive Slack user %s", message_info.email)
 
             add_slack_user_if_not_exists(db_session, message_info.email)
 

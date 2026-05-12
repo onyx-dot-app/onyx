@@ -48,7 +48,7 @@ def get_tenant_id_for_email(email: str) -> str:
                     db_session.commit()
                     tenant_id = mapping.tenant_id
     except Exception as e:
-        logger.exception(f"Error getting tenant id for email {email}: {e}")
+        logger.exception("Error getting tenant id for email %s: %s", email, e)
         raise exceptions.UserNotExists()
 
     if tenant_id is None:
@@ -126,10 +126,10 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
             # Commit the transaction
             db_session.commit()
-            logger.info(f"Successfully added users {emails} to tenant {tenant_id}")
+            logger.info("Successfully added users %s to tenant %s", emails, tenant_id)
 
         except Exception:
-            logger.exception(f"Failed to add users to tenant {tenant_id}")
+            logger.exception("Failed to add users to tenant %s", tenant_id)
             db_session.rollback()
             raise
 
@@ -152,7 +152,7 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
             db_session.commit()
         except Exception as e:
             logger.exception(
-                f"Failed to remove users from tenant {tenant_id}: {str(e)}"
+                "Failed to remove users from tenant %s: %s", tenant_id, str(e)
             )
             db_session.rollback()
 
@@ -229,7 +229,9 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
             if active_mapping:
                 db_session.delete(active_mapping)
                 logger.info(
-                    f"Deleted existing active mapping for user {email} in tenant {tenant_id}"
+                    "Deleted existing active mapping for user %s in tenant %s",
+                    email,
+                    tenant_id,
                 )
 
             # Find the inactive mapping for this user and tenant
@@ -253,16 +255,21 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
                 # Activate this mapping
                 mapping.active = True
                 db_session.commit()
-                logger.info(f"User {email} accepted invitation to tenant {tenant_id}")
+                logger.info(
+                    "User %s accepted invitation to tenant %s", email, tenant_id
+                )
             else:
                 logger.warning(
-                    f"No invitation found for user {email} in tenant {tenant_id}"
+                    "No invitation found for user %s in tenant %s", email, tenant_id
                 )
 
         except Exception as e:
             db_session.rollback()
             logger.exception(
-                f"Failed to accept invitation for user {email} to tenant {tenant_id}: {str(e)}"
+                "Failed to accept invitation for user %s to tenant %s: %s",
+                email,
+                tenant_id,
+                str(e),
             )
             raise
 
@@ -273,7 +280,7 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
         if email in invited_users:
             invited_users.remove(email)
             write_invited_users(invited_users)
-            logger.info(f"Removed {email} from invited users list after acceptance")
+            logger.info("Removed %s from invited users list after acceptance", email)
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -297,10 +304,10 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
 
         db_session.commit()
         if result:
-            logger.info(f"User {email} denied invitation to tenant {tenant_id}")
+            logger.info("User %s denied invitation to tenant %s", email, tenant_id)
         else:
             logger.warning(
-                f"No invitation found for user {email} in tenant {tenant_id}"
+                "No invitation found for user %s in tenant %s", email, tenant_id
             )
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:

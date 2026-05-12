@@ -426,7 +426,7 @@ def save_zip_metadata_to_file_store(
             try:
                 json.loads(metadata_bytes)
             except json.JSONDecodeError as e:
-                logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
+                logger.warning("Unable to load %s: %s", ONYX_METADATA_FILENAME, e)
                 raise HTTPException(
                     status_code=400,
                     detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
@@ -441,7 +441,7 @@ def save_zip_metadata_to_file_store(
             )
             return file_id
     except KeyError:
-        logger.info(f"No {ONYX_METADATA_FILENAME} file")
+        logger.info("No %s file", ONYX_METADATA_FILENAME)
         return None
 
 
@@ -678,7 +678,7 @@ def list_connector_files(
                 )
             )
         except Exception as e:
-            logger.warning(f"Error reading file record for {file_id}: {e}")
+            logger.warning("Error reading file record for %s: %s", file_id, e)
             # Include file with basic info even if record fetch fails
             files.append(
                 ConnectorFileInfo(
@@ -754,7 +754,7 @@ def update_connector_files(
             else:
                 current_zip_metadata = loaded_metadata
         except Exception as e:
-            logger.warning(f"Failed to load existing metadata file: {e}")
+            logger.warning("Failed to load existing metadata file: %s", e)
             raise HTTPException(
                 status_code=500,
                 detail="Failed to load existing connector metadata file",
@@ -785,7 +785,7 @@ def update_connector_files(
                 else:
                     new_zip_metadata = loaded_metadata
             except Exception as e:
-                logger.warning(f"Failed to load new metadata file: {e}")
+                logger.warning("Failed to load new metadata file: %s", e)
 
     # Remove specified files
     files_to_remove_set = set(file_ids_list)
@@ -878,7 +878,9 @@ def update_connector_files(
                 priority=OnyxCeleryPriority.HIGH,
             )
             logger.info(
-                f"Marked cc_pair {cc_pair.id} for UPDATE indexing (new files) for connector {connector_id}"
+                "Marked cc_pair %s for UPDATE indexing (new files) for connector %s",
+                cc_pair.id,
+                connector_id,
             )
 
         # If files were removed, trigger pruning immediately
@@ -889,15 +891,19 @@ def update_connector_files(
             )
             if payload_id:
                 logger.info(
-                    f"Triggered pruning for cc_pair {cc_pair.id} (removed files) for connector "
-                    f"{connector_id}, payload_id={payload_id}"
+                    "Triggered pruning for cc_pair %s (removed files) for connector %s, payload_id=%s",
+                    cc_pair.id,
+                    connector_id,
+                    payload_id,
                 )
             else:
                 logger.warning(
-                    f"Failed to trigger pruning for cc_pair {cc_pair.id} (removed files) for connector {connector_id}"
+                    "Failed to trigger pruning for cc_pair %s (removed files) for connector %s",
+                    cc_pair.id,
+                    connector_id,
                 )
     except Exception as e:
-        logger.error(f"Failed to trigger re-indexing after file update: {e}")
+        logger.error("Failed to trigger re-indexing after file update: %s", e)
 
     return FileUploadResponse(
         file_paths=final_file_locations,
@@ -1560,7 +1566,7 @@ def create_connector_from_model(
 
         return connector_response
     except ValueError as e:
-        logger.error(f"Error creating connector: {e}")
+        logger.error("Error creating connector: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1631,7 +1637,8 @@ def create_connector_with_mock_credential(
         )
 
         logger.info(
-            f"create_connector_with_mock_credential - running check_for_indexing: cc_pair={response.data}"
+            "create_connector_with_mock_credential - running check_for_indexing: cc_pair=%s",
+            response.data,
         )
 
         mt_cloud_telemetry(
@@ -1988,16 +1995,20 @@ Tenant ID: {tenant_id}
                 text_body=email_body_text,
             )
             logger.info(
-                f"Connector request email sent to hello@onyx.app for connector: {connector_name}"
+                "Connector request email sent to hello@onyx.app for connector: %s",
+                connector_name,
             )
         except Exception as e:
             # Log error but don't fail the request if email fails
             logger.error(
-                f"Failed to send connector request email for {connector_name}: {e}"
+                "Failed to send connector request email for %s: %s", connector_name, e
             )
 
     logger.info(
-        f"Connector request submitted: {connector_name} by user {user_email or 'anonymous'} (tenant: {tenant_id})"
+        "Connector request submitted: %s by user %s (tenant: %s)",
+        connector_name,
+        user_email or "anonymous",
+        tenant_id,
     )
 
     return StatusResponse(
@@ -2100,16 +2111,16 @@ def trigger_indexing_for_cc_pair(
             num_triggers += 1
 
             logger.info(
-                f"connector_run_once - marking cc_pair with indexing trigger: "
-                f"connector={connector_id} "
-                f"cc_pair={cc_pair.id} "
-                f"indexing_trigger={indexing_mode}"
+                "connector_run_once - marking cc_pair with indexing trigger: connector=%s cc_pair=%s indexing_trigger=%s",
+                connector_id,
+                cc_pair.id,
+                indexing_mode,
             )
 
     priority = OnyxCeleryPriority.HIGH
 
     # run the beat task to pick up the triggers immediately
-    logger.info(f"Sending indexing check task with priority {priority}")
+    logger.info("Sending indexing check task with priority %s", priority)
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         priority=priority,

@@ -136,28 +136,29 @@ def batch_create_notifications(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
-) -> int:
+) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.
     Uses ON CONFLICT DO NOTHING for atomic idempotent inserts - if a user already
     has a notification with the same (user_id, notif_type, additional_data), the
     insert is silently skipped.
 
-    Returns the number of notifications created.
+    Returns the set of user_ids whose row was newly inserted (excludes conflicts).
+    Callers that need to fire side effects only on fresh inserts (emails, webhooks)
+    can iterate the returned set without re-triggering on idempotent retries.
 
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
     if not user_ids:
-        return 0
+        return set()
 
     now = datetime.now(timezone.utc)
-    # Use empty dict instead of None to match COALESCE behavior in the unique index
     additional_data_normalized = additional_data if additional_data is not None else {}
 
     values = [
         {
             "user_id": uid,
-            "notif_type": notif_type.value,
+            "notif_type": notif_type,
             "title": title,
             "description": description,
             "dismissed": False,
@@ -168,17 +169,16 @@ def batch_create_notifications(
         for uid in user_ids
     ]
 
-    stmt = insert(Notification).values(values).on_conflict_do_nothing()
-    result = db_session.execute(stmt)
-    db_session.commit()
-
-    # rowcount returns number of rows inserted (excludes conflicts)
-    # CursorResult has rowcount but session.execute type hints are too broad
-    return (
-        result.rowcount  # ty: ignore[unresolved-attribute]
-        if result.rowcount >= 0  # ty: ignore[unresolved-attribute]
-        else 0
+    stmt = (
+        insert(Notification)
+        .values(values)
+        .on_conflict_do_nothing()
+        .returning(Notification.user_id)
     )
+    result = db_session.execute(stmt)
+    inserted_ids = set(result.scalars())
+    db_session.commit()
+    return inserted_ids
 
 
 def update_notification_last_shown(

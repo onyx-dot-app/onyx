@@ -9,19 +9,18 @@ import (
 	"strings"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
+	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/tui"
-	"github.com/onyx-dot-app/onyx/cli/internal/util"
 	"golang.org/x/term"
 )
 
-// Aliases for shared styles.
 var (
-	boldStyle   = util.BoldStyle
-	dimStyle    = util.DimStyle
-	greenStyle  = util.GreenStyle
-	redStyle    = util.RedStyle
-	yellowStyle = util.YellowStyle
+	boldStyle   = tui.BoldStyle
+	dimStyle    = tui.DimStyle
+	greenStyle  = tui.GreenStyle
+	redStyle    = tui.RedStyle
+	yellowStyle = tui.YellowStyle
 )
 
 func getTermSize() (int, int) {
@@ -59,25 +58,25 @@ func Run(existing *config.OnyxCliConfig) *config.OnyxCliConfig {
 		return nil
 	}
 
-	// API Key
+	// Personal Access Token
 	fmt.Println()
-	fmt.Println("  " + dimStyle.Render("Need an API key? Press Enter to open the admin panel in your browser,"))
-	fmt.Println("  " + dimStyle.Render("or paste your key below."))
+	fmt.Println("  " + dimStyle.Render("Need a personal access token (PAT)? Press Enter to open the admin panel"))
+	fmt.Println("  " + dimStyle.Render("in your browser, or paste your PAT below."))
 	fmt.Println()
 
-	apiKey := promptSecret("  API key", cfg.APIKey)
+	apiKey := promptSecret("  Personal access token", cfg.APIKey)
 
 	if apiKey == "" {
-		// Open browser to API key page
-		url := strings.TrimRight(serverURL, "/") + "/app/settings/accounts-access"
+		// Open browser to PAT page
+		url := config.WebOrigin(serverURL) + "/app/settings/accounts-access"
 		fmt.Printf("\n  Opening %s ...\n", url)
-		util.OpenBrowser(url)
-		fmt.Println("  " + dimStyle.Render("Copy your API key, then paste it here."))
+		browser.OpenBrowser(url)
+		fmt.Println("  " + dimStyle.Render("Copy your personal access token, then paste it here."))
 		fmt.Println()
 
-		apiKey = promptSecret("  API key", "")
+		apiKey = promptSecret("  Personal access token", "")
 		if apiKey == "" {
-			fmt.Println("\n  " + redStyle.Render("No API key provided. Exiting."))
+			fmt.Println("\n  " + redStyle.Render("No personal access token provided. Exiting."))
 			return nil
 		}
 	}

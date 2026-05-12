@@ -208,7 +208,6 @@ class DocumentSource(str, Enum):
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
-    REQUESTTRACKER = "requesttracker"
     GITHUB = "github"
     GITBOOK = "gitbook"
     GITLAB = "gitlab"
@@ -289,6 +288,7 @@ class NotificationType(str, Enum):
     ASSISTANT_FILES_READY = "assistant_files_ready"
     FEATURE_ANNOUNCEMENT = "feature_announcement"
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
+    LICENSE_EXPIRY_WARNING = "license_expiry_warning"
 
 
 class BlobType(str, Enum):
@@ -368,6 +368,7 @@ class TokenRateLimitScope(str, Enum):
 class FileStoreType(str, Enum):
     S3 = "s3"
     POSTGRES = "postgres"
+    GCS = "gcs"
 
 
 class FileOrigin(str, Enum):
@@ -574,6 +575,9 @@ class OnyxCeleryTask:
     CHECK_FOR_USER_FILE_DELETE = "check_for_user_file_delete"
     DELETE_SINGLE_USER_FILE = "delete_single_user_file"
 
+    # Targeted reindex
+    TARGETED_REINDEX_TASK = "targeted_reindex_task"
+
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"
@@ -604,7 +608,7 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
-    VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+    DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
@@ -620,6 +624,9 @@ class OnyxCeleryTask:
 
     # Hook execution log retention
     HOOK_EXECUTION_LOG_CLEANUP_TASK = "hook_execution_log_cleanup_task"
+
+    # License expiry tiered warnings
+    CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
@@ -674,7 +681,6 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.WEB: "indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
     DocumentSource.GMAIL: "email messages",
-    DocumentSource.REQUESTTRACKER: "requesttracker",
     DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",

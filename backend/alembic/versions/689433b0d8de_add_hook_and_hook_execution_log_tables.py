@@ -10,7 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
-
 # revision identifiers, used by Alembic.
 revision = "689433b0d8de"
 down_revision = "93a2e195e25c"

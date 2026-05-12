@@ -22,7 +22,7 @@ def _get_sitemap_locations_from_robots(base_url: str) -> Set[str]:
                     sitemap_url = line.split(":", 1)[1].strip()
                     sitemap_urls.add(sitemap_url)
     except Exception as e:
-        logger.warning(f"Error fetching robots.txt: {e}")
+        logger.warning("Error fetching robots.txt: %s", e)
     return sitemap_urls
 
 
@@ -54,7 +54,7 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
                     urls.add(url.text)
 
     except Exception as e:
-        logger.warning(f"Error processing sitemap {sitemap_url}: {e}")
+        logger.warning("Error processing sitemap %s: %s", sitemap_url, e)
 
     return urls
 

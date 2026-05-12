@@ -1,4 +1,3 @@
-import os
 import time
 
 import pytest
@@ -7,6 +6,12 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.notion.connector import NotionConnector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.NOTION_INTEGRATION_TOKEN)
+
+
+VALID_NOTION_URL_PREFIXES = ("https://www.notion.so/", "https://app.notion.com/p/")
 
 
 def compare_hierarchy_nodes(
@@ -37,12 +42,16 @@ def compare_hierarchy_nodes(
 
 
 @pytest.fixture
-def notion_connector() -> NotionConnector:
+def notion_connector(
+    test_secrets: dict[TestSecret, str],
+) -> NotionConnector:
     """Create a NotionConnector with credentials from environment variables"""
     connector = NotionConnector()
     connector.load_credentials(
         {
-            "notion_integration_token": os.environ["NOTION_INTEGRATION_TOKEN"],
+            "notion_integration_token": test_secrets[
+                TestSecret.NOTION_INTEGRATION_TOKEN
+            ],
         }
     )
     return connector
@@ -109,7 +118,7 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     # Content specific checks for root
     assert root_section.text == "\nroot"
     assert root_section.link is not None
-    assert root_section.link.startswith("https://www.notion.so/")
+    assert root_section.link.startswith(VALID_NOTION_URL_PREFIXES)
 
     # Verify child1 document structure
     assert child1_doc.id is not None
@@ -122,7 +131,7 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     # Content specific checks for child1
     assert child1_section.text == "\nchild1"
     assert child1_section.link is not None
-    assert child1_section.link.startswith("https://www.notion.so/")
+    assert child1_section.link.startswith(VALID_NOTION_URL_PREFIXES)
 
     # Verify child2 document structure (includes database)
     assert child2_doc.id is not None
@@ -136,13 +145,13 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     # Content specific checks for child2
     assert child2_section.text == "\nchild2"
     assert child2_section.link is not None
-    assert child2_section.link.startswith("https://www.notion.so/")
+    assert child2_section.link.startswith(VALID_NOTION_URL_PREFIXES)
 
     # Database section checks for child2
     assert child2_db_section.text is not None
     assert child2_db_section.text.strip() != ""  # Should contain some database content
     assert child2_db_section.link is not None
-    assert child2_db_section.link.startswith("https://www.notion.so/")
+    assert child2_db_section.link.startswith(VALID_NOTION_URL_PREFIXES)
 
     # Verify table entry document structure
     assert table_entry_doc.id is not None
@@ -155,7 +164,7 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     # Content specific checks for table entry
     assert table_entry_section.text == "\ntable-entry01"
     assert table_entry_section.link is not None
-    assert table_entry_section.link.startswith("https://www.notion.so/")
+    assert table_entry_section.link.startswith(VALID_NOTION_URL_PREFIXES)
 
     # Verify table entry child document structure
     assert table_entry_child_doc.id is not None
@@ -168,4 +177,4 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     # Content specific checks for table entry child
     assert table_entry_child_section.text == "\nchild-table-entry01"
     assert table_entry_child_section.link is not None
-    assert table_entry_child_section.link.startswith("https://www.notion.so/")
+    assert table_entry_child_section.link.startswith(VALID_NOTION_URL_PREFIXES)

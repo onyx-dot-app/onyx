@@ -184,3 +184,26 @@ export function formatDurationSeconds(seconds: number): string {
   const secs = totalSeconds % 60;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
+
+// Pretty-print a millisecond duration, picking a unit appropriate to the
+// magnitude. Used by the index-attempt stage metrics UI where a single view
+// can mix tiny (sub-millisecond) and large (multi-minute) durations.
+export function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms)) return "—";
+  if (ms < 1) return "<1 ms";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 2 : 1)} s`;
+
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remSeconds = totalSeconds % 60;
+  if (minutes < 60) {
+    return remSeconds > 0 ? `${minutes}m ${remSeconds}s` : `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
+}

@@ -863,22 +863,27 @@ def test_salesforce_bulk_retrieve() -> None:
                             # Count data rows
                             num_data_rows = sum(1 for _ in reader)
                             logger.info(
-                                f"Counted {num_data_rows} data rows in {filename}"
+                                "Counted %s data rows in %s", num_data_rows, filename
                             )
                             total_data_rows += num_data_rows
                         except StopIteration:
                             # Handle empty file or file with only header
                             logger.info(
-                                f"File {filename} is empty or contains only a header."
+                                "File %s is empty or contains only a header.", filename
                             )
                 except Exception as e:
-                    logger.error(f"Error reading or counting rows in {filename}: {e}")
+                    logger.error(
+                        "Error reading or counting rows in %s: %s", filename, e
+                    )
 
         logger.info(
-            f"Found {len(csv_files_found)} CSV files for {object_type} in {temp_dir}."
+            "Found %s CSV files for %s in %s.",
+            len(csv_files_found),
+            object_type,
+            temp_dir,
         )
         logger.info(
-            f"Total data rows across all CSVs for {object_type}: {total_data_rows}"
+            "Total data rows across all CSVs for %s: %s", object_type, total_data_rows
         )
 
         assert total_data_rows > 1100 and total_data_rows < 1200
@@ -1003,10 +1008,12 @@ def test_salesforce_connector_single() -> None:
     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
 
     # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
-    logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+    logger.info("Parent object types: num=%s list=%s", len(parent_types), parent_types)
     for parent_type_working in parent_types:
         child_types_working = sf_client.get_children_of_sf_type(parent_type_working)
-        logger.debug(f"Found {len(child_types)} child types for {parent_type_working}")
+        logger.debug(
+            "Found %s child types for %s", len(child_types), parent_type_working
+        )
 
         for child_type, child_relationship in child_types_working.items():
             # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
@@ -1032,7 +1039,10 @@ def test_salesforce_connector_single() -> None:
 
         child_types.update(list(child_types_working.keys()))
         logger.info(
-            f"Child object types: parent={parent_type_working} num={len(child_types_working)} list={child_types_working.keys()}"
+            "Child object types: parent=%s num=%s list=%s",
+            parent_type_working,
+            len(child_types_working),
+            child_types_working.keys(),
         )
 
     # queryable_fields_attachment = _get_all_queryable_fields_of_sf_type(sf_client, "Attachment")
@@ -1117,7 +1127,7 @@ def test_salesforce_connector_single() -> None:
             result = sf_client.query(query)
             print(f"{result=}")
         except Exception:
-            logger.exception(f"Query failed: {query=}")
+            logger.exception("Query failed: query=%r", query)
             for child_relationship in child_relationships_batch:
                 relationship_status[child_relationship] = False
         else:
@@ -1150,7 +1160,7 @@ def test_salesforce_connector_single() -> None:
             result = sf_client.query(query)
             print(f"{result=}")
         except Exception:
-            logger.exception(f"Query failed: {query=}")
+            logger.exception("Query failed: query=%r", query)
             for child_relationship in child_relationships_batch:
                 relationship_status[child_relationship] = False
         else:

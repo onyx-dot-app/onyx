@@ -39,5 +39,10 @@
     "eslint-config-next": "16.1.4",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "router": {
+      "path-to-regexp": "^8.4.2"
+    }
   }
 }

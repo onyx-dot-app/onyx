@@ -48,8 +48,7 @@ def _set_new_search_settings(
     user: DATestUser,
     current_settings: dict,
     enable_contextual_rag: bool = False,
-    contextual_rag_llm_name: str | None = None,
-    contextual_rag_llm_provider: str | None = None,
+    contextual_rag_model_configuration_id: int | None = None,
 ) -> requests.Response:
     """POST to set-new-search-settings, deriving the payload from current settings."""
     payload = {
@@ -64,8 +63,7 @@ def _set_new_search_settings(
         "embedding_precision": current_settings["embedding_precision"],
         "reduced_dimension": current_settings.get("reduced_dimension"),
         "enable_contextual_rag": enable_contextual_rag,
-        "contextual_rag_llm_name": contextual_rag_llm_name,
-        "contextual_rag_llm_provider": contextual_rag_llm_provider,
+        "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
     }
     return requests.post(
         f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
@@ -92,8 +90,7 @@ def test_get_current_search_settings(
     assert "model_name" in settings
     assert "model_dim" in settings
     assert "enable_contextual_rag" in settings
-    assert "contextual_rag_llm_name" in settings
-    assert "contextual_rag_llm_provider" in settings
+    assert "contextual_rag_model_configuration_id" in settings
     assert "index_name" in settings
     assert "embedding_precision" in settings
 
@@ -125,17 +122,16 @@ def test_set_contextual_rag_model(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
-    """Set contextual RAG LLM model and verify it persists."""
+    """Set contextual RAG model configuration ID and verify it persists."""
+    mc_id = llm_provider.model_configuration_ids[0]
     settings = _get_current_search_settings(admin_user)
 
     settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = llm_provider.default_model_name
-    settings["contextual_rag_llm_provider"] = llm_provider.name
+    settings["contextual_rag_model_configuration_id"] = mc_id
     _update_inference_settings(admin_user, settings)
 
     updated = _get_current_search_settings(admin_user)
-    assert updated["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert updated["contextual_rag_llm_provider"] == llm_provider.name
+    assert updated["contextual_rag_model_configuration_id"] == mc_id
 
 
 def test_unset_contextual_rag_model(
@@ -144,27 +140,24 @@ def test_unset_contextual_rag_model(
     llm_provider: DATestLLMProvider,
 ) -> None:
     """Set a contextual RAG model, then unset it and verify it becomes None."""
+    mc_id = llm_provider.model_configuration_ids[0]
     settings = _get_current_search_settings(admin_user)
     settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = llm_provider.default_model_name
-    settings["contextual_rag_llm_provider"] = llm_provider.name
+    settings["contextual_rag_model_configuration_id"] = mc_id
     _update_inference_settings(admin_user, settings)
 
     # Verify it's set
     updated = _get_current_search_settings(admin_user)
-    assert updated["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert updated["contextual_rag_llm_provider"] == llm_provider.name
+    assert updated["contextual_rag_model_configuration_id"] == mc_id
 
     # Unset by disabling contextual RAG
     updated["enable_contextual_rag"] = False
-    updated["contextual_rag_llm_name"] = None
-    updated["contextual_rag_llm_provider"] = None
+    updated["contextual_rag_model_configuration_id"] = None
     _update_inference_settings(admin_user, updated)
 
     # Verify it's unset
     final = _get_current_search_settings(admin_user)
-    assert final["contextual_rag_llm_name"] is None
-    assert final["contextual_rag_llm_provider"] is None
+    assert final["contextual_rag_model_configuration_id"] is None
 
 
 def test_change_contextual_rag_model(
@@ -179,54 +172,24 @@ def test_change_contextual_rag_model(
         user_performing_action=admin_user,
     )
 
-    settings = _get_current_search_settings(admin_user)
-    settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = llm_provider.default_model_name
-    settings["contextual_rag_llm_provider"] = llm_provider.name
-    _update_inference_settings(admin_user, settings)
-
-    updated = _get_current_search_settings(admin_user)
-    assert updated["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert updated["contextual_rag_llm_provider"] == llm_provider.name
-
-    # Switch to a different model and provider
-    updated["enable_contextual_rag"] = True
-    updated["contextual_rag_llm_name"] = second_provider.default_model_name
-    updated["contextual_rag_llm_provider"] = second_provider.name
-    _update_inference_settings(admin_user, updated)
-
-    final = _get_current_search_settings(admin_user)
-    assert final["contextual_rag_llm_name"] == second_provider.default_model_name
-    assert final["contextual_rag_llm_provider"] == second_provider.name
-
-
-def test_change_contextual_rag_provider_only(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
-) -> None:
-    """Change only the provider while keeping the same model name."""
-    shared_model_name = llm_provider.default_model_name
-    second_provider = LLMProviderManager.create(
-        name="second-provider",
-        default_model_name=shared_model_name,
-        user_performing_action=admin_user,
-    )
+    mc_id = llm_provider.model_configuration_ids[0]
+    second_mc_id = second_provider.model_configuration_ids[0]
 
     settings = _get_current_search_settings(admin_user)
     settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = shared_model_name
-    settings["contextual_rag_llm_provider"] = llm_provider.name
+    settings["contextual_rag_model_configuration_id"] = mc_id
     _update_inference_settings(admin_user, settings)
 
     updated = _get_current_search_settings(admin_user)
+    assert updated["contextual_rag_model_configuration_id"] == mc_id
+
+    # Switch to a different model configuration
     updated["enable_contextual_rag"] = True
-    updated["contextual_rag_llm_provider"] = second_provider.name
+    updated["contextual_rag_model_configuration_id"] = second_mc_id
     _update_inference_settings(admin_user, updated)
 
     final = _get_current_search_settings(admin_user)
-    assert final["contextual_rag_llm_name"] == shared_model_name
-    assert final["contextual_rag_llm_provider"] == second_provider.name
+    assert final["contextual_rag_model_configuration_id"] == second_mc_id
 
 
 def test_enable_contextual_rag_preserved_on_inference_update(
@@ -240,8 +203,7 @@ def test_enable_contextual_rag_preserved_on_inference_update(
 
     # Attempt to flip the flag
     settings["enable_contextual_rag"] = not original_enable
-    settings["contextual_rag_llm_name"] = None
-    settings["contextual_rag_llm_provider"] = None
+    settings["contextual_rag_model_configuration_id"] = None
     _update_inference_settings(admin_user, settings)
 
     updated = _get_current_search_settings(admin_user)
@@ -270,27 +232,25 @@ def test_contextual_rag_settings_reflected_in_get_all(
     llm_provider: DATestLLMProvider,
 ) -> None:
     """Verify that contextual RAG updates appear in get-all-search-settings."""
+    mc_id = llm_provider.model_configuration_ids[0]
     settings = _get_current_search_settings(admin_user)
     settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = llm_provider.default_model_name
-    settings["contextual_rag_llm_provider"] = llm_provider.name
+    settings["contextual_rag_model_configuration_id"] = mc_id
     _update_inference_settings(admin_user, settings)
 
     all_settings = _get_all_search_settings(admin_user)
     current = all_settings["current_settings"]
-    assert current["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert current["contextual_rag_llm_provider"] == llm_provider.name
+    assert current["contextual_rag_model_configuration_id"] == mc_id
 
 
-def test_update_contextual_rag_nonexistent_provider(
+def test_update_contextual_rag_nonexistent_model_configuration(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
-    """Updating with a provider that does not exist should return 400."""
+    """Updating with a model_configuration_id that does not exist should return 400."""
     settings = _get_current_search_settings(admin_user)
     settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = "some-model"
-    settings["contextual_rag_llm_provider"] = "nonexistent-provider"
+    settings["contextual_rag_model_configuration_id"] = 999999
 
     response = requests.post(
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
@@ -298,69 +258,7 @@ def test_update_contextual_rag_nonexistent_provider(
         headers=admin_user.headers,
     )
     assert response.status_code == 400
-    assert "Provider nonexistent-provider not found" in response.json()["detail"]
-
-
-def test_update_contextual_rag_nonexistent_model(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
-) -> None:
-    """Updating with a valid provider but a model not in that provider should return 400."""
-    settings = _get_current_search_settings(admin_user)
-    settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = "nonexistent-model"
-    settings["contextual_rag_llm_provider"] = llm_provider.name
-
-    response = requests.post(
-        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
-        json=settings,
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 400
-    assert (
-        f"Model nonexistent-model not found in provider {llm_provider.name}"
-        in response.json()["detail"]
-    )
-
-
-def test_update_contextual_rag_missing_provider_name(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-) -> None:
-    """Providing a model name without a provider name should return 400."""
-    settings = _get_current_search_settings(admin_user)
-    settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = "some-model"
-    settings["contextual_rag_llm_provider"] = None
-
-    response = requests.post(
-        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
-        json=settings,
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 400
-    assert "Provider name and model name are required" in response.json()["detail"]
-
-
-def test_update_contextual_rag_missing_model_name(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,
-) -> None:
-    """Providing a provider name without a model name should return 400."""
-    settings = _get_current_search_settings(admin_user)
-    settings["enable_contextual_rag"] = True
-    settings["contextual_rag_llm_name"] = None
-    settings["contextual_rag_llm_provider"] = llm_provider.name
-
-    response = requests.post(
-        f"{SEARCH_SETTINGS_URL}/update-inference-settings",
-        json=settings,
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 400
-    assert "Provider name and model name are required" in response.json()["detail"]
+    assert "999999" in response.json()["detail"]
 
 
 def test_set_new_search_settings_with_contextual_rag(
@@ -369,15 +267,15 @@ def test_set_new_search_settings_with_contextual_rag(
     llm_provider: DATestLLMProvider,
 ) -> None:
     """Create new search settings with contextual RAG enabled and verify the
-    secondary settings contain the correct provider and model."""
+    secondary settings contain the correct model configuration ID."""
+    mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
     response = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=True,
-        contextual_rag_llm_name=llm_provider.default_model_name,
-        contextual_rag_llm_provider=llm_provider.name,
+        contextual_rag_model_configuration_id=mc_id,
     )
     response.raise_for_status()
     assert "id" in response.json()
@@ -385,8 +283,7 @@ def test_set_new_search_settings_with_contextual_rag(
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
     assert secondary["enable_contextual_rag"] is True
-    assert secondary["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert secondary["contextual_rag_llm_provider"] == llm_provider.name
+    assert secondary["contextual_rag_model_configuration_id"] == mc_id
 
     _cancel_new_embedding(admin_user)
 
@@ -396,7 +293,7 @@ def test_set_new_search_settings_without_contextual_rag(
     admin_user: DATestUser,
 ) -> None:
     """Create new search settings with contextual RAG disabled and verify
-    the secondary settings have no RAG provider."""
+    the secondary settings have no RAG model configuration."""
     current = _get_current_search_settings(admin_user)
 
     response = _set_new_search_settings(
@@ -409,8 +306,7 @@ def test_set_new_search_settings_without_contextual_rag(
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
     assert secondary["enable_contextual_rag"] is False
-    assert secondary["contextual_rag_llm_name"] is None
-    assert secondary["contextual_rag_llm_provider"] is None
+    assert secondary["contextual_rag_model_configuration_id"] is None
 
     _cancel_new_embedding(admin_user)
 
@@ -422,6 +318,7 @@ def test_set_new_then_update_inference_settings(
 ) -> None:
     """Create new secondary settings, then update the current (primary) settings
     with contextual RAG and verify both are visible through get-all."""
+    mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
     # Create secondary settings without contextual RAG
@@ -432,22 +329,19 @@ def test_set_new_then_update_inference_settings(
     )
     response.raise_for_status()
 
-    # Update the *current* (primary) settings with a contextual RAG provider
+    # Update the *current* (primary) settings with a contextual RAG model
     current["enable_contextual_rag"] = True
-    current["contextual_rag_llm_name"] = llm_provider.default_model_name
-    current["contextual_rag_llm_provider"] = llm_provider.name
+    current["contextual_rag_model_configuration_id"] = mc_id
     _update_inference_settings(admin_user, current)
 
     all_settings = _get_all_search_settings(admin_user)
 
     primary = all_settings["current_settings"]
-    assert primary["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert primary["contextual_rag_llm_provider"] == llm_provider.name
+    assert primary["contextual_rag_model_configuration_id"] == mc_id
 
     secondary = all_settings["secondary_settings"]
     assert secondary is not None
-    assert secondary["contextual_rag_llm_name"] is None
-    assert secondary["contextual_rag_llm_provider"] is None
+    assert secondary["contextual_rag_model_configuration_id"] is None
 
     _cancel_new_embedding(admin_user)
 
@@ -459,6 +353,7 @@ def test_set_new_search_settings_replaces_previous_secondary(
 ) -> None:
     """Calling set-new-search-settings twice should retire the first secondary
     and replace it with the second."""
+    mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
     # First: no contextual RAG
@@ -475,8 +370,7 @@ def test_set_new_search_settings_replaces_previous_secondary(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=True,
-        contextual_rag_llm_name=llm_provider.default_model_name,
-        contextual_rag_llm_provider=llm_provider.name,
+        contextual_rag_model_configuration_id=mc_id,
     )
     resp2.raise_for_status()
     second_id = resp2.json()["id"]
@@ -486,7 +380,6 @@ def test_set_new_search_settings_replaces_previous_secondary(
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
     assert secondary["enable_contextual_rag"] is True
-    assert secondary["contextual_rag_llm_name"] == llm_provider.default_model_name
-    assert secondary["contextual_rag_llm_provider"] == llm_provider.name
+    assert secondary["contextual_rag_model_configuration_id"] == mc_id
 
     _cancel_new_embedding(admin_user)

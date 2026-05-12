@@ -161,7 +161,7 @@ def get_schema_options() -> (
                 name.strip() for name in schema_names_str.split(",") if name.strip()
             ]
             if schemas:
-                logger.info(f"Specific schema names specified: {schemas}")
+                logger.info("Specific schema names specified: %s", schemas)
 
     # Validate that only one method is used at a time
     range_filtering = tenant_range_start is not None or tenant_range_end is not None
@@ -282,14 +282,17 @@ async def run_async_migrations() -> None:
 
     if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
+        logger.info("Migrating specific schema names: %s", schemas)
 
         i_schema = 0
         num_schemas = len(schemas)
         for schema in schemas:
             i_schema += 1
             logger.info(
-                f"Migrating schema: index={i_schema} num_schemas={num_schemas} schema={schema}"
+                "Migrating schema: index=%s num_schemas=%s schema=%s",
+                i_schema,
+                num_schemas,
+                schema,
             )
             try:
                 async with engine.connect() as connection:
@@ -300,7 +303,7 @@ async def run_async_migrations() -> None:
                     )
                     await connection.commit()
             except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
+                logger.error("Error migrating schema %s: %s", schema, e)
                 if not continue_on_error:
                     logger.error("--continue=true is not set, raising exception!")
                     raise
@@ -316,10 +319,14 @@ async def run_async_migrations() -> None:
 
         if tenant_range_start is not None or tenant_range_end is not None:
             logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+                "Filtering tenants by range: start=%s, end=%s",
+                tenant_range_start,
+                tenant_range_end,
             )
             logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+                "Total tenants: %s, Filtered tenants: %s",
+                len(tenant_schemas),
+                len(filtered_tenant_schemas),
             )
 
         i_tenant = 0
@@ -327,7 +334,10 @@ async def run_async_migrations() -> None:
         for schema in filtered_tenant_schemas:
             i_tenant += 1
             logger.info(
-                f"Migrating schema: index={i_tenant} num_tenants={num_tenants} schema={schema}"
+                "Migrating schema: index=%s num_tenants=%s schema=%s",
+                i_tenant,
+                num_tenants,
+                schema,
             )
             try:
                 async with engine.connect() as connection:
@@ -338,7 +348,7 @@ async def run_async_migrations() -> None:
                     )
                     await connection.commit()
             except Exception as e:
-                logger.error(f"Error migrating schema {schema}: {e}")
+                logger.error("Error migrating schema %s: %s", schema, e)
                 if not continue_on_error:
                     logger.error("--continue=true is not set, raising exception!")
                     raise
@@ -384,10 +394,10 @@ def run_migrations_offline() -> None:
 
     if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {schemas}")
+        logger.info("Migrating specific schema names: %s", schemas)
 
         for schema in schemas:
-            logger.info(f"Migrating schema: {schema}")
+            logger.info("Migrating schema: %s", schema)
             context.configure(
                 url=url,
                 target_metadata=target_metadata,
@@ -421,14 +431,18 @@ def run_migrations_offline() -> None:
 
         if tenant_range_start is not None or tenant_range_end is not None:
             logger.info(
-                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+                "Filtering tenants by range: start=%s, end=%s",
+                tenant_range_start,
+                tenant_range_end,
             )
             logger.info(
-                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+                "Total tenants: %s, Filtered tenants: %s",
+                len(tenant_schemas),
+                len(filtered_tenant_schemas),
             )
 
         for schema in filtered_tenant_schemas:
-            logger.info(f"Migrating schema: {schema}")
+            logger.info("Migrating schema: %s", schema)
             context.configure(
                 url=url,
                 target_metadata=target_metadata,

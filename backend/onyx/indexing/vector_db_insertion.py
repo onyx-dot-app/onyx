@@ -64,8 +64,9 @@ def write_chunks_to_vector_db_with_backoff(
         # where the 60s read timeout fires when the server is slow to
         # finish the bulk index.)
         logger.warning(
-            f"Failed to write chunk batch to vector db. Trying individual docs. "
-            f"Batch error: {type(e).__name__}: {e}"
+            "Failed to write chunk batch to vector db. Trying individual docs. Batch error: %s: %s",
+            type(e).__name__,
+            e,
         )
 
         # give some specific logging on this common failure case.
@@ -106,7 +107,7 @@ def write_chunks_to_vector_db_with_backoff(
                 scope.fingerprint = ["vector-db-write-failure", type(e).__name__]
                 sentry_sdk.capture_exception(e)
             logger.exception(
-                f"Failed to write document chunks for '{doc_id}' to vector db"
+                "Failed to write document chunks for '%s' to vector db", doc_id
             )
 
             # give some specific logging on this common failure case.

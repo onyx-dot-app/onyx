@@ -41,9 +41,7 @@ def get_schemas_needing_migration(
             )
         )
 
-        conn.execute(
-            text(
-                """
+        conn.execute(text("""
                 DO $$
                 DECLARE
                     s        text;
@@ -77,9 +75,7 @@ def get_schemas_needing_migration(
                     END LOOP;
                 END;
                 $$
-                """
-            )
-        )
+                """))
 
         rows = conn.execute(
             text("SELECT schema_name, version_num FROM _alembic_version_snapshot")

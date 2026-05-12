@@ -11,7 +11,7 @@ import type { TagProps } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts/general/components";
 import { Content, ContentAction } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------

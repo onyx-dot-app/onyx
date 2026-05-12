@@ -59,7 +59,7 @@ def create_token(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    logger.info(f"User {user.email} created PAT '{request.name}'")
+    logger.info("User %s created PAT '%s'", user.email, request.name)
 
     return CreatedTokenResponse(
         id=pat.id,
@@ -85,5 +85,5 @@ def delete_token(
             status_code=404, detail="Token not found or not owned by user"
         )
 
-    logger.info(f"User {user.email} revoked token {token_id}")
+    logger.info("User %s revoked token %s", user.email, token_id)
     return {"message": "Token deleted successfully"}

@@ -19,7 +19,7 @@ const cspHeader = `
 const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
-  transpilePackages: ["@onyx/opal"],
+  transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
   reactCompiler: true,
   images: {
@@ -150,6 +150,11 @@ const nextConfig = {
       {
         source: "/ee/assistants/:path*",
         destination: "/ee/agents/:path*",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/search",
+        destination: "/admin/configuration/index-settings",
         permanent: true,
       },
       {

@@ -80,7 +80,7 @@ def create_release_notifications_for_versions(
             "link": link,
         }
 
-        created_count = batch_create_notifications(
+        inserted_ids = batch_create_notifications(
             user_ids,
             NotificationType.RELEASE_NOTES,
             db_session,
@@ -88,10 +88,14 @@ def create_release_notifications_for_versions(
             description=f"Check out what's new in {entry.version}",
             additional_data=additional_data,
         )
+        created_count = len(inserted_ids)
         total_created += created_count
 
         logger.debug(
-            f"Created {created_count} release notes notifications (version {entry.version}, {len(user_ids)} eligible users)"
+            "Created %s release notes notifications (version %s, %s eligible users)",
+            created_count,
+            entry.version,
+            len(user_ids),
         )
 
     return total_created

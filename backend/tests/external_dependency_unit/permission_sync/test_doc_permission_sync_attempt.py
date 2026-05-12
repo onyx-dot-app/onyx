@@ -155,6 +155,40 @@ class TestDocPermissionSyncAttempt:
         assert attempt.time_started is not None
         assert attempt.time_finished is not None
         assert attempt.error_message == error_msg
+        # Default-omitted full_exception_trace should be None — guards
+        # the optional-kwarg signature so synthesized-string callers
+        # (e.g. ``_fail_doc_permission_sync_attempt``) keep working.
+        assert attempt.full_exception_trace is None
+
+    def test_mark_doc_permission_sync_attempt_failed_persists_traceback(
+        self, db_session: Session
+    ) -> None:
+        """Tracebacks captured in ``except`` blocks must round-trip
+        through the failure helper so the connector-detail UI can
+        surface the full Python stack instead of just a single-line
+        summary."""
+        cc_pair = _create_test_connector_credential_pair(db_session)
+        attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
+
+        error_msg = "Sync process crashed unexpectedly"
+        full_trace = (
+            "Traceback (most recent call last):\n"
+            '  File "tasks.py", line 123, in connector_permission_sync_generator_task\n'
+            "    do_sync()\n"
+            "RuntimeError: simulated failure\n"
+        )
+        mark_doc_permission_sync_attempt_failed(
+            attempt_id,
+            db_session,
+            error_message=error_msg,
+            full_exception_trace=full_trace,
+        )
+
+        attempt = get_doc_permission_sync_attempt(db_session, attempt_id)
+        assert attempt is not None
+        assert attempt.status == PermissionSyncStatus.FAILED
+        assert attempt.error_message == error_msg
+        assert attempt.full_exception_trace == full_trace
 
     def test_get_recent_doc_permission_sync_attempts_for_cc_pair(
         self, db_session: Session

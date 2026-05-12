@@ -26,4 +26,11 @@ var (
 	splashStyle = lipgloss.NewStyle().Foreground(splashColor).Bold(true)
 	taglineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A0A0A0"))
 	hintStyle    = lipgloss.NewStyle().Foreground(dimColor)
+
+	// Shared text styles used across the CLI.
+	BoldStyle   = lipgloss.NewStyle().Bold(true)
+	DimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#555577"))
+	GreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc66")).Bold(true)
+	RedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff5555")).Bold(true)
+	YellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffcc00"))
 )

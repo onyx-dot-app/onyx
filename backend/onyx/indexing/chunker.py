@@ -191,7 +191,7 @@ class Chunker:
     ) -> list[DocAwareChunk]:
         # Specifically for reproducing an issue with gmail
         if document.source == DocumentSource.GMAIL:
-            logger.debug(f"Chunking {document.semantic_identifier}")
+            logger.debug("Chunking %s", document.semantic_identifier)
 
         # Title prep
         title = extract_blurb(

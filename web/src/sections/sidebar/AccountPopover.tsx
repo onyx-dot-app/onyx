@@ -11,7 +11,7 @@ import {
   logout,
 } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
@@ -235,7 +235,7 @@ export default function AccountPopover({
       <Popover.Content
         align="end"
         side="right"
-        width={popupState === "Notifications" ? "xl" : "lg"}
+        width={popupState === "Notifications" ? "2xl" : "lg"}
       >
         {popupState === "Settings" && (
           <SettingsPopover

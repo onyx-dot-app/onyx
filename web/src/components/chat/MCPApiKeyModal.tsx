@@ -207,6 +207,11 @@ export default function MCPApiKeyModal({
                         type="button"
                         onClick={() => toggleCredentialVisibility(field)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                        aria-label={
+                          showCredentials[field]
+                            ? "Hide credential"
+                            : "Show credential"
+                        }
                       >
                         {showCredentials[field] ? (
                           <SvgEyeClosed className="h-4 w-4" />
@@ -238,6 +243,7 @@ export default function MCPApiKeyModal({
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
                   >
                     {showApiKey ? (
                       <SvgEyeClosed className="h-4 w-4" />

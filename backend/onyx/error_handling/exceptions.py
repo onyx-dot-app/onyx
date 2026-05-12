@@ -63,9 +63,9 @@ def log_onyx_error(exc: OnyxError) -> None:
     detail = exc.detail
     status_code = exc.status_code
     if status_code >= 500:
-        logger.error(f"OnyxError {exc.error_code.code}: {detail}")
+        logger.error("OnyxError %s: %s", exc.error_code.code, detail)
     elif status_code >= 400:
-        logger.warning(f"OnyxError {exc.error_code.code}: {detail}")
+        logger.warning("OnyxError %s: %s", exc.error_code.code, detail)
 
 
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:

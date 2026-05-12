@@ -99,7 +99,7 @@ def _object_type_has_api_data(
     except SalesforceRefusedRequest as e:
         if is_salesforce_rate_limit_error(e):
             logger.warning(
-                f"Salesforce rate limit exceeded for object type check: {sf_type}"
+                "Salesforce rate limit exceeded for object type check: %s", sf_type
             )
             # Add additional delay for rate limit errors
             time.sleep(3)
@@ -107,7 +107,7 @@ def _object_type_has_api_data(
 
     except Exception as e:
         if "OPERATION_TOO_LARGE" not in str(e):
-            logger.warning(f"Object type {sf_type} doesn't support query: {e}")
+            logger.warning("Object type %s doesn't support query: %s", sf_type, e)
             return False
     return True
 
@@ -147,9 +147,9 @@ def _bulk_retrieve_from_salesforce(
     if not bulk_2_type:
         return sf_type, None
 
-    logger.info(f"Downloading {sf_type}")
+    logger.info("Downloading %s", sf_type)
 
-    logger.debug(f"Query: {query}")
+    logger.debug("Query: %s", query)
 
     try:
         # This downloads the file to a file in the target path with a random name
@@ -170,16 +170,16 @@ def _bulk_retrieve_from_salesforce(
             all_download_paths.append(new_file_path)
     except Exception as e:
         logger.error(
-            f"Failed to download salesforce csv for object type {sf_type}: {e}"
+            "Failed to download salesforce csv for object type %s: %s", sf_type, e
         )
-        logger.warning(f"Exceptioning query for object type {sf_type}: {query}")
+        logger.warning("Exceptioning query for object type %s: %s", sf_type, query)
         return sf_type, None
     finally:
         bulk_2_handler = None
         bulk_2_type = None
         gc.collect()
 
-    logger.info(f"Downloaded {sf_type} to {all_download_paths}")
+    logger.info("Downloaded %s to %s", sf_type, all_download_paths)
     return sf_type, all_download_paths
 
 
@@ -215,26 +215,32 @@ def fetch_all_csvs_in_parallel(
                 )
                 if time_filter_temp is None:
                     logger.warning(
-                        f"Object type not filterable: type={sf_type} fields={queryable_fields}"
+                        "Object type not filterable: type=%s fields=%s",
+                        sf_type,
+                        queryable_fields,
                     )
                     time_filter = ""
                 else:
                     logger.info(
-                        f"Object type filterable: type={sf_type} filter={time_filter_temp}"
+                        "Object type filterable: type=%s filter=%s",
+                        sf_type,
+                        time_filter_temp,
                     )
                     time_filter = time_filter_temp
 
             break
 
         if not _object_type_has_api_data(sf_client, sf_type, time_filter):
-            logger.warning(f"Object type skipped (no data available): type={sf_type}")
+            logger.warning("Object type skipped (no data available): type=%s", sf_type)
             continue
 
         query = _make_time_filtered_query(queryable_fields, sf_type, time_filter)
         type_to_query[sf_type] = query
 
     logger.info(
-        f"Object types to query: initial={len(all_types_to_filter)} queryable={len(type_to_query)}"
+        "Object types to query: initial=%s queryable=%s",
+        len(all_types_to_filter),
+        len(type_to_query),
     )
 
     # Run the bulk retrieve in parallel

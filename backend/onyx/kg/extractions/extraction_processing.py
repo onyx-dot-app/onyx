@@ -217,7 +217,7 @@ def kg_extraction(
             - Update document table to set kg_extracted = True
     """
 
-    logger.info(f"Starting kg extraction for tenant {tenant_id}")
+    logger.info("Starting kg extraction for tenant %s", tenant_id)
 
     kg_config_settings = get_kg_config_settings()
     validate_kg_settings(kg_config_settings)
@@ -275,7 +275,9 @@ def kg_extraction(
 
             if len(unprocessed_document_batch) == 0:
                 logger.info(
-                    f"No unprocessed documents found for connector {connector_id}. Processed {document_batch_counter} batches."
+                    "No unprocessed documents found for connector %s. Processed %s batches.",
+                    connector_id,
+                    document_batch_counter,
                 )
                 break
 
@@ -283,7 +285,7 @@ def kg_extraction(
             last_lock_time = extend_lock(
                 lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
             )
-            logger.info(f"Processing document batch {document_batch_counter}")
+            logger.info("Processing document batch %s", document_batch_counter)
 
             # Get the document attributes and entity types
             batch_metadata = _get_batch_documents_enhanced_metadata(
@@ -300,7 +302,7 @@ def kg_extraction(
                     # info for after the connector has been processed
                     kg_stage = KGStage.SKIPPED
                     logger.debug(
-                        f"Document {unprocessed_document.id} is not of any entity type"
+                        "Document %s is not of any entity type", unprocessed_document.id
                     )
                 elif batch_metadata[unprocessed_document.id].skip:
                     # info for after the connector has been processed. But no message as there may be many
@@ -445,7 +447,8 @@ def kg_extraction(
                 parts = split_entity_id(entity)
                 if len(parts) != 2:
                     logger.error(
-                        f"Invalid entity {entity} in aggregated_kg_extractions.entities"
+                        "Invalid entity %s in aggregated_kg_extractions.entities",
+                        entity,
                     )
                     continue
 
@@ -506,14 +509,15 @@ def kg_extraction(
 
                         db_session.commit()
                 except Exception as e:
-                    logger.error(f"Error adding entity {entity}. Error message: {e}")
+                    logger.error("Error adding entity %s. Error message: %s", entity, e)
 
             for document_id, relationship in batch_relationships:
                 relationship_split = split_relationship_id(relationship)
 
                 if len(relationship_split) != 3:
                     logger.error(
-                        f"Invalid relationship {relationship} in aggregated_kg_extractions.relationships"
+                        "Invalid relationship %s in aggregated_kg_extractions.relationships",
+                        relationship,
                     )
                     continue
 
@@ -543,7 +547,9 @@ def kg_extraction(
                         db_session.commit()
                     except Exception as e:
                         logger.error(
-                            f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                            "Error adding relationship type %s to the database: %s",
+                            relationship_type_id_name,
+                            e,
                         )
 
                     with get_session_with_current_tenant() as db_session:
@@ -557,7 +563,9 @@ def kg_extraction(
                             db_session.commit()
                         except Exception as e:
                             logger.error(
-                                f"Error adding relationship {relationship} to the database: {e}"
+                                "Error adding relationship %s to the database: %s",
+                                relationship,
+                                e,
                             )
 
             # Populate the Documents table with the kg information for the documents

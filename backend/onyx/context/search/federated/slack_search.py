@@ -80,26 +80,26 @@ def fetch_and_cache_channel_metadata(
     try:
         cached = redis_client.get(cache_key)
         if cached:
-            logger.debug(f"Channel metadata cache HIT for team {team_id}")
+            logger.debug("Channel metadata cache HIT for team %s", team_id)
             cached_str: str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
             )
             cached_data = cast(dict[str, ChannelMetadata], json.loads(cached_str))
-            logger.debug(f"Loaded {len(cached_data)} channels from cache")
+            logger.debug("Loaded %s channels from cache", len(cached_data))
             if not include_private:
                 filtered: dict[str, ChannelMetadata] = {
                     k: v
                     for k, v in cached_data.items()
                     if v.get("type") != ChannelType.PRIVATE_CHANNEL.value
                 }
-                logger.debug(f"Filtered to {len(filtered)} channels (exclude private)")
+                logger.debug("Filtered to %s channels (exclude private)", len(filtered))
                 return filtered
             return cached_data
     except Exception as e:
-        logger.warning(f"Error reading from channel metadata cache: {e}")
+        logger.warning("Error reading from channel metadata cache: %s", e)
 
     # Cache miss - fetch from Slack API with retry logic
-    logger.debug(f"Channel metadata cache MISS for team {team_id} - fetching from API")
+    logger.debug("Channel metadata cache MISS for team %s - fetching from API", team_id)
     slack_client = WebClient(token=access_token)
     channel_metadata: dict[str, ChannelMetadata] = {}
 
@@ -149,7 +149,7 @@ def fetch_and_cache_channel_metadata(
                 if not cursor:
                     break
 
-            logger.info(f"Fetched {channel_count} channels for team {team_id}")
+            logger.info("Fetched %s channels for team %s", channel_count, team_id)
 
             # Cache the results
             try:
@@ -159,10 +159,14 @@ def fetch_and_cache_channel_metadata(
                     ex=CHANNEL_METADATA_CACHE_TTL,
                 )
                 logger.info(
-                    f"Cached {channel_count} channels for team {team_id} (TTL: {CHANNEL_METADATA_CACHE_TTL}s, key: {cache_key})"
+                    "Cached %s channels for team %s (TTL: %ss, key: %s)",
+                    channel_count,
+                    team_id,
+                    CHANNEL_METADATA_CACHE_TTL,
+                    cache_key,
                 )
             except Exception as e:
-                logger.warning(f"Error caching channel metadata: {e}")
+                logger.warning("Error caching channel metadata: %s", e)
 
             return channel_metadata
 
@@ -189,8 +193,10 @@ def fetch_and_cache_channel_metadata(
                     # Remove the problematic channel type and retry
                     available_channel_types.remove(missing_channel_type)
                     logger.warning(
-                        f"Missing scope '{needed_scope}' for channel type '{missing_channel_type}'. "
-                        f"Continuing with reduced channel types: {available_channel_types}"
+                        "Missing scope '%s' for channel type '%s'. Continuing with reduced channel types: %s",
+                        needed_scope,
+                        missing_channel_type,
+                        available_channel_types,
                     )
                     # Don't count this as a retry attempt, just try again with fewer types
                     if available_channel_types:  # Only continue if we have types left
@@ -198,27 +204,35 @@ def fetch_and_cache_channel_metadata(
                     # Otherwise fall through to retry logic
                 else:
                     logger.error(
-                        f"Missing scope '{needed_scope}' but could not map to channel type or already removed. "
-                        f"Response: {e.response}"
+                        "Missing scope '%s' but could not map to channel type or already removed. Response: %s",
+                        needed_scope,
+                        e.response,
                     )
 
             # For other errors, use retry logic
             if attempt < CHANNEL_METADATA_MAX_RETRIES - 1:
                 retry_delay = CHANNEL_METADATA_RETRY_DELAY * (2**attempt)
                 logger.warning(
-                    f"Failed to fetch channel metadata (attempt {attempt + 1}/{CHANNEL_METADATA_MAX_RETRIES}): {e}. "
-                    f"Retrying in {retry_delay}s..."
+                    "Failed to fetch channel metadata (attempt %s/%s): %s. Retrying in %ss...",
+                    attempt + 1,
+                    CHANNEL_METADATA_MAX_RETRIES,
+                    e,
+                    retry_delay,
                 )
                 time.sleep(retry_delay)
             else:
                 logger.error(
-                    f"Failed to fetch channel metadata after {CHANNEL_METADATA_MAX_RETRIES} attempts: {e}"
+                    "Failed to fetch channel metadata after %s attempts: %s",
+                    CHANNEL_METADATA_MAX_RETRIES,
+                    e,
                 )
 
     # If we have some channel metadata despite errors, return it with a warning
     if channel_metadata:
         logger.warning(
-            f"Returning partial channel metadata ({len(channel_metadata)} channels) despite errors. Last error: {last_exception}"
+            "Returning partial channel metadata (%s channels) despite errors. Last error: %s",
+            len(channel_metadata),
+            last_exception,
         )
         return channel_metadata
 
@@ -262,7 +276,7 @@ def get_cached_user_profile(
             # Empty string means user was not found previously
             return cached_str if cached_str else None
     except Exception as e:
-        logger.debug(f"Error reading user profile cache: {e}")
+        logger.debug("Error reading user profile cache: %s", e)
 
     # Cache miss - fetch from Slack API
     slack_client = WebClient(token=access_token)
@@ -280,7 +294,7 @@ def get_cached_user_profile(
                 ex=USER_PROFILE_CACHE_TTL,
             )
         except Exception as e:
-            logger.debug(f"Error caching user profile: {e}")
+            logger.debug("Error caching user profile: %s", e)
 
         return name
 
@@ -288,14 +302,15 @@ def get_cached_user_profile(
         error_str = str(e)
         if "user_not_found" in error_str:
             logger.debug(
-                f"User {user_id} not found in Slack workspace (likely deleted/deactivated)"
+                "User %s not found in Slack workspace (likely deleted/deactivated)",
+                user_id,
             )
         elif "ratelimited" in error_str:
             # Don't cache rate limit errors - we'll retry later
-            logger.debug(f"Rate limited fetching user {user_id}, will retry later")
+            logger.debug("Rate limited fetching user %s, will retry later", user_id)
             return None
         else:
-            logger.warning(f"Could not fetch profile for user {user_id}: {e}")
+            logger.warning("Could not fetch profile for user %s: %s", user_id, e)
 
         # Cache negative result to avoid repeated lookups for missing users
         try:
@@ -405,7 +420,9 @@ def _should_skip_channel(
                     return True
         except Exception as e:
             logger.warning(
-                f"Could not determine channel type for {channel_id}, filtering out: {e}"
+                "Could not determine channel type for %s, filtering out: %s",
+                channel_id,
+                e,
             )
             return True
     return False
@@ -439,13 +456,18 @@ def _fetch_thread_from_url(
         messages: list[dict[str, Any]] = response.get("messages", [])
     except SlackApiError as e:
         logger.warning(
-            f"Failed to fetch thread from URL (channel={channel_id}, ts={thread_ts}): {e}"
+            "Failed to fetch thread from URL (channel=%s, ts=%s): %s",
+            channel_id,
+            thread_ts,
+            e,
         )
         return SlackQueryResult(messages=[], filtered_channels=[])
 
     if not messages:
         logger.warning(
-            f"No messages found for URL override (channel={channel_id}, ts={thread_ts})"
+            "No messages found for URL override (channel=%s, ts=%s)",
+            channel_id,
+            thread_ts,
         )
         return SlackQueryResult(messages=[], filtered_channels=[])
 
@@ -502,7 +524,10 @@ def _fetch_thread_from_url(
     )
 
     logger.info(
-        f"URL override: fetched thread from channel={channel_id}, ts={thread_ts}, {len(messages)} messages"
+        "URL override: fetched thread from channel=%s, ts=%s, %s messages",
+        channel_id,
+        thread_ts,
+        len(messages),
     )
 
     return SlackQueryResult(messages=[slack_message], filtered_channels=[])
@@ -536,7 +561,7 @@ def query_slack(
             # Add channel filter to query
             final_query = f"{query_string} {channel_filter}"
 
-    logger.info(f"Final query to slack: {final_query}")
+    logger.info("Final query to slack: %s", final_query)
 
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(query_string)
@@ -560,16 +585,18 @@ def query_slack(
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
 
-        logger.info(f"Slack search found {len(matches)} messages")
+        logger.info("Slack search found %s messages", len(matches))
     except SlackApiError as slack_error:
-        logger.error(f"Slack API error in search_messages: {slack_error}")
+        logger.error("Slack API error in search_messages: %s", slack_error)
         logger.error(
-            f"Slack API error details: status={slack_error.response.status_code}, error={slack_error.response.get('error')}"
+            "Slack API error details: status=%s, error=%s",
+            slack_error.response.status_code,
+            slack_error.response.get("error"),
         )
         if "not_allowed_token_type" in str(slack_error):
             # Log token type prefix
             token_prefix = access_token[:4] if len(access_token) >= 4 else "unknown"
-            logger.error(f"TOKEN TYPE ERROR: access_token type: {token_prefix}...")
+            logger.error("TOKEN TYPE ERROR: access_token type: %s...", token_prefix)
         return SlackQueryResult(messages=[], filtered_channels=[])
 
     # convert matches to slack messages
@@ -765,15 +792,17 @@ def _fetch_thread_context(
         # Check for rate limit error specifically
         if e.response and e.response.status_code == 429:
             logger.warning(
-                f"Slack rate limit hit while fetching thread context for {channel_id}/{thread_id}"
+                "Slack rate limit hit while fetching thread context for %s/%s",
+                channel_id,
+                thread_id,
             )
             return ThreadContextResult.rate_limited(message.text)
         # For other Slack errors, log and return original text
-        logger.error(f"Slack API error in thread context fetch: {e}")
+        logger.error("Slack API error in thread context fetch: %s", e)
         return ThreadContextResult.error(message.text)
     except Exception as e:
         # Network errors, timeouts, etc - treat as recoverable error
-        logger.error(f"Unexpected error in thread context fetch: {e}")
+        logger.error("Unexpected error in thread context fetch: %s", e)
         return ThreadContextResult.error(message.text)
 
     # If empty response or single message (not a thread), return original text
@@ -804,7 +833,7 @@ def _build_thread_text(
     if not replies:
         return thread_text
 
-    logger.debug(f"Thread {messages[0].get('ts')}: {len(replies)} replies included")
+    logger.debug("Thread %s: %s replies included", messages[0].get("ts"), len(replies))
     thread_text += "\n\nReplies:"
 
     for msg in replies:
@@ -829,10 +858,10 @@ def _build_thread_text(
             except SlackApiError as e:
                 if "user_not_found" in str(e):
                     logger.debug(
-                        f"User {userid} not found (likely deleted/deactivated)"
+                        "User %s not found (likely deleted/deactivated)", userid
                     )
                 else:
-                    logger.warning(f"Could not fetch profile for user {userid}: {e}")
+                    logger.warning("Could not fetch profile for user %s: %s", userid, e)
                 continue
             if not user_name:
                 continue
@@ -878,8 +907,11 @@ def fetch_thread_contexts_with_rate_limit_handling(
         messages_without_context = []
 
     logger.info(
-        f"Fetching thread context for {len(messages_for_context)} of {len(slack_messages)} messages "
-        f"(batch_size={batch_size}, max={max_messages or 'unlimited'})"
+        "Fetching thread context for %s of %s messages (batch_size=%s, max=%s)",
+        len(messages_for_context),
+        len(slack_messages),
+        batch_size,
+        max_messages or "unlimited",
     )
 
     results: list[str] = []
@@ -896,9 +928,11 @@ def fetch_thread_contexts_with_rate_limit_handling(
             remaining = messages_for_context[i:]
             skipped_batches = total_batches - rate_limit_batch
             logger.warning(
-                f"Slack rate limit: skipping {len(remaining)} remaining messages "
-                f"({skipped_batches} of {total_batches} batches). "
-                f"Successfully enriched {len(results)} messages before rate limit."
+                "Slack rate limit: skipping %s remaining messages (%s of %s batches). Successfully enriched %s messages before rate limit.",
+                len(remaining),
+                skipped_batches,
+                total_batches,
+                len(results),
             )
             results.extend([msg.text for msg in remaining])
             break
@@ -925,7 +959,7 @@ def fetch_thread_contexts_with_rate_limit_handling(
         for j, result in enumerate(batch_results):
             if result is None:
                 # Unexpected exception (shouldn't happen) - use original text, stop
-                logger.error(f"Unexpected None result for message {j} in batch")
+                logger.error("Unexpected None result for message %s in batch", j)
                 results.append(batch[j].text)
                 rate_limited = True
                 rate_limit_batch = current_batch
@@ -940,8 +974,9 @@ def fetch_thread_contexts_with_rate_limit_handling(
 
         if rate_limited:
             logger.warning(
-                f"Slack rate limit (429) hit at batch {current_batch}/{total_batches} "
-                f"while fetching thread context. Stopping further API calls."
+                "Slack rate limit (429) hit at batch %s/%s while fetching thread context. Stopping further API calls.",
+                current_batch,
+                total_batches,
             )
 
     # Add original text for messages we didn't fetch context for
@@ -1002,7 +1037,7 @@ def slack_retrieval(
     if not entities:
         logger.debug("No entity configuration found, using defaults")
     else:
-        logger.debug(f"Using entity configuration: {entities}")
+        logger.debug("Using entity configuration: %s", entities)
 
     # Extract limit from entity config if not explicitly provided
     query_limit = limit
@@ -1011,9 +1046,11 @@ def slack_retrieval(
             parsed_entities = SlackEntities(**entities)
             if limit is None:
                 query_limit = parsed_entities.max_messages_per_query
-                logger.debug(f"Using max_messages_per_query from config: {query_limit}")
+                logger.debug(
+                    "Using max_messages_per_query from config: %s", query_limit
+                )
         except Exception as e:
-            logger.warning(f"Error parsing entities for limit: {e}")
+            logger.warning("Error parsing entities for limit: %s", e)
             if limit is None:
                 query_limit = 100  # Fallback default
     elif limit is None:
@@ -1059,7 +1096,8 @@ def slack_retrieval(
         if channel_type == ChannelType.PRIVATE_CHANNEL:
             allowed_private_channel = slack_event_context.channel_id
             logger.debug(
-                f"Private channel context: will only allow messages from {allowed_private_channel} + public channels"
+                "Private channel context: will only allow messages from %s + public channels",
+                allowed_private_channel,
             )
 
     # Build search tasks — direct thread fetches + keyword searches

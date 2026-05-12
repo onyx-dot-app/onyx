@@ -243,7 +243,7 @@ def _persist_result(
                 log_session.commit()
         except Exception:
             logger.exception(
-                f"Failed to persist hook execution log for hook_id={hook_id}"
+                "Failed to persist hook execution log for hook_id=%s", hook_id
             )
 
     # Update is_reachable separately — best-effort, non-critical.
@@ -260,7 +260,7 @@ def _persist_result(
                 )
                 reachable_session.commit()
         except Exception:
-            logger.warning(f"Failed to update is_reachable for hook_id={hook_id}")
+            logger.warning("Failed to update is_reachable for hook_id=%s", hook_id)
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +342,9 @@ def _execute_hook_inner(
                 outcome.error_message or "Hook execution failed.",
             )
         logger.warning(
-            f"Hook execution failed (soft fail) for hook_id={hook_id}: {outcome.error_message}"
+            "Hook execution failed (soft fail) for hook_id=%s: %s",
+            hook_id,
+            outcome.error_message,
         )
         return HookSoftFailed()
 
@@ -379,7 +381,7 @@ def _execute_hook_impl(
     except Exception:
         if fail_strategy == HookFailStrategy.SOFT:
             logger.exception(
-                f"Unexpected error in hook execution (soft fail) for hook_id={hook_id}"
+                "Unexpected error in hook execution (soft fail) for hook_id=%s", hook_id
             )
             return HookSoftFailed()
         raise
