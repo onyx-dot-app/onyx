@@ -1106,7 +1106,7 @@ All mutation modals include the "takes effect within a few minutes" callout (see
 
 #### 13.4 Delete
 Soft-delete confirmation modal:
-> "Delete `<name>`? This removes it from new sessions. Sessions currently using it will keep the skill until they end. This action can be reversed by an engineer in the database."
+> "Delete `<name>`? This removes the skill and revokes access for all granted users and groups. Conversations currently in progress will see the deletion on their next turn (≤ 5 min). Files this skill *wrote into* user workspaces (generated outputs, attachments) remain there until the sessions end; the skill's own code stops being readable on the next refresh. This action can be reversed by an engineer in the database."
 
 Submit → `DELETE /api/admin/skills/custom/{id}`. Row disappears from list. Hard delete is not a V1 admin action.
 
