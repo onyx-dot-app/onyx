@@ -17,6 +17,14 @@ def get_external_app_by_id(
     return db_session.scalar(stmt)
 
 
+def get_external_apps(
+    *,
+    db_session: Session,
+) -> list[ExternalApp]:
+    stmt = select(ExternalApp).order_by(ExternalApp.id)
+    return list(db_session.scalars(stmt).all())
+
+
 def create_external_app__no_commit(
     *,
     db_session: Session,
