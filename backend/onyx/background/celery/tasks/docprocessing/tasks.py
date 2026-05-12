@@ -311,9 +311,21 @@ def validate_active_indexing_attempts(
                         f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
                         f"no pending or in-flight batches — all batches failed or lost"
                     )
-            else:
+            elif has_resumable_checkpoint:
                 failure_reason = (
-                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
+                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds "
+                    f"during docfetching"
+                )
+            else:
+                # Docfetching phase but no checkpoint saved yet — pod likely
+                # died before the connector reached its first checkpoint
+                # boundary. We can't auto-resume, so this falls through to
+                # FAILED below. Surface the cause explicitly so operators can
+                # distinguish it from a logical connector error.
+                failure_reason = (
+                    f"Worker died during docfetching after "
+                    f"{heartbeat_timeout_seconds}s of no heartbeat, before any "
+                    f"checkpoint was saved — cannot auto-resume"
                 )
 
             task_logger.warning(

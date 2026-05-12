@@ -73,15 +73,16 @@ export function IndexAttemptStatus({
   } else if (status === "interrupted") {
     const icon = (
       <Badge variant="in_progress" icon={FiClock}>
-        Auto-retrying
+        Interrupted
       </Badge>
     );
-    badge = errorMsg ? (
-      <Tooltip tooltip={errorMsg}>
+    const tooltipMsg =
+      errorMsg ||
+      "Worker restarted mid-run. Onyx will automatically resume indexing from the last saved checkpoint.";
+    badge = (
+      <Tooltip tooltip={tooltipMsg}>
         <div className="cursor-pointer">{icon}</div>
       </Tooltip>
-    ) : (
-      icon
     );
   } else if (status === "invalid") {
     badge = (
@@ -243,7 +244,7 @@ export function CCPairStatus({
     ) {
       badge = (
         <Badge variant="in_progress" icon={FiClock}>
-          Auto-retrying
+          Interrupted
         </Badge>
       );
     } else {

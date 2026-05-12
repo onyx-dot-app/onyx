@@ -11,6 +11,8 @@ Covered:
     3. Watchdog: docprocessing-phase             -> FAILED (unchanged)
     4. should_index bypasses cadence when last attempt is INTERRUPTED
     5. is_in_repeated_error_state ignores INTERRUPTED runs
+    6. mark_attempt_interrupted is a no-op if the attempt has already
+       transitioned out of IN_PROGRESS (race fix)
 
 Runs against real Postgres because IndexAttempt's row-level locking and
 the watchdog's commit semantics are part of what we're verifying.
@@ -38,6 +40,7 @@ from onyx.background.celery.tasks.docprocessing.utils import should_index
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
+from onyx.db.index_attempt import mark_attempt_interrupted
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
@@ -387,3 +390,74 @@ class TestRepeatedErrorStateIgnoresInterrupted:
             search_settings_id=search_settings.id,
             db_session=db_session,
         )
+
+
+# ---------------------------------------------------------------------------
+# Race fix: mark_attempt_interrupted must not overwrite terminal states
+# ---------------------------------------------------------------------------
+
+
+class TestMarkAttemptInterruptedRace:
+    """The watchdog reads attempt status without a row lock before calling
+    mark_attempt_interrupted; the row lock isn't taken until inside that
+    function. If the worker completes (mark_attempt_succeeded) in the gap
+    between the unlocked read and the locked write, we must not overwrite
+    SUCCESS → INTERRUPTED — that would trigger an unnecessary scheduler
+    retry of an already-successful run.
+    """
+
+    @pytest.mark.parametrize(
+        "preexisting_status",
+        [
+            IndexingStatus.SUCCESS,
+            IndexingStatus.FAILED,
+            IndexingStatus.CANCELED,
+            IndexingStatus.COMPLETED_WITH_ERRORS,
+        ],
+    )
+    def test_no_op_when_attempt_already_terminal(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        search_settings: SearchSettings,
+        preexisting_status: IndexingStatus,
+    ) -> None:
+        attempt = _make_terminal_attempt(
+            db_session,
+            cc_pair,
+            search_settings,
+            status=preexisting_status,
+        )
+        original_error_msg = attempt.error_msg
+
+        mark_attempt_interrupted(attempt.id, db_session, reason="watchdog lost race")
+
+        db_session.expire_all()
+        refreshed = db_session.get(IndexAttempt, attempt.id)
+        assert refreshed is not None
+        assert refreshed.status == preexisting_status
+        assert refreshed.error_msg == original_error_msg
+
+    def test_marks_interrupted_when_still_in_progress(
+        self,
+        db_session: Session,
+        cc_pair: ConnectorCredentialPair,
+        search_settings: SearchSettings,
+    ) -> None:
+        """Sanity: the no-op guard above didn't break the happy path."""
+        attempt = _make_in_progress_attempt(
+            db_session,
+            cc_pair,
+            search_settings,
+            total_batches=None,
+            checkpoint_pointer=f"checkpoint_{uuid4().hex}.json",
+            stale_seconds=HEARTBEAT_TIMEOUT_SECONDS + 60,
+        )
+
+        mark_attempt_interrupted(attempt.id, db_session, reason="watchdog observed")
+
+        db_session.expire_all()
+        refreshed = db_session.get(IndexAttempt, attempt.id)
+        assert refreshed is not None
+        assert refreshed.status == IndexingStatus.INTERRUPTED
+        assert refreshed.error_msg == "watchdog observed"

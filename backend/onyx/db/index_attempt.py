@@ -466,6 +466,21 @@ def mark_attempt_interrupted(
             .with_for_update()
         ).scalar_one()
 
+        # The watchdog reads attempt status without a lock before calling this
+        # function, so by the time we acquire the row lock the attempt may
+        # have already transitioned to a terminal state (e.g. the worker
+        # completed and called mark_attempt_succeeded). Overwriting a
+        # successful attempt with INTERRUPTED would trigger an unnecessary
+        # scheduler retry, so bail out if we're no longer IN_PROGRESS.
+        if attempt.status != IndexingStatus.IN_PROGRESS:
+            logger.info(
+                "Skipping INTERRUPTED marking for attempt %s: status is %s",
+                index_attempt_id,
+                attempt.status.value,
+            )
+            db_session.rollback()
+            return
+
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.INTERRUPTED
