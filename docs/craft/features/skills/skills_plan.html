@@ -1405,6 +1405,17 @@
     </div>
     <ul>
       <li>
+        <strong>V1 is infrastructure, not a brand surface.</strong> Skills V1
+        ships as plumbing — the data model, primitive, sandbox-delivery
+        pipeline, and an admin upload path. The product positioning (naming,
+        marketing surface, marketplace narrative, discoverability moments) is
+        intentionally <strong>not</strong> in scope for V1. A separate product
+        workstream layers the brand surface on top of this infrastructure once
+        V1 is stable. Implication for V1 decisions: when in doubt, prefer the
+        choice that doesn't lock in marketing surface (internal-leaning copy, no
+        in-product launch moments, no marketplace UI).
+      </li>
+      <li>
         <strong>Universal-from-day-one vs Craft-now-refactor-later.</strong>
         Chose universal. The cost is one extra module path; the savings are
         avoiding a future migration of customer-facing API routes when
@@ -3830,6 +3841,29 @@ enqueue_change(db, tenant_id, "skills")</code></pre>
       metadata + visibility. Admin chooses visibility at upload time — no silent
       default.
     </p>
+    <p>
+      <strong>Pre-upload SKILL.md preview.</strong> Once the admin selects a
+      zip, the modal grows a right-side preview pane showing the parsed and
+      markdown-rendered <code>SKILL.md</code> alongside a file list of the rest
+      of the bundle. The admin sees the agent-facing instructions before they
+      commit — this is the same content the LLM will read inside user sessions.
+      Surfacing it forces a quick read-through of what's being authorized,
+      mitigating the "I uploaded an opaque zip" failure mode and the
+      social-attack vector of a SKILL.md that quietly subverts agent behavior.
+      Implementation reuses the client-side <code>jszip</code> reader that's
+      already doing the frontmatter pre-fill — no new endpoint.
+    </p>
+    <p>
+      <strong>Empty state — example skill download.</strong> When the admin has
+      zero custom skills, the list area shows an inline "Get started" card with
+      a <code>Download example skill (.zip)</code> button alongside the
+      <code>Upload skill</code> CTA. The example zip is a minimal
+      <code>hello-world</code> skill (SKILL.md + a short script) shipped in the
+      deploy artifact and served by a static endpoint (<code
+        >GET /api/admin/skills/example-bundle</code
+      >). Removes the cold-start friction of "what does a skill zip even look
+      like?" for the first custom upload.
+    </p>
 
     <!-- ============== MOCKUP: Upload modal ============== -->
     <div class="mockup-frame">
@@ -4807,8 +4841,14 @@ enqueue_change(db, tenant_id, "skills")</code></pre>
         upload.
       </li>
       <li>
-        <strong>No audit log in V1.</strong> <code>created_at</code> /
-        <code>updated_at</code> / <code>author_user_id</code> are sufficient.
+        <strong>Skill audit history is V1.5, not V1.</strong>
+        <code>created_at</code> / <code>updated_at</code> /
+        <code>author_user_id</code> on the skill row partially answer "who
+        uploaded what when." A proper audit log — every mutation as an immutable
+        event row, with an admin "Activity" tab — is the right shape for
+        compliance-grade enterprises but adds a table, a write path on every
+        mutation, and a UI surface. Deferred to V1.5; called out in §19. V1
+        customers needing richer history can derive it from app logs.
       </li>
       <li>
         <strong>No bulk operations.</strong> "Grant skill to N groups" is the
@@ -5655,6 +5695,69 @@ def cleanup_orphaned_skill_blobs() -&gt; None:
             <code>user_ids</code> to the POST/PUT bodies +
             <code>granted_user_ids</code> to <code>CustomSkillAdmin</code>.
             Migration is additive; no V1 schema disruption.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>User-authored skills (third tier)</strong></td>
+          <td>V1.5 — when users should author + share their own skills</td>
+          <td>
+            Big lift. Adds user-side <code>POST /api/skills</code> upload with
+            per-user quota, brings <code>Skill__User</code> back for
+            user-to-user sharing, adds <code>source = "user"</code> to the
+            manifest discriminator (V1 already designs for this), adds a skill
+            promotion workflow (request/approve table + admin UI tab), and
+            requires a real threat-model expansion of §18: user-authored shifts
+            the model from "bounded by admin RBAC" to "any tenant user can
+            introduce code that runs in other users' sessions." ~+4–6 weeks
+            after V1 ships.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Skill author tooling</strong></td>
+          <td>
+            V1.5 — paired with user-authored skills, but useful for
+            admin-authored skills too
+          </td>
+          <td>
+            V1 assumes a developer hand-crafts the zip. V1.5 ships authoring
+            affordances so non-engineers can produce a valid skill: a CLI
+            scaffolder (<code>onyx-cli skill new &lt;slug&gt;</code>) that
+            generates the SKILL.md template, frontmatter, an example script, and
+            zip layout; a local validator (<code
+              >onyx-cli skill validate &lt;path&gt;</code
+            >) that runs the same Pydantic / slug / file-size /
+            SKILL.md-required checks the server does with identical error
+            messages; a <code>--dry-run</code> upload mode that posts to the
+            server, runs validation, and returns the would-be
+            <code>OnyxError</code> without persisting; a docs page with format
+            spec, allowed tools, sandboxing constraints, and a worked example.
+            Pure UX layer; no server schema changes. ~1–2 weeks once
+            user-authored skills land.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Skill audit history</strong></td>
+          <td>
+            V1.5 — when the first compliance-driven customer asks, or when
+            support tickets surface "what changed?" questions
+          </td>
+          <td>
+            V1 captures
+            <code>created_at</code>/<code>updated_at</code>/<code
+              >author_user_id</code
+            >
+            on the skill row — enough for most questions but missing a temporal
+            record of mutations. Add: (1)
+            <code
+              >skill_audit_event (id, skill_id, tenant_id, actor_user_id,
+              event_type, payload jsonb, created_at)</code
+            >
+            table in the private schema, (2) write path triggered from every
+            mutation endpoint (single helper, ~10 lines), (3) admin UI
+            "Activity" tab rendering events with filters by skill and date, (4)
+            retention policy (default 13 months, configurable per tenant).
+            Strictly additive; pairs with the existing orphan-cleanup sweep
+            (§16).
           </td>
         </tr>
         <tr>

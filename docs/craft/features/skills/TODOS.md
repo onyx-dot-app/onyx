@@ -285,6 +285,13 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 - `[TODO]` `P4.021` Client-side frontmatter pre-fill: parse uploaded zip with `jszip`, extract SKILL.md frontmatter, populate name/description fields
 - `[TODO]` `P4.022` Slug regex validation client-side
 - `[TODO]` `P4.023` Submit → multipart POST to `/api/admin/skills/custom`; on success close modal + refetch list; on failure show inline error from `OnyxError.detail`  (deps: P2.005)
+- `[TODO]` `P4.024` **Pre-upload SKILL.md preview pane** — right-side panel in the modal showing parsed-and-markdown-rendered `SKILL.md` + file list of the rest of the bundle. Reuse the `jszip` reader from P4.021 (no new endpoint). Include inline soft-attestation note: "This text is read by the agent inside user sessions; confirm it reflects your intent."  (deps: P4.020, P4.021)
+
+### 4.3b Example skill download (empty-state aid)
+
+- `[TODO]` `P4.025` Ship `backend/onyx/server/features/skills/example_bundle/` with a minimal `hello-world` skill (SKILL.md with frontmatter + one short script). Zipped into the deploy artifact at build time.
+- `[TODO]` `P4.026` `GET /api/admin/skills/example-bundle` — static endpoint returning the bundle as `application/zip`. Admin-only auth.
+- `[TODO]` `P4.027` Empty-state card in `SkillsList.tsx`: when there are zero custom skills, render an inline "Get started" card with a `Download example skill (.zip)` link/button alongside `Upload skill`. Hide the card once any custom skill exists.
 
 ### 4.4 Visibility picker (shared component)
 
@@ -425,6 +432,9 @@ Listed so agents don't accidentally pick these up. Lift to a real task only if p
 - `[SKIP]` `V15.011` Shared/bundled `SkillRequirement` modules
 - `[SKIP]` `V15.012` In-browser skill editor
 - `[SKIP]` `V15.013` Slug rename history table
+- `[SKIP]` `V15.014` **Skill author tooling** — CLI scaffolder (`onyx-cli skill new`), local validator (`onyx-cli skill validate`), `--dry-run` upload mode, format-spec docs page. V1 assumes a developer hand-crafts the zip; the example-skill download (P4.025–P4.027) is the V1 cold-start aid. Pairs with V15.015 (user-authored skills) but useful for admin-authored too.
+- `[SKIP]` `V15.015` **User-authored skills (third tier)** — user-side `POST /api/skills` upload with per-user quota, `Skill__User` brought back for user→user sharing, skill promotion workflow (request/approve table + admin UI tab), `source = "user"` on the manifest discriminator (V1 already designs for this), and a §18 threat-model expansion since the lateral-attacker model becomes first-class. ~+4–6 weeks after V1.
+- `[SKIP]` `V15.016` **Skill audit history** — `skill_audit_event (id, skill_id, tenant_id, actor_user_id, event_type, payload jsonb, created_at)` table in the private schema, write path on every mutation endpoint (single helper ~10 lines), admin UI "Activity" tab with filtering by skill/date, retention policy (default 13 months). Compliance-grade; strictly additive to V1.
 
 ---
 
