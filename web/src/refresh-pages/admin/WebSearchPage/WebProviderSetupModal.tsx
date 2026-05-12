@@ -14,7 +14,6 @@ import {
   buildSearchProviderConfig,
   buildContentProviderConfig,
 } from "@/lib/webSearch/utils";
-
 import { connectProviderFlow } from "@/lib/webSearch/svc";
 import type { WebProviderCategory } from "@/lib/webSearch/types";
 import {
