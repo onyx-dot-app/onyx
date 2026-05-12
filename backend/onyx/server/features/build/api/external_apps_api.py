@@ -166,6 +166,7 @@ def upsert_user_credentials(
         user_id=user.id,
         user_credentials=request.user_credentials,
     )
+    db_session.commit()
 
 
 @router.get("/apps")
