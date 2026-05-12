@@ -17,6 +17,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.external_app import create_external_app__no_commit
 from onyx.db.external_app import delete_external_app__no_commit
+from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import update_external_app__no_commit
 from onyx.db.models import ExternalApp
 from onyx.db.models import User
@@ -92,9 +93,8 @@ def list_external_apps_admin(
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppAdminResponse]:
     """List all external apps with admin-only fields (org credentials, auth template)."""
-    raise OnyxError(
-        OnyxErrorCode.NOT_IMPLEMENTED, "list_external_apps_admin not implemented"
-    )
+    apps = get_external_apps(db_session=db_session)
+    return [_to_admin_response(app) for app in apps]
 
 
 @router.delete("/admin/apps/{external_app_id}")
