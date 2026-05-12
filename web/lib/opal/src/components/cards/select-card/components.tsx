@@ -1,9 +1,13 @@
 import "@opal/components/cards/select-card/styles.css";
-import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import type {
+  BorderVariants,
+  ColorTypes,
+  PaddingVariants,
+  RoundingVariants,
+} from "@opal/types";
 import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
-import type { BorderVariant } from "../card/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,11 +50,20 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    * - `"dashed"`: dashed border.
    * - `"solid"`: solid border.
    *
-   * In the selected state, the border color changes to `border-action-link-05`.
-   *
    * @default "solid"
    */
-  border?: BorderVariant;
+  border?: BorderVariants;
+
+  /**
+   * Border color.
+   * - `"interactive"`: follows `--interactive-foreground` via `currentColor` —
+   *   the border shifts between neutral and action-link colors as the card
+   *   moves through empty → filled → selected states.
+   * - `"default"`: always `border-01` regardless of interactive state.
+   *
+   * @default "default"
+   */
+  borderColor?: Extract<ColorTypes, "default" | "interactive">;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -88,6 +101,7 @@ function SelectCard({
   padding: paddingProp = "md",
   rounding: roundingProp = "md",
   border = "solid",
+  borderColor = "default",
   ref,
   children,
   ...statefulProps
@@ -101,6 +115,7 @@ function SelectCard({
         ref={ref}
         className={cn("opal-select-card", padding, rounding)}
         data-border={border}
+        data-border-color={borderColor}
       >
         {children}
       </div>

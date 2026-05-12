@@ -4,6 +4,7 @@
   @apply w-full overflow-clip;
 }
 
+/* Border style */
 .opal-select-card[data-border="none"] {
   border: none;
 }
@@ -16,7 +17,12 @@
   @apply border;
 }
 
-.opal-select-card[data-border="solid"][data-interactive-state="filled"],
-.opal-select-card[data-border="dashed"][data-interactive-state="filled"] {
-  @apply border-action-link-05;
+/* Border color */
+.opal-select-card[data-border-color="default"],
+.opal-select-card[data-border-color="interactive"] {
+  @apply border-border-01;
+}
+
+.opal-select-card[data-border-color="interactive"][data-interactive-state="selected"] {
+  border-color: var(--interactive-foreground);
 }

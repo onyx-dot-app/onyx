@@ -642,6 +642,7 @@ function EmbeddingModelCard({
       state={cardState}
       rounding="md"
       padding="xs"
+      borderColor="interactive"
       onClick={isClickable ? onSelect : undefined}
     >
       <GeneralLayouts.Section flexDirection="row" alignItems="start">
