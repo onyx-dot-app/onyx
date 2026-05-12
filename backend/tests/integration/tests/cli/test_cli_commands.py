@@ -31,6 +31,12 @@ Test Suite:
 15. test_help_non_tty - No subcommand prints help, exits 0
 16. test_version_flag - Prints client and server version
 17. test_experiments - Lists feature flags
+18. test_search_returns_results - Search returns seeded document content
+19. test_search_raw - --raw outputs full SearchAPIResponse as JSON
+20. test_search_truncation - --max-output truncates with temp file path
+21. test_search_no_query - No query returns exit code 2
+22. test_search_bad_pat - Invalid PAT returns exit code 4
+23. test_search_not_configured - Missing PAT returns exit code 3
 """
 
 import json
@@ -42,8 +48,11 @@ from pathlib import Path
 import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.cc_pair import CCPairManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
@@ -373,3 +382,109 @@ def test_experiments(cli_binary: Path) -> None:
 
     assert result.returncode == 0
     assert "Stream Markdown" in result.stdout
+
+
+# --- search ---
+
+
+def test_search_returns_results(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """Search returns results containing the seeded document content."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    phrase = "cli-search-unique-phrase-alpha"
+    DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
+
+    result = run_cli(cli_binary, ["search", phrase], pat=pat_token, timeout=120)
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert len(result.stdout.strip()) > 0
+    assert phrase in result.stdout
+
+
+def test_search_raw(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """--raw outputs the full SearchAPIResponse as JSON."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    phrase = "cli-search-raw-unique-phrase"
+    doc = DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
+
+    result = run_cli(
+        cli_binary, ["search", "--raw", phrase], pat=pat_token, timeout=120
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    data = json.loads(result.stdout)
+    assert isinstance(data["results"], list)
+    assert len(data["results"]) > 0
+    assert isinstance(data["llm_facing_text"], str)
+    assert len(data["llm_facing_text"]) > 0
+    assert isinstance(data["citation_mapping"], dict)
+
+    result_doc_ids = {r["document_id"] for r in data["results"]}
+    assert doc.id in result_doc_ids
+
+
+def test_search_truncation(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """--max-output truncates output and shows temp file path."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    phrase = "cli-search-truncation-unique"
+    DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
+
+    result = run_cli(
+        cli_binary,
+        ["search", "--max-output", "50", phrase],
+        pat=pat_token,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "response truncated" in result.stdout
+    assert "Full response:" in result.stdout
+
+
+def test_search_no_query(
+    cli_binary: Path,
+    pat_token: str,
+    admin_user: DATestUser,  # noqa: ARG001
+) -> None:
+    """Search with no query returns BadRequest (exit code 2)."""
+    result = run_cli(cli_binary, ["search"], pat=pat_token)
+
+    assert result.returncode == 2
+
+
+def test_search_bad_pat(
+    cli_binary: Path,
+    admin_user: DATestUser,  # noqa: ARG001
+) -> None:
+    """Search with an invalid PAT returns AuthFailure (exit code 4)."""
+    result = run_cli(cli_binary, ["search", "test"], pat="bad-token")
+
+    assert result.returncode == 4
+
+
+def test_search_not_configured(
+    cli_binary: Path,
+    admin_user: DATestUser,  # noqa: ARG001
+) -> None:
+    """Search without PAT returns NotConfigured (exit code 3)."""
+    result = run_cli(cli_binary, ["search", "test"])
+
+    assert result.returncode == 3

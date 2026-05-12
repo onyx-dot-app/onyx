@@ -94,7 +94,7 @@ type SearchRequest struct {
 
 // SearchResult is a single document result from the search API.
 type SearchResult struct {
-    CitationID int     `json:"citation_id"`
+    CitationID *int    `json:"citation_id"`
     DocumentID string  `json:"document_id"`
     ChunkInd   int     `json:"chunk_ind"`
     Title      string  `json:"title"`

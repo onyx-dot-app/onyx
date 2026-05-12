@@ -100,3 +100,34 @@ type Placement struct {
 	TabIndex     int  `json:"tab_index"`
 	SubTurnIndex *int `json:"sub_turn_index"`
 }
+
+// SearchRequest is the request body for POST /api/search.
+type SearchRequest struct {
+	Query              string   `json:"query"`
+	Sources            []string `json:"sources,omitempty"`
+	DocumentSets       []string `json:"document_sets,omitempty"`
+	TimeCutoffDays     *int     `json:"time_cutoff_days,omitempty"`
+	NumResults         int      `json:"num_results,omitempty"`
+	PersonaID          *int     `json:"persona_id,omitempty"`
+	SkipQueryExpansion bool     `json:"skip_query_expansion,omitempty"`
+}
+
+// SearchResult is a single document result from the search API.
+type SearchResult struct {
+	CitationID *int     `json:"citation_id"`
+	DocumentID string   `json:"document_id"`
+	ChunkInd   int      `json:"chunk_ind"`
+	Title      string   `json:"title"`
+	Blurb      string   `json:"blurb"`
+	Link       *string  `json:"link"`
+	SourceType string   `json:"source_type"`
+	Score      *float64 `json:"score"`
+	UpdatedAt  *string  `json:"updated_at"`
+}
+
+// SearchResponse is the response from POST /api/search.
+type SearchResponse struct {
+	Results         []SearchResult `json:"results"`
+	LLMFacingText   string         `json:"llm_facing_text"`
+	CitationMapping map[int]string `json:"citation_mapping"`
+}

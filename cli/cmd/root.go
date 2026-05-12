@@ -96,6 +96,7 @@ func Execute() error {
 	chatCmd := newChatCmd()
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(newAskCmd(ios))
+	rootCmd.AddCommand(newSearchCmd(ios))
 	rootCmd.AddCommand(newAgentsCmd(ios))
 	rootCmd.AddCommand(newConfigureCmd(ios))
 	rootCmd.AddCommand(newValidateConfigCmd(ios))

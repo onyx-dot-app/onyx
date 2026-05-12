@@ -53,13 +53,48 @@ Exit code 0 on success. Non-zero with a descriptive error on failure (see exit c
 
 ## Commands
 
+### Search documents
+
+```bash
+onyx-cli search "What is our deployment process?"
+```
+
+Returns ranked, cited documents from the Onyx knowledge base as JSON. The default output is the LLM-facing format — `{"results": [...]}` with citation IDs, titles, content, and source types. Use `--raw` for the full API response including document IDs, scores, links, and citation mapping.
+
+```bash
+# Filter by source
+onyx-cli search --source slack,google_drive "auth migration status"
+
+# Recent results only
+onyx-cli search --days 30 --limit 5 "recent production incidents"
+
+# Use a specific agent for scoped search
+onyx-cli search --agent-id 5 "engineering roadmap"
+
+# Full API response for programmatic use
+onyx-cli search --raw "API documentation" | jq '.results[].title'
+
+# Skip query expansion for exact matching
+onyx-cli search --no-query-expansion "exact error message text"
+```
+
+| Flag                    | Type   | Description                                                      |
+| ----------------------- | ------ | ---------------------------------------------------------------- |
+| `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
+| `--days`                | int    | Only return results from the last N days                         |
+| `--limit`               | int    | Maximum number of results (default: server decides)              |
+| `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
+| `--raw`                 | bool   | Output full API response (results with scores, links, document IDs, citation mapping) |
+| `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
+| `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY) |
+
 ### Ask a question
 
 ```bash
 onyx-cli ask "What is our company's PTO policy?"
 ```
 
-Streams the answer as plain text to stdout. When stdout is not a TTY, output is truncated to 4096 bytes and the full response is saved to a temp file (path printed at the end). Use `--max-output 0` to disable truncation.
+Streams an LLM-generated answer as plain text to stdout. Use `search` instead when you need the source documents rather than a synthesized answer. When stdout is not a TTY, output is truncated to 4096 bytes and the full response is saved to a temp file (path printed at the end). Use `--max-output 0` to disable truncation.
 
 ```bash
 # Use a specific agent
@@ -87,7 +122,7 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
-Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `ask --agent-id`.
+Prints a table of agent IDs, names, and descriptions. Use `--json` for structured JSON output. Use agent IDs with `search --agent-id` or `ask --agent-id`.
 
 ### Validate configuration
 
@@ -102,7 +137,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 - **stdout**: Results only (answer text, agent list, status)
 - **stderr**: Progress indicators, warnings, errors
 - **Non-TTY**: No ANSI escape codes, no interactive prompts
-- **Truncation**: When stdout is not a TTY, `ask` output is truncated to 4096 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
+- **Truncation**: When stdout is not a TTY, `search` and `ask` output is truncated to 4096 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
 
 ## Exit Codes
 
@@ -121,17 +156,22 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 
 ## Statelessness
 
-Each `onyx-cli ask` call creates an independent chat session. There is no way to chain context across multiple invocations — every call starts fresh.
+Each invocation is independent. `search` does not create a chat session. `ask` creates a one-shot chat session. There is no way to chain context across multiple invocations — every call starts fresh.
 
 ## When to Use
 
-Use `onyx-cli ask` when:
-- The user asks about company-specific information (policies, docs, processes)
-- You need to search internal knowledge bases or connected data sources
-- The user references Onyx or wants to query their documents
-- You need context from company wikis, Confluence, Google Drive, Slack, or other connected sources
+Use `onyx-cli search` when:
+- You need to find specific documents or gather context for a task
+- You want to reason over multiple source documents yourself
+- The user asks you to look up or find information in company knowledge
+- You need cited, structured results (document IDs, source types, content)
 
-Do NOT use when:
+Use `onyx-cli ask` when:
+- The user wants a direct answer, summarization, or synthesis
+- A human-readable response is more useful than raw documents
+- You need the LLM to reason across sources and produce an answer
+
+Do NOT use either when:
 - The question is about general programming knowledge (use your own knowledge)
 - The user is asking about code in the current repository (use grep/read tools)
 - The user hasn't mentioned Onyx and the question doesn't require internal company data
@@ -139,16 +179,13 @@ Do NOT use when:
 ## Examples
 
 ```bash
-# Simple question
+# Search for documents
+onyx-cli search "What is our deployment process?"
+onyx-cli search --source slack "auth migration status"
+onyx-cli search --raw "API documentation" | jq '.results[].title'
+
+# Ask for an answer
 onyx-cli ask "What are the steps to deploy to production?"
-
-# Use a specialized agent
 onyx-cli ask --agent-id 3 "What were the action items from last week's standup?"
-
-# Pipe context with a question
 cat error.log | onyx-cli ask --prompt "What does this error mean?"
-
-# Read the full response when truncated
-onyx-cli ask "Describe the full onboarding process" 2>/dev/null
-# If truncated, read the temp file path from the last line of output
 ```

@@ -113,6 +113,49 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 	return nil
 }
 
+func (c *Client) doJSONLong(ctx context.Context, method, path string, reqBody any, result any) error {
+	var body io.Reader
+	if reqBody != nil {
+		data, err := json.Marshal(reqBody)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(data)
+	}
+
+	req, err := c.newRequest(ctx, method, path, body)
+	if err != nil {
+		return err
+	}
+	if reqBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.longHTTPClient.Do(req)
+	if err != nil {
+		return wrapTimeoutError(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if err := checkResponse(resp); err != nil {
+		return err
+	}
+
+	if result != nil {
+		return json.NewDecoder(resp.Body).Decode(result)
+	}
+	return nil
+}
+
+// Search calls POST /api/search and returns the response.
+func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error) {
+	var resp models.SearchResponse
+	if err := c.doJSONLong(ctx, "POST", "/search", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // TestConnection checks if the server is reachable and credentials are valid.
 // Returns nil on success, or an error with a descriptive message on failure.
 func (c *Client) TestConnection(ctx context.Context) error {
@@ -315,6 +358,7 @@ type ClientAPI interface {
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 }
 
 var _ ClientAPI = (*Client)(nil)
