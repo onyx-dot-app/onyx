@@ -3,7 +3,7 @@
 ## Objective
 
 Implement the **Scheduled Tasks** product surface in
-[`docs/product/scheduled-tasks.md`](../../product/scheduled-tasks.md): a user
+[`docs/product/scheduled-tasks.md`](../../../product/scheduled-tasks.md): a user
 saves a prompt + schedule, and the system runs the prompt as Craft on a
 timer. Every fire creates a brand-new Craft session, executes the agent
 headlessly, and records what happened.
@@ -382,43 +382,5 @@ serialization lease.
 
 ## Tests
 
-**External-dependency unit (the bulk of the value):**
-
-- `test_dispatch.py`: due tasks claimed and run-rows inserted; two parallel
-  ticks claim each row once (FOR UPDATE SKIP LOCKED); prior in-flight run
-  → `skipped` row, `next_run_at` still advances; paused / soft-deleted
-  tasks not claimed.
-- `test_sidebar_filter.py`: create one interactive session and one
-  scheduled-run session for the same user; `get_user_build_sessions`
-  returns only the interactive one. Verifies the sidebar query, the
-  default column value, and the executor's `origin=SCHEDULED` wiring.
-- `test_executor.py`: synthetic ACP event stream → run transitions
-  `queued→running→succeeded`, `session_id` populated, `summary` set,
-  `BuildMessage` rows written via shared `_persist_acp_events`. Separately:
-  timeout → `failed`; approval-required → `awaiting_approval` (lease
-  released); idempotency (calling twice on `succeeded` is a no-op).
-- `test_schedule.py`: `compile_to_cron` + `compute_next_run_at` for each
-  editor input; weekly 9 AM PT fires 9 AM local across PST/PDT.
-
-**Integration (one E2E):** `test_scheduled_task_e2e.py` — create task,
-force-tick dispatcher, poll run to terminal, assert session created with
-the prompt as first user message, messages shaped identically to an
-interactive run, summary set, session-context endpoint returns the task.
-
-**Playwright (one):** `scheduled-tasks.spec.ts` — log in, create task,
-Run Now, wait for `succeeded`, click row, confirm session view + banner.
-Pause → resume; verify `next_run_at`.
-
-**Unit (small):** pure-function tests of `compile_to_cron` /
-`human_readable`.
-
-**Manual smoke (before merging):**
-
-- Every-2-min task vs Onyx-search prompt; walk away 6 min; confirm three
-  runs with complete sessions and sensible summaries.
-- `Europe/London` Mon/Wed/Fri 9 AM — verify `next_run_at` is right across
-  BST and a force-tick at 9 AM fires.
-- Pause mid-fire: in-flight completes, no new fire; resume → next fires.
-- Approval boundary: run sits `awaiting_approval`, notification appears,
-  interactive Craft on the same sandbox still usable (lease released).
-- Kill worker mid-run: stuck-run sweeper moves to `failed` within an hour.
+See [`tests.md`](./tests.md) for the testing plan, the layout of the
+existing test suites, and the manual smoke checklist.
