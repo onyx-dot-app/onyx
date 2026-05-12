@@ -72,6 +72,111 @@ async def test_openai_embedding(
         mock_client.embeddings.create.assert_called_once()
 
 
+def _build_google_embed_response(
+    embeddings: list[list[float]],
+) -> MagicMock:
+    response = MagicMock()
+    response.embeddings = [MagicMock(values=embedding) for embedding in embeddings]
+    return response
+
+
+@pytest.mark.asyncio
+async def test_vertex_embed_keeps_task_type_for_existing_models(
+    sample_embeddings: list[list[float]],
+) -> None:
+    """Existing Vertex models continue to receive task_type and unmodified text."""
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as mock_credentials:
+        mock_credentials.return_value = MagicMock()
+
+        with patch("google.genai.Client") as mock_genai_client:
+            mock_client = MagicMock()
+            mock_client.aio.models.embed_content = AsyncMock(
+                return_value=_build_google_embed_response(sample_embeddings[:1])
+            )
+            mock_client.aio.aclose = AsyncMock()
+            mock_genai_client.return_value = mock_client
+
+            embedding = CloudEmbedding(
+                '{"project_id":"test-project"}',
+                EmbeddingProvider.GOOGLE,
+            )
+            try:
+                result = await embedding._embed_vertex(
+                    ["query text"],
+                    "text-embedding-005",
+                    "RETRIEVAL_QUERY",
+                    128,
+                )
+            finally:
+                await embedding.aclose()
+
+            assert result == sample_embeddings[:1]
+
+            embed_call = mock_client.aio.models.embed_content.await_args
+            assert embed_call is not None
+            config = embed_call.kwargs["config"]
+            contents = embed_call.kwargs["contents"]
+
+            assert config.task_type == "RETRIEVAL_QUERY"
+            assert config.output_dimensionality == 128
+            assert config.auto_truncate is True
+            assert contents[0].parts[0].text == "query text"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("embedding_type", "expected_text"),
+    [
+        ("RETRIEVAL_QUERY", "task: search result | query: hello world"),
+        ("RETRIEVAL_DOCUMENT", "title: none | text: hello world"),
+    ],
+)
+async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
+    embedding_type: str,
+    expected_text: str,
+    sample_embeddings: list[list[float]],
+) -> None:
+    """gemini-embedding-2 omits task_type and prefixes the text per Google's docs."""
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info"
+    ) as mock_credentials:
+        mock_credentials.return_value = MagicMock()
+
+        with patch("google.genai.Client") as mock_genai_client:
+            mock_client = MagicMock()
+            mock_client.aio.models.embed_content = AsyncMock(
+                return_value=_build_google_embed_response(sample_embeddings[:1])
+            )
+            mock_client.aio.aclose = AsyncMock()
+            mock_genai_client.return_value = mock_client
+
+            embedding = CloudEmbedding(
+                '{"project_id":"test-project"}',
+                EmbeddingProvider.GOOGLE,
+            )
+            try:
+                result = await embedding._embed_vertex(
+                    ["hello world"],
+                    "gemini-embedding-2-preview",
+                    embedding_type,
+                    None,
+                )
+            finally:
+                await embedding.aclose()
+
+            assert result == sample_embeddings[:1]
+
+            embed_call = mock_client.aio.models.embed_content.await_args
+            assert embed_call is not None
+            config = embed_call.kwargs["config"]
+            contents = embed_call.kwargs["contents"]
+
+            assert config.task_type is None
+            assert contents[0].parts[0].text == expected_text
+
+
 @pytest.mark.asyncio
 async def test_rate_limit_handling() -> None:
     with patch(

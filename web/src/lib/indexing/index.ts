@@ -101,6 +101,15 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         passagePrefix: "",
         description: "Smaller, lighter-weight embedding model from Google.",
       },
+      {
+        modelName: "gemini-embedding-2-preview",
+        modelDim: 3072,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        description:
+          "Google's multimodal embedding model. Higher-quality retrieval with a 3072-dim output.",
+      },
     ],
   },
   {

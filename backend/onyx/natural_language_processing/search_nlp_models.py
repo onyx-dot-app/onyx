@@ -228,6 +228,40 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
+_GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
+
+# Gemini embedding-2 ignores task_type entirely; instead the documented way
+# to differentiate query vs. document is to wrap the input in Google's task
+# instruction format. The exact templates come from
+# https://ai.google.dev/gemini-api/docs/embeddings (Gemini Embedding 2 section).
+_GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
+    "RETRIEVAL_QUERY": "task: search result | query: {text}",
+    "RETRIEVAL_DOCUMENT": "title: none | text: {text}",
+}
+
+
+def _is_gemini_embedding_2_model(model: str) -> bool:
+    return (
+        model.split("/")[-1]
+        .strip()
+        .lower()
+        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
+    )
+
+
+def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
+    if not _is_gemini_embedding_2_model(model):
+        return text
+
+    template = _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES.get(embedding_type)
+    if template is None:
+        raise RuntimeError(
+            f"Unsupported Gemini embedding-2 task type: {embedding_type}"
+        )
+
+    return template.format(text=text)
+
+
 def format_embedding_error(
     error: Exception,
     service_name: str,
@@ -369,8 +403,7 @@ class CloudEmbedding:
         from google import genai
         from google.genai import types as genai_types
 
-        if not model:
-            model = DEFAULT_VERTEX_MODEL
+        resolved_model = model or DEFAULT_VERTEX_MODEL
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
@@ -391,19 +424,38 @@ class CloudEmbedding:
             credentials=credentials,
         )
 
-        embed_config = genai_types.EmbedContentConfig(
-            task_type=embedding_type,
-            output_dimensionality=reduced_dimension,
-            auto_truncate=True,
-        )
+        # gemini-embedding-2 rejects task_type; embedding intent is conveyed
+        # via the instruction-formatted text instead. Older models continue
+        # to use task_type.
+        if _is_gemini_embedding_2_model(resolved_model):
+            embed_config = genai_types.EmbedContentConfig(
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
+        else:
+            embed_config = genai_types.EmbedContentConfig(
+                task_type=embedding_type,
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
-                genai_types.Content(parts=[genai_types.Part(text=text)])
+                genai_types.Content(
+                    parts=[
+                        genai_types.Part(
+                            text=_format_vertex_embedding_text(
+                                text=text,
+                                model=resolved_model,
+                                embedding_type=embedding_type,
+                            )
+                        )
+                    ]
+                )
                 for text in batch_texts
             ]
             response = await client.aio.models.embed_content(
-                model=model,
+                model=resolved_model,
                 contents=content_requests,
                 config=embed_config,
             )
