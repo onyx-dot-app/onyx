@@ -82,10 +82,6 @@ class AsanaAPI:
                 logger.info("Processed %s projects", project_count)
 
         logger.info("Found %s projects to process", len(projects_list))
-        # When the user supplied an explicit project allowlist, bypass the team
-        # filter for those projects — they were deliberately opted in even if
-        # they sit outside the configured team or have no team association.
-        from_explicit_allowlist = project_gids is not None
         # Asana tasks can belong to multiple projects and thus tasks
         # can get reported multiple times
         seen_task_gids: set[str] = set()
@@ -95,7 +91,7 @@ class AsanaAPI:
                 start_date,
                 start_seconds,
                 seen_task_gids,
-                from_explicit_allowlist,
+                project_gids,
             ):
                 yield task
         logger.info("Completed fetching %s tasks from Asana", self.task_count)
@@ -110,7 +106,7 @@ class AsanaAPI:
         start_date: str,
         start_seconds: int,
         seen_task_gids: set[str],
-        from_explicit_allowlist: bool,
+        project_gids: list[str] | None,
     ) -> Iterator[AsanaTask]:
         project = self.project_api.get_project(project_gid, opts={})
         project_name = project.get("name", project_gid)
@@ -120,11 +116,15 @@ class AsanaAPI:
         if project.get("archived"):
             logger.info("Skipping archived project: %s (%s)", project_name, project_gid)
             return
+        # The team filter narrows the workspace-wide sync. When the user has
+        # picked specific projects via `project_gids`, respect that choice
+        # regardless of team membership — those projects were explicitly
+        # opted in upstream by the project_gid filter in get_tasks.
         if (
             project.get("privacy_setting") == "private"
             and self.team_gid
             and team_gid != self.team_gid
-            and not from_explicit_allowlist
+            and project_gids is None
         ):
             logger.info(
                 "Skipping private project not in configured team: %s (%s)",
