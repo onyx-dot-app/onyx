@@ -269,6 +269,51 @@ def test_get_tasks_processes_private_wrong_team_project_when_allowlisted() -> No
     assert [t.id for t in yielded] == ["B"]
 
 
+def test_get_tasks_skips_private_teamless_project_with_team_filter_and_no_allowlist() -> (
+    None
+):
+    """A private, teamless project cannot satisfy the configured team filter
+    (None is never equal to a real team gid), so it must be skipped when the
+    user did not explicitly allowlist it. Pins the corner that emerges from
+    the new compound skip condition so future refactors of that branch don't
+    silently flip its behavior."""
+    setup = _build_api_with_mocks(
+        {"P_NULL": [_make_task_data("A")]},
+        team_gid="T_CONFIGURED",
+        project_metadata={
+            "P_NULL": {"team": None, "privacy_setting": "private"},
+        },
+    )
+
+    yielded = list(
+        setup.api.get_tasks(project_gids=None, start_date="2026-01-01T00:00:00+00:00")
+    )
+
+    assert yielded == []
+
+
+def test_get_tasks_processes_public_teamless_project_with_team_filter_and_no_allowlist() -> (
+    None
+):
+    """Public projects are not subject to the team filter — only the
+    `private` branch applies it. A teamless public project must therefore
+    still index when no allowlist is supplied, even with a team filter
+    configured. Pins the symmetric counterpart of the private skip above."""
+    setup = _build_api_with_mocks(
+        {"P_NULL": [_make_task_data("A")]},
+        team_gid="T_CONFIGURED",
+        project_metadata={
+            "P_NULL": {"team": None, "privacy_setting": "public"},
+        },
+    )
+
+    yielded = list(
+        setup.api.get_tasks(project_gids=None, start_date="2026-01-01T00:00:00+00:00")
+    )
+
+    assert [t.id for t in yielded] == ["A"]
+
+
 def test_get_tasks_skips_archived_project_even_when_allowlisted() -> None:
     """The archived filter is unconditional — even an explicit allowlist
     shouldn't pull tasks from an archived project (they are read-only and
