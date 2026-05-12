@@ -1,4 +1,5 @@
 from enum import Enum as PyEnum
+from typing import Any
 from typing import cast
 from typing import Literal
 
@@ -140,7 +141,7 @@ def register_tenant_users(
     # Use existing price to preserve the customer's current plan
     current_price_id = subscription_item.price.id
 
-    modify_kwargs: dict = {
+    modify_kwargs: dict[str, Any] = {
         "items": [
             {
                 "id": subscription_item.id,
