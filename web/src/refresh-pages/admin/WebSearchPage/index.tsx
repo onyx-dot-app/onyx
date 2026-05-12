@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
@@ -26,13 +26,11 @@ import {
   SEARCH_PROVIDER_DETAILS,
   SEARCH_PROVIDER_ORDER,
   getSearchProviderDisplayLabel,
-  getSingleConfigFieldValueForForm,
   isBuiltInSearchProviderType,
   isSearchProviderConfigured,
   searchProviderRequiresApiKey,
   CONTENT_PROVIDER_DETAILS,
   CONTENT_PROVIDER_ORDER,
-  getSingleContentConfigFieldValueForForm,
   getCurrentContentProviderType,
   isContentProviderConfigured,
 } from "@/lib/webSearch/utils";
@@ -86,6 +84,7 @@ function getContentConfigField(
     return {
       title: "API Base URL",
       placeholder: "https://api.firecrawl.dev/v2/scrape",
+      defaultValue: "https://api.firecrawl.dev/v2/scrape",
       subDescription: "Your Firecrawl API base URL.",
     };
   }
@@ -178,12 +177,13 @@ function WebSearchDisconnectModal({
       {needsReplacement ? (
         hasReplacements ? (
           <Section alignItems="start">
-            <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}. Search history will be preserved.
+            <Text as="p" font="main-ui-body" color="text-03">
+              {markdown(
+                `**${disconnectTarget.label}** is currently the active ${categoryLabel}. Search history will be preserved.`
+              )}
             </Text>
             <Section alignItems="start" gap={0.25}>
-              <Text as="p" secondaryBody text03>
+              <Text as="p" font="secondary-body" color="text-03">
                 Set New Default
               </Text>
               <InputSelect
@@ -210,22 +210,26 @@ function WebSearchDisconnectModal({
           </Section>
         ) : (
           <>
-            <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}.
+            <Text as="p" font="main-ui-body" color="text-03">
+              {markdown(
+                `**${disconnectTarget.label}** is currently the active ${categoryLabel}.`
+              )}
             </Text>
-            <Text as="p" text03>
-              Connect another provider to continue using {featureLabel}.
+            <Text as="p" font="main-ui-body" color="text-03">
+              {`Connect another provider to continue using ${featureLabel}.`}
             </Text>
           </>
         )
       ) : (
         <>
-          <Text as="p" text03>
-            {isSearch ? "Web search" : "Web crawling"} will no longer be routed
-            through <b>{disconnectTarget.label}</b>.
+          <Text as="p" font="main-ui-body" color="text-03">
+            {markdown(
+              `${
+                isSearch ? "Web search" : "Web crawling"
+              } will no longer be routed through **${disconnectTarget.label}**.`
+            )}
           </Text>
-          <Text as="p" text03>
+          <Text as="p" font="main-ui-body" color="text-03">
             Search history will be preserved.
           </Text>
         </>
@@ -805,14 +809,11 @@ export default function WebSearchPage() {
                     id: activeSearchProvider.provider.id,
                     name: activeSearchProvider.provider.name,
                     has_api_key: activeSearchProvider.provider.has_api_key,
+                    config: activeSearchProvider.provider.config,
                   }
                 : null
             }
             hasSharedApiKey={activeSearchProvider.hasSharedKey}
-            initialConfigValue={getSingleConfigFieldValueForForm(
-              activeSearchProvider.providerType,
-              activeSearchProvider.provider
-            )}
             requiresApiKey={searchProviderRequiresApiKey(
               activeSearchProvider.providerType
             )}
@@ -848,19 +849,11 @@ export default function WebSearchPage() {
                     id: activeContentProvider.provider.id,
                     name: activeContentProvider.provider.name,
                     has_api_key: activeContentProvider.provider.has_api_key,
+                    config: activeContentProvider.provider.config,
                   }
                 : null
             }
             hasSharedApiKey={activeContentProvider.hasSharedKey}
-            initialConfigValue={
-              activeContentProvider.providerType === "firecrawl"
-                ? getSingleContentConfigFieldValueForForm(
-                    activeContentProvider.providerType,
-                    activeContentProvider.provider,
-                    "https://api.firecrawl.dev/v2/scrape"
-                  )
-                : undefined
-            }
             requiresApiKey={
               activeContentProvider.providerType !== "onyx_web_crawler"
             }

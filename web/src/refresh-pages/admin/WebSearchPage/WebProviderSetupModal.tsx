@@ -13,6 +13,8 @@ import { toast } from "@/hooks/useToast";
 import {
   buildSearchProviderConfig,
   buildContentProviderConfig,
+  getSingleConfigFieldValueForForm,
+  getSingleContentConfigFieldValueForForm,
 } from "@/lib/webSearch/utils";
 import { connectProviderFlow } from "@/lib/webSearch/svc";
 import type { WebProviderCategory } from "@/lib/webSearch/types";
@@ -25,12 +27,14 @@ export interface ExistingProviderInfo {
   id: number;
   name: string;
   has_api_key: boolean;
+  config: Record<string, string> | null;
 }
 
 export interface ConfigFieldSpec {
   title: string;
   placeholder: string;
   subDescription?: string | RichStr;
+  defaultValue?: string;
 }
 
 export interface WebProviderSetupModalProps {
@@ -46,7 +50,6 @@ export interface WebProviderSetupModalProps {
    * renders the API key field in non-revealable mode.
    */
   hasSharedApiKey?: boolean;
-  initialConfigValue?: string;
   requiresApiKey: boolean;
   configField?: ConfigFieldSpec;
   mutate: () => Promise<unknown>;
@@ -66,7 +69,6 @@ export function WebProviderSetupModal({
   apiKeyUrl,
   existingProvider,
   hasSharedApiKey = false,
-  initialConfigValue,
   requiresApiKey,
   configField,
   mutate,
@@ -78,7 +80,17 @@ export function WebProviderSetupModal({
   const hasStoredKey =
     (existingProvider?.has_api_key ?? false) || hasSharedApiKey;
   const initialApiKey = hasStoredKey ? "••••••••••••••••" : "";
-  const initialConfig = initialConfigValue ?? "";
+
+  const initialConfig = configField
+    ? (category === "search"
+        ? getSingleConfigFieldValueForForm(providerType, existingProvider)
+        : getSingleContentConfigFieldValueForForm(
+            providerType,
+            existingProvider
+          )) ||
+      configField.defaultValue ||
+      ""
+    : "";
 
   const initialValues: FormValues = {
     api_key: initialApiKey,
