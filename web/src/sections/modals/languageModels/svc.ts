@@ -1,8 +1,5 @@
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
-import {
-  LLM_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/languageModels/constants";
+import { LLM_ADMIN_URL, LLM_PROVIDERS_ADMIN_URL } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";

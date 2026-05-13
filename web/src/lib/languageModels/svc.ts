@@ -10,10 +10,7 @@
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
 
-import {
-  LLM_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/languageModels/constants";
+import { LLM_ADMIN_URL, LLM_PROVIDERS_ADMIN_URL } from "@/lib/swr-keys";
 import {
   OllamaModelResponse,
   OpenRouterModelResponse,

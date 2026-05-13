@@ -23,7 +23,7 @@ import {
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/languageModels/constants";
+import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/swr-keys";
 import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
