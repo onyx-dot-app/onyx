@@ -2699,6 +2699,7 @@ class HierarchyNodeByConnectorCredentialPair(Base):
                 "connector_credential_pair.credential_id",
             ],
             ondelete="CASCADE",
+            onupdate="CASCADE",
         ),
         Index(
             "ix_hierarchy_node_cc_pair_connector_credential",
