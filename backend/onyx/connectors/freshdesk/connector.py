@@ -292,6 +292,11 @@ class FreshdeskConnector(PollConnector, LoadConnector):
                     _FRESHDESK_MAX_PAGE,
                     last_updated_at,
                 )
+                if last_updated_at == params["updated_since"]:
+                    raise RuntimeError(
+                        "Last updated_at is the same as the updated_since window; "
+                        "stopping pagination to avoid infinite loop."
+                    )
                 params["updated_since"] = last_updated_at
                 params["page"] = 1
                 continue
