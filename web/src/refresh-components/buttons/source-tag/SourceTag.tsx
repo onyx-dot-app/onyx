@@ -244,7 +244,7 @@ const QueryText = ({
 
   return (
     <OpalTooltip
-      tooltip={isTruncated ? tooltipText ?? displayName : undefined}
+      tooltip={isTruncated ? (tooltipText ?? displayName) : undefined}
       side="top"
       delayDuration={300}
     >

@@ -159,13 +159,13 @@ uv run ty check
 
 #### Frontend
 
-We use `prettier` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
+We use `oxfmt` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
 
 ```bash
-npx prettier --write .  # from onyx/web
+npx oxfmt .  # from onyx/web
 ```
 
-Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
+Pre-commit will also run oxfmt automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
 
 ---
 

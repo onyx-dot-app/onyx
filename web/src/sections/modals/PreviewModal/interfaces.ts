@@ -13,8 +13,9 @@ export interface PreviewContext {
   onZoomOut: () => void;
 }
 
-export interface PreviewVariant
-  extends Required<Pick<ModalContentProps, "width" | "height">> {
+export interface PreviewVariant extends Required<
+  Pick<ModalContentProps, "width" | "height">
+> {
   /** Return true if this variant should handle the given file. */
   matches: (semanticIdentifier: string | null, mimeType: string) => boolean;
   /** Whether the fetcher should read the blob as text. */

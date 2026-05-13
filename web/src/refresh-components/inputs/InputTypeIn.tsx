@@ -65,8 +65,10 @@ import { SvgSearch, SvgX } from "@opal/icons";
  * />
  * ```
  */
-export interface InputTypeInProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled"> {
+export interface InputTypeInProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "disabled"
+> {
   variant?: Variants;
 
   prefixText?: string;

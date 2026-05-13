@@ -59,11 +59,10 @@ const iconClassNames = {
   skeleton: "line-item-icon-skeleton",
 } as const;
 
-export interface LineItemProps
-  extends Omit<
-    WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
-    "children"
-  > {
+export interface LineItemProps extends Omit<
+  WithoutStyles<React.HTMLAttributes<HTMLDivElement>>,
+  "children"
+> {
   /**
    * Whether the row should behave like a standalone interactive button.
    * Set to false when nested inside another interactive primitive

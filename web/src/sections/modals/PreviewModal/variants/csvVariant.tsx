@@ -23,7 +23,7 @@ interface CsvData {
 
 function parseCsv(content: string): CsvData {
   const lines = content.split(/\r?\n/).filter((l) => l.length > 0);
-  const headers = lines.length > 0 ? lines[0]?.split(",") ?? [] : [];
+  const headers = lines.length > 0 ? (lines[0]?.split(",") ?? []) : [];
   const rows = lines.slice(1).map((line) => line.split(","));
   return { headers, rows };
 }

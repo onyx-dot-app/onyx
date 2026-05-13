@@ -155,9 +155,9 @@ const SourceTagDetailsCardInner = ({
                   text={currentSource.metadata.author}
                 />
               )}
-              {currentSource.metadata?.tags
-                ?.slice(0, 2)
-                .map((tag) => <MetadataChip key={tag} text={tag} />)}
+              {currentSource.metadata?.tags?.slice(0, 2).map((tag) => (
+                <MetadataChip key={tag} text={tag} />
+              ))}
               {relativeDate && (
                 <Text secondaryBody text02>
                   {relativeDate}

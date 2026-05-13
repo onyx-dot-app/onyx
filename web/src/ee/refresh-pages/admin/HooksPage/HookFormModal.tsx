@@ -365,8 +365,8 @@ export default function HookFormModal({
                       name="api_key"
                       placeholder={
                         isEdit
-                          ? hook?.api_key_masked ??
-                            "Leave blank to keep current key"
+                          ? (hook?.api_key_masked ??
+                            "Leave blank to keep current key")
                           : undefined
                       }
                       disabled={isSubmitting}

@@ -4,8 +4,7 @@ import React, { useRef, useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@opal/utils";
 
-export interface VerticalShadowScrollerProps
-  extends React.HtmlHTMLAttributes<HTMLDivElement> {
+export interface VerticalShadowScrollerProps extends React.HtmlHTMLAttributes<HTMLDivElement> {
   // Mask related
   disableMask?: boolean;
   backgroundColor?: string;

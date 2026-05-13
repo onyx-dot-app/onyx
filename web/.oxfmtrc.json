@@ -1,0 +1,12 @@
+{
+  "printWidth": 80,
+  "trailingComma": "es5",
+  "ignorePatterns": [
+    "**/.git",
+    "**/.svn",
+    "**/.hg",
+    "**/node_modules",
+    "**/.next",
+    "**/.vscode"
+  ]
+}

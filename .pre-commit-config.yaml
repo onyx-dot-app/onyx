@@ -112,12 +112,6 @@ repos:
         language_version: "1.26.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: ffb6a759a979008c0e6dff86e39f4745a2d9eac4 # frozen: v3.1.0
-    hooks:
-      - id: prettier
-        types_or: [html, css, javascript, ts, tsx]
-        language_version: system
 
   - repo: https://github.com/sirwart/ripsecrets
     rev: 7d94620933e79b8acaa0cd9e60e9864b07673d86 # frozen: v0.1.11
@@ -152,6 +146,12 @@ repos:
         entry: bash -c 'cd web && npm install --package-lock-only'
         pass_filenames: false
         files: ^web/package(-lock)?\.json$
+
+      - id: oxfmt
+        name: oxfmt
+        entry: npx --prefix web oxfmt
+        language: system
+        types_or: [html, css, javascript, ts, tsx]
 
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:

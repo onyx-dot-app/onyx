@@ -78,8 +78,9 @@ const widthClasses = {
  * </SettingsLayouts.Root>
  * ```
  */
-interface SettingsRootProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface SettingsRootProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   width?: keyof typeof widthClasses;
 }
 function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
