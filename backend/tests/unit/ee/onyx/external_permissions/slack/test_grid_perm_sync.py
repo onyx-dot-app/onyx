@@ -7,8 +7,11 @@ from unittest.mock import patch
 
 from ee.onyx.external_permissions.slack.doc_sync import _fetch_channel_permissions
 from ee.onyx.external_permissions.slack.doc_sync import _fetch_workspace_permissions
+from ee.onyx.external_permissions.slack.doc_sync import _get_slack_document_access
 from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
+from onyx.access.models import ExternalAccess
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.models import ChannelType
 
 
@@ -191,3 +194,62 @@ class TestFetchChannelPermissionsGrid:
                 team_id_to_user_emails=None,
             )
             assert result["C1"].external_user_emails == {"a@x.com", "b@x.com"}
+
+
+class TestGetSlackDocumentAccess:
+    def test_channel_permissions_override_external_access(self) -> None:
+        connector = MagicMock()
+        original_access = ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+        override_access = ExternalAccess(
+            external_user_emails={"allowed@x.com"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        slim_doc = SlimDocument(
+            id="C1__123",
+            external_access=original_access,
+            parent_hierarchy_raw_node_id="C1",
+        )
+        connector.retrieve_all_slim_docs_perm_sync.return_value = iter([[slim_doc]])
+
+        results = list(
+            _get_slack_document_access(
+                slack_connector=connector,
+                channel_permissions={"C1": override_access},
+                callback=None,
+                indexing_start=None,
+            )
+        )
+
+        assert len(results) == 1
+        assert results[0].external_access == override_access
+
+    def test_falls_back_when_channel_missing(self) -> None:
+        connector = MagicMock()
+        access = ExternalAccess(
+            external_user_emails={"stay@x.com"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        slim_doc = SlimDocument(
+            id="C2__999",
+            external_access=access,
+            parent_hierarchy_raw_node_id="C2",
+        )
+        connector.retrieve_all_slim_docs_perm_sync.return_value = iter([[slim_doc]])
+
+        results = list(
+            _get_slack_document_access(
+                slack_connector=connector,
+                channel_permissions={},
+                callback=None,
+                indexing_start=None,
+            )
+        )
+
+        assert len(results) == 1
+        assert results[0].external_access == access

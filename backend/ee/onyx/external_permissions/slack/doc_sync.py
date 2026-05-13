@@ -134,7 +134,7 @@ def _fetch_channel_permissions(
 
 def _get_slack_document_access(
     slack_connector: SlackConnector,
-    channel_permissions: dict[str, ExternalAccess],  # noqa: ARG001
+    channel_permissions: dict[str, ExternalAccess],
     callback: IndexingHeartbeatInterface | None,
     indexing_start: SecondsSinceUnixEpoch | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
@@ -148,15 +148,21 @@ def _get_slack_document_access(
             if isinstance(doc_metadata, HierarchyNode):
                 # TODO: handle hierarchynodes during sync
                 continue
-            if doc_metadata.external_access is None:
+            external_access = doc_metadata.external_access
+            if external_access is None:
                 raise ValueError(
                     f"No external access for document {doc_metadata.id}. "
                     "Please check to make sure that your Slack bot token has the "
                     "`channels:read` scope"
                 )
+            channel_id = getattr(doc_metadata, "parent_hierarchy_raw_node_id", None)
+            if channel_id is not None:
+                override_access = channel_permissions.get(channel_id)
+                if override_access is not None:
+                    external_access = override_access
 
             yield DocExternalAccess(
-                external_access=doc_metadata.external_access,
+                external_access=external_access,
                 doc_id=doc_metadata.id,
             )
 
