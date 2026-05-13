@@ -54,17 +54,19 @@ class ManifestFileEntry(BaseModel):
     size: int
 
 
-class ManifestFrontmatter(BaseModel):
+class ManifestMetadata(BaseModel):
+    """Bundle metadata captured at validation time. Persisted as JSONB on
+    the ``Skill`` row.
+
+    ``name`` and ``description`` come from the bundle's optional YAML
+    frontmatter and are pre-fill hints only — the admin-typed values on the
+    ``Skill`` row are authoritative.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     name: str | None = None
     description: str | None = None
-
-
-class ManifestMetadata(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    frontmatter: ManifestFrontmatter = Field(default_factory=ManifestFrontmatter)
     files: list[ManifestFileEntry] = Field(default_factory=list)
     total_uncompressed_bytes: int = 0
     validator_version: int = VALIDATOR_VERSION
@@ -100,15 +102,20 @@ def _normalize_zip_path(name: str) -> str:
     return trimmed
 
 
-def _parse_frontmatter(skill_md_bytes: bytes) -> ManifestFrontmatter:
-    """Best-effort YAML frontmatter extraction. Returns empty on any failure."""
+def _parse_frontmatter(skill_md_bytes: bytes) -> tuple[str | None, str | None]:
+    """Best-effort YAML frontmatter extraction.
+
+    Returns ``(name, description)``; either or both may be ``None`` when the
+    frontmatter is missing, malformed, or unparseable.
+    """
+    empty: tuple[str | None, str | None] = (None, None)
     try:
         text = skill_md_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        return ManifestFrontmatter()
+        return empty
 
     if not text.startswith("---"):
-        return ManifestFrontmatter()
+        return empty
 
     lines = text.split("\n")
     end_idx: int | None = None
@@ -117,21 +124,21 @@ def _parse_frontmatter(skill_md_bytes: bytes) -> ManifestFrontmatter:
             end_idx = i
             break
     if end_idx is None:
-        return ManifestFrontmatter()
+        return empty
 
     yaml_text = "\n".join(lines[1:end_idx])
     try:
         parsed: Any = yaml.safe_load(yaml_text)
     except yaml.YAMLError:
-        return ManifestFrontmatter()
+        return empty
     if not isinstance(parsed, dict):
-        return ManifestFrontmatter()
+        return empty
 
     name = parsed.get("name")
     description = parsed.get("description")
-    return ManifestFrontmatter(
-        name=str(name) if name is not None else None,
-        description=str(description) if description is not None else None,
+    return (
+        str(name) if name is not None else None,
+        str(description) if description is not None else None,
     )
 
 
@@ -222,10 +229,11 @@ def validate_custom_bundle(
             skill_md_bytes = zf.read(skill_md_info)
         except Exception as exc:
             raise InvalidBundleError(f"cannot read 'SKILL.md': {exc}") from exc
-        frontmatter = _parse_frontmatter(skill_md_bytes)
+        name, description = _parse_frontmatter(skill_md_bytes)
 
     return ManifestMetadata(
-        frontmatter=frontmatter,
+        name=name,
+        description=description,
         files=files,
         total_uncompressed_bytes=total,
         validator_version=VALIDATOR_VERSION,

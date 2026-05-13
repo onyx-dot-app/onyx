@@ -69,8 +69,8 @@ def _valid_bundle() -> bytes:
 
 def test_valid_bundle_accepted() -> None:
     metadata = validate_custom_bundle(_valid_bundle(), slug="hello")
-    assert metadata.frontmatter.name == "hello"
-    assert metadata.frontmatter.description == "A friendly hello skill."
+    assert metadata.name == "hello"
+    assert metadata.description == "A friendly hello skill."
     paths = sorted(f.path for f in metadata.files)
     assert paths == ["SKILL.md", "docs/notes.md", "scripts/run.sh"]
     assert metadata.total_uncompressed_bytes == sum(f.size for f in metadata.files)
@@ -80,8 +80,8 @@ def test_valid_bundle_accepted() -> None:
 def test_valid_bundle_without_frontmatter() -> None:
     zip_bytes = _build_zip([("SKILL.md", b"# Title\n\nNo frontmatter here.\n")])
     metadata = validate_custom_bundle(zip_bytes, slug="hello")
-    assert metadata.frontmatter.name is None
-    assert metadata.frontmatter.description is None
+    assert metadata.name is None
+    assert metadata.description is None
 
 
 # ---------------------------------------------------------------------------
