@@ -4,12 +4,14 @@ from slack_sdk import WebClient
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.slack.connector import channel_team_ids
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
@@ -44,6 +46,7 @@ def _fetch_channel_permissions(
     workspace_permissions: ExternalAccess,
     user_id_to_email_map: dict[str, str],
     team_ids: list[str] | None = None,
+    team_id_to_user_emails: dict[str, set[str]] | None = None,
 ) -> dict[str, ExternalAccess]:
     channel_permissions = {}
     if team_ids:
@@ -70,11 +73,22 @@ def _fetch_channel_permissions(
             get_public=False,
             get_private=True,
         )
-    public_channel_ids = [
-        channel["id"] for channel in public_channels if "id" in channel
-    ]
-    for channel_id in public_channel_ids:
-        channel_permissions[channel_id] = workspace_permissions
+    for channel in public_channels:
+        channel_id = channel.get("id")
+        if not channel_id:
+            continue
+        if team_id_to_user_emails:
+            # Grid: union users across the workspaces this channel is shared into
+            emails: set[str] = set()
+            for tid in channel_team_ids(channel):
+                emails |= team_id_to_user_emails.get(tid, set())
+            channel_permissions[channel_id] = ExternalAccess(
+                external_user_emails=emails,
+                external_user_group_ids=set(),
+                is_public=False,
+            )
+        else:
+            channel_permissions[channel_id] = workspace_permissions
 
     private_channel_ids = [
         channel["id"] for channel in private_channels if "id" in channel
@@ -190,9 +204,14 @@ def slack_doc_sync(
     except Exception as e:
         logger.warning("Slack Grid detection during perm sync failed: %s", e)
 
-    user_id_to_email_map = fetch_user_id_to_email_map(
-        slack_client, team_ids=grid_team_ids
-    )
+    team_id_to_user_emails: dict[str, set[str]] | None = None
+    if grid_team_ids:
+        team_id_to_user_emails = fetch_team_user_emails(slack_client, grid_team_ids)
+        user_id_to_email_map = fetch_user_id_to_email_map(
+            slack_client, team_ids=grid_team_ids
+        )
+    else:
+        user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     if not user_id_to_email_map:
         raise ValueError(
             "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
@@ -206,6 +225,7 @@ def slack_doc_sync(
         workspace_permissions=workspace_permissions,
         user_id_to_email_map=user_id_to_email_map,
         team_ids=grid_team_ids,
+        team_id_to_user_emails=team_id_to_user_emails,
     )
 
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)

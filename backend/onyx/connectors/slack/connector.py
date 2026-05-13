@@ -260,6 +260,16 @@ def _channel_team_id(channel: ChannelType) -> str | None:
     return channel.get("team") or channel.get("context_team_id")
 
 
+def channel_team_ids(channel: ChannelType) -> list[str]:
+    """All Grid workspaces this channel is shared into. Falls back to the
+    single home team id when ``shared_team_ids`` is absent."""
+    shared = channel.get("shared_team_ids") or []
+    if shared:
+        return list(shared)
+    single = _channel_team_id(channel)
+    return [single] if single else []
+
+
 def thread_to_doc(
     channel: ChannelType,
     thread: ThreadType,

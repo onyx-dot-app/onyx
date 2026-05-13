@@ -14,6 +14,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.connectors.slack.connector import _channel_team_id
 from onyx.connectors.slack.connector import _channel_to_hierarchy_node
+from onyx.connectors.slack.connector import channel_team_ids
 from onyx.connectors.slack.connector import fetch_team_url
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
@@ -170,6 +171,23 @@ class TestChannelTeamId:
 
     def test_none_when_neither_present(self) -> None:
         assert _channel_team_id(_channel("C1")) is None
+
+
+class TestChannelTeamIdsPlural:
+    def test_uses_shared_team_ids_when_present(self) -> None:
+        ch = _channel("C1", team="T1", shared_team_ids=["T1", "T2", "T3"])
+        assert channel_team_ids(ch) == ["T1", "T2", "T3"]
+
+    def test_falls_back_to_single_team_id(self) -> None:
+        ch = _channel("C1", team="T1")
+        assert channel_team_ids(ch) == ["T1"]
+
+    def test_falls_back_to_context_team_id(self) -> None:
+        ch = _channel("C1", context_team_id="T_INFO")
+        assert channel_team_ids(ch) == ["T_INFO"]
+
+    def test_empty_when_no_team_info(self) -> None:
+        assert channel_team_ids(_channel("C1")) == []
 
 
 class TestChannelToHierarchyNode:
