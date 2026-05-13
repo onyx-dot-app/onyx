@@ -61,6 +61,7 @@ from onyx.connectors.slack.models import ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
 from onyx.connectors.slack.utils import expert_info_from_slack_id
+from onyx.connectors.slack.utils import fetch_team_user_emails
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 from onyx.connectors.slack.utils import SlackTextCleaner
@@ -606,6 +607,7 @@ def _get_all_doc_ids(
     end: SecondsSinceUnixEpoch | None = None,
     team_ids: list[str] | None = None,
     team_id_to_url: dict[str, str] | None = None,
+    team_id_to_user_emails: dict[str, set[str]] | None = None,
 ) -> GenerateSlimDocumentOutput:
     """
     Get all document ids in the workspace, channel by channel
@@ -630,6 +632,7 @@ def _get_all_doc_ids(
             client=client,
             channel=channel,
             user_cache=user_cache,
+            team_id_to_user_emails=team_id_to_user_emails,
         )
 
         # Yield the channel as a HierarchyNode first (before any documents)
@@ -803,6 +806,7 @@ class SlackConnector(
         self._is_grid: bool = False
         self._team_ids: list[str] = []
         self._team_id_to_url: dict[str, str] = {}
+        self._team_id_to_user_emails: dict[str, set[str]] = {}
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
 
@@ -961,6 +965,7 @@ class SlackConnector(
         self._is_grid = is_grid
         self._team_ids = []
         self._team_id_to_url = {}
+        self._team_id_to_user_emails = {}
         if self._is_grid and self.client is not None:
             try:
                 self._team_ids = list_grid_team_ids(self.client)
@@ -991,10 +996,23 @@ class SlackConnector(
                             continue
                         if url:
                             self._team_id_to_url[tid] = url
+                try:
+                    self._team_id_to_user_emails = fetch_team_user_emails(
+                        grid_client, self._team_ids
+                    )
+                except SlackApiError as e:
+                    # Public-channel access on Grid stays org-wide instead of
+                    # per-workspace if this fails. Surfaced via missing_scope etc.
+                    logger.warning(
+                        "users.list per-team failed on Grid org: %s",
+                        e.response.get("error", ""),
+                    )
+                    self._team_id_to_user_emails = {}
             logger.info(
-                "Slack Enterprise Grid detected: teams=%s urls_resolved=%s",
+                "Slack Enterprise Grid detected: teams=%s urls_resolved=%s users_scoped=%s",
                 len(self._team_ids),
                 len(self._team_id_to_url),
+                sum(len(v) for v in self._team_id_to_user_emails.values()),
             )
 
     def retrieve_all_slim_docs_perm_sync(
@@ -1017,6 +1035,9 @@ class SlackConnector(
             end=end,
             team_ids=self._team_ids if self._is_grid else None,
             team_id_to_url=self._team_id_to_url if self._is_grid else None,
+            team_id_to_user_emails=(
+                self._team_id_to_user_emails if self._is_grid else None
+            ),
         )
 
     def _load_from_checkpoint(
@@ -1076,6 +1097,9 @@ class SlackConnector(
                     client=self.client,
                     channel=checkpoint.current_channel,
                     user_cache=self.user_cache,
+                    team_id_to_user_emails=(
+                        self._team_id_to_user_emails if self._is_grid else None
+                    ),
                 )
                 checkpoint.current_channel_access = channel_access
             checkpoint.has_more = True
@@ -1276,6 +1300,9 @@ class SlackConnector(
                             client=self.client,
                             channel=new_channel,
                             user_cache=self.user_cache,
+                            team_id_to_user_emails=(
+                                self._team_id_to_user_emails if self._is_grid else None
+                            ),
                         )
                         checkpoint.current_channel_access = channel_access
                 else:

@@ -1,5 +1,8 @@
 from slack_sdk import WebClient
 
+from onyx.connectors.slack.utils import (
+    fetch_team_user_emails as _fetch_team_user_emails,
+)
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 
 
@@ -29,17 +32,6 @@ def fetch_team_user_emails(
     slack_client: WebClient,
     team_ids: list[str],
 ) -> dict[str, set[str]]:
-    """Per-workspace user email sets, used to scope public-channel access
-    on Grid so W1 users don't get access to W2's public channels."""
-    result: dict[str, set[str]] = {}
-    for tid in team_ids:
-        emails: set[str] = set()
-        for user_info in make_paginated_slack_api_call(
-            slack_client.users_list, team_id=tid
-        ):
-            for user in user_info.get("members", []):
-                email = user.get("profile", {}).get("email")
-                if email:
-                    emails.add(email)
-        result[tid] = emails
-    return result
+    """Re-export of ``onyx.connectors.slack.utils.fetch_team_user_emails`` for
+    callers that already import it from this EE module."""
+    return _fetch_team_user_emails(slack_client, team_ids)

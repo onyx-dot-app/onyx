@@ -5,6 +5,9 @@ from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from ee.onyx.external_permissions.slack.channel_access import (
+    get_channel_access as ee_get_channel_access,
+)
 from ee.onyx.external_permissions.slack.doc_sync import _fetch_channel_permissions
 from ee.onyx.external_permissions.slack.doc_sync import _fetch_workspace_permissions
 from ee.onyx.external_permissions.slack.doc_sync import _get_slack_document_access
@@ -80,7 +83,7 @@ class TestFetchTeamUserEmails:
     def test_returns_per_team_email_sets(self) -> None:
         client = MagicMock()
         with patch(
-            "ee.onyx.external_permissions.slack.utils.make_paginated_slack_api_call"
+            "onyx.connectors.slack.utils.make_paginated_slack_api_call"
         ) as mock_paginate:
             mock_paginate.side_effect = [
                 iter([{"members": [{"id": "U1", "profile": {"email": "u1@x.com"}}]}]),
@@ -101,7 +104,7 @@ class TestFetchTeamUserEmails:
     def test_skips_users_without_email(self) -> None:
         client = MagicMock()
         with patch(
-            "ee.onyx.external_permissions.slack.utils.make_paginated_slack_api_call"
+            "onyx.connectors.slack.utils.make_paginated_slack_api_call"
         ) as mock_paginate:
             mock_paginate.return_value = iter(
                 [
@@ -194,6 +197,68 @@ class TestFetchChannelPermissionsGrid:
                 team_id_to_user_emails=None,
             )
             assert result["C1"].external_user_emails == {"a@x.com", "b@x.com"}
+
+
+class TestEEGetChannelAccessGrid:
+    def test_public_channel_non_grid_returns_is_public_true(self) -> None:
+        ch = _channel("C1", is_private=False)
+        access = ee_get_channel_access(MagicMock(), ch, {}, team_id_to_user_emails=None)
+        assert access.is_public is True
+        assert access.external_user_emails == set()
+
+    def test_public_channel_grid_scoped_to_workspace_users(self) -> None:
+        ch = _channel("C1", is_private=False, team="T1")
+        access = ee_get_channel_access(
+            MagicMock(),
+            ch,
+            {},
+            team_id_to_user_emails={"T1": {"a@x.com"}, "T2": {"z@x.com"}},
+        )
+        assert access.is_public is False
+        assert access.external_user_emails == {"a@x.com"}
+
+    def test_public_channel_grid_org_shared_unions_workspaces(self) -> None:
+        ch = _channel(
+            "C1",
+            is_private=False,
+            team="T1",
+            shared_team_ids=["T1", "T2"],
+            is_org_shared=True,
+        )
+        access = ee_get_channel_access(
+            MagicMock(),
+            ch,
+            {},
+            team_id_to_user_emails={"T1": {"a@x.com"}, "T2": {"z@x.com"}},
+        )
+        assert access.is_public is False
+        assert access.external_user_emails == {"a@x.com", "z@x.com"}
+
+    def test_private_channel_uses_members_path_regardless_of_grid(self) -> None:
+        client = MagicMock()
+        ch = _channel("C1", is_private=True, team="T1")
+        with (
+            patch(
+                "ee.onyx.external_permissions.slack.channel_access.make_paginated_slack_api_call"
+            ) as mock_paginate,
+            patch(
+                "ee.onyx.external_permissions.slack.channel_access.expert_info_from_slack_id"
+            ) as mock_expert,
+        ):
+            mock_paginate.return_value = iter([{"members": ["U1", "U2"]}])
+            mock_expert.side_effect = (
+                lambda user_id, client, user_cache: (  # noqa: ARG005
+                    MagicMock(email=f"{user_id.lower()}@x.com") if user_id else None
+                )
+            )
+            access = ee_get_channel_access(
+                client,
+                ch,
+                {},
+                team_id_to_user_emails={"T1": {"a@x.com"}, "T2": {"z@x.com"}},
+            )
+            assert access.is_public is False
+            assert access.external_user_emails == {"u1@x.com", "u2@x.com"}
 
 
 class TestGetSlackDocumentAccess:
