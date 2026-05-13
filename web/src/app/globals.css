@@ -129,16 +129,21 @@
     flex-direction: column;
     align-items: start;
   }
+}
 
+/* Markdown chat overrides — placed in `utilities` so they sit in the same
+   cascade layer as `@tailwindcss/typography` (which v4 emits there). The
+   plugin's selectors use `:where()` (zero specificity), so our regular
+   selectors win within the layer. Leaving these in `@layer base` would let
+   the plugin's utilities-layer rules override them regardless of specificity. */
+@layer utilities {
   ol > li > p,
   ul > li > p {
     margin-top: 0;
     margin-bottom: 0;
     display: inline;
-    /* Make paragraphs inline to reduce vertical space */
   }
 
-  /* Reduce spacing for markdown elements in chat */
   .prose h1,
   .prose h2,
   .prose h3,
@@ -183,12 +188,10 @@
     margin-bottom: 0.5em;
   }
 
-  /* Remove top margin from first child to align with icon */
   .prose > :first-child {
     margin-top: 0;
   }
 
-  /* Remove bottom margin from last child to avoid extra space */
   .prose > :last-child {
     margin-bottom: 0;
   }
