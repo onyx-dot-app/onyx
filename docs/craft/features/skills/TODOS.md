@@ -40,8 +40,7 @@ If you're an agent picking up work:
 
 _(Update this section as you claim things. Keep it short — just the active `WIP` and `REVIEW` items so anyone glancing at the file can see what's hot.)_
 
-- `[REVIEW @codex #10996]` `P1.001-P1.005` Database models/constants/migration
-- `[REVIEW @codex #10996]` `P1.010-P1.015` Module skeletons
+- _(nothing yet)_
 
 ---
 
@@ -52,20 +51,20 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.1 Database + migration  (spec §3)
 
-- `[REVIEW @codex #10996]` `P1.001` Add `Skill` model to `backend/onyx/db/models.py` with all columns + indexes per §3
-- `[REVIEW @codex #10996]` `P1.002` Add `Skill__UserGroup` join table to `backend/onyx/db/models.py`
-- `[REVIEW @codex #10996]` `P1.003` Add `FileOrigin.SKILL_BUNDLE` to `backend/onyx/configs/constants.py:373`
-- `[REVIEW @codex #10996]` `P1.005` Create Alembic revision under `backend/alembic/versions/<hash>_skills.py` — `CREATE TABLE skill`, then `CREATE UNIQUE INDEX ux_skill_slug ON skill (slug) WHERE deleted_at IS NULL` (partial unique so slugs can be reused after soft-delete); `CREATE TABLE skill__user_group`. No extra perf index in V1.  (deps: P1.001, P1.002, P1.003)
+- `[TODO]` `P1.001` Add `Skill` model to `backend/onyx/db/models.py` with all columns + indexes per §3
+- `[TODO]` `P1.002` Add `Skill__UserGroup` join table to `backend/onyx/db/models.py`
+- `[TODO]` `P1.003` Add `FileOrigin.SKILL_BUNDLE` to `backend/onyx/configs/constants.py:373`
+- `[TODO]` `P1.005` Create Alembic revision under `backend/alembic/versions/<hash>_skills.py` — `CREATE TABLE skill`, then `CREATE UNIQUE INDEX ux_skill_slug ON skill (slug) WHERE deleted_at IS NULL` (partial unique so slugs can be reused after soft-delete); `CREATE TABLE skill__user_group`; `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`. No extra perf index in V1.  (deps: P1.001, P1.002, P1.003)
 - `[TODO]` `P1.006` Run `alembic -n schema_private upgrade head` on a fresh EE tenant; confirm clean apply + idempotent re-run  (deps: P1.005)
 
 ### 1.2 Module skeletons  (spec §2)
 
-- `[REVIEW @codex #10996]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
-- `[REVIEW @codex #10996]` `P1.011` Create empty `backend/onyx/skills/registry.py`
-- `[REVIEW @codex #10996]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
-- `[REVIEW @codex #10996]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
-- `[REVIEW @codex #10996]` `P1.014` Create empty `backend/onyx/skills/render.py`
-- `[REVIEW @codex #10996]` `P1.015` Create empty `backend/onyx/db/skill.py`
+- `[TODO]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
+- `[TODO]` `P1.011` Create empty `backend/onyx/skills/registry.py`
+- `[TODO]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
+- `[TODO]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
+- `[TODO]` `P1.014` Create empty `backend/onyx/skills/render.py`
+- `[TODO]` `P1.015` Create empty `backend/onyx/db/skill.py`
 
 ### 1.3 BuiltinSkillRegistry  (spec §4)
 

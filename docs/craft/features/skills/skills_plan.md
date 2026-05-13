@@ -177,7 +177,7 @@ We need persistence for custom skills (admin-uploaded). Built-ins are code-resid
 
 ### Proposed Solution
 
-Two tables in the per-tenant (private) schema, plus one new `FileOrigin` application value.
+Three tables in the per-tenant (private) schema, plus two new `FileOrigin` enum values.
 
 ```python
 # backend/onyx/db/models.py
@@ -268,6 +268,7 @@ Slug rules:
 - [ ] Create Alembic migration `backend/alembic/versions/<hash>_skills.py`:
   - [ ] `CREATE TABLE skill` with all columns + indexes.
   - [ ] `CREATE TABLE skill__user_group` with FKs.
+  - [ ] `ALTER TYPE fileorigin ADD VALUE 'skill_bundle'`.
 - [ ] Verify with `alembic -n schema_private upgrade head` on a fresh EE tenant.
 - [ ] Implement DB ops in `backend/onyx/db/skill.py`:
   - [ ] `list_skills_for_user(user, db) -> list[Skill]` — public OR group-grant, with **`enabled = True AND deleted_at IS NULL`** filter (mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81`, minus the direct-user-grant branch). This is the materializer's source — disabled or soft-deleted skills never make it into `/skills/`.
@@ -1245,7 +1246,7 @@ The skills system changes both the api_server (new endpoints, new materializer, 
 4. Wait one release cycle for confidence.
 5. Remove the flag and the legacy `ln -sf` code.
 
-**Migration**: single Alembic revision creating `skill`, `skill__user_group`, and the new `FileOrigin.SKILL_BUNDLE` application value. Run with `alembic -n schema_private upgrade head` for EE.
+**Migration**: single Alembic revision creating `skill`, `skill__user_group`, and the two new `FileOrigin` enum values. Run with `alembic -n schema_private upgrade head` for EE.
 
 ### Considerations / Tradeoffs / Decisions
 - **Why feature-flag rather than coordinated deploy.** Coordinated deploys are fragile (rolling restarts cross boundaries). The flag lets us roll images at our convenience and flip atomically.

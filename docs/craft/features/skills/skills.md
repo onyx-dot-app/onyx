@@ -27,7 +27,7 @@ V1: a universal skill primitive (DB + APIs + materializer + bundle validator) pl
 
 ## Important Notes
 
-- **Two-layer architecture, named to match.** The universal layer lives under `backend/onyx/skills/` (new top-level module) and `backend/onyx/db/skill.py`. Tables are `skill` and `skill__user_group`. APIs are `/api/admin/skills/...` and `/api/skills`. The Craft-consumer layer lives under `backend/onyx/server/features/build/skills/` and adds the sandbox-write adapter (no consumer-side join table — the session has no per-session pin set). No "craft" or "build" appears in any universal-layer name.
+- **Two-layer architecture, named to match.** The universal layer lives under `backend/onyx/skills/` (new top-level module) and `backend/onyx/db/skill.py`. Tables are `skill`, `skill__user_group`, `skill__user`. APIs are `/api/admin/skills/...` and `/api/skills`. The Craft-consumer layer lives under `backend/onyx/server/features/build/skills/` and adds the sandbox-write adapter (no consumer-side join table — the session has no per-session pin set). No "craft" or "build" appears in any universal-layer name.
 - **Universal layer is intentionally a primitive, not a runtime.** It defines what a skill *is* (a slug, frontmatter metadata, a directory of files), where its bytes live (on disk for built-ins, file store for customs), and how to materialize a chosen set into a destination path. It does not know what a "session" is, what a "sandbox" is, or what `.opencode/skills` is. Each consumer translates its own selection state into the materializer's input and chooses the destination path. That separation is what lets Personas or Chat adopt this without forking.
 - **OpenCode/Codex skill shape stays identical.** Disk layout the agent sees doesn't change — `.opencode/skills/<slug>/SKILL.md` plus optional `scripts/` and supporting `*.md` files. YAML frontmatter (`name`, `description`) is what OpenCode and Codex skill systems already read. We are *not* defining a new skill format; we are defining a *distribution and selection* layer around the existing format.
 - **Built-ins are sourced from disk, every deploy.** No seeder, no DB rows, no hash tracking, no per-org state. Built-ins are registered at app boot as `(slug, source_dir, is_available)` triples — the build feature registers its own at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/`. The `is_available(db_session) -> bool` callable is consulted at materialization time; the skill is included only if it returns True. Admins do not get a per-org disable toggle: a built-in is available because the deployment has the dependencies it needs (provider key, feature flag, ...), or it isn't.
@@ -79,7 +79,7 @@ Backend calls a hosted "Onyx Skills" service for bundles at session setup.
 
 ### F. Universal skill primitive, automatic per-user materialization, built-ins on disk + customs in DB+filestore (winner)
 
-`backend/onyx/skills/` ships the universal layer: `skill` table (one row, one bundle), `skill__user_group` grants, `/api/admin/skills` + `/api/skills`, and a `materialize_skills(...)` helper. Built-ins are registered at boot as `(slug, source_dir, is_available)` triples. Custom uploads go through file-store + synchronous validation. Each session gets every available built-in plus every custom skill its user has access to. The agent's instructions inline either the full list or just the built-ins (with a discovery line) depending on count.
+`backend/onyx/skills/` ships the universal layer: `skill` table (one row, one bundle), `skill__user_group` / `skill__user` grants, `/api/admin/skills` + `/api/skills`, and a `materialize_skills(...)` helper. Built-ins are registered at boot as `(slug, source_dir, is_available)` triples. Custom uploads go through file-store + synchronous validation. Each session gets every available built-in plus every custom skill its user has access to. The agent's instructions inline either the full list or just the built-ins (with a discovery line) depending on count.
 
 **Why this wins:**
 
@@ -98,15 +98,15 @@ Backend calls a hosted "Onyx Skills" service for bundles at session setup.
 3. **No DB rows for built-in state.** Admins do not configure built-ins per-org. Whether a built-in is available is determined entirely by code — its `is_available` callable inspects whatever it needs (env vars, configured providers, feature flags, sub-feature DB rows). This trades configurability for simplicity: there's no per-tenant "we don't want pptx" toggle, but also no admin surface to reason about, no state-row-vs-registry-mismatch failure mode, and no migration when we add or remove built-ins.
 4. **Built-ins ship `SKILL.md.template` to opt into rendering.** The materializer checks for `SKILL.md.template` in the source directory; if present, renders against `SkillRenderContext` and writes `SKILL.md`. Otherwise copies the existing `SKILL.md` verbatim. Other files always copy verbatim.
 5. **Custom skills cannot ship templates.** Validation rejects bundles containing any `*.template` file.
-6. **Custom skill identity = `(tenant, slug)`.** Slug is the directory name under `.opencode/skills/` and the value of `name` in the frontmatter. Lowercase, hyphens, ≤ 64 chars, regex-validated. Reserved slugs (the union of all registered built-ins) are rejected at upload time. Two custom skills in the same tenant cannot share a slug unless the earlier row has been soft-deleted.
+6. **Custom skill identity = `(tenant, slug)`.** Slug is the directory name under `.opencode/skills/` and the value of `name` in the frontmatter. Lowercase, hyphens, ≤ 64 chars, regex-validated. Reserved slugs (the union of all registered built-ins) are rejected at upload time. Two custom skills in the same tenant cannot share a slug.
 7. **One bundle per custom skill.** The bundle's `file_store` id and sha256 live directly on the `skill` row. Re-uploading replaces the bundle: the old blob is deleted in the same request as the new one is saved. No version rows, no `latest_version_id` pointer, no "promote" step.
 8. **Bundle blobs live under `FileOrigin.SKILL_BUNDLE`.** Same shape as sandbox snapshots. File ids are random UUIDs (not slugs).
-9. **Access control mirrors Persona, custom skills only.** Custom skills get `is_public` (org-wide) plus `skill__user_group` grants, queried with the same pattern as `fetch_persona_by_id_for_user` (`backend/onyx/db/persona.py:81`) minus the direct-user-grant branch. Built-ins have no org/group access control — they're available to whoever can use the consuming feature, subject to their own `is_available` callable.
+9. **Access control mirrors Persona, custom skills only.** Custom skills get `is_public` (org-wide) plus `skill__user_group` and `skill__user` join tables, queried with the same pattern as `fetch_persona_by_id_for_user` (`backend/onyx/db/persona.py:81`). Built-ins have no org/group access control — they're available to whoever can use the consuming feature, subject to their own `is_available` callable.
 10. **No per-session pinning.** Sessions don't carry a skills selection. The materializer is called with a `(user, db_session)` pair; it returns/writes the union of available built-ins and access-granted customs. Skill grant changes propagate at the next session start. There's no consumer-side join table — the build adapter just calls the materializer at session setup.
 11. **AGENTS.md skill listing is count-bounded.** The materializer writes a `.skills_manifest.json` listing built-in vs custom slugs. The agent-instructions generator inlines all skills if total ≤ `BUILD_SKILLS_INLINE_LIMIT` (default 15); otherwise inlines only built-ins and adds a one-line discovery instruction (`ls .opencode/skills/ | cat each SKILL.md as needed`). Built-ins are always inline because they're the small stable core.
 12. **`materialize_skills(dest, user, db_session, render_context)` is the single materialization function.** Internally it resolves the user's skill set, walks built-ins (reading from disk + rendering templates) and customs (downloading from file store + unzipping), writes the manifest, and returns. Both Craft sandbox backends call it the same way.
 13. **`SkillRenderContext` is extensible.** Pydantic model with well-known optional fields plus an `extra: dict[str, str]` bag for consumer-specific keys. Unknown placeholders in templates are left in place and logged.
-14. **Bundle cleanup is in-line on replace; the orphan task is just a safety net.** When admin re-uploads, the old blob is deleted as part of the same DB transaction that updates the skill row. When a skill is soft-deleted, the blob is retained for the retention window. The weekly Celery beat task is a defensive sweep for blobs left over from interrupted requests and aged soft-deleted rows.
+14. **Bundle cleanup is in-line on replace; the orphan task is just a safety net.** When admin re-uploads, the old blob is deleted as part of the same DB transaction that updates the skill row. When a skill is hard-deleted, its blob is deleted immediately. The weekly Celery beat task is a defensive sweep for blobs left over from interrupted requests.
 15. **Validation runs synchronously in the upload request.** Read bytes → validate in memory → compute sha256 → save to file store → upsert `skill` row → delete prior blob (on replace), in that order, in one request. Validator failure short-circuits before anything persists.
 
 ## Architecture
@@ -121,7 +121,7 @@ Backend calls a hosted "Onyx Skills" service for bundles at session setup.
                                 │                                          │
                                 │  DB (backend/onyx/db/skill.py)           │
                                 │  ├─ skill (one bundle per row)           │
-                                │  └─ skill__user_group                    │
+                                │  └─ skill__user_group, skill__user       │
                                 │                                          │
                                 │  APIs                                    │
                                 │  ├─ /api/admin/skills/... (CRUD)         │
@@ -240,12 +240,12 @@ class Skill(Base):
     bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
-    author_user_id: Mapped[UUID | None] = mapped_column(
+    owner_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True,
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    deleted_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -253,14 +253,11 @@ class Skill(Base):
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup", secondary="skill__user_group", viewonly=True,
     )
-    __table_args__ = (
-        Index(
-            "ux_skill_slug",
-            "slug",
-            unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
-        ),
+    users: Mapped[list["User"]] = relationship(
+        "User", secondary="skill__user", viewonly=True,
     )
+
+    __table_args__ = (Index("ux_skill_slug", "slug", unique=True),)
 
 
 class Skill__UserGroup(Base):
@@ -273,6 +270,15 @@ class Skill__UserGroup(Base):
     )
 
 
+class Skill__User(Base):
+    __tablename__ = "skill__user"
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("skill.id", ondelete="CASCADE"), primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), primary_key=True,
+    )
+
 # ── Craft consumer ─────────────────────────────────────────────────────────
 # No consumer-specific table. The Craft sandbox setup path calls
 # materialize_skills(...) at session start; there is no per-session skill
@@ -281,9 +287,9 @@ class Skill__UserGroup(Base):
 
 Notes:
 
-- Universal table names (`skill`, `skill__user_group`) deliberately have no consumer prefix — adding a Persona consumer in V2 that wants explicit attachment is "add `persona_skill`" with no migration of these tables.
+- Universal table names (`skill`, `skill__user_group`, `skill__user`) deliberately have no consumer prefix — adding a Persona consumer in V2 that wants explicit attachment is "add `persona_skill`" with no migration of these tables.
 - `skill.bundle_file_id`, `bundle_sha256`, and `manifest_metadata` are `NOT NULL` — a skill always has a bundle. The first upload is the create; subsequent uploads replace.
-- Soft-delete (`deleted_at=now()`) is the standard path. Hard delete is only used after admins confirm no consumer references the skill (currently trivial since no consumer stores references; future consumers with their own join tables will need the same protection).
+- Soft-delete (`deleted=true`) is the standard path. Hard delete is only used after admins confirm no consumer references the skill (currently trivial since no consumer stores references; future consumers with their own join tables will need the same protection).
 - Future consumers that want explicit attachment add their own join table (e.g. `persona_skill (persona_id, builtin_slug, custom_skill_id, ...)`). V1 Craft does not.
 
 ## API Spec
@@ -303,9 +309,9 @@ All endpoints raise `OnyxError`, return typed FastAPI models (no `response_model
 
 **`PATCH /api/admin/skills/custom/{skill_id}`** body: `CustomSkillEdit` (name, description, is_public, enabled). Cannot mutate slug or bundle. Use the bundle endpoint to replace bundle.
 
-**`PUT /api/admin/skills/custom/{skill_id}/grants`** body: `{group_ids: list[int]}`. Replaces grants atomically.
+**`PUT /api/admin/skills/custom/{skill_id}/grants`** body: `{group_ids: list[int], user_ids: list[UUID]}`. Replaces grants atomically.
 
-**`DELETE /api/admin/skills/custom/{skill_id}`** → soft delete (`deleted_at=now()`).
+**`DELETE /api/admin/skills/custom/{skill_id}`** → soft delete (`deleted=true`).
 
 There is **no** built-in toggle endpoint. Built-ins are not configurable per-org; they're available iff their `is_available` callable returns True for the deployment's state.
 
@@ -472,7 +478,7 @@ The threshold is `BUILD_SKILLS_INLINE_LIMIT` (default 15). Tune on data — if a
 
 ## Cleanup / Migrations
 
-- Migration creates universal tables only (`skill`, `skill__user_group`) plus the new `FileOrigin.SKILL_BUNDLE` application value. No consumer-side join table. No data migration — existing Craft sessions just start receiving the auto-resolved skill set on next setup.
+- Migration creates universal tables only (`skill`, `skill__user_group`, `skill__user`) plus the new `FileOrigin.SKILL_BUNDLE` enum value. No consumer-side join table. No data migration — existing Craft sessions just start receiving the auto-resolved skill set on next setup.
 - Dockerfile change: drop `COPY skills/` and `mkdir -p /workspace/skills`. The on-disk skills at `backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/` stay as-is — they're now read at runtime by the api_server / Celery worker host file system, not baked into the sandbox image.
 - Weekly Celery beat task `cleanup_orphaned_skill_bundles` (`@shared_task`, `expires=3600`): defensive sweep for `FileOrigin.SKILL_BUNDLE` blobs older than 14 days that no `skill.bundle_file_id` row references. The replace-bundle and delete-skill paths both clean up in-line during the request, so this task should normally find nothing — it exists to catch the rare case where a request crashed between file-store save and DB commit.
 
