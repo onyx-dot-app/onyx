@@ -179,6 +179,27 @@ class TestFetchChannelPermissionsGrid:
                 "z@x.com",
             }
 
+    def test_public_channel_fallback_to_is_public_when_teams_unknown(
+        self,
+    ) -> None:
+        client = MagicMock()
+        ws_emails = {"T_W1": {"a@x.com"}}
+        ch = _channel("C_UNKNOWN", team="T_UNKNOWN")
+        with patch(
+            "ee.onyx.external_permissions.slack.doc_sync.get_channels_across_teams"
+        ) as mock_get:
+            mock_get.side_effect = [[ch], []]
+            workspace_perm = _fetch_workspace_permissions({})
+            result = _fetch_channel_permissions(
+                slack_client=client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={},
+                team_ids=["T_W1"],
+                team_id_to_user_emails=ws_emails,
+            )
+            assert result["C_UNKNOWN"].is_public is True
+            assert result["C_UNKNOWN"].external_user_emails == set()
+
     def test_public_channel_fallback_to_is_public_when_union_exceeds_cap(
         self,
     ) -> None:
@@ -255,6 +276,32 @@ class TestEEGetChannelAccessGrid:
         )
         assert access.is_public is False
         assert access.external_user_emails == {"a@x.com", "z@x.com"}
+
+    def test_public_channel_grid_falls_back_to_is_public_when_teams_unknown(
+        self,
+    ) -> None:
+        ch = _channel("C1", is_private=False, team="T_UNKNOWN")
+        access = ee_get_channel_access(
+            MagicMock(),
+            ch,
+            {},
+            team_id_to_user_emails={"T1": {"a@x.com"}},
+        )
+        assert access.is_public is True
+        assert access.external_user_emails == set()
+
+    def test_public_channel_grid_falls_back_to_is_public_when_channel_team_ids_empty(
+        self,
+    ) -> None:
+        ch = _channel("C1", is_private=False)  # no team / context_team_id
+        access = ee_get_channel_access(
+            MagicMock(),
+            ch,
+            {},
+            team_id_to_user_emails={"T1": {"a@x.com"}},
+        )
+        assert access.is_public is True
+        assert access.external_user_emails == set()
 
     def test_public_channel_grid_falls_back_to_is_public_when_union_exceeds_cap(
         self,
