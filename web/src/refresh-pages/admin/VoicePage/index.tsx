@@ -209,7 +209,7 @@ export default function VoicePage() {
     mode: ProviderMode
   ): "disconnected" | "connected" | "selected" => {
     const provider = providersByType.get(model.providerType);
-    if (!provider || !provider.has_api_key) return "disconnected";
+    if (!provider || !provider.api_key) return "disconnected";
 
     const isActive =
       mode === "stt"

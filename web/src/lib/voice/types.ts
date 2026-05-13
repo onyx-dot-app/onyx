@@ -8,7 +8,6 @@ export interface VoiceProviderView {
   tts_model: string | null;
   default_voice: string | null;
   api_key: string | null;
-  has_api_key: boolean;
   target_uri: string | null;
 }
 

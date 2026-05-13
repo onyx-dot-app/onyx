@@ -130,8 +130,7 @@ export function VoiceProviderSetupModal({
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
     const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
-    const shouldUseStoredKey =
-      !apiKeyChanged && !!existingProvider?.has_api_key;
+    const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
 
     try {
       if (!shouldUseStoredKey) {
