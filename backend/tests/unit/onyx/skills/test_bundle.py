@@ -9,12 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _safe_unzip
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import InvalidBundleError
 from onyx.skills.bundle import validate_custom_bundle
-from onyx.skills.bundle import VALIDATOR_VERSION
 
 # ---------------------------------------------------------------------------
 # Fixture builders
@@ -41,21 +40,13 @@ def _build_zip(
     return buf.getvalue()
 
 
-VALID_FRONTMATTER_MD = b"""---
-name: hello
-description: A friendly hello skill.
----
-
-# Hello
-
-Body content.
-"""
+VALID_SKILL_MD = b"# Hello\n\nBody content.\n"
 
 
 def _valid_bundle() -> bytes:
     return _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("scripts/run.sh", b"#!/bin/sh\necho hi\n"),
             ("docs/notes.md", b"# Notes\n"),
         ]
@@ -69,19 +60,9 @@ def _valid_bundle() -> bytes:
 
 def test_valid_bundle_accepted() -> None:
     metadata = validate_custom_bundle(_valid_bundle(), slug="hello")
-    assert metadata.name == "hello"
-    assert metadata.description == "A friendly hello skill."
     paths = sorted(f.path for f in metadata.files)
     assert paths == ["SKILL.md", "docs/notes.md", "scripts/run.sh"]
     assert metadata.total_uncompressed_bytes == sum(f.size for f in metadata.files)
-    assert metadata.validator_version == VALIDATOR_VERSION
-
-
-def test_valid_bundle_without_frontmatter() -> None:
-    zip_bytes = _build_zip([("SKILL.md", b"# Title\n\nNo frontmatter here.\n")])
-    metadata = validate_custom_bundle(zip_bytes, slug="hello")
-    assert metadata.name is None
-    assert metadata.description is None
 
 
 # ---------------------------------------------------------------------------
@@ -90,30 +71,30 @@ def test_valid_bundle_without_frontmatter() -> None:
 
 
 def test_rejects_non_zip() -> None:
-    with pytest.raises(InvalidBundleError, match="not a valid zip"):
+    with pytest.raises(OnyxError, match="not a valid zip"):
         validate_custom_bundle(b"not a zip", slug="hello")
 
 
 def test_rejects_missing_skill_md() -> None:
     zip_bytes = _build_zip([("scripts/run.sh", b"#!/bin/sh\n")])
-    with pytest.raises(InvalidBundleError, match="SKILL.md missing at bundle root"):
+    with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
 def test_rejects_skill_md_not_at_root() -> None:
-    zip_bytes = _build_zip([("subdir/SKILL.md", VALID_FRONTMATTER_MD)])
-    with pytest.raises(InvalidBundleError, match="SKILL.md missing at bundle root"):
+    zip_bytes = _build_zip([("subdir/SKILL.md", VALID_SKILL_MD)])
+    with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
 def test_rejects_template_file() -> None:
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("SKILL.md.template", b"# templated\n"),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="cannot ship templates"):
+    with pytest.raises(OnyxError, match="cannot ship templates"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
@@ -129,31 +110,31 @@ def test_rejects_template_file() -> None:
 def test_rejects_path_traversal(bad_path: str) -> None:
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             (bad_path, b"oops"),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="escapes root"):
+    with pytest.raises(OnyxError, match="escapes root"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
 def test_rejects_symlink() -> None:
     zip_bytes = _build_zip(
-        [("SKILL.md", VALID_FRONTMATTER_MD)],
+        [("SKILL.md", VALID_SKILL_MD)],
         symlinks=[("link", b"/etc/passwd")],
     )
-    with pytest.raises(InvalidBundleError, match="symlink"):
+    with pytest.raises(OnyxError, match="symlink"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
 def test_rejects_oversized_single_file() -> None:
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("big.bin", b"\x00" * 64),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="exceeds 0 MiB|exceeds"):
+    with pytest.raises(OnyxError, match="exceeds"):
         validate_custom_bundle(zip_bytes, slug="hello", per_file_max_bytes=32)
 
 
@@ -165,7 +146,7 @@ def test_rejects_oversized_total() -> None:
             ("b.bin", b"z" * 64),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="uncompressed"):
+    with pytest.raises(OnyxError, match="uncompressed"):
         validate_custom_bundle(
             zip_bytes,
             slug="hello",
@@ -186,12 +167,12 @@ def test_rejects_oversized_total() -> None:
     ],
 )
 def test_rejects_invalid_slug(bad_slug: str) -> None:
-    with pytest.raises(InvalidBundleError, match="invalid slug"):
+    with pytest.raises(OnyxError, match="invalid slug"):
         validate_custom_bundle(_valid_bundle(), slug=bad_slug)
 
 
 def test_rejects_reserved_slug() -> None:
-    with pytest.raises(InvalidBundleError, match="reserved"):
+    with pytest.raises(OnyxError, match="reserved"):
         validate_custom_bundle(
             _valid_bundle(), slug="pptx", reserved_slugs={"pptx", "image-generation"}
         )
@@ -211,7 +192,7 @@ def test_sha256_differs_when_bytes_differ() -> None:
     a = _valid_bundle()
     b = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("scripts/run.sh", b"#!/bin/sh\necho different\n"),
         ]
     )
@@ -226,7 +207,7 @@ def test_sha256_differs_for_same_content_different_timestamps() -> None:
     exact same upload," not "the contents match."
     """
     entries = [
-        ("SKILL.md", VALID_FRONTMATTER_MD),
+        ("SKILL.md", VALID_SKILL_MD),
         ("scripts/run.sh", b"#!/bin/sh\n"),
     ]
     a = _build_zip(entries, fixed_date=(2026, 1, 1, 0, 0, 0))
@@ -242,27 +223,27 @@ def test_sha256_differs_for_same_content_different_timestamps() -> None:
 
 def test_safe_unzip_extracts_valid_bundle(tmp_path: Path) -> None:
     _safe_unzip(_valid_bundle(), tmp_path / "out")
-    assert (tmp_path / "out" / "SKILL.md").read_bytes() == VALID_FRONTMATTER_MD
+    assert (tmp_path / "out" / "SKILL.md").read_bytes() == VALID_SKILL_MD
     assert (tmp_path / "out" / "scripts" / "run.sh").exists()
 
 
 def test_safe_unzip_rejects_traversal(tmp_path: Path) -> None:
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("../escape.txt", b"x"),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="escapes root"):
+    with pytest.raises(OnyxError, match="escapes root"):
         _safe_unzip(zip_bytes, tmp_path / "out")
 
 
 def test_safe_unzip_rejects_symlink(tmp_path: Path) -> None:
     zip_bytes = _build_zip(
-        [("SKILL.md", VALID_FRONTMATTER_MD)],
+        [("SKILL.md", VALID_SKILL_MD)],
         symlinks=[("link", b"/etc/passwd")],
     )
-    with pytest.raises(InvalidBundleError, match="symlink"):
+    with pytest.raises(OnyxError, match="symlink"):
         _safe_unzip(zip_bytes, tmp_path / "out")
 
 
@@ -271,11 +252,11 @@ def test_safe_unzip_enforces_per_file_cap(tmp_path: Path) -> None:
     blob is tampered, extraction must not write unbounded data to disk."""
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("big.bin", b"\x00" * 64),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="exceeds"):
+    with pytest.raises(OnyxError, match="exceeds"):
         _safe_unzip(zip_bytes, tmp_path / "out", per_file_max_bytes=32)
 
 
@@ -287,7 +268,7 @@ def test_safe_unzip_enforces_total_cap(tmp_path: Path) -> None:
             ("b.bin", b"z" * 64),
         ]
     )
-    with pytest.raises(InvalidBundleError, match="uncompressed"):
+    with pytest.raises(OnyxError, match="uncompressed"):
         _safe_unzip(
             zip_bytes,
             tmp_path / "out",
@@ -325,15 +306,15 @@ def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:
 
 def test_rejects_unsupported_compression() -> None:
     """A ZIP using a stdlib-unknown compression method raises NotImplementedError
-    from zf.open() — we must translate that to InvalidBundleError, not a 500."""
-    zip_bytes = _zip_with_patched_compression_method(VALID_FRONTMATTER_MD, method=99)
-    with pytest.raises(InvalidBundleError, match="cannot read"):
+    from zf.open() — we must translate that to OnyxError, not a 500."""
+    zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
+    with pytest.raises(OnyxError, match="cannot read"):
         validate_custom_bundle(zip_bytes, slug="hello")
 
 
 def test_safe_unzip_rejects_unsupported_compression(tmp_path: Path) -> None:
-    zip_bytes = _zip_with_patched_compression_method(VALID_FRONTMATTER_MD, method=99)
-    with pytest.raises(InvalidBundleError, match="cannot extract"):
+    zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
+    with pytest.raises(OnyxError, match="cannot extract"):
         _safe_unzip(zip_bytes, tmp_path / "out")
 
 
@@ -346,17 +327,17 @@ def test_size_violation_returns_413() -> None:
     """Spec §5 size-cap violations should return HTTP 413, not 400."""
     zip_bytes = _build_zip(
         [
-            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("SKILL.md", VALID_SKILL_MD),
             ("big.bin", b"\x00" * 64),
         ]
     )
-    with pytest.raises(InvalidBundleError) as exc_info:
+    with pytest.raises(OnyxError) as exc_info:
         validate_custom_bundle(zip_bytes, slug="hello", per_file_max_bytes=32)
     assert exc_info.value.status_code == 413
 
 
 def test_validation_violation_returns_400() -> None:
     """Non-size violations still return 400."""
-    with pytest.raises(InvalidBundleError) as exc_info:
+    with pytest.raises(OnyxError) as exc_info:
         validate_custom_bundle(b"not a zip", slug="hello")
     assert exc_info.value.status_code == 400

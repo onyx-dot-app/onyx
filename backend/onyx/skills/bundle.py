@@ -11,18 +11,14 @@ import re
 import stat
 import zipfile
 from pathlib import Path
-from typing import Any
 from typing import Final
 
-import yaml
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-
-VALIDATOR_VERSION: Final[int] = 1
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * 1024 * 1024
@@ -35,18 +31,6 @@ SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 
 
-class InvalidBundleError(OnyxError):
-    """Raised when a custom skill bundle fails validation."""
-
-    def __init__(
-        self,
-        detail: str,
-        *,
-        error_code: OnyxErrorCode = OnyxErrorCode.INVALID_INPUT,
-    ) -> None:
-        super().__init__(error_code, detail)
-
-
 class ManifestFileEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -55,37 +39,41 @@ class ManifestFileEntry(BaseModel):
 
 
 class ManifestMetadata(BaseModel):
-    """Bundle metadata captured at validation time. Persisted as JSONB on
-    the ``Skill`` row.
+    """Bundle-content inventory captured at validation time, persisted as
+    JSONB on the ``Skill`` row.
 
-    ``name`` and ``description`` come from the bundle's optional YAML
-    frontmatter and are pre-fill hints only — the admin-typed values on the
-    ``Skill`` row are authoritative.
+    Only carries bundle facts that the ``Skill`` row itself doesn't already
+    have — the file list and total size, for admin-UI surfacing. Frontmatter
+    name/description live on the row; admins type them into the upload form
+    (with client-side pre-fill via jszip per P4.021).
     """
 
     model_config = ConfigDict(frozen=True)
 
-    name: str | None = None
-    description: str | None = None
     files: list[ManifestFileEntry] = Field(default_factory=list)
     total_uncompressed_bytes: int = 0
-    validator_version: int = VALIDATOR_VERSION
 
 
 def _check_slug(slug: str) -> None:
     if not SLUG_REGEX.match(slug):
-        raise InvalidBundleError(f"invalid slug '{slug}'")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"invalid slug '{slug}'")
 
 
 def _is_symlink(info: zipfile.ZipInfo) -> bool:
-    """True if the zip entry was archived as a Unix symlink."""
+    """True if the zip entry was archived as a Unix symlink.
+
+    We inspect the zip-entry metadata (``external_attr`` mode bits) rather
+    than ``Path.is_symlink()`` because at validation time nothing has been
+    extracted to disk yet — and the whole point of the check is to refuse
+    to extract.
+    """
     if info.create_system != _ZIP_UNIX_CREATE_SYSTEM:
         return False
     unix_mode = (info.external_attr >> 16) & 0xFFFF
     return stat.S_ISLNK(unix_mode)
 
 
-def _normalize_zip_path(name: str) -> str:
+def _check_zip_entry_path(name: str) -> str:
     """Reject path-traversal entries; return a clean relative posix path.
 
     A zip-bomb-style entry like ``../../etc/passwd`` or ``/etc/passwd`` must
@@ -93,53 +81,22 @@ def _normalize_zip_path(name: str) -> str:
     """
     trimmed = name.rstrip("/")
     if not trimmed:
-        raise InvalidBundleError(f"bundle entry has empty path: '{name}'")
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle entry has empty path: '{name}'",
+        )
     if trimmed.startswith("/") or "\\" in trimmed:
-        raise InvalidBundleError(f"bundle entry escapes root: '{name}'")
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle entry escapes root: '{name}'",
+        )
     parts = trimmed.split("/")
     if any(p in ("", ".", "..") for p in parts):
-        raise InvalidBundleError(f"bundle entry escapes root: '{name}'")
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle entry escapes root: '{name}'",
+        )
     return trimmed
-
-
-def _parse_frontmatter(skill_md_bytes: bytes) -> tuple[str | None, str | None]:
-    """Best-effort YAML frontmatter extraction.
-
-    Returns ``(name, description)``; either or both may be ``None`` when the
-    frontmatter is missing, malformed, or unparseable.
-    """
-    empty: tuple[str | None, str | None] = (None, None)
-    try:
-        text = skill_md_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        return empty
-
-    if not text.startswith("---"):
-        return empty
-
-    lines = text.split("\n")
-    end_idx: int | None = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            end_idx = i
-            break
-    if end_idx is None:
-        return empty
-
-    yaml_text = "\n".join(lines[1:end_idx])
-    try:
-        parsed: Any = yaml.safe_load(yaml_text)
-    except yaml.YAMLError:
-        return empty
-    if not isinstance(parsed, dict):
-        return empty
-
-    name = parsed.get("name")
-    description = parsed.get("description")
-    return (
-        str(name) if name is not None else None,
-        str(description) if description is not None else None,
-    )
 
 
 def validate_custom_bundle(
@@ -155,9 +112,11 @@ def validate_custom_bundle(
     Args:
         zip_bytes: Raw zip bytes uploaded by an admin.
         slug: Caller-supplied slug for this skill.
-        reserved_slugs: Slugs registered as built-ins (rejected here).
-            Pass ``BuiltinSkillRegistry.instance().reserved_slugs()`` from
-            the API layer.
+        reserved_slugs: Slugs registered as built-ins (rejected here). Caller
+            threads in ``BuiltinSkillRegistry.instance().reserved_slugs()``;
+            we don't call it directly because the registry is a separate
+            in-flight task on this stack and we don't want the import edge.
+            Consolidate once the registry lands on skills-phase-1.
         per_file_max_bytes: Per-entry uncompressed cap.
         total_max_bytes: Total uncompressed cap.
 
@@ -165,32 +124,40 @@ def validate_custom_bundle(
         ManifestMetadata to persist on the ``Skill`` row.
 
     Raises:
-        InvalidBundleError: any rule from spec §5 fails.
+        OnyxError(INVALID_INPUT): structural violations (bad slug, missing
+            SKILL.md, traversal, symlink, template, unreadable entry).
+        OnyxError(PAYLOAD_TOO_LARGE): per-file or total size cap exceeded.
     """
     _check_slug(slug)
     if reserved_slugs and slug in reserved_slugs:
-        raise InvalidBundleError(f"slug '{slug}' is reserved")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
-        raise InvalidBundleError("bundle is not a valid zip")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
     with zf:
         files: list[ManifestFileEntry] = []
         total = 0
-        skill_md_info: zipfile.ZipInfo | None = None
+        saw_skill_md = False
 
         for info in zf.infolist():
             if info.is_dir():
-                _normalize_zip_path(info.filename)
+                _check_zip_entry_path(info.filename)
                 continue
 
-            normalized = _normalize_zip_path(info.filename)
+            normalized = _check_zip_entry_path(info.filename)
             if _is_symlink(info):
-                raise InvalidBundleError(f"bundle contains a symlink: '{normalized}'")
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains a symlink: '{normalized}'",
+                )
             if normalized.endswith(TEMPLATE_SUFFIX):
-                raise InvalidBundleError("custom skills cannot ship templates")
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "custom skills cannot ship templates",
+                )
 
             size = 0
             try:
@@ -201,43 +168,37 @@ def validate_custom_bundle(
                             break
                         size += len(chunk)
                         if size > per_file_max_bytes:
-                            raise InvalidBundleError(
+                            raise OnyxError(
+                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
                                 f"file '{normalized}' exceeds "
                                 f"{per_file_max_bytes // (1024 * 1024)} MiB",
-                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
                             )
                         total += len(chunk)
                         if total > total_max_bytes:
-                            raise InvalidBundleError(
+                            raise OnyxError(
+                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
                                 f"bundle exceeds "
                                 f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
-                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
                             )
-            except InvalidBundleError:
+            except OnyxError:
                 raise
             except Exception as exc:
-                raise InvalidBundleError(f"cannot read '{normalized}': {exc}") from exc
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"cannot read '{normalized}': {exc}",
+                ) from exc
 
             files.append(ManifestFileEntry(path=normalized, size=size))
             if normalized == SKILL_MD_NAME:
-                skill_md_info = info
+                saw_skill_md = True
 
-        if skill_md_info is None:
-            raise InvalidBundleError("SKILL.md missing at bundle root")
+        if not saw_skill_md:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "SKILL.md missing at bundle root",
+            )
 
-        try:
-            skill_md_bytes = zf.read(skill_md_info)
-        except Exception as exc:
-            raise InvalidBundleError(f"cannot read 'SKILL.md': {exc}") from exc
-        name, description = _parse_frontmatter(skill_md_bytes)
-
-    return ManifestMetadata(
-        name=name,
-        description=description,
-        files=files,
-        total_uncompressed_bytes=total,
-        validator_version=VALIDATOR_VERSION,
-    )
+    return ManifestMetadata(files=files, total_uncompressed_bytes=total)
 
 
 def _safe_unzip(
@@ -260,22 +221,24 @@ def _safe_unzip(
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
-        raise InvalidBundleError("bundle is not a valid zip")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
     with zf:
         total = 0
         for info in zf.infolist():
             if _is_symlink(info):
-                raise InvalidBundleError(
-                    f"bundle contains a symlink: '{info.filename}'"
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains a symlink: '{info.filename}'",
                 )
-            normalized = _normalize_zip_path(info.filename)
+            normalized = _check_zip_entry_path(info.filename)
             target = (dest / normalized).resolve()
             try:
                 target.relative_to(dest_resolved)
             except ValueError:
-                raise InvalidBundleError(
-                    f"bundle entry escapes root: '{info.filename}'"
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle entry escapes root: '{info.filename}'",
                 )
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -290,24 +253,25 @@ def _safe_unzip(
                             break
                         size += len(chunk)
                         if size > per_file_max_bytes:
-                            raise InvalidBundleError(
+                            raise OnyxError(
+                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
                                 f"file '{normalized}' exceeds "
                                 f"{per_file_max_bytes // (1024 * 1024)} MiB",
-                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
                             )
                         total += len(chunk)
                         if total > total_max_bytes:
-                            raise InvalidBundleError(
+                            raise OnyxError(
+                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
                                 f"bundle exceeds "
                                 f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
-                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
                             )
                         out.write(chunk)
-            except InvalidBundleError:
+            except OnyxError:
                 raise
             except Exception as exc:
-                raise InvalidBundleError(
-                    f"cannot extract '{normalized}': {exc}"
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"cannot extract '{normalized}': {exc}",
                 ) from exc
 
 
