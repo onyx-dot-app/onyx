@@ -176,6 +176,18 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.SANDBOX,
         },
     },
+    # Weekly sweep: orphaned skill bundle blobs + aged soft-deleted skills.
+    # Both retention paths use the same 14-day window inside the task body, so a
+    # weekly cadence keeps stale rows/blobs bounded without pressuring FileStore.
+    {
+        "name": "cleanup-orphaned-skill-blobs",
+        "task": OnyxCeleryTask.CLEANUP_ORPHANED_SKILL_BLOBS,
+        "schedule": timedelta(days=7),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": 3600,
+        },
+    },
 ]
 
 # Mirror set_is_ee_based_on_env_variable(): EE features are active when either

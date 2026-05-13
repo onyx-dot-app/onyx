@@ -498,6 +498,9 @@ class OnyxRedisLocks:
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
     CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
 
+    # Skills cleanup (orphan blobs + aged soft-deletes)
+    CLEANUP_ORPHANED_SKILL_BLOBS_BEAT_LOCK = "da_lock:cleanup_orphaned_skill_blobs_beat"
+
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
@@ -626,6 +629,9 @@ class OnyxCeleryTask:
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
+
+    # Skills cleanup
+    CLEANUP_ORPHANED_SKILL_BLOBS = "cleanup_orphaned_skill_blobs"
 
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"

@@ -160,6 +160,8 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.opensearch_migration",
             # Sandbox cleanup tasks (isolated in build feature)
             "onyx.server.features.build.sandbox.tasks",
+            # Skills cleanup (orphan blobs + aged soft-deletes)
+            "onyx.background.celery.tasks.skills",
         ]
     )
 )
