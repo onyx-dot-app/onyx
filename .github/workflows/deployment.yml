@@ -627,7 +627,7 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
@@ -1282,7 +1282,7 @@ jobs:
             latest=false
           tags: |
             type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || 'craft-latest' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && github.ref_name || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && github.ref_name || '' }}
 
       - name: Create and push manifest
         env:
@@ -1507,7 +1507,7 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
-            type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
@@ -1529,12 +1529,14 @@ jobs:
       - merge-web
       - merge-web-cloud
       - merge-backend
+      - merge-backend-craft
       - merge-model-server
     if: >-
       always() && !cancelled() &&
       (needs.merge-web.result == 'success' ||
        needs.merge-web-cloud.result == 'success' ||
        needs.merge-backend.result == 'success' ||
+       needs.merge-backend-craft.result == 'success' ||
        needs.merge-model-server.result == 'success')
     runs-on:
       - runs-on
@@ -1564,7 +1566,13 @@ jobs:
           case "$COMPONENT" in
             web) RESULT="$MERGE_WEB" ;;
             web-cloud) RESULT="$MERGE_WEB_CLOUD" ;;
-            backend) RESULT="$MERGE_BACKEND" ;;
+            backend)
+              if [ "$MERGE_BACKEND" == "success" ] || [ "$MERGE_BACKEND_CRAFT" == "success" ]; then
+                RESULT="success"
+              else
+                RESULT="skipped"
+              fi
+              ;;
             model-server) RESULT="$MERGE_MODEL_SERVER" ;;
           esac
           if [ "$RESULT" == "success" ]; then
@@ -1577,6 +1585,7 @@ jobs:
           MERGE_WEB: ${{ needs.merge-web.result }}
           MERGE_WEB_CLOUD: ${{ needs.merge-web-cloud.result }}
           MERGE_BACKEND: ${{ needs.merge-backend.result }}
+          MERGE_BACKEND_CRAFT: ${{ needs.merge-backend-craft.result }}
           MERGE_MODEL_SERVER: ${{ needs.merge-model-server.result }}
 
       - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
