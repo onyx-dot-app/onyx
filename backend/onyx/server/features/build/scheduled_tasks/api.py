@@ -54,6 +54,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import human_readable
 from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
 from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -282,10 +283,15 @@ def _enqueue_executor(run_id: UUID) -> None:
     The executor task definition lives in the background-workers package
     (a sibling agent owns that). We only need its name + queue + an
     ``expires=`` (per CLAUDE.md).
+
+    Passes ``tenant_id`` so ``TenantAwareTask`` sets the per-task
+    contextvar on the executor — without it, the run would execute
+    against the default schema.
     """
+    tenant_id = get_current_tenant_id()
     celery_app.send_task(
         OnyxCeleryTask.SCHEDULED_TASKS_RUN,
-        kwargs={"run_id": str(run_id)},
+        kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.SCHEDULED_TASKS,
         priority=OnyxCeleryPriority.MEDIUM,
         expires=EXECUTOR_TASK_EXPIRES_SECONDS,

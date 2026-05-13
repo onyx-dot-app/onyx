@@ -154,7 +154,10 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         try:
             self.app.send_task(
                 OnyxCeleryTask.SCHEDULED_TASKS_RUN,
-                kwargs={"run_id": str(run_id)},
+                kwargs={
+                    "run_id": str(run_id),
+                    "tenant_id": tenant_id,
+                },
                 queue=OnyxCeleryQueues.SCHEDULED_TASKS,
                 priority=OnyxCeleryPriority.MEDIUM,
                 expires=RUN_EXPIRES_SECONDS,
@@ -191,14 +194,19 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
     bind=True,
     track_started=True,
 )
-def run_scheduled_task(self: Task, *, run_id: str) -> None:
+def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
     """Thin Celery wrapper around :func:`run_scheduled_task_logic`.
+
+    ``tenant_id`` is consumed by ``TenantAwareTask`` before this body
+    runs (it sets ``CURRENT_TENANT_ID_CONTEXTVAR``); we accept it here
+    only so Celery's argument unpacking succeeds.
 
     Swallows exceptions so Celery doesn't reschedule. The executor logic
     is responsible for translating failures into a ``FAILED`` row +
     notification.
     """
     _ = self  # bound only for symmetry with other shared_task wrappers
+    _ = tenant_id
     try:
         run_scheduled_task_logic(UUID(run_id))
     except Exception:
