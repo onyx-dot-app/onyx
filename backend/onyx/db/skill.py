@@ -50,7 +50,12 @@ def _add_user_visibility_filter(
 
     Mirrors `onyx.db.persona._add_user_filters` minus the direct user-grant
     branch (no `Skill__User` table in V1). Admins bypass the filter; everyone
-    else sees `is_public=True` OR membership in a group that holds a grant.
+    else — including `GLOBAL_CURATOR` and `CURATOR` — goes through the
+    is_public-or-group-grant path. The curator-specific elevated access in
+    persona exists to gate *editability* of curator-owned personas; skills
+    have no editability dimension at the user-read layer in V1 (only admins
+    mutate skills), so global-curators are intentionally treated the same as
+    regular users for visibility.
     """
     if user.role == UserRole.ADMIN:
         return stmt
