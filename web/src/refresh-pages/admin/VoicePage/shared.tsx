@@ -22,7 +22,7 @@ import type {
   VoiceProviderView,
   VoiceFormValues,
   VoiceOption,
-} from "@/lib/voice/interfaces";
+} from "@/lib/voice/types";
 import {
   testVoiceProvider,
   upsertVoiceProvider,
@@ -108,9 +108,7 @@ export function VoiceProviderSetupModal({
   }, [providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: hasStoredKey
-      ? Yup.string()
-      : Yup.string().required("API key is required"),
+    api_key: Yup.string().required("API key is required"),
     target_uri:
       providerType === "azure"
         ? Yup.string().required("Target URI is required")
@@ -121,7 +119,7 @@ export function VoiceProviderSetupModal({
   });
 
   const initialValues: VoiceFormValues = {
-    api_key: "",
+    api_key: existingProvider?.api_key ?? "",
     target_uri: existingProvider?.target_uri ?? "",
     stt_model: existingProvider?.stt_model ?? "whisper-1",
     tts_model: initialTtsModel,
@@ -132,7 +130,7 @@ export function VoiceProviderSetupModal({
     values: VoiceFormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = values.api_key !== "";
+    const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
     const shouldUseStoredKey = hasStoredKey && !apiKeyChanged;
 
     try {
@@ -238,11 +236,7 @@ export function VoiceProviderSetupModal({
                   >
                     <PasswordInputTypeInField
                       name="api_key"
-                      placeholder={
-                        hasStoredKey
-                          ? "Enter new key to replace stored key"
-                          : "API key"
-                      }
+                      placeholder="API key"
                     />
                   </InputVertical>
 

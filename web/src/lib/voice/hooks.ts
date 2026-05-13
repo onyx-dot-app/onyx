@@ -1,7 +1,7 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { VoiceProviderView } from "@/lib/voice/interfaces";
+import type { VoiceProviderView } from "@/lib/voice/types";
 
 export type { VoiceProviderView };
 
