@@ -18,7 +18,7 @@ import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { toast } from "@/hooks/useToast";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tier } from "@/interfaces/settings";
@@ -77,10 +77,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   const isSyncing = group != null && !group.is_up_to_date;
 
-  // Fetch token rate limits for this group
+  // Fetch token rate limits for this group. Skip retry on tier-gated 402
+  // (BUSINESS-tier tenants don't have access) so SWR doesn't churn the form
+  // by repeatedly flipping its isLoading state.
   const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
     TokenRateLimitDisplay[]
-  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher);
+  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher, {
+    onErrorRetry: skipRetryOnAuthError,
+  });
 
   // Form state
   const [groupName, setGroupName] = useState("");

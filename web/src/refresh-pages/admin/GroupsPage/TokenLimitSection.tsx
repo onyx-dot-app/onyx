@@ -5,6 +5,7 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
+import { planTagProps } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
@@ -81,6 +82,7 @@ function TokenLimitSection({
       <SimpleCollapsible.Header
         title="Token Rate Limit"
         description="Limit number of tokens this group can use within a given time period."
+        tag={disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined }
       />
       <SimpleCollapsible.Content>
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
