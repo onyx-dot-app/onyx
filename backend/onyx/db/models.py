@@ -5846,7 +5846,7 @@ class ExternalApp(Base):
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
     )
-    upstream_urls: Mapped[list[str]] = mapped_column(
+    upstream_url_patterns: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
     auth_template: Mapped[dict[str, Any]] = mapped_column(

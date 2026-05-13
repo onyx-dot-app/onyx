@@ -30,7 +30,7 @@ def upgrade() -> None:
             server_default="CUSTOM",
         ),
         sa.Column(
-            "upstream_urls",
+            "upstream_url_patterns",
             postgresql.ARRAY(sa.String()),
             nullable=False,
             server_default="{}",
