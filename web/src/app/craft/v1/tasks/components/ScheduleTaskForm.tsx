@@ -18,7 +18,6 @@ import type {
   EditorPayload,
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
-  ScheduledTaskListItem,
   ScheduledTaskPatchBody,
 } from "@/app/craft/v1/tasks/interfaces";
 import {
@@ -109,14 +108,13 @@ export default function ScheduleTaskForm({
             timezone,
             run_immediately: runImmediately,
           };
-          const created: ScheduledTaskListItem =
-            await createScheduledTask(body);
+          await createScheduledTask(body);
           toast.success(
             runImmediately
               ? "Scheduled task created and queued."
               : "Scheduled task created."
           );
-          router.push(taskDetailPath(created.id));
+          router.push(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
