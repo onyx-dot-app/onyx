@@ -1,10 +1,16 @@
 """DB operations for custom (admin-uploaded) skills.
 
 Access model:
-- Admin reads: filter `deleted_at IS NULL` only. Disabled skills stay visible
-  so admins can re-enable them.
-- User reads: filter `enabled = True AND deleted_at IS NULL`, plus `is_public`
-  OR the user is in a group that has been granted access.
+- Admin reads: see every row. Disabled skills stay visible so admins can
+  re-enable them.
+- User reads: filter `enabled = True`, plus `is_public` OR the user is in a
+  group that has been granted access.
+
+Delete is a hard delete — `delete_skill` removes the row and returns its
+`bundle_file_id` so the caller can drop the blob from the file store
+immediately (skills sync via S3-backed bundles, so blob retention isn't
+needed). The legacy `deleted_at` column from the V1 migration is left
+unset; callers don't filter on it.
 
 These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace grants) can roll back atomically.
@@ -15,7 +21,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete
-from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -72,15 +77,9 @@ def _add_user_visibility_filter(
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
     """Skills the user can use in a session.
 
-    Filtered to `enabled = True AND deleted_at IS NULL`: disabled or soft-deleted
-    skills never reach the materializer.
+    Filtered to `enabled = True`: disabled skills never reach the materializer.
     """
-    stmt = (
-        select(Skill)
-        .where(Skill.enabled.is_(True))
-        .where(Skill.deleted_at.is_(None))
-        .order_by(Skill.name)
-    )
+    stmt = select(Skill).where(Skill.enabled.is_(True)).order_by(Skill.name)
     stmt = _add_user_visibility_filter(stmt, user)
     return db_session.scalars(stmt).all()
 
@@ -90,32 +89,26 @@ def fetch_skill_for_user(
 ) -> Skill | None:
     """Single-skill lookup with the same filter as `list_skills_for_user`.
 
-    Returns None when the skill does not exist, is disabled, soft-deleted, or
-    the user has no grant — callers translate to 404 as needed.
+    Returns None when the skill does not exist, is disabled, or the user has
+    no grant — callers translate to 404 as needed.
     """
-    stmt = (
-        select(Skill)
-        .where(Skill.id == skill_id)
-        .where(Skill.enabled.is_(True))
-        .where(Skill.deleted_at.is_(None))
-    )
+    stmt = select(Skill).where(Skill.id == skill_id).where(Skill.enabled.is_(True))
     stmt = _add_user_visibility_filter(stmt, user)
     return db_session.scalars(stmt).one_or_none()
 
 
 def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
-    """Admin lookup: `deleted_at IS NULL` only (no `enabled` filter)."""
-    stmt = select(Skill).where(Skill.id == skill_id).where(Skill.deleted_at.is_(None))
+    """Admin lookup (no `enabled` filter — disabled skills are still visible)."""
+    stmt = select(Skill).where(Skill.id == skill_id)
     return db_session.scalars(stmt).one_or_none()
 
 
 def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
-    """All non-soft-deleted skills, for the admin UI.
+    """All skills, for the admin UI.
 
-    Disabled skills are included so the admin can re-enable them; soft-deleted
-    rows are hidden by default (engineer-only undelete bypasses this helper).
+    Disabled skills are included so the admin can re-enable them.
     """
-    stmt = select(Skill).where(Skill.deleted_at.is_(None)).order_by(Skill.name)
+    stmt = select(Skill).order_by(Skill.name)
     return db_session.scalars(stmt).all()
 
 
@@ -139,9 +132,7 @@ def create_skill(
     writer race. Both raise the same structured error so callers never see
     a raw IntegrityError.
     """
-    existing = db_session.scalars(
-        select(Skill.id).where(Skill.slug == slug).where(Skill.deleted_at.is_(None))
-    ).first()
+    existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
     if existing is not None:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
@@ -229,10 +220,7 @@ def patch_skill(
     if slug_changed:
         assert not isinstance(slug, UnsetType)
         clashing = db_session.scalars(
-            select(Skill.id)
-            .where(Skill.slug == slug)
-            .where(Skill.deleted_at.is_(None))
-            .where(Skill.id != skill_id)
+            select(Skill.id).where(Skill.slug == slug).where(Skill.id != skill_id)
         ).first()
         if clashing is not None:
             raise OnyxError(
@@ -287,17 +275,19 @@ def replace_skill_grants(
     db_session.flush()
 
 
-def delete_skill(skill_id: UUID, db_session: Session) -> None:
-    """Soft-delete by stamping `deleted_at = now()`.
+def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
+    """Hard-delete a skill and return its `bundle_file_id` for caller cleanup.
 
-    The bundle blob is NOT removed inline; the weekly sweep (§16) deletes it
-    after the soft-delete ages past the retention window, then hard-deletes
-    the row. Running sessions continue to use the on-pod copy.
-
-    Idempotent: re-deleting an already-deleted skill is a no-op.
+    Returns `None` if the skill did not exist (idempotent). The
+    `skill__user_group` rows cascade delete via the FK. The caller is
+    responsible for removing the bundle blob from the file store AFTER
+    the transaction commits; running sandbox pods keep their materialized
+    copy until the next bundle-sync cycle.
     """
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
-        return
-    skill.deleted_at = func.now()
+        return None
+    bundle_file_id = skill.bundle_file_id
+    db_session.delete(skill)
     db_session.flush()
+    return bundle_file_id
