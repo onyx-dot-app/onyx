@@ -1827,7 +1827,7 @@ class BuiltinSkillRegistry:
         requirements: Sequence[SkillRequirement] = (),
     ) -> None: ...
     def list_all(self) -> list[BuiltinSkill]: ...
-    def list_satisfied(self, db: Session) -> list[BuiltinSkill]:
+    def list_available(self, db: Session) -> list[BuiltinSkill]:
         """Built-ins whose requirements all check True. Used by the materializer."""
     def evaluate_for_admin(self, db: Session) -> list[BuiltinSkillStatus]:
         """Per-built-in: each requirement + satisfied bool. Used by /api/admin/skills."""
@@ -1960,7 +1960,7 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
       <li>
         Implement <code>BuiltinSkillRegistry</code>: singleton accessor,
         <code>register(slug, source_dir, requirements=[])</code>,
-        <code>list_all()</code>, <code>list_satisfied(db)</code>,
+        <code>list_all()</code>, <code>list_available(db)</code>,
         <code>evaluate_for_admin(db)</code>, <code>get(slug)</code>,
         <code>reserved_slugs()</code>.
       </li>
@@ -1986,7 +1986,7 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
             <code>assert registry.get("pptx") is not None</code> after boot.
           </li>
           <li>
-            <code>list_satisfied(db)</code> excludes
+            <code>list_available(db)</code> excludes
             <code>image-generation</code> when no provider is configured;
             includes it after one is added.
           </li>
@@ -2210,7 +2210,7 @@ def materialize_skills(
       <li>
         <code
           >builtins =
-          BuiltinSkillRegistry.instance().list_satisfied(db_session)</code
+          BuiltinSkillRegistry.instance().list_available(db_session)</code
         >
         — only built-ins whose declared requirements all check True. Unsatisfied
         built-ins are skipped silently; admins see them as "Needs setup" in the

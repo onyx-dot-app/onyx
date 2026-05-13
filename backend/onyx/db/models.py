@@ -4195,7 +4195,6 @@ class Skill(Base):
     # Bundle bytes (single, replaced on re-upload).
     bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
     bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
