@@ -22,6 +22,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
+from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
@@ -214,6 +215,19 @@ class LocalSandboxManager(SandboxManager):
         ):
             shutil.copytree(self._directory_manager.skills_source_path, sandbox_skills)
 
+        # Symlink user_library to persistent storage path where write_raw_file puts files
+        user_lib_source = (
+            Path(PERSISTENT_DOCUMENT_STORAGE_PATH)
+            / tenant_id
+            / "knowledge"
+            / str(user_id)
+            / "user_library"
+        )
+        user_lib_source.mkdir(parents=True, exist_ok=True)
+        sandbox_user_lib = sandbox_path / "user_library"
+        if not sandbox_user_lib.exists():
+            sandbox_user_lib.symlink_to(user_lib_source)
+
         logger.info(
             "Provisioned sandbox %s at %s (no sessions yet)", sandbox_id, sandbox_path
         )
@@ -366,6 +380,12 @@ class LocalSandboxManager(SandboxManager):
                 session_path, skills_target=sandbox_path / "skills"
             )
             logger.debug("Skills ready")
+
+            # Symlink user library (shared sandbox-level directory)
+            user_lib_target = sandbox_path / "user_library"
+            user_lib_link = session_path / "user_library"
+            if user_lib_target.exists() and not user_lib_link.exists():
+                user_lib_link.symlink_to(user_lib_target)
 
             # Setup attachments directory
             logger.debug("Setting up attachments directory")
@@ -1133,6 +1153,15 @@ class LocalSandboxManager(SandboxManager):
             raise ValueError(f"Invalid sandbox file path: {path}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+
+    def sync_user_library(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        disabled_paths: list[str] | None = None,  # noqa: ARG002
+    ) -> None:
+        pass
 
     def get_upload_stats(
         self,

@@ -45,7 +45,10 @@ Follow this two-step pattern for most tasks:
 2. Read the `company-search` SKILL.md for available sources and flags.
 3. **Iterate** — run additional searches to refine. Use `--source` to narrow by
    connector and `--days` for recent content.
-4. **Summarize** key findings before proceeding to output generation.
+4. **User library files** (spreadsheets, PDFs, CSVs uploaded by the user) are
+   in the `user_library/` directory. Open them directly with Python libraries
+   when the task requires working with the raw file.
+5. **Summarize** key findings before proceeding to output generation.
 
 ### Step 2: Output Generation
 

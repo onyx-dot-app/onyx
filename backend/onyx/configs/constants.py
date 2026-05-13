@@ -623,9 +623,10 @@ class OnyxCeleryTask:
     # License expiry tiered warnings
     CHECK_LICENSE_EXPIRY_NOTIFICATIONS = "check_license_expiry_notifications"
 
-    # Sandbox cleanup
+    # Sandbox
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
+    SYNC_USER_LIBRARY_FILES = "sync_user_library_files"
 
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"

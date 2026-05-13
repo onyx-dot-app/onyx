@@ -46,6 +46,7 @@ from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_sessio
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.db.user_library import get_disabled_user_library_paths
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
@@ -505,6 +506,17 @@ def restore_session(
                     db_session.commit()
 
                 session_manager.push_dynamic_skills(sandbox.id, user.id)
+                try:
+                    disabled = get_disabled_user_library_paths(db_session, user.id)
+                    sandbox_manager.sync_user_library(
+                        sandbox.id, user.id, tenant_id, disabled_paths=disabled
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to sync user library during restore for sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",

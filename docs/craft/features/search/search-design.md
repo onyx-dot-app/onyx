@@ -64,7 +64,7 @@ Bundle onyx-cli into the sandbox. Add a `search` command backed by a new general
 **Cons:**
 - Requires CLI refactoring work (Part 1) to make it properly agent-first.
 - Requires a new backend search API (Part 2) — but this is needed regardless of delivery mechanism.
-- Sandbox image grows by the size of the Go binary.
+- Sandbox image grows by the size of the CLI pip package.
 - Craft sandbox needs internal network URL (`ONYX_SERVER_URL` pointing at the Kube service, not the public nginx URL).
 
 **Why this wins:**
@@ -385,7 +385,7 @@ Persona scoping is exposed as `--agent-id` on the `search` command. When specifi
 
 ### Objective
 
-Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI binary, creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
+Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI (via pip), creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
 
 > **Architecture summary.** Dynamic skill content (the rendered `company-search` SKILL.md) is written to the pod via a `write_sandbox_file()` / `render_company_search_skill()` pattern that is decoupled from the sandbox manager interface. Content is rendered in `sandbox/skills/rendering.py`, written to `/workspace/skills/` at the pod level (shared across sessions via existing symlinks), and orchestrated by `SessionManager.push_dynamic_skills()`. This avoids threading new parameters through the manager abstraction and provides a clean extension point for future skill bundles.
 
@@ -406,14 +406,14 @@ Each user's Craft sandbox gets a single PAT that persists across sessions and po
 
 The security boundary is the pod, which is already one-per-user. Per-session PATs don't add security within the same pod. PAT scopes will be addressed later by the Permissions system, not this project.
 
-#### R4.2: CLI binary bundling
+#### R4.2: CLI bundling
 
-The onyx-cli binary must be available inside the sandbox:
+The onyx-cli must be available inside the sandbox:
 
-- The binary is included in the sandbox Docker image. This is a build-time dependency, not a runtime download.
-- The binary version is pinned to the Onyx release. There is no version mismatch between the CLI and the backend it talks to.
-- The binary is on `$PATH` inside the sandbox so the agent can invoke it as `onyx-cli` without a full path.
-- The binary works without a config file — it reads `ONYX_PAT` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
+- Installed as a pip package (`onyx-cli==1.0.1`) via `initial-requirements.txt` during the sandbox Docker image build. This is a build-time dependency, not a runtime download.
+- The package version is pinned to the Onyx release. There is no version mismatch between the CLI and the backend it talks to.
+- The CLI is on `$PATH` inside the sandbox (via the Python venv) so the agent can invoke it as `onyx-cli` without a full path.
+- The CLI works without a config file — it reads `ONYX_PAT` and `ONYX_SERVER_URL` from the environment (per Part 1's agent-first design). No `configure` step is needed or possible.
 
 #### R4.3: CLI skill creation
 
@@ -460,7 +460,7 @@ Remove the legacy `files/` corpus sync infrastructure (search replaces it) and r
 
 > **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
 
-> **Implementation note.** This is split across two PRs. **PR 3 is removal-only** (~1500 lines deleted) — it deletes the old file sync infrastructure after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. **PR 4 is the user library rework** — net new code adding the shared volume, kubectl exec sync, and Celery task for user library delivery. This split keeps PR 3 a clean deletion pass and isolates the new functionality in PR 4.
+> **Implementation note.** This is split across two PRs. **PR 3 is removal-only** (~1500 lines deleted) — it deletes the old file sync infrastructure after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. **PR 4 is the user library rework** — net new code adding `sync_user_library()` on `SandboxManager`, kubectl exec sync, and Celery task for user library delivery. This split keeps PR 3 a clean deletion pass and isolates the new functionality in PR 4.
 
 **File sync removal (PR 3 — pure deletion):**
 - Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
@@ -474,11 +474,13 @@ Remove the legacy `files/` corpus sync infrastructure (search replaces it) and r
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They still need direct file access.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
-- **Session setup/resume** — populates the directory, catching files uploaded while the pod was sleeping.
-- **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately.
+Add a `/workspace/user_library/` directory baked into the sandbox image (same filesystem as `/workspace`, not a separate volume). Add `sync_user_library()` as an abstract method on `SandboxManager` with K8s implementation (kubectl exec running `aws s3 sync`) and local no-op. Sync triggered at:
+- **Session setup/resume** — called from `SessionManager` (after `setup_session_workspace` and `push_dynamic_skills`) and from the restore path in `sessions_api.py`.
+- **After each upload/delete** — `_dispatch_user_library_sync()` helper in `user_library.py` dispatches `sync_user_library_files_task` Celery task.
 
-Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`aws s3 sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+Sessions access files via a `user_library/` symlink in the session workspace pointing to `/workspace/user_library/` — the same pattern used for skills symlinks. The agent accesses `user_library/` as a relative path in its session directory. No `opencode_config.py` changes are needed (the deny-all external_directory policy stays intact). `AGENTS.template.md` references `user_library/` (relative) so the agent knows where to find uploaded files. The sync is idempotent (`aws s3 sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+
+`onyx-cli` is installed via `initial-requirements.txt` as a pip package (`onyx-cli==1.0.1`), not copied as a binary.
 
 **PersistentDocumentWriter (PR 3):** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
 
@@ -500,8 +502,8 @@ The `files/` infrastructure is the only delivery mechanism for demo data. Removi
 
 - **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_API_SERVER_URL` config.
 - **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. Resolved by reusing the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording) — no new source metadata system needed.
-- **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in PR 3 (pure deletion). PR 4 adds the new user library delivery mechanism (shared volume + kubectl exec sync).
+- **User library sync for non-K8s**: The kubectl exec approach is K8s-native. The local sandbox manager has a no-op implementation. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in PR 3 (pure deletion). PR 4 adds the new user library delivery mechanism (`sync_user_library()` on `SandboxManager` + Celery task dispatch).
 - **Decoupled rendering**: The dynamic skill rendering (`render_company_search_skill()` + `write_sandbox_file()`) is deliberately decoupled from the sandbox manager interface. This avoids threading new parameters through `setup_session_workspace()` and `restore_snapshot()`, keeping the manager abstraction clean. The orchestration lives in `SessionManager.push_dynamic_skills()`, which catches all exceptions and logs a warning so failures don't block session setup.
 
 ---
