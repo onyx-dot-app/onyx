@@ -13,6 +13,7 @@ import {
 import { SvgChevronRight, SvgCalendar } from "@opal/icons";
 import { ONYX_CRAFT_CALENDAR_URL } from "@/app/craft/v1/constants";
 import useCCPairs from "@/hooks/useCCPairs";
+import { useUser } from "@/providers/UserProvider";
 
 interface ConnectorBannersRowProps {
   className?: string;
@@ -29,10 +30,11 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectorBannersRow({
   className,
 }: ConnectorBannersRowProps) {
+  const { isAdmin, isCurator } = useUser();
   const { ccPairs, isLoading } = useCCPairs();
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  if (isLoading || hasConnectorEverSucceeded) {
+  if (isLoading || hasConnectorEverSucceeded || (!isAdmin && !isCurator)) {
     return null;
   }
 

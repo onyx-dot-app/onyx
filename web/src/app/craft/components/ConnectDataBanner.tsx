@@ -12,6 +12,7 @@ import {
 } from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
 import useCCPairs from "@/hooks/useCCPairs";
+import { useUser } from "@/providers/UserProvider";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -28,10 +29,11 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
+  const { isAdmin, isCurator } = useUser();
   const { ccPairs, isLoading } = useCCPairs();
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  if (isLoading || hasConnectorEverSucceeded) {
+  if (isLoading || hasConnectorEverSucceeded || (!isAdmin && !isCurator)) {
     return null;
   }
 

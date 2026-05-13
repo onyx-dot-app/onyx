@@ -23,6 +23,7 @@ import {
 import UserLibraryModal from "@/app/craft/v1/configure/components/UserLibraryModal";
 import { Button, Divider } from "@opal/components";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
+import { useUser } from "@/providers/UserProvider";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { getModelIcon } from "@/lib/languageModels";
 import {
@@ -35,6 +36,7 @@ import {
 
 export default function BuildConfigPage() {
   const { llmProviders } = useLLMProviders();
+  const { isAdmin, isCurator } = useUser();
   const { openUserInfoEditor, openLlmSetup } = useOnboarding();
   const [showUserLibraryModal, setShowUserLibraryModal] = useState(false);
 
@@ -263,25 +265,25 @@ export default function BuildConfigPage() {
                   </button>
                 </InputHorizontal>
               </Card>
-              <Card>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.href = "/admin/indexing/status";
-                  }}
-                  className="w-full flex items-center justify-between py-1"
-                >
-                  <div className="flex flex-col gap-0.25">
-                    <Text mainContentEmphasis text04>
-                      Connect your data
-                    </Text>
-                    <Text secondaryBody text03>
-                      Manage connectors on the admin page
-                    </Text>
-                  </div>
-                  <SvgChevronRight className="w-5 h-5 text-text-03" />
-                </button>
-              </Card>
+              {(isAdmin || isCurator) && (
+                <Card>
+                  <InputHorizontal
+                    title="Connect your data"
+                    description="Manage connectors on the admin page"
+                    center
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/admin/indexing/status";
+                      }}
+                      className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors"
+                    >
+                      <SvgChevronRight className="w-5 h-5" />
+                    </button>
+                  </InputHorizontal>
+                </Card>
+              )}
             </Section>
           </Section>
         </SettingsLayouts.Body>
