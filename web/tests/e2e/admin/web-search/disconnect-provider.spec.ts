@@ -93,7 +93,7 @@ test.describe("Web Search Provider Disconnect", () => {
       });
     });
 
-    test("should show replacement dropdown when disconnecting active search provider with alternatives", async ({
+    test("should disconnect active search provider when alternatives exist", async ({
       page,
     }) => {
       // Exa is active, Brave is also configured
@@ -122,12 +122,10 @@ test.describe("Web Search Provider Disconnect", () => {
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
       await expect(confirmDialog).toContainText("Disconnect Exa");
 
-      // Should show replacement dropdown
       await expect(
         confirmDialog.getByText("Search history will be preserved")
       ).toBeVisible();
 
-      // Disconnect button should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
@@ -161,7 +159,7 @@ test.describe("Web Search Provider Disconnect", () => {
 
       // Should show message about connecting another provider
       await expect(
-        confirmDialog.getByText("Connect another provider")
+        confirmDialog.getByText("Connect another search engine")
       ).toBeVisible();
 
       // Disconnect button should be enabled
@@ -267,7 +265,7 @@ test.describe("Web Search Provider Disconnect", () => {
       ).toBeVisible({ timeout: 10000 });
     });
 
-    test("should show replacement dropdown when disconnecting active content provider with alternatives", async ({
+    test("should disconnect active content provider when alternatives exist", async ({
       page,
     }) => {
       // Firecrawl is active, Exa is also configured
@@ -292,12 +290,13 @@ test.describe("Web Search Provider Disconnect", () => {
       const confirmDialog = page.getByRole("dialog");
       await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-      // Should show replacement dropdown
+      // Should show disconnect modal with content provider text
       await expect(
-        confirmDialog.getByText("Search history will be preserved")
+        confirmDialog.getByText(
+          "will no longer be used to read search result web pages"
+        )
       ).toBeVisible();
 
-      // Disconnect should be enabled because first replacement is auto-selected
       const confirmButton = confirmDialog.getByRole("button", {
         name: "Disconnect",
       });
