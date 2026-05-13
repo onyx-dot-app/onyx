@@ -263,6 +263,44 @@ def test_safe_unzip_enforces_per_file_cap(tmp_path: Path) -> None:
         _safe_unzip(zip_bytes, tmp_path / "out", per_file_max_bytes=32)
 
 
+def test_safe_unzip_cleans_dest_on_size_cap_failure(tmp_path: Path) -> None:
+    """Half-extracted skill trees on disk break atomicity — a failed
+    _safe_unzip must leave nothing behind."""
+    out = tmp_path / "out"
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            ("a/first.bin", b"\x00" * 16),
+            ("a/second.bin", b"\x00" * 64),  # tips us past per_file cap
+        ]
+    )
+    with pytest.raises(OnyxError, match="exceeds"):
+        _safe_unzip(zip_bytes, out, per_file_max_bytes=32)
+    assert not out.exists()
+
+
+def test_safe_unzip_cleans_dest_on_unreadable_entry(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
+    with pytest.raises(OnyxError, match="cannot extract"):
+        _safe_unzip(zip_bytes, out)
+    assert not out.exists()
+
+
+def test_safe_unzip_wraps_mkdir_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A permissions / OS failure during mkdir must surface as OnyxError,
+    not bubble as a raw OSError → HTTP 500."""
+
+    def boom(self: Path, *_args: object, **_kwargs: object) -> None:  # noqa: ARG001
+        raise PermissionError("simulated permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", boom)
+    with pytest.raises(OnyxError, match="cannot create"):
+        _safe_unzip(_valid_bundle(), tmp_path / "out")
+
+
 def test_safe_unzip_enforces_total_cap(tmp_path: Path) -> None:
     zip_bytes = _build_zip(
         [

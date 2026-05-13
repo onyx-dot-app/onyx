@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import shutil
 import stat
 import zipfile
 from pathlib import Path
@@ -175,65 +176,85 @@ def _safe_unzip(
     bundles at upload, but a validator bug or a tampered blob shouldn't equal
     a sandbox escape or a disk-exhaustion incident. We re-check everything
     here — traversal, symlinks, and the same per-file + total size caps.
-    """
-    dest.mkdir(parents=True, exist_ok=True)
-    dest_resolved = dest.resolve()
 
+    On any failure mid-extraction (size cap hit, OS error, unsupported
+    compression, etc.) the entire ``dest`` directory is removed before the
+    error propagates, so the caller never sees a half-populated skill tree.
+    """
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
-    with zf:
-        total = 0
-        for info in zf.infolist():
-            if _is_symlink(info):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"bundle contains a symlink: '{info.filename}'",
-                )
-            normalized = _check_zip_entry_path(info.filename)
-            target = (dest / normalized).resolve()
-            try:
-                target.relative_to(dest_resolved)
-            except ValueError:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"bundle entry escapes root: '{info.filename}'",
-                )
-            if info.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            size = 0
-            try:
-                with zf.open(info, mode="r") as src, open(target, "wb") as out:
-                    while True:
-                        chunk = src.read(64 * 1024)
-                        if not chunk:
-                            break
-                        size += len(chunk)
-                        if size > per_file_max_bytes:
-                            raise OnyxError(
-                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                                f"file '{normalized}' exceeds "
-                                f"{per_file_max_bytes // (1024 * 1024)} MiB",
-                            )
-                        total += len(chunk)
-                        if total > total_max_bytes:
-                            raise OnyxError(
-                                OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                                f"bundle exceeds "
-                                f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
-                            )
-                        out.write(chunk)
-            except OnyxError:
-                raise
-            except Exception as exc:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"cannot extract '{normalized}': {exc}",
-                ) from exc
+    _mkdir_or_raise(dest)
+    dest_resolved = dest.resolve()
+
+    try:
+        with zf:
+            total = 0
+            for info in zf.infolist():
+                if _is_symlink(info):
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"bundle contains a symlink: '{info.filename}'",
+                    )
+                normalized = _check_zip_entry_path(info.filename)
+                target = (dest / normalized).resolve()
+                try:
+                    target.relative_to(dest_resolved)
+                except ValueError:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"bundle entry escapes root: '{info.filename}'",
+                    )
+                if info.is_dir():
+                    _mkdir_or_raise(target)
+                    continue
+                _mkdir_or_raise(target.parent)
+                size = 0
+                try:
+                    with zf.open(info, mode="r") as src, open(target, "wb") as out:
+                        while True:
+                            chunk = src.read(64 * 1024)
+                            if not chunk:
+                                break
+                            size += len(chunk)
+                            if size > per_file_max_bytes:
+                                raise OnyxError(
+                                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                                    f"file '{normalized}' exceeds "
+                                    f"{per_file_max_bytes // (1024 * 1024)} MiB",
+                                )
+                            total += len(chunk)
+                            if total > total_max_bytes:
+                                raise OnyxError(
+                                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                                    f"bundle exceeds "
+                                    f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
+                                )
+                            out.write(chunk)
+                except OnyxError:
+                    raise
+                except Exception as exc:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"cannot extract '{normalized}': {exc}",
+                    ) from exc
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+
+
+def _mkdir_or_raise(path: Path) -> None:
+    """``path.mkdir(parents=True, exist_ok=True)`` with OS errors translated
+    to ``OnyxError`` so failed bundle extraction never surfaces as a 500."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"cannot create '{path}': {exc}",
+        ) from exc
 
 
 def compute_bundle_sha256(zip_bytes: bytes) -> str:
