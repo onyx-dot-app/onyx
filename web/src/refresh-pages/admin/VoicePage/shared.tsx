@@ -73,7 +73,6 @@ export function VoiceProviderSetupModal({
     : existingProvider?.tts_model ?? "tts-1";
 
   const isEditing = !!existingProvider;
-  const hasStoredKey = !!existingProvider?.has_api_key;
   const label = PROVIDER_LABELS[providerType] ?? providerType;
   const ProviderIcon = getProviderIcon(providerType);
 
@@ -131,7 +130,8 @@ export function VoiceProviderSetupModal({
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
     const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
-    const shouldUseStoredKey = hasStoredKey && !apiKeyChanged;
+    const shouldUseStoredKey =
+      !apiKeyChanged && !!existingProvider?.has_api_key;
 
     try {
       if (!shouldUseStoredKey) {
