@@ -811,9 +811,9 @@ class TestForgottenFileMetadata:
         )
 
         forgotten = self._find_forgotten_message(result)
-        assert (
-            forgotten is None
-        ), "Should not inject forgotten-files when file is in context"
+        assert forgotten is None, (
+            "Should not inject forgotten-files when file is in context"
+        )
         # The file message itself should still be present
         assert any(m.file_id == "file-abc" for m in result)
 
@@ -882,9 +882,9 @@ class TestForgottenFileMetadata:
         )
 
         forgotten = self._find_forgotten_message(result)
-        assert (
-            forgotten is not None
-        ), "Orphaned file metadata should trigger forgotten-files message"
+        assert forgotten is not None, (
+            "Orphaned file metadata should trigger forgotten-files message"
+        )
         assert "moby_dick.txt" in forgotten.message
         assert "file-abc" in forgotten.message
 
@@ -953,9 +953,9 @@ class TestForgottenFileMetadata:
         )
 
         forgotten = self._find_forgotten_message(result)
-        assert (
-            forgotten is None
-        ), "No forgotten-files message when metadata dict is None"
+        assert forgotten is None, (
+            "No forgotten-files message when metadata dict is None"
+        )
 
     # ------------------------------------------------------------------
     # Case 6: orphaned metadata with multiple files, all summarized away
@@ -1019,9 +1019,9 @@ class TestForgottenFileMetadata:
             )
 
             forgotten = self._find_forgotten_message(result)
-            assert (
-                forgotten is not None
-            ), f"Turn {turn}: forgotten-files message must persist every turn"
+            assert forgotten is not None, (
+                f"Turn {turn}: forgotten-files message must persist every turn"
+            )
             assert "moby_dick.txt" in forgotten.message
 
 

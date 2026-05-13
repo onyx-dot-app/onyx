@@ -122,9 +122,9 @@ class TestRecoverProcessingFiles:
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
-        assert (
-            str(uf.id) in called_ids
-        ), f"Expected file {uf.id} to be recovered but got: {called_ids}"
+        assert str(uf.id) in called_ids, (
+            f"Expected file {uf.id} to be recovered but got: {called_ids}"
+        )
 
     def test_completed_files_not_recovered(
         self,
@@ -141,9 +141,9 @@ class TestRecoverProcessingFiles:
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
-        assert (
-            str(uf.id) not in called_ids
-        ), f"COMPLETED file {uf.id} should not have been recovered"
+        assert str(uf.id) not in called_ids, (
+            f"COMPLETED file {uf.id} should not have been recovered"
+        )
 
 
 class TestRecoverDeletingFiles:
@@ -164,9 +164,9 @@ class TestRecoverDeletingFiles:
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
-        assert (
-            str(uf.id) in called_ids
-        ), f"Expected file {uf.id} to be recovered for deletion but got: {called_ids}"
+        assert str(uf.id) in called_ids, (
+            f"Expected file {uf.id} to be recovered for deletion but got: {called_ids}"
+        )
 
 
 class TestRecoverSyncFiles:
@@ -192,9 +192,9 @@ class TestRecoverSyncFiles:
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
-        assert (
-            str(uf.id) in called_ids
-        ), f"Expected file {uf.id} to be recovered for sync but got: {called_ids}"
+        assert str(uf.id) in called_ids, (
+            f"Expected file {uf.id} to be recovered for sync but got: {called_ids}"
+        )
 
     def test_needs_persona_sync_recovered(
         self,
@@ -216,9 +216,9 @@ class TestRecoverSyncFiles:
             recover_stuck_user_files(TEST_TENANT_ID)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
-        assert (
-            str(uf.id) in called_ids
-        ), f"Expected file {uf.id} to be recovered for persona sync but got: {called_ids}"
+        assert str(uf.id) in called_ids, (
+            f"Expected file {uf.id} to be recovered for persona sync but got: {called_ids}"
+        )
 
 
 class TestRecoveryMultipleFiles:
@@ -245,9 +245,9 @@ class TestRecoveryMultipleFiles:
 
         called_ids = {call.kwargs["user_file_id"] for call in mock_impl.call_args_list}
         expected_ids = {str(uf.id) for uf in files}
-        assert expected_ids.issubset(
-            called_ids
-        ), f"Expected all {len(files)} files to be recovered. Missing: {expected_ids - called_ids}"
+        assert expected_ids.issubset(called_ids), (
+            f"Expected all {len(files)} files to be recovered. Missing: {expected_ids - called_ids}"
+        )
 
 
 class TestTransientFailures:

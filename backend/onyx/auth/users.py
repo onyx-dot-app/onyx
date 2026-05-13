@@ -1024,11 +1024,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
             and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
-            marketing_anonymous_id = (
-                parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
-                    "distinct_id"
-                ]
-            )
+            marketing_anonymous_id = parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
+                "distinct_id"
+            ]
 
             # Technically, USER_SIGNED_UP is only fired from the cloud site when
             # it is the first user in a tenant. However, it is semantically correct

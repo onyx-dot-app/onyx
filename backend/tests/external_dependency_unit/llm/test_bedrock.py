@@ -81,9 +81,9 @@ def test_nova_streaming_does_not_leak_thinking_tags(
     full_content = "".join(content_parts)
     full_reasoning = "".join(reasoning_parts)
 
-    assert (
-        full_content.strip()
-    ), f"Model produced no visible content. reasoning={full_reasoning!r}"
-    assert (
-        "<thinking>" not in full_content and "</thinking>" not in full_content
-    ), f"Raw <thinking> tags leaked into visible content: {full_content!r}"
+    assert full_content.strip(), (
+        f"Model produced no visible content. reasoning={full_reasoning!r}"
+    )
+    assert "<thinking>" not in full_content and "</thinking>" not in full_content, (
+        f"Raw <thinking> tags leaked into visible content: {full_content!r}"
+    )

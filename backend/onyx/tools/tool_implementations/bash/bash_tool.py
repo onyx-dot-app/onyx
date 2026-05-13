@@ -46,7 +46,7 @@ class BashTool(Tool[BashToolOverrideKwargs]):
     NAME = "bash"
     DISPLAY_NAME = "Bash"
     DESCRIPTION = (
-        "Execute a bash command inside an isolated, network-restricted " "session."
+        "Execute a bash command inside an isolated, network-restricted session."
     )
 
     def __init__(self, tool_id: int, session_id: str, emitter: Emitter) -> None:

@@ -76,9 +76,9 @@ repos:
         pass_filenames: true
         types_or: [python]
       - id: uv-run
-        alias: black
-        name: black
-        args: ["black"]
+        alias: ruff-format
+        name: ruff format
+        args: ["ruff", "format"]
         pass_filenames: true
         types_or: [python]
 

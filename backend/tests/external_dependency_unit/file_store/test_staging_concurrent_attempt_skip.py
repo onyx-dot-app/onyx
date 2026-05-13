@@ -123,9 +123,9 @@ def test_sweep_skips_files_owned_by_non_terminal_attempt(
 
     db_session.expire_all()
 
-    assert (
-        get_filerecord_by_file_id_optional(file_for_terminal, db_session) is None
-    ), "terminal attempt's staged file should be reaped"
+    assert get_filerecord_by_file_id_optional(file_for_terminal, db_session) is None, (
+        "terminal attempt's staged file should be reaped"
+    )
     assert (
         get_filerecord_by_file_id_optional(file_for_in_progress, db_session) is not None
     ), "concurrent in-progress attempt's staged file must NOT be reaped"
@@ -229,7 +229,7 @@ def test_sweep_reaps_orphan_with_no_owning_attempt(
     from onyx.db.file_record import get_filerecord_by_file_id_optional
 
     db_session.expire_all()
-    assert (
-        get_filerecord_by_file_id_optional(file_for_orphan, db_session) is None
-    ), "orphaned staged file (no owning attempt) should be reaped"
+    assert get_filerecord_by_file_id_optional(file_for_orphan, db_session) is None, (
+        "orphaned staged file (no owning attempt) should be reaped"
+    )
     db_session.commit()

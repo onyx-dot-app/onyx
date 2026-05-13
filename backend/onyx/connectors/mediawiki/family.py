@@ -159,7 +159,8 @@ if __name__ == "__main__":
         pages,
         *[
             pagegenerators.CategorizedPageGenerator(
-                category, recurse=recursion_depth  # ty: ignore[invalid-argument-type]
+                category,
+                recurse=recursion_depth,  # ty: ignore[invalid-argument-type]
             )
             for category in categories
         ],

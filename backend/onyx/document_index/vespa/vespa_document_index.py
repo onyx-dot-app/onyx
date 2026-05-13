@@ -123,9 +123,9 @@ def _enrich_basic_chunk_info(
             http_client=http_client,
         )
 
-    assert (
-        last_indexed_chunk is not None and last_indexed_chunk >= 0
-    ), f"Bug: Last indexed chunk index is None or less than 0 for document: {document_id}."
+    assert last_indexed_chunk is not None and last_indexed_chunk >= 0, (
+        f"Bug: Last indexed chunk index is None or less than 0 for document: {document_id}."
+    )
 
     enriched_doc_info = EnrichedDocumentIndexingInfo(
         doc_id=document_id,

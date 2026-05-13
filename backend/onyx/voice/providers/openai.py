@@ -225,7 +225,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             # So chunk_bytes / 48000 = duration in seconds
             duration_ms = (len(chunk) / 48000) * 1000
             self._logger.debug(
-                "Sending %s bytes (%sms) of audio to OpenAI. " "First 10 bytes: %s",
+                "Sending %s bytes (%sms) of audio to OpenAI. First 10 bytes: %s",
                 len(chunk),
                 format(duration_ms, ".1f"),
                 chunk[:10].hex() if len(chunk) >= 10 else chunk.hex(),

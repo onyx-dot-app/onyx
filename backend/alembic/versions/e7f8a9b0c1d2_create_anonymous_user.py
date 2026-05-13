@@ -40,7 +40,8 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
     # NULL user_id values as distinct. Before migrating them to the anonymous
     # user, collapse duplicates and remove rows that would conflict with an
     # already-existing anonymous notification.
-    result = connection.execute(sa.text("""
+    result = connection.execute(
+        sa.text("""
             WITH ranked_null_notifications AS (
                 SELECT
                     id,
@@ -57,7 +58,8 @@ def _dedupe_null_notifications(connection: sa.Connection) -> None:
                 FROM ranked_null_notifications
                 WHERE row_num > 1
             )
-            """))
+            """)
+    )
     if result.rowcount > 0:
         print(f"Deleted {result.rowcount} duplicate NULL-owned notifications")
 

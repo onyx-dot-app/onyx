@@ -145,7 +145,7 @@ npm i
 
 #### Backend
 
-Set up pre-commit hooks (black / reorder-python-imports):
+Set up pre-commit hooks (`ruff` / `ruff format`):
 
 ```bash
 uv run pre-commit install

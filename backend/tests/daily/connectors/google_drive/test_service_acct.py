@@ -732,6 +732,6 @@ def test_slim_retrieval_does_not_call_permissions_list(
         for c in mock_paginated.call_args_list
         if "permissions" in str(c.kwargs.get("retrieval_function", ""))
     ]
-    assert (
-        len(permissions_calls) == 0
-    ), f"permissions().list was called {len(permissions_calls)} time(s) during pruning"
+    assert len(permissions_calls) == 0, (
+        f"permissions().list was called {len(permissions_calls)} time(s) during pruning"
+    )

@@ -80,9 +80,9 @@ def _create_provider(
 
 
 @contextmanager
-def use_mock_llm() -> (
-    Generator[tuple[MockLLM, dict[str, bool | str | None]], None, None]
-):
+def use_mock_llm() -> Generator[
+    tuple[MockLLM, dict[str, bool | str | None]], None, None
+]:
     """Context manager that patches LLM factory functions and tracks which ones are called."""
     mock_llm = MockLLM()
 
@@ -125,15 +125,15 @@ def _assert_llm_calls(
     call_tracker: dict[str, bool | str | None], expected_provider: str
 ) -> None:
     """Assert that get_llm was called with expected provider and get_default_llm was not called."""
-    assert not call_tracker[
-        "get_default_llm_called"
-    ], "get_default_llm should not be called when using private provider"
-    assert call_tracker[
-        "get_llm_called"
-    ], "get_llm should be called when using private provider"
-    assert (
-        call_tracker["provider"] == expected_provider
-    ), f"Expected provider '{expected_provider}', got '{call_tracker['provider']}'"
+    assert not call_tracker["get_default_llm_called"], (
+        "get_default_llm should not be called when using private provider"
+    )
+    assert call_tracker["get_llm_called"], (
+        "get_llm should be called when using private provider"
+    )
+    assert call_tracker["provider"] == expected_provider, (
+        f"Expected provider '{expected_provider}', got '{call_tracker['provider']}'"
+    )
 
 
 def _reset_call_tracker(call_tracker: dict[str, bool | str | None]) -> None:

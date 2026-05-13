@@ -66,13 +66,13 @@ def test_confluence_connector_permissions(
     # Verify all space nodes have no parent and all page nodes have a parent
     for node in hierarchy_nodes:
         if node.node_type.value == "space":
-            assert (
-                node.raw_parent_id is None
-            ), f"Space node {node.raw_node_id} should have no parent"
+            assert node.raw_parent_id is None, (
+                f"Space node {node.raw_node_id} should have no parent"
+            )
         elif node.node_type.value == "page":
-            assert (
-                node.raw_parent_id is not None
-            ), f"Page node {node.raw_node_id} should have a parent"
+            assert node.raw_parent_id is not None, (
+                f"Page node {node.raw_node_id} should have a parent"
+            )
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
@@ -85,9 +85,9 @@ def test_confluence_connector_permissions(
     difference = all_full_doc_ids - all_slim_doc_ids
 
     # The set of full doc IDs should be always be a subset of the slim doc IDs
-    assert all_full_doc_ids.issubset(
-        all_slim_doc_ids
-    ), f"Full doc IDs are not a subset of slim doc IDs. Found {len(difference)} IDs in full docs but not in slim docs."
+    assert all_full_doc_ids.issubset(all_slim_doc_ids), (
+        f"Full doc IDs are not a subset of slim doc IDs. Found {len(difference)} IDs in full docs but not in slim docs."
+    )
 
 
 @patch("ee.onyx.external_permissions.confluence.doc_sync.OnyxDBCredentialsProvider")
@@ -199,9 +199,9 @@ def test_confluence_connector_restriction_handling(
         for d in doc_access_list
         if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Root+Page")
     )
-    assert (
-        root_page.external_access.external_user_emails == restricted_emails
-    ), "Root page emails do not match expected values"
+    assert root_page.external_access.external_user_emails == restricted_emails, (
+        "Root page emails do not match expected values"
+    )
     assert (
         root_page.external_access.external_user_group_ids == restricted_user_groups
     ), "Root page groups do not match expected values"
@@ -212,9 +212,9 @@ def test_confluence_connector_restriction_handling(
         for d in doc_access_list
         if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page")
     )
-    assert (
-        child_page.external_access.external_user_emails == restricted_emails
-    ), "Child page emails do not match expected values"
+    assert child_page.external_access.external_user_emails == restricted_emails, (
+        "Child page emails do not match expected values"
+    )
     assert (
         child_page.external_access.external_user_group_ids == restricted_user_groups
     ), "Child page groups do not match expected values"
@@ -225,9 +225,9 @@ def test_confluence_connector_restriction_handling(
         for d in doc_access_list
         if isinstance(d, DocExternalAccess) and d.doc_id.endswith("Child+Page+2")
     )
-    assert (
-        child_page_2.external_access.external_user_emails == restricted_emails
-    ), "Child page 2 emails do not match expected values"
+    assert child_page_2.external_access.external_user_emails == restricted_emails, (
+        "Child page 2 emails do not match expected values"
+    )
     assert (
         child_page_2.external_access.external_user_group_ids == restricted_user_groups
     ), "Child page 2 groups do not match expected values"

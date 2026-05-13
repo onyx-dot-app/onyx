@@ -75,11 +75,10 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         if user.role == UserRole.CURATOR:
             user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= (
-            ~exists()
-            .where(DocumentSet__UG.document_set_id == DocumentSetDBModel.id)
-            .where(~DocumentSet__UG.user_group_id.in_(user_groups))
-            .correlate(DocumentSetDBModel)
+        where_clause &= ~exists().where(
+            DocumentSet__UG.document_set_id == DocumentSetDBModel.id
+        ).where(~DocumentSet__UG.user_group_id.in_(user_groups)).correlate(
+            DocumentSetDBModel
         )
         where_clause |= DocumentSetDBModel.user_id == user.id
     else:
@@ -718,9 +717,7 @@ def fetch_document_sets_for_documents(
     valid_cc_pairs_subquery = aliased(
         ConnectorCredentialPair,
         select(ConnectorCredentialPair)
-        .where(
-            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
-        )  # noqa: E712
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)  # noqa: E712
         .subquery(),
     )
 

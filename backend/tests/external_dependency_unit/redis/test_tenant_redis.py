@@ -379,8 +379,7 @@ class TestEval:
         key1 = _unique_key("lua1")
         key2 = _unique_key("lua2")
         tenant_redis.eval(
-            "redis.call('SET', KEYS[1], ARGV[1]); "
-            "redis.call('SET', KEYS[2], ARGV[2])",
+            "redis.call('SET', KEYS[1], ARGV[1]); redis.call('SET', KEYS[2], ARGV[2])",
             keys=[key1, key2],
             args=["v1", "v2"],
         )

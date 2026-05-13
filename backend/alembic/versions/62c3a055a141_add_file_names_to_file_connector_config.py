@@ -36,11 +36,13 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # Get all FILE connectors with their configs
-    file_connectors = conn.execute(sa.text("""
+    file_connectors = conn.execute(
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'FILE'
-        """)).fetchall()
+        """)
+    ).fetchall()
 
     for connector_id, config in file_connectors:
         # Parse config if it's a string
@@ -87,11 +89,13 @@ def downgrade() -> None:
     conn = op.get_bind()
 
     # Remove file_names from all FILE connectors
-    file_connectors = conn.execute(sa.text("""
+    file_connectors = conn.execute(
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'FILE'
-        """)).fetchall()
+        """)
+    ).fetchall()
 
     for connector_id, config in file_connectors:
         # Parse config if it's a string

@@ -224,9 +224,9 @@ class TestClaimConcurrency:
             for future in as_completed(futures):
                 future.result()
 
-        assert (
-            counter.call_count == 1
-        ), f"Expected run_fn called once, got {counter.call_count}"
+        assert counter.call_count == 1, (
+            f"Expected run_fn called once, got {counter.call_count}"
+        )
 
     def test_no_errors_under_contention(self) -> None:
         """All threads complete without exceptions under high contention."""

@@ -247,7 +247,7 @@ def cleanup_stuck_scheduled_runs(self: Task, *, tenant_id: str) -> int:
         )
         for run in stuck:
             detail = (
-                "queued > " f"{int(STUCK_QUEUED_OLDER_THAN.total_seconds() // 60)} min"
+                f"queued > {int(STUCK_QUEUED_OLDER_THAN.total_seconds() // 60)} min"
                 if run.status == ScheduledTaskRunStatus.QUEUED
                 else "running > "
                 f"{int(STUCK_RUNNING_OLDER_THAN.total_seconds() // 60)} min"

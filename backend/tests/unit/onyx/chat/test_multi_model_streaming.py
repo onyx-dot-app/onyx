@@ -120,9 +120,9 @@ class TestRunMultiModelStreamValidation:
         req = _make_request()
         # 1 override must yield a StreamingError
         result = _first_from_stream(req, [_make_override()])
-        assert isinstance(
-            result, StreamingError
-        ), "1 override should yield StreamingError"
+        assert isinstance(result, StreamingError), (
+            "1 override should yield StreamingError"
+        )
         # 2 overrides must NOT yield a validation StreamingError (may raise later due to
         # missing session, that's OK — validation itself passed)
         try:
@@ -605,9 +605,9 @@ class TestRunModels:
             # executor.shutdown(wait=True) → main thread completes models.
             gen.close()
 
-            assert (
-                completion_called.is_set()
-            ), "main thread must call completion for the successful model"
+            assert completion_called.is_set(), (
+                "main thread must call completion for the successful model"
+            )
             assert mock_handle.call_count == 1
 
     def test_b1_race_disconnect_handler_completes_already_finished_model(self) -> None:
@@ -665,9 +665,9 @@ class TestRunModels:
             # Now close — worker is already done, so else-branch handles completion.
             gen.close()
 
-            assert completion_called.wait(
-                timeout=5
-            ), "disconnect handler must call completion for a model that already finished"
+            assert completion_called.wait(timeout=5), (
+                "disconnect handler must call completion for a model that already finished"
+            )
             assert mock_handle.call_count == 1, "completion must be called exactly once"
 
     def test_stop_button_does_not_call_completion_for_errored_model(self) -> None:
@@ -707,9 +707,9 @@ class TestRunModels:
         # Completion must NOT be called for model 0 (it errored).
         # It MAY be called for model 1 (still in-flight when stop fired).
         for call in mock_handle.call_args_list:
-            assert (
-                call.kwargs.get("llm") is not setup.llms[0]
-            ), "llm_loop_completion_handle must not be called for the errored model"
+            assert call.kwargs.get("llm") is not setup.llms[0], (
+                "llm_loop_completion_handle must not be called for the errored model"
+            )
 
     def test_external_state_container_used_for_model_zero(self) -> None:
         """When provided, external_state_container is used as state_containers[0]."""

@@ -17,7 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
             UPDATE persona
             SET starter_messages = (
                 SELECT jsonb_agg(elem - 'description')
@@ -25,11 +26,13 @@ def upgrade() -> None:
             )
             WHERE starter_messages IS NOT NULL
               AND jsonb_typeof(starter_messages) = 'array'
-            """))
+            """)
+    )
 
 
 def downgrade() -> None:
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
             UPDATE persona
             SET starter_messages = (
                 SELECT jsonb_agg(elem || '{"description": ""}')
@@ -37,4 +40,5 @@ def downgrade() -> None:
             )
             WHERE starter_messages IS NOT NULL
               AND jsonb_typeof(starter_messages) = 'array'
-            """))
+            """)
+    )

@@ -148,7 +148,8 @@ def test_validate_config_success(cli_binary: Path, pat_token: str) -> None:
 
 
 def test_validate_config_bad_pat(
-    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+    cli_binary: Path,
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Invalid PAT returns AuthFailure (exit code 4)."""
     result = run_cli(cli_binary, ["validate-config"], pat="bad-token")
@@ -157,7 +158,8 @@ def test_validate_config_bad_pat(
 
 
 def test_validate_config_not_configured(
-    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+    cli_binary: Path,
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Missing PAT returns NotConfigured (exit code 3)."""
     result = run_cli(cli_binary, ["validate-config"])
@@ -300,7 +302,8 @@ def test_ask_no_truncation(
 
 
 def test_ask_not_configured(
-    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
+    cli_binary: Path,
+    admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
     """Missing PAT returns NotConfigured (exit code 3)."""
     result = run_cli(cli_binary, ["ask", "test"])
