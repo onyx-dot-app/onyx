@@ -195,7 +195,7 @@ The Kubernetes path (`KubernetesSandboxManager._setup_session_workspace`, around
 **New files (universal layer):**
 
 - `backend/onyx/skills/__init__.py` — public API: `materialize_skills`, `resolve_skills`, `validate_custom_bundle`, `BuiltinSkillRegistry`, `SkillRenderContext`, `ResolvedSkill`, `BuiltinSkillRef`.
-- `backend/onyx/skills/registry.py` — `BuiltinSkillRegistry` singleton; `register(slug: str, source_dir: Path, is_available: Callable[[Session], bool], unavailable_reason: str | None = None, configure_url: str | None = None)`, `list_all() -> list[BuiltinSkill]`, `list_available(db_session) -> list[BuiltinSkill]`, `get(slug)`, and `reserved_slugs()`. In-memory; rebuilt at boot.
+- `backend/onyx/skills/registry.py` — `BuiltinSkillRegistry` singleton; `register(slug: str, source_dir: Path, is_available: Callable[[Session], bool], unavailable_reason: str | None = None)`, `list_all() -> list[BuiltinSkill]`, `list_available(db_session) -> list[BuiltinSkill]`, `get(slug)`, and `reserved_slugs()`. In-memory; rebuilt at boot.
 - `backend/onyx/skills/bundle.py` — zip helpers: `validate_custom_bundle(zip_bytes) -> ManifestMetadata | InvalidBundleError`, `compute_bundle_sha256(zip_bytes)`. Deterministic checks.
 - `backend/onyx/skills/materialize.py` — `materialize_skills(...)`, `SkillRenderContext` (Pydantic), the manifest writer. The render step delegates to a small `_render_template_placeholders` helper migrated from `agent_instructions.py` so it can be reused outside the build feature.
 - `backend/onyx/db/skill.py` — DB ops: `list_skills_for_user`, `fetch_skill_for_user`, `create_skill`, `replace_skill_bundle`, `delete_skill`. Mirrors `backend/onyx/db/persona.py` patterns.

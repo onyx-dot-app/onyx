@@ -290,7 +290,7 @@ Built-in skills are on-disk directories. We need a way for each feature that shi
 
 ### Proposed Solution
 
-A process-wide singleton populated at app boot. Each registration captures a `(slug, source_dir, name, description, is_available, unavailable_reason, configure_url)` tuple — name/description are read from the source dir's `SKILL.md` frontmatter at registration time and cached. `is_available` is a single optional org-level dependency check for the skill (e.g. a configured Gemini provider for `image-generation`).
+A process-wide singleton populated at app boot. Each registration captures a `(slug, source_dir, name, description, is_available, unavailable_reason)` tuple — name/description are read from the source dir's `SKILL.md` frontmatter at registration time and cached. `is_available` is a single optional org-level dependency check for the skill (e.g. a configured Gemini provider for `image-generation`).
 
 ```python
 # backend/onyx/skills/registry.py
@@ -307,7 +307,6 @@ class BuiltinSkill(BaseModel):
     has_template: bool
     is_available: Callable[[Session], bool] = always_available
     unavailable_reason: str | None = None
-    configure_url: str | None = None
 
 class BuiltinSkillRegistry:
     """Process-wide. Populated at boot; treated as immutable after."""
@@ -318,7 +317,6 @@ class BuiltinSkillRegistry:
         source_dir: Path,
         is_available: Callable[[Session], bool] = always_available,
         unavailable_reason: str | None = None,
-        configure_url: str | None = None,
     ) -> None:
         """Reads SKILL.md(.template) frontmatter, validates slug, stores entry."""
 
@@ -346,7 +344,6 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
         source_dir=_SKILLS_DIR / "image-generation",
         is_available=lambda db: get_default_image_generation_config(db) is not None,
         unavailable_reason="Configure an image-generation provider before this skill can run.",
-        configure_url="/admin/configuration/image-generation",
     )
 
     # bio-builder, company-search registered when their on-disk dirs land.
@@ -369,7 +366,7 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
 ### Todos
 - [ ] Implement `BuiltinSkillRegistry`:
   - [ ] Singleton accessor (`BuiltinSkillRegistry.instance()`).
-  - [ ] `register(slug, source_dir, is_available=..., unavailable_reason=None, configure_url=None)` — read frontmatter, validate slug, raise on duplicate or missing SKILL.md.
+  - [ ] `register(slug, source_dir, is_available=..., unavailable_reason=None)` — read frontmatter, validate slug, raise on duplicate or missing SKILL.md.
   - [ ] `list_all()`, `list_available(db)`, `get(slug)`, `reserved_slugs()`.
 - [ ] Implement `register_craft_builtins(registry)` in `backend/onyx/server/features/build/skills/builtins_registration.py`:
   - [ ] `pptx` — no requirements.
@@ -573,7 +570,6 @@ class BuiltinSkillAdmin(BaseModel):
     has_template: bool
     available: bool
     unavailable_reason: str | None
-    configure_url: str | None
 
 class CustomSkillAdmin(BaseModel):
     id: UUID
@@ -1077,7 +1073,7 @@ Columns: letter-monogram avatar, name (and slug as subtext), description (trunca
 
 - **Built-in rows**: no action menu. Click row → drawer with read-only details (frontmatter, files list, on-disk path, availability status).
 - **Custom rows**: action menu → Edit, Replace bundle, Manage grants, Enable/Disable, Delete.
-- **Built-in availability**: Access column shows `Available` (green dot) when `available` is true, or `Needs setup` (warning) with an inline `Configure →` button when `configure_url` is present (e.g. `/admin/configuration/image-generation`).
+- **Built-in availability**: Access column shows `Available` (green dot) when `available` is true, or `Needs setup` (warning) with an inline `Configure →` button using a frontend route derived from the built-in slug.
 - **Search**: name + slug.
 - **Filter**: source (All / Platform / Custom), enabled state, availability (All / Available / Needs setup).
 - **Sort**: default by name; can sort by updated_at.

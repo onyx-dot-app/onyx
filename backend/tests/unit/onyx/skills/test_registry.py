@@ -151,7 +151,6 @@ def test_list_available_excludes_unavailable_skill(
         unavailable_dir,
         is_available=lambda _: False,
         unavailable_reason="Configure the provider first.",
-        configure_url="/admin/configuration/provider",
     )
 
     assert [skill.slug for skill in registry.list_available(db)] == ["available"]
@@ -160,4 +159,3 @@ def test_list_available_excludes_unavailable_skill(
     assert unavailable is not None
     assert unavailable.is_available(db) is False
     assert unavailable.unavailable_reason == "Configure the provider first."
-    assert unavailable.configure_url == "/admin/configuration/provider"

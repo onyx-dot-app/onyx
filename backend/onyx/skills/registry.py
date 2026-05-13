@@ -50,7 +50,6 @@ class BuiltinSkill(Skill):
     has_template: bool
     is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
     unavailable_reason: str | None = None
-    configure_url: str | None = None
 
 
 class CustomSkill(Skill):
@@ -138,7 +137,6 @@ class BuiltinSkillRegistry:
         source_dir: Path,
         is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE,
         unavailable_reason: str | None = None,
-        configure_url: str | None = None,
     ) -> None:
         if slug in self._skills:
             raise ValueError(f"Built-in skill {slug!r} is already registered")
@@ -158,7 +156,6 @@ class BuiltinSkillRegistry:
             has_template=has_template,
             is_available=is_available,
             unavailable_reason=unavailable_reason,
-            configure_url=configure_url,
         )
 
     def list_all(self) -> list[BuiltinSkill]:
