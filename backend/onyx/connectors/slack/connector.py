@@ -998,7 +998,17 @@ class SlackConnector(
                     }
                     for future in as_completed(url_futures):
                         tid = url_futures[future]
-                        url = future.result()
+                        try:
+                            url = future.result()
+                        except Exception as e:
+                            # Non-SlackApiError (e.g. transient network failures
+                            # past the retry budget) would otherwise abort
+                            # connector init for the whole Grid org. Skip the
+                            # team; channel links fall back to _workspace_url.
+                            logger.warning(
+                                "team.info failed for team_id=%s: %s", tid, e
+                            )
+                            continue
                         if url:
                             self._team_id_to_url[tid] = url
             logger.info(
@@ -1376,26 +1386,14 @@ class SlackConnector(
                     f"Slack API returned a failure: {error_msg}"
                 )
 
-            # 3) Enterprise Grid: also confirm we can enumerate workspaces in the
+            # 3) Enterprise Grid: confirm we can enumerate workspaces in the
             # org. Without team:read, channel listing across the Grid org is not
-            # possible.
+            # possible. The Slack SDK raises SlackApiError on failure (caught
+            # below), so no inline ok-check is needed here.
             if auth_response.get("enterprise_id"):
-                teams_resp = self.fast_client.auth_teams_list(limit=1)
-                if not teams_resp.get("ok", False):
-                    grid_error = teams_resp.get(
-                        "error", "Unknown error from auth.teams.list"
-                    )
-                    if grid_error == "missing_scope":
-                        raise InsufficientPermissionsError(
-                            "Slack Enterprise Grid org detected but the bot token "
-                            "lacks the `team:read` scope required to list workspaces "
-                            "(auth.teams.list)."
-                        )
-                    raise UnexpectedValidationError(
-                        f"Slack auth.teams.list returned a failure: {grid_error}"
-                    )
+                self.fast_client.auth_teams_list(limit=1)
 
-            # 3) If channels are specified and regex is not enabled, verify each is accessible
+            # 4) If channels are specified and regex is not enabled, verify each is accessible
             # NOTE: removed this for now since it may be too slow for large workspaces which may
             # have some automations which create a lot of channels (100k+)
 
