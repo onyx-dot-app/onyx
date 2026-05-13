@@ -2,7 +2,7 @@
 
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, SelectCard } from "@opal/components";
-import { Content, ContentAction } from "@opal/layouts";
+import { ContentAction } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { Hoverable } from "@opal/core";
 import {
@@ -62,6 +62,8 @@ interface ProviderCardProps {
   onDisconnect?: () => void;
   /** When true, keeps the disconnect button visible (as if hovered). */
   disconnectModalOpen?: boolean;
+  /** When true, keeps the edit button visible (as if hovered). */
+  setupModalOpen?: boolean;
   selectedLabel?: string;
   "aria-label"?: string;
 }
@@ -83,6 +85,7 @@ export default function ProviderCard({
   onEdit,
   onDisconnect,
   disconnectModalOpen,
+  setupModalOpen,
   selectedLabel = "Current Default",
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
@@ -93,7 +96,7 @@ export default function ProviderCard({
   return (
     <Hoverable.Root
       group="ProviderCard"
-      interaction={disconnectModalOpen ? "hover" : "rest"}
+      interaction={disconnectModalOpen || setupModalOpen ? "hover" : "rest"}
     >
       <SelectCard
         state={STATUS_TO_STATE[status]}
@@ -143,14 +146,13 @@ export default function ProviderCard({
                     Set as Default
                   </Button>
                 ) : isSelected ? (
-                  <div className="p-2">
-                    <Content
-                      title={selectedLabel}
-                      sizePreset="main-ui"
-                      variant="section"
-                      icon={SvgCheckSquare}
-                    />
-                  </div>
+                  <Button
+                    variant="action"
+                    prominence="tertiary"
+                    rightIcon={SvgCheckSquare}
+                  >
+                    {selectedLabel}
+                  </Button>
                 ) : undefined}
                 {(onDisconnect || onEdit) && (
                   <div className="px-1 pb-1">
@@ -178,17 +180,22 @@ export default function ProviderCard({
                         </Hoverable.Item>
                       )}
                       {onEdit && (
-                        <Button
-                          icon={SvgSettings}
-                          tooltip="Edit"
-                          aria-label={`Edit ${title}`}
-                          prominence="tertiary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit();
-                          }}
-                          size="md"
-                        />
+                        <Hoverable.Item
+                          group="ProviderCard"
+                          variant="appear-on-hover"
+                        >
+                          <Button
+                            icon={SvgSettings}
+                            tooltip="Edit"
+                            aria-label={`Edit ${title}`}
+                            prominence="tertiary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit();
+                            }}
+                            size="md"
+                          />
+                        </Hoverable.Item>
                       )}
                     </Section>
                   </div>

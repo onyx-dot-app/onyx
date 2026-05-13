@@ -36,7 +36,7 @@ type OnyxCliConfig struct {
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:      "https://cloud.onyx.app/api",
+		ServerURL:      "https://cloud.onyx.app",
 		APIKey:         "",
 		DefaultAgentID: 0,
 	}
@@ -56,16 +56,18 @@ func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
 }
 
-// WebOrigin strips any API path suffix from a server URL, returning the web
-// app origin suitable for browser URLs (e.g., /admin/indexing/status).
-func WebOrigin(serverURL string) string {
-	u := strings.TrimRight(serverURL, "/")
-	for _, suffix := range []string{"/api/v1", "/api"} {
-		if strings.HasSuffix(u, suffix) {
-			return u[:len(u)-len(suffix)]
-		}
+// APIURL appends the API prefix (default "/api") to the server origin.
+// Set ONYX_API_PREFIX="" for direct backend access without the proxy prefix.
+func APIURL(serverURL string) string {
+	prefix := "/api"
+	if v, ok := os.LookupEnv("ONYX_API_PREFIX"); ok {
+		prefix = v
 	}
-	return u
+	u := strings.TrimRight(serverURL, "/")
+	if prefix == "" {
+		return u
+	}
+	return u + "/" + strings.Trim(prefix, "/")
 }
 
 // ConfigDir returns ~/.config/onyx-cli

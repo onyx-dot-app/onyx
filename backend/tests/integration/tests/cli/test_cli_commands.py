@@ -119,6 +119,7 @@ def run_cli(
         "PATH": os.environ.get("PATH", ""),
         "HOME": os.environ.get("HOME", ""),
         "ONYX_SERVER_URL": server_url,
+        "ONYX_API_PREFIX": "",
         "XDG_CONFIG_HOME": tempfile.mkdtemp(),
     }
     if pat is not None:

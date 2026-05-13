@@ -116,7 +116,6 @@ export const SWR_KEYS = {
   voiceStatus: "/api/voice/status",
 
   // ── Build (Craft) ─────────────────────────────────────────────────────────
-  buildConnectors: "/api/build/connectors",
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,

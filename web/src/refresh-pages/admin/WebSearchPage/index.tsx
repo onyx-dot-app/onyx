@@ -1,329 +1,119 @@
 "use client";
 
-import { useEffect, useMemo, useState, useReducer } from "react";
-import type { IconFunctionComponent } from "@opal/types";
-import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
+import { useMemo, useState } from "react";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { markdown } from "@opal/utils";
-import useSWR from "swr";
-import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { FetchError } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { Callout } from "@/components/ui/callout";
-import { cn } from "@opal/utils";
+import { useWebSearchProviders } from "@/lib/webSearch/hooks";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import { SvgGlobe, SvgSlash, SvgUnplug } from "@opal/icons";
+import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Button, MessageCard } from "@opal/components";
+import { MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { WebProviderSetupModal } from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import {
+  WebProviderSetupModal,
+  type ProviderModalState,
+} from "@/refresh-pages/admin/WebSearchPage/WebProviderSetupModal";
+import { WebSearchDisconnectModal } from "@/refresh-pages/admin/WebSearchPage/WebSearchDisconnectModal";
 import {
   SEARCH_PROVIDER_DETAILS,
   SEARCH_PROVIDER_ORDER,
   getSearchProviderDisplayLabel,
-  buildSearchProviderConfig,
-  canConnectSearchProvider,
-  getSingleConfigFieldValueForForm,
   isBuiltInSearchProviderType,
   isSearchProviderConfigured,
-  searchProviderRequiresApiKey,
-  type WebSearchProviderType,
-} from "@/refresh-pages/admin/WebSearchPage/searchProviderUtils";
-import {
   CONTENT_PROVIDER_DETAILS,
   CONTENT_PROVIDER_ORDER,
-  buildContentProviderConfig,
-  canConnectContentProvider,
-  getSingleContentConfigFieldValueForForm,
   getCurrentContentProviderType,
   isContentProviderConfigured,
-  type WebContentProviderType,
-} from "@/refresh-pages/admin/WebSearchPage/contentProviderUtils";
-import {
-  initialWebProviderModalState,
-  WebProviderModalReducer,
-  MASKED_API_KEY_PLACEHOLDER,
-} from "@/refresh-pages/admin/WebSearchPage/WebProviderModalReducer";
-import { connectProviderFlow } from "@/refresh-pages/admin/WebSearchPage/connectProviderFlow";
+} from "@/lib/webSearch/utils";
 import {
   activateSearchProvider,
   deactivateSearchProvider,
   activateContentProvider,
   deactivateContentProvider,
-  disconnectProvider,
-} from "@/refresh-pages/admin/WebSearchPage/svc";
+} from "@/lib/webSearch/svc";
 import type {
+  WebSearchProviderType,
+  WebContentProviderType,
   WebSearchProviderView,
   WebContentProviderView,
   DisconnectTargetState,
-} from "@/refresh-pages/admin/WebSearchPage/interfaces";
-
-const NO_DEFAULT_VALUE = "__none__";
+} from "@/lib/webSearch/types";
 
 const route = ADMIN_ROUTES.WEB_SEARCH;
-
-// ---------------------------------------------------------------------------
-// WebSearchDisconnectModal
-// ---------------------------------------------------------------------------
-
-function WebSearchDisconnectModal({
-  disconnectTarget,
-  searchProviders,
-  contentProviders,
-  replacementProviderId,
-  onReplacementChange,
-  onClose,
-  onDisconnect,
-}: {
-  disconnectTarget: DisconnectTargetState;
-  searchProviders: WebSearchProviderView[];
-  contentProviders: WebContentProviderView[];
-  replacementProviderId: string | null;
-  onReplacementChange: (id: string | null) => void;
-  onClose: () => void;
-  onDisconnect: () => void;
-}) {
-  const isSearch = disconnectTarget.category === "search";
-
-  // Determine if the target is currently the active/selected provider
-  const isActive = isSearch
-    ? searchProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false
-    : contentProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false;
-
-  // Find other configured providers as replacements
-  const replacementOptions = isSearch
-    ? searchProviders.filter(
-        (p) => p.id !== disconnectTarget.id && p.id > 0 && p.has_api_key
-      )
-    : contentProviders.filter(
-        (p) =>
-          p.id !== disconnectTarget.id &&
-          p.provider_type !== "onyx_web_crawler" &&
-          p.id > 0 &&
-          p.has_api_key
-      );
-
-  const needsReplacement = isActive;
-  const hasReplacements = replacementOptions.length > 0;
-
-  const getLabel = (p: { name: string; provider_type: string }) => {
-    if (isSearch) {
-      const details =
-        SEARCH_PROVIDER_DETAILS[p.provider_type as WebSearchProviderType];
-      return details?.label ?? p.name ?? p.provider_type;
-    }
-    const details = CONTENT_PROVIDER_DETAILS[p.provider_type];
-    return details?.label ?? p.name ?? p.provider_type;
-  };
-
-  const categoryLabel = isSearch ? "search engine" : "web crawler";
-  const featureLabel = isSearch ? "web search" : "web crawling";
-  const disableLabel = isSearch ? "Disable Web Search" : "Disable Web Crawling";
-
-  // Auto-select first replacement when modal opens
-  useEffect(() => {
-    if (needsReplacement && hasReplacements && !replacementProviderId) {
-      const first = replacementOptions[0];
-      if (first) onReplacementChange(String(first.id));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <ConfirmationModalLayout
-      icon={SvgUnplug}
-      title={markdown(`Disconnect *${disconnectTarget.label}*`)}
-      description="This will remove the stored credentials for this provider."
-      onClose={onClose}
-      submit={
-        <Button
-          variant="danger"
-          onClick={onDisconnect}
-          disabled={
-            needsReplacement && hasReplacements && !replacementProviderId
-          }
-        >
-          Disconnect
-        </Button>
-      }
-    >
-      {needsReplacement ? (
-        hasReplacements ? (
-          <Section alignItems="start">
-            <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}. Search history will be preserved.
-            </Text>
-            <Section alignItems="start" gap={0.25}>
-              <Text as="p" secondaryBody text03>
-                Set New Default
-              </Text>
-              <InputSelect
-                value={replacementProviderId ?? undefined}
-                onValueChange={(v) => onReplacementChange(v)}
-              >
-                <InputSelect.Trigger placeholder="Select a replacement provider" />
-                <InputSelect.Content>
-                  {replacementOptions.map((p) => (
-                    <InputSelect.Item key={p.id} value={String(p.id)}>
-                      {getLabel(p)}
-                    </InputSelect.Item>
-                  ))}
-                  <InputSelect.Separator />
-                  <InputSelect.Item value={NO_DEFAULT_VALUE} icon={SvgSlash}>
-                    <span>
-                      <b>No Default</b>
-                      <span className="text-text-03"> ({disableLabel})</span>
-                    </span>
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </Section>
-          </Section>
-        ) : (
-          <>
-            <Text as="p" text03>
-              <b>{disconnectTarget.label}</b> is currently the active{" "}
-              {categoryLabel}.
-            </Text>
-            <Text as="p" text03>
-              Connect another provider to continue using {featureLabel}.
-            </Text>
-          </>
-        )
-      ) : (
-        <>
-          <Text as="p" text03>
-            {isSearch ? "Web search" : "Web crawling"} will no longer be routed
-            through <b>{disconnectTarget.label}</b>.
-          </Text>
-          <Text as="p" text03>
-            Search history will be preserved.
-          </Text>
-        </>
-      )}
-    </ConfirmationModalLayout>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
-  const [searchModal, dispatchSearchModal] = useReducer(
-    WebProviderModalReducer,
-    initialWebProviderModalState
-  );
+  const [activeProvider, setActiveProvider] =
+    useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
     useState<DisconnectTargetState | null>(null);
-  const [replacementProviderId, setReplacementProviderId] = useState<
-    string | null
-  >(null);
-  const [contentModal, dispatchContentModal] = useReducer(
-    WebProviderModalReducer,
-    initialWebProviderModalState
-  );
-  const [activationError, setActivationError] = useState<string | null>(null);
-  const [contentActivationError, setContentActivationError] = useState<
-    string | null
-  >(null);
+  const setupModal = useCreateModal();
+  const disconnectModal = useCreateModal();
   const {
-    data: searchProvidersData,
-    error: searchProvidersError,
-    isLoading: isLoadingSearchProviders,
-    mutate: mutateSearchProviders,
-  } = useSWR<WebSearchProviderView[]>(
-    SWR_KEYS.webSearchSearchProviders,
-    errorHandlingFetcher
-  );
+    searchProviders,
+    contentProviders,
+    searchProvidersError,
+    contentProvidersError,
+    isLoading,
+    mutateSearchProviders,
+    mutateContentProviders,
+  } = useWebSearchProviders();
 
-  const {
-    data: contentProvidersData,
-    error: contentProvidersError,
-    isLoading: isLoadingContentProviders,
-    mutate: mutateContentProviders,
-  } = useSWR<WebContentProviderView[]>(
-    SWR_KEYS.webSearchContentProviders,
-    errorHandlingFetcher
-  );
-
-  const searchProviders = searchProvidersData ?? [];
-  const contentProviders = contentProvidersData ?? [];
-
-  const isLoading = isLoadingSearchProviders || isLoadingContentProviders;
-
-  // Exa shares API key between search and content providers
   const exaSearchProvider = searchProviders.find(
     (p) => p.provider_type === "exa"
   );
   const exaContentProvider = contentProviders.find(
     (p) => p.provider_type === "exa"
   );
-  const hasSharedExaKey =
-    (exaSearchProvider?.has_api_key || exaContentProvider?.has_api_key) ??
-    false;
-
-  // Modal form state is owned by reducers
-
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
-    const requiresApiKey = searchProviderRequiresApiKey(providerType);
-    const hasStoredKey = provider?.has_api_key ?? false;
-
-    // For Exa search provider, check if we can use the shared Exa key
+    const hasStoredKey = !!provider?.masked_api_key;
     const isExa = providerType === "exa";
-    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
+    const sharedExaMaskedKey =
+      isExa && !hasStoredKey
+        ? exaContentProvider?.masked_api_key ?? null
+        : null;
 
-    dispatchSearchModal({
-      type: "OPEN",
+    const effectiveProvider: WebSearchProviderView | null =
+      provider ??
+      (sharedExaMaskedKey
+        ? {
+            id: -1,
+            name: "Exa",
+            provider_type: "exa",
+            is_active: false,
+            config: null,
+            masked_api_key: sharedExaMaskedKey,
+          }
+        : null);
+
+    setActiveProvider({
+      category: "search",
       providerType,
-      existingProviderId: provider?.id ?? null,
-      initialApiKeyValue:
-        requiresApiKey && (hasStoredKey || canUseSharedExaKey)
-          ? MASKED_API_KEY_PLACEHOLDER
-          : "",
-      initialConfigValue: getSingleConfigFieldValueForForm(
-        providerType,
-        provider
-      ),
+      provider: effectiveProvider,
     });
+    setupModal.toggle(true);
   };
 
   const openContentModal = (
     providerType: WebContentProviderType,
     provider?: WebContentProviderView
   ) => {
-    const hasStoredKey = provider?.has_api_key ?? false;
-    const defaultFirecrawlBaseUrl = "https://api.firecrawl.dev/v2/scrape";
-
-    // For Exa content provider, check if we can use the shared Exa key
-    const isExa = providerType === "exa";
-    const canUseSharedExaKey = isExa && hasSharedExaKey && !hasStoredKey;
-
-    dispatchContentModal({
-      type: "OPEN",
+    setActiveProvider({
+      category: "content",
       providerType,
-      existingProviderId: provider?.id ?? null,
-      initialApiKeyValue:
-        hasStoredKey || canUseSharedExaKey ? MASKED_API_KEY_PLACEHOLDER : "",
-      initialConfigValue:
-        providerType === "firecrawl"
-          ? getSingleContentConfigFieldValueForForm(
-              providerType,
-              provider,
-              defaultFirecrawlBaseUrl
-            )
-          : "",
+      provider: provider ?? null,
     });
+    setupModal.toggle(true);
   };
 
   const hasActiveSearchProvider = searchProviders.some(
@@ -369,86 +159,11 @@ export default function WebSearchPage() {
     return [...ordered, ...additional];
   }, [searchProviders]);
 
-  const selectedProviderType =
-    searchModal.providerType as WebSearchProviderType | null;
-  const selectedContentProviderType =
-    contentModal.providerType as WebContentProviderType | null;
-
-  const providerLabel = selectedProviderType
-    ? getSearchProviderDisplayLabel(selectedProviderType)
-    : "";
-  const searchProviderValues = useMemo(
-    () => ({
-      apiKey: searchModal.apiKeyValue.trim(),
-      config: searchModal.configValue.trim(),
-    }),
-    [searchModal.apiKeyValue, searchModal.configValue]
-  );
-  const canConnect =
-    !!selectedProviderType &&
-    canConnectSearchProvider(
-      selectedProviderType,
-      searchProviderValues.apiKey,
-      searchProviderValues.config
-    );
-  const contentProviderLabel = selectedContentProviderType
-    ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ||
-      selectedContentProviderType
-    : "";
-  const contentProviderValues = useMemo(
-    () => ({
-      apiKey: contentModal.apiKeyValue.trim(),
-      config: contentModal.configValue.trim(),
-    }),
-    [contentModal.apiKeyValue, contentModal.configValue]
-  );
-  const canConnectContent =
-    !!selectedContentProviderType &&
-    canConnectContentProvider(
-      selectedContentProviderType,
-      contentProviderValues.apiKey,
-      contentProviderValues.config
-    );
-
-  const renderLogo = ({
-    logo: Logo,
-    fallback,
-    size = 16,
-    containerSize,
-  }: {
-    logo?: IconFunctionComponent;
-    fallback?: React.ReactNode;
-    size?: number;
-    containerSize?: number;
-  }) => {
-    const containerSizeClass =
-      size === 24 || containerSize === 28 ? "size-7" : "size-5";
-
-    return (
-      <div
-        className={cn(
-          "flex items-center justify-center px-0.5 py-0 shrink-0 overflow-clip",
-          containerSizeClass
-        )}
-      >
-        {Logo ? (
-          <Logo size={size} />
-        ) : fallback ? (
-          fallback
-        ) : (
-          <SvgGlobe size={size} className="text-text-02" />
-        )}
-      </div>
-    );
-  };
-
   const combinedContentProviders = useMemo(() => {
     const byType = new Map(
       contentProviders.map((p) => [p.provider_type, p] as const)
     );
 
-    // Always include our built-in providers in a stable order. If missing, inject
-    // a virtual placeholder so the UI can still render/activate it.
     const ordered = CONTENT_PROVIDER_ORDER.map((providerType) => {
       const existing = byType.get(providerType);
       if (existing) return existing;
@@ -460,7 +175,7 @@ export default function WebSearchPage() {
           provider_type: "onyx_web_crawler",
           is_active: true,
           config: null,
-          has_api_key: true,
+          masked_api_key: null,
         } satisfies WebContentProviderView;
       }
 
@@ -471,7 +186,7 @@ export default function WebSearchPage() {
           provider_type: "firecrawl",
           is_active: false,
           config: null,
-          has_api_key: false,
+          masked_api_key: null,
         } satisfies WebContentProviderView;
       }
 
@@ -482,7 +197,10 @@ export default function WebSearchPage() {
           provider_type: "exa",
           is_active: false,
           config: null,
-          has_api_key: hasSharedExaKey,
+          masked_api_key:
+            exaSearchProvider?.masked_api_key ??
+            exaContentProvider?.masked_api_key ??
+            null,
         } satisfies WebContentProviderView;
       }
 
@@ -494,7 +212,7 @@ export default function WebSearchPage() {
     );
 
     return [...ordered, ...additional];
-  }, [contentProviders, hasSharedExaKey]);
+  }, [contentProviders, exaSearchProvider, exaContentProvider]);
 
   const currentContentProviderType =
     getCurrentContentProviderType(contentProviders);
@@ -524,14 +242,11 @@ export default function WebSearchPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <Callout type="danger" title="Failed to load web search settings">
-            {message}
-            {detail && (
-              <Text as="p" className="mt-2 text-text-03" mainContentBody text03>
-                {detail}
-              </Text>
-            )}
-          </Callout>
+          <MessageCard
+            variant="error"
+            title="Failed to load web search settings"
+            description={detail ?? message}
+          />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
@@ -553,275 +268,54 @@ export default function WebSearchPage() {
     );
   }
 
-  const handleSearchConnect = async () => {
-    if (!selectedProviderType) {
-      return;
-    }
-
-    const config = buildSearchProviderConfig(
-      selectedProviderType,
-      searchProviderValues.config
-    );
-
-    const existingProviderId = searchModal.existingProviderId;
-    const existingProvider = existingProviderId
-      ? searchProviders.find((p) => p.id === existingProviderId)
-      : null;
-
-    const providerRequiresApiKey =
-      searchProviderRequiresApiKey(selectedProviderType);
-    const apiKeyChangedForProvider =
-      providerRequiresApiKey &&
-      searchModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
-      searchProviderValues.apiKey.length > 0;
-
-    const storedConfigValue = getSingleConfigFieldValueForForm(
-      selectedProviderType,
-      existingProvider
-    );
-    const configChanged =
-      Object.keys(config).length > 0 &&
-      storedConfigValue !== searchProviderValues.config;
-
-    dispatchSearchModal({ type: "SET_PHASE", phase: "saving" });
-    dispatchSearchModal({ type: "CLEAR_MESSAGE" });
-    setActivationError(null);
-
-    await connectProviderFlow({
-      category: "search",
-      providerType: selectedProviderType,
-      existingProviderId: existingProvider?.id ?? null,
-      existingProviderName: existingProvider?.name ?? null,
-      existingProviderHasApiKey: existingProvider?.has_api_key ?? false,
-      displayName:
-        SEARCH_PROVIDER_DETAILS[selectedProviderType]?.label ??
-        selectedProviderType,
-      providerRequiresApiKey,
-      apiKeyChangedForProvider,
-      apiKey: searchProviderValues.apiKey,
-      config,
-      configChanged,
-      onValidating: (message) => (
-        dispatchSearchModal({ type: "SET_PHASE", phase: "validating" }),
-        dispatchSearchModal({ type: "SET_STATUS_MESSAGE", text: message })
-      ),
-      onSaving: (message) => (
-        dispatchSearchModal({ type: "SET_PHASE", phase: "saving" }),
-        dispatchSearchModal({ type: "SET_STATUS_MESSAGE", text: message })
-      ),
-      onError: (message) =>
-        dispatchSearchModal({ type: "SET_ERROR_MESSAGE", text: message }),
-      onClose: () => {
-        dispatchSearchModal({ type: "CLOSE" });
-      },
-      mutate: async () => {
-        await mutateSearchProviders();
-        if (selectedProviderType === "exa") {
-          await mutateContentProviders();
-        }
-      },
-    });
-  };
-
-  const handleActivateSearchProvider = async (providerId: number) => {
-    setActivationError(null);
+  async function handleActivateSearchProvider(providerId: number) {
     try {
       await activateSearchProvider(providerId);
       await mutateSearchProviders();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
-      setActivationError(message);
+      toast.error(message);
     }
-  };
+  }
 
-  const handleDeactivateSearchProvider = async (providerId: number) => {
-    setActivationError(null);
+  async function handleDeactivateSearchProvider(providerId: number) {
     try {
       await deactivateSearchProvider(providerId);
       await mutateSearchProviders();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
-      setActivationError(message);
+      toast.error(message);
     }
-  };
+  }
 
-  const handleActivateContentProvider = async (
+  async function handleActivateContentProvider(
     provider: WebContentProviderView
-  ) => {
-    setContentActivationError(null);
+  ) {
     try {
       await activateContentProvider(provider);
       await mutateContentProviders();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
-      setContentActivationError(message);
+      toast.error(message);
     }
-  };
+  }
 
-  const handleDeactivateContentProvider = async (
+  async function handleDeactivateContentProvider(
     providerId: number,
     providerType: string
-  ) => {
-    setContentActivationError(null);
+  ) {
     try {
       await deactivateContentProvider(providerId, providerType);
       await mutateContentProviders();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
-      setContentActivationError(message);
+      toast.error(message);
     }
-  };
-
-  const handleContentConnect = async () => {
-    if (!selectedContentProviderType) {
-      return;
-    }
-
-    const config = buildContentProviderConfig(
-      selectedContentProviderType,
-      contentProviderValues.config
-    );
-
-    const existingProviderId = contentModal.existingProviderId;
-    const existingProvider = existingProviderId
-      ? contentProviders.find((p) => p.id === existingProviderId)
-      : null;
-
-    const storedBaseUrl = getSingleContentConfigFieldValueForForm(
-      selectedContentProviderType,
-      existingProvider,
-      "https://api.firecrawl.dev/v2/scrape"
-    );
-    const configChanged =
-      selectedContentProviderType === "firecrawl" &&
-      storedBaseUrl !== contentProviderValues.config;
-
-    dispatchContentModal({ type: "SET_PHASE", phase: "saving" });
-    dispatchContentModal({ type: "CLEAR_MESSAGE" });
-
-    const apiKeyChangedForContentProvider =
-      contentModal.apiKeyValue !== MASKED_API_KEY_PLACEHOLDER &&
-      contentProviderValues.apiKey.length > 0;
-
-    await connectProviderFlow({
-      category: "content",
-      providerType: selectedContentProviderType,
-      existingProviderId: existingProvider?.id ?? null,
-      existingProviderName: existingProvider?.name ?? null,
-      existingProviderHasApiKey: existingProvider?.has_api_key ?? false,
-      displayName:
-        CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ??
-        selectedContentProviderType,
-      providerRequiresApiKey: true,
-      apiKeyChangedForProvider: apiKeyChangedForContentProvider,
-      apiKey: contentProviderValues.apiKey,
-      config,
-      configChanged,
-      onValidating: (message) => (
-        dispatchContentModal({ type: "SET_PHASE", phase: "validating" }),
-        dispatchContentModal({ type: "SET_STATUS_MESSAGE", text: message })
-      ),
-      onSaving: (message) => (
-        dispatchContentModal({ type: "SET_PHASE", phase: "saving" }),
-        dispatchContentModal({ type: "SET_STATUS_MESSAGE", text: message })
-      ),
-      onError: (message) =>
-        dispatchContentModal({ type: "SET_ERROR_MESSAGE", text: message }),
-      onClose: () => {
-        dispatchContentModal({ type: "CLOSE" });
-      },
-      mutate: async () => {
-        await mutateContentProviders();
-        if (selectedContentProviderType === "exa") {
-          await mutateSearchProviders();
-        }
-      },
-    });
-  };
-
-  const getContentProviderHelperMessage = () => {
-    if (contentModal.message?.kind === "error") {
-      return contentModal.message.text;
-    }
-    if (contentModal.message?.kind === "status") {
-      return contentModal.message.text;
-    }
-    if (
-      contentModal.phase === "validating" ||
-      contentModal.phase === "saving"
-    ) {
-      return "Validating API key...";
-    }
-
-    const providerName = selectedContentProviderType
-      ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.label ||
-        selectedContentProviderType
-      : "";
-
-    if (selectedContentProviderType === "exa") {
-      return (
-        <>
-          Paste your{" "}
-          <a
-            href="https://dashboard.exa.ai/api-keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            API key
-          </a>{" "}
-          from Exa to enable crawling.
-        </>
-      );
-    }
-
-    return selectedContentProviderType === "firecrawl" ? (
-      <>
-        Paste your <span className="underline">API key</span> from Firecrawl to
-        access your search engine.
-      </>
-    ) : (
-      `Paste your API key from ${providerName} to enable crawling.`
-    );
-  };
-
-  const getContentProviderHelperClass = () => {
-    if (contentModal.message?.kind === "error") return "text-status-error-05";
-    if (contentModal.message?.kind === "status") {
-      return contentModal.message.text.toLowerCase().includes("validated")
-        ? "text-green-500"
-        : "text-text-03";
-    }
-    return "text-text-03";
-  };
-
-  const handleDisconnectProvider = async () => {
-    if (!disconnectTarget) return;
-    const { id, category } = disconnectTarget;
-
-    try {
-      await disconnectProvider(id, category, replacementProviderId);
-      toast.success(`${disconnectTarget.label} disconnected`);
-      await mutateSearchProviders();
-      await mutateContentProviders();
-    } catch (error) {
-      console.error("Failed to disconnect web search provider:", error);
-      const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
-      if (category === "search") {
-        setActivationError(message);
-      } else {
-        setContentActivationError(message);
-      }
-    } finally {
-      setDisconnectTarget(null);
-      setReplacementProviderId(null);
-    }
-  };
+  }
 
   return (
     <>
@@ -841,12 +335,6 @@ export default function WebSearchPage() {
               sizePreset="main-content"
               variant="section"
             />
-
-            {activationError && (
-              <Callout type="danger" title="Unable to update default provider">
-                {activationError}
-              </Callout>
-            )}
 
             {!hasActiveSearchProvider && (
               <MessageCard
@@ -896,10 +384,7 @@ export default function WebSearchPage() {
                       status={status}
                       onConnect={
                         canOpenModal
-                          ? () => {
-                              openSearchModal(providerType, provider);
-                              setActivationError(null);
-                            }
+                          ? () => openSearchModal(providerType, provider)
                           : undefined
                       }
                       onSelect={
@@ -915,28 +400,35 @@ export default function WebSearchPage() {
                       }
                       onEdit={
                         isConfigured && canOpenModal
-                          ? () => {
+                          ? () =>
                               openSearchModal(
                                 providerType as WebSearchProviderType,
                                 provider
-                              );
-                            }
+                              )
                           : undefined
                       }
                       onDisconnect={
                         isConfigured && provider && provider.id > 0
-                          ? () =>
+                          ? () => {
                               setDisconnectTarget({
                                 id: provider.id,
                                 label,
                                 category: "search",
                                 providerType,
-                              })
+                              });
+                              disconnectModal.toggle(true);
+                            }
                           : undefined
                       }
                       disconnectModalOpen={
+                        disconnectModal.isOpen &&
                         disconnectTarget?.id === providerId &&
                         disconnectTarget?.category === "search"
+                      }
+                      setupModalOpen={
+                        setupModal.isOpen &&
+                        activeProvider?.category === "search" &&
+                        activeProvider?.providerType === providerType
                       }
                     />
                   );
@@ -952,12 +444,6 @@ export default function WebSearchPage() {
               sizePreset="main-content"
               variant="section"
             />
-
-            {contentActivationError && (
-              <Callout type="danger" title="Unable to update crawler">
-                {contentActivationError}
-              </Callout>
-            )}
 
             <div className="flex flex-col gap-2">
               {combinedContentProviders.map((provider) => {
@@ -1011,7 +497,6 @@ export default function WebSearchPage() {
                     selectedLabel="Current Crawler"
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
-                      setContentActivationError(null);
                     }}
                     onSelect={
                       canActivate
@@ -1036,18 +521,26 @@ export default function WebSearchPage() {
                       provider.provider_type !== "onyx_web_crawler" &&
                       isConfigured &&
                       provider.id > 0
-                        ? () =>
+                        ? () => {
                             setDisconnectTarget({
                               id: provider.id,
                               label,
                               category: "content",
                               providerType: provider.provider_type,
-                            })
+                            });
+                            disconnectModal.toggle(true);
+                          }
                         : undefined
                     }
                     disconnectModalOpen={
+                      disconnectModal.isOpen &&
                       disconnectTarget?.id === providerId &&
                       disconnectTarget?.category === "content"
+                    }
+                    setupModalOpen={
+                      setupModal.isOpen &&
+                      activeProvider?.category === "content" &&
+                      activeProvider?.providerType === provider.provider_type
                     }
                   />
                 );
@@ -1058,195 +551,16 @@ export default function WebSearchPage() {
       </SettingsLayouts.Root>
 
       {disconnectTarget && (
-        <WebSearchDisconnectModal
-          disconnectTarget={disconnectTarget}
-          searchProviders={searchProviders}
-          contentProviders={combinedContentProviders}
-          replacementProviderId={replacementProviderId}
-          onReplacementChange={setReplacementProviderId}
-          onClose={() => {
-            setDisconnectTarget(null);
-            setReplacementProviderId(null);
-          }}
-          onDisconnect={() => void handleDisconnectProvider()}
-        />
+        <disconnectModal.Provider>
+          <WebSearchDisconnectModal disconnectTarget={disconnectTarget} />
+        </disconnectModal.Provider>
       )}
 
-      <WebProviderSetupModal
-        isOpen={selectedProviderType !== null}
-        onClose={() => {
-          dispatchSearchModal({ type: "CLOSE" });
-        }}
-        providerLabel={providerLabel}
-        providerLogo={renderLogo({
-          logo: selectedProviderType
-            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.logo
-            : undefined,
-          size: 24,
-          containerSize: 28,
-        })}
-        description={
-          selectedProviderType
-            ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.helper ??
-              SEARCH_PROVIDER_DETAILS[selectedProviderType]?.subtitle ??
-              ""
-            : ""
-        }
-        apiKeyValue={searchModal.apiKeyValue}
-        onApiKeyChange={(value) =>
-          dispatchSearchModal({ type: "SET_API_KEY", value })
-        }
-        isStoredApiKey={searchModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
-        optionalField={
-          selectedProviderType === "google_pse"
-            ? {
-                label: "Search Engine ID",
-                value: searchModal.configValue,
-                onChange: (value) =>
-                  dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
-                placeholder: "Enter search engine ID",
-                description: (
-                  <>
-                    Paste your{" "}
-                    <a
-                      href="https://programmablesearchengine.google.com/controlpanel/all"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                    >
-                      search engine ID
-                    </a>{" "}
-                    you want to use for web search.
-                  </>
-                ),
-              }
-            : selectedProviderType === "searxng"
-              ? {
-                  label: "SearXNG Base URL",
-                  value: searchModal.configValue,
-                  onChange: (value) =>
-                    dispatchSearchModal({ type: "SET_CONFIG_VALUE", value }),
-                  placeholder: "https://your-searxng-instance.com",
-                  description: (
-                    <>
-                      Paste the base URL of your{" "}
-                      <a
-                        href="https://docs.searxng.org/admin/installation.html"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline"
-                      >
-                        private SearXNG instance
-                      </a>
-                      .
-                    </>
-                  ),
-                }
-              : undefined
-        }
-        helperMessage={
-          searchModal.message?.kind === "error" ? (
-            searchModal.message.text
-          ) : searchModal.phase === "validating" ||
-            searchModal.phase === "saving" ? (
-            "Checking connection..."
-          ) : (
-            <>
-              Paste your{" "}
-              <a
-                href={
-                  (selectedProviderType
-                    ? SEARCH_PROVIDER_DETAILS[selectedProviderType]?.apiKeyUrl
-                    : undefined) ?? "#"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                API key
-              </a>{" "}
-              to access your search engine.
-            </>
-          )
-        }
-        helperClass={
-          searchModal.message?.kind === "error"
-            ? "text-status-error-05"
-            : searchModal.phase === "validating" ||
-                searchModal.phase === "saving"
-              ? "text-text-03"
-              : "text-text-03"
-        }
-        isProcessing={
-          searchModal.phase === "validating" || searchModal.phase === "saving"
-        }
-        canConnect={canConnect}
-        onConnect={() => {
-          void handleSearchConnect();
-        }}
-        hideApiKey={
-          !!selectedProviderType &&
-          !searchProviderRequiresApiKey(selectedProviderType)
-        }
-      />
-
-      <WebProviderSetupModal
-        isOpen={selectedContentProviderType !== null}
-        onClose={() => {
-          dispatchContentModal({ type: "CLOSE" });
-        }}
-        providerLabel={contentProviderLabel}
-        providerLogo={renderLogo({
-          logo: selectedContentProviderType
-            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.logo
-            : undefined,
-          fallback:
-            selectedContentProviderType === "onyx_web_crawler" ? (
-              <SvgOnyxLogo size={24} />
-            ) : undefined,
-          size: 24,
-          containerSize: 28,
-        })}
-        description={
-          selectedContentProviderType
-            ? CONTENT_PROVIDER_DETAILS[selectedContentProviderType]
-                ?.description ||
-              CONTENT_PROVIDER_DETAILS[selectedContentProviderType]?.subtitle ||
-              `Provide credentials for ${contentProviderLabel} to enable crawling.`
-            : ""
-        }
-        apiKeyValue={contentModal.apiKeyValue}
-        onApiKeyChange={(value) =>
-          dispatchContentModal({ type: "SET_API_KEY", value })
-        }
-        isStoredApiKey={contentModal.apiKeyValue === MASKED_API_KEY_PLACEHOLDER}
-        optionalField={
-          selectedContentProviderType === "firecrawl"
-            ? {
-                label: "API Base URL",
-                value: contentModal.configValue,
-                onChange: (value) =>
-                  dispatchContentModal({ type: "SET_CONFIG_VALUE", value }),
-                placeholder: "https://",
-                description: "Your Firecrawl API base URL.",
-                showFirst: true,
-              }
-            : undefined
-        }
-        helperMessage={getContentProviderHelperMessage()}
-        helperClass={getContentProviderHelperClass()}
-        isProcessing={
-          contentModal.phase === "validating" || contentModal.phase === "saving"
-        }
-        canConnect={canConnectContent}
-        onConnect={() => {
-          void handleContentConnect();
-        }}
-        apiKeyAutoFocus={
-          !selectedContentProviderType ||
-          selectedContentProviderType !== "firecrawl"
-        }
-      />
+      {activeProvider && (
+        <setupModal.Provider>
+          <WebProviderSetupModal state={activeProvider} />
+        </setupModal.Provider>
+      )}
     </>
   );
 }

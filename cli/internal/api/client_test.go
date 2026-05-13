@@ -41,7 +41,7 @@ func TestSearch_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	resp, err := client.Search(t.Context(), models.SearchRequest{Query: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

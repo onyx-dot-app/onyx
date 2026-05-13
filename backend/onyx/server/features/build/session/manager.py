@@ -428,7 +428,6 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
-        demo_data_enabled: bool = True,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
     ) -> BuildSession:
         """
@@ -441,11 +440,10 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
             origin: Provenance of the session. INTERACTIVE (default) sessions
                 appear in the Craft sidebar; SCHEDULED sessions (created by
                 the scheduled-tasks executor) are excluded.
@@ -492,7 +490,6 @@ class SessionManager:
             user_id,
             self._db_session,
             name=name,
-            demo_data_enabled=demo_data_enabled,
             origin=origin,
         )
         build_session.nextjs_port = nextjs_port
@@ -599,7 +596,6 @@ class SessionManager:
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
-            use_demo_data=demo_data_enabled,
         )
         self.push_dynamic_skills(sandbox.id, user_id)
 
@@ -619,24 +615,21 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
-        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists, has a healthy sandbox,
-        AND has matching demo_data_enabled setting. Otherwise creates new.
+        Returns existing recent empty session if one exists and has a healthy sandbox.
         If an empty session exists but its sandbox is unhealthy/terminated/missing,
         the stale session is deleted and a fresh one is created (which will handle
         sandbox recovery/re-provisioning).
 
         Args:
             user_id: The user ID
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -645,10 +638,7 @@ class SessionManager:
             ValueError: If max concurrent sandboxes reached
             RuntimeError: If sandbox provisioning fails
         """
-        # Look for existing empty session with matching demo_data setting
-        existing = get_empty_session_for_user(
-            user_id, self._db_session, demo_data_enabled=demo_data_enabled
-        )
+        existing = get_empty_session_for_user(user_id, self._db_session)
         if existing:
             logger.info(
                 "Existing empty session %s found for user %s", existing.id, user_id
@@ -704,14 +694,13 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
-            demo_data_enabled=demo_data_enabled,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:
         """Delete user's pre-provisioned (empty) session if one exists.
 
         A session is considered "empty" if it has no messages.
-        This is called when user changes LLM selection or toggles demo data
+        This is called when user changes LLM selection
         so the session can be re-created with the new LLM configuration.
 
         Args:

@@ -93,8 +93,8 @@ class IndexingMode(str, PyEnum):
 class ProcessingMode(str, PyEnum):
     """Determines how documents are processed after fetching."""
 
-    REGULAR = "REGULAR"  # Full pipeline: chunk → embed → Vespa
-    FILE_SYSTEM = "FILE_SYSTEM"  # Write to file system only (JSON documents)
+    REGULAR = "REGULAR"  # Full pipeline: chunk → embed → index
+    FILE_SYSTEM = "FILE_SYSTEM"  # Deprecated: bypasses indexing, not searchable
     RAW_BINARY = "RAW_BINARY"  # Write raw binary to S3 (no text extraction)
 
 
