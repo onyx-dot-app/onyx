@@ -9,7 +9,10 @@ import { type Page, type Locator, expect } from "@playwright/test";
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
 const NEW_TASK_PATH = "/craft/v1/tasks/new";
-const DETAIL_PATH_REGEX = /\/craft\/v1\/tasks\/[^/]+$/;
+// `[^/]+` would also match `/new` (the create form), so exclude that segment
+// explicitly. Matches any UUID/string except literally "new".
+const DETAIL_PATH_REGEX = /\/craft\/v1\/tasks\/(?!new(?:$|\?|\/))[^/]+$/;
+const LIST_PATH_REGEX = /\/craft\/v1\/tasks(?:\?|$)/;
 
 type IntervalUnit = "minutes" | "hours" | "days";
 
@@ -22,30 +25,23 @@ export class ScheduledTasksPage {
   readonly intervalEveryInput: Locator;
   readonly intervalUnitTrigger: Locator;
   readonly saveButton: Locator;
+  readonly saveAndRunNowButton: Locator;
   readonly runNowButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.newTaskButton = page.getByTestId("new-task-button").first();
-    // ScheduleTaskForm wraps the inputs in a container with the testid; the
-    // actual editable element is the nested input/textarea.
-    this.nameInput = page
-      .locator(
-        '[data-testid="task-name-input"] input, [data-testid="task-name-input"] textarea'
-      )
-      .first();
-    this.promptInput = page
-      .locator(
-        '[data-testid="task-prompt-input"] textarea, [data-testid="task-prompt-input"]'
-      )
-      .first();
-    this.intervalEveryInput = page
-      .locator('[data-testid="interval-every"] input')
-      .first();
+    // The InputTypeIn/InputTextArea components spread props directly onto the
+    // underlying <input>/<textarea>, so the test IDs land on the editable
+    // element itself — not on a wrapper.
+    this.nameInput = page.getByTestId("task-name-input");
+    this.promptInput = page.getByTestId("task-prompt-input");
+    this.intervalEveryInput = page.getByTestId("interval-every");
     // The interval-unit InputSelect has no test ID; it's the only combobox
     // on the new-task form.
     this.intervalUnitTrigger = page.getByRole("combobox").first();
     this.saveButton = page.getByTestId("save-task");
+    this.saveAndRunNowButton = page.getByTestId("save-and-run-now");
     this.runNowButton = page.getByTestId("run-now-button");
   }
 
@@ -54,11 +50,38 @@ export class ScheduledTasksPage {
   // ---------------------------------------------------------------------------
 
   /**
+   * Seed the `build_user_persona` cookie so the Craft onboarding modal
+   * doesn't intercept the page. Without this, non-admin workers without a
+   * pre-existing persona cookie will hit `BuildOnboardingModal` on first
+   * navigation, blocking every other interaction. The shape matches
+   * `BuildUserPersona` in `web/src/app/craft/onboarding/constants.ts`.
+   */
+  private async seedBuildPersonaCookie(): Promise<void> {
+    const url = new URL(this.page.url());
+    const domain = url.hostname || "localhost";
+    await this.page.context().addCookies([
+      {
+        name: "build_user_persona",
+        value: encodeURIComponent(
+          JSON.stringify({ workArea: "engineering", level: "ic" })
+        ),
+        domain,
+        path: "/",
+        expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
+      },
+    ]);
+  }
+
+  /**
    * Navigate to the tasks list. When the Craft feature flag is off the
    * `/craft` layout redirects to `/app`, so callers should follow this with
-   * `expectCraftEnabled()` (or skip the test).
+   * `isCraftEnabled()` (and `test.skip` if false).
    */
   async gotoList(): Promise<void> {
+    // Land on the base URL first so we have a real origin for the cookie,
+    // then seed the persona cookie, then navigate to the tasks list.
+    await this.page.goto("/");
+    await this.seedBuildPersonaCookie();
     await this.page.goto(TASKS_LIST_PATH);
     await this.page.waitForLoadState("networkidle");
   }
@@ -106,8 +129,40 @@ export class ScheduledTasksPage {
     await this.page.getByRole("option", { name: unit, exact: true }).click();
   }
 
+  /**
+   * Click "Save". The create flow redirects to the tasks list (NOT the
+   * detail page), so callers should follow this with `expectOnListPage()`
+   * and `openTaskByName()` if they need to reach the detail surface.
+   */
   async save(): Promise<void> {
     await this.saveButton.click();
+  }
+
+  /**
+   * Click "Save and run now" — creates the task with `run_immediately=true`,
+   * which enqueues an immediate run. Same redirect as `save()`: lands on
+   * the tasks list.
+   */
+  async saveAndRunNow(): Promise<void> {
+    await this.saveAndRunNowButton.click();
+  }
+
+  // ---------------------------------------------------------------------------
+  // List page
+  // ---------------------------------------------------------------------------
+
+  async expectOnListPage(): Promise<void> {
+    await this.page.waitForURL(LIST_PATH_REGEX);
+  }
+
+  /**
+   * Click the row for the task with the given name to navigate to its
+   * detail page. Names are unique within a test run (callers should
+   * embed a timestamp/uuid).
+   */
+  async openTaskByName(name: string): Promise<void> {
+    await this.page.getByRole("row").filter({ hasText: name }).first().click();
+    await this.expectOnDetailPage();
   }
 
   // ---------------------------------------------------------------------------
@@ -129,13 +184,17 @@ export class ScheduledTasksPage {
   }
 
   /**
-   * Wait for a run row to reach SUCCEEDED or FAILED. Either outcome proves
-   * the dispatcher → executor → run-history wiring is reachable; the smoke
-   * just needs a row.
+   * Wait for a run row to reach a terminal state. SUCCEEDED, FAILED, and
+   * SKIPPED all qualify — any of them prove the dispatcher → executor →
+   * run-history wiring is reachable end-to-end. (SKIPPED is the deterministic
+   * outcome when the sandbox provider is unavailable in dev, e.g.
+   * `sandbox_unavailable`.)
    */
   async expectRunInTerminalState(timeout = 60_000): Promise<void> {
     const terminalRunRow = this.page
-      .locator('[data-run-status="SUCCEEDED"], [data-run-status="FAILED"]')
+      .locator(
+        '[data-run-status="SUCCEEDED"], [data-run-status="FAILED"], [data-run-status="SKIPPED"]'
+      )
       .first();
     await expect(terminalRunRow).toBeVisible({ timeout });
   }

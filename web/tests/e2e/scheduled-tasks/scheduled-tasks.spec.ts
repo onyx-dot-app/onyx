@@ -23,12 +23,18 @@ test.describe("Scheduled Tasks", () => {
     await scheduledTasks.fillPrompt("say hi");
     await scheduledTasks.setIntervalEvery(5);
     await scheduledTasks.selectIntervalUnit("minutes");
-    await scheduledTasks.save();
 
-    await scheduledTasks.expectOnDetailPage();
+    // "Save and run now" creates the task with run_immediately=true (the
+    // dispatcher enqueues a run on creation) and redirects to the list.
+    await scheduledTasks.saveAndRunNow();
+    await scheduledTasks.expectOnListPage();
+
+    // Navigate to the detail page to see status + run history.
+    await scheduledTasks.openTaskByName(uniqueName);
     await scheduledTasks.expectActiveStatus();
 
-    await scheduledTasks.runNow();
+    // A run row in a terminal state proves the dispatcher → executor →
+    // run-history wiring is reachable end-to-end.
     await scheduledTasks.expectRunInTerminalState();
   });
 });
