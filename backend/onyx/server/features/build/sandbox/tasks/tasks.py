@@ -308,3 +308,54 @@ def _list_session_directories(
 #             lock.release()
 
 #     task_logger.info("cleanup_old_snapshots_task completed")
+
+
+@shared_task(
+    name=OnyxCeleryTask.SYNC_USER_LIBRARY_FILES,
+    ignore_result=True,
+)
+def sync_user_library_files_task(
+    *,
+    user_id: str,
+    tenant_id: str,
+) -> None:
+    """Sync user library files from S3 to the user's running sandbox.
+
+    Triggered after user library uploads/deletions. Runs `aws s3 sync`
+    inside the sandbox container to download changed files.
+
+    No per-user locking — concurrent syncs to the same sandbox are
+    harmless (aws s3 sync is idempotent) and the expected frequency
+    is low (only on upload/delete).
+    """
+    task_logger.info(f"sync_user_library_files starting for user {user_id}")
+
+    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
+        task_logger.debug("sync_user_library_files skipped (local backend)")
+        return
+
+    from onyx.db.enums import SandboxStatus
+    from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+    from onyx.server.features.build.db.user_library import (
+        get_disabled_user_library_paths,
+    )
+
+    with get_session_with_current_tenant() as db_session:
+        sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
+        if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
+            task_logger.debug(f"No running sandbox for user {user_id}, skipping sync")
+            return
+        sandbox_id = sandbox.id
+        disabled_paths = get_disabled_user_library_paths(db_session, UUID(user_id))
+
+    sandbox_manager = get_sandbox_manager()
+    try:
+        sandbox_manager.sync_user_library(
+            sandbox_id=sandbox_id,
+            user_id=UUID(user_id),
+            tenant_id=tenant_id,
+            disabled_paths=disabled_paths,
+        )
+        task_logger.info(f"User library sync completed for user {user_id}")
+    except Exception:
+        task_logger.exception(f"Failed to sync user library for user {user_id}")

@@ -4,7 +4,7 @@
 
 ## Objective
 
-Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync. Provision per-user PATs with encrypted-at-rest storage, bundle the CLI binary, create a `company-search` skill with the user's available sources, and tear down the file-sync infrastructure.
+Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync. Provision per-user PATs with encrypted-at-rest storage, bundle the CLI (via pip), create a `company-search` skill with the user's available sources, and tear down the file-sync infrastructure.
 
 **Parts 1–3 are complete.** Part 1 repositioned onyx-cli as an agent-first tool with `ONYX_SERVER_URL`/`ONYX_PAT` env var support, clean exit codes, and `validate-config`. Part 2 shipped `POST /api/search` backed by the full `SearchTool.run()` pipeline (query expansion, hybrid retrieval, LLM document selection, context expansion). Part 3 added the `search` CLI command wrapping that endpoint with `--source`, `--days`, `--limit`, `--agent-id`, `--raw`, and `--no-query-expansion` flags.
 
@@ -36,7 +36,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 |-----------|--------|-------|
 | `/workspace/files/` | S3-synced corpus dump | Gone |
 | S3 sidecar container | Runs `aws s3 sync` at pod start | Gone |
-| `onyx-cli` binary | Not present | `/usr/local/bin/onyx-cli` |
+| `onyx-cli` | Not present | Installed via `initial-requirements.txt` (pip package `onyx-cli==1.0.1`) |
 | `company-search` skill | Does not exist | `.opencode/skills/company-search/SKILL.md` with user's sources |
 | `ONYX_PAT` env var | Not set | Per-user PAT, 30-day expiry, re-minted when expired |
 | `ONYX_SERVER_URL` env var | Not set | Internal Kube service address |
@@ -89,7 +89,7 @@ Pods don't live long enough for the PAT to expire mid-session — the 1-hour idl
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They're written to S3 via `PersistentDocumentWriter.write_raw_file()` and currently synced to the sandbox by the file-sync sidecar.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at session setup and after each upload. Sessions access files directly at `/workspace/user_library/`. Sidecar removal is in PR 3 (pure deletion); the new user library delivery mechanism is in PR 4 (steps 23–28).
+Replace the sidecar with a `/workspace/user_library/` directory baked into the sandbox image (same filesystem, not a separate volume). Sync via `sync_user_library()` on `SandboxManager` — the K8s implementation runs a one-shot `kubectl exec` with `aws s3 sync`. Triggered at session setup/resume (called from `SessionManager` after `setup_session_workspace`) and after each upload/delete (via `sync_user_library_files_task` Celery task dispatched from `user_library.py`). Sessions access files via a symlink from the session workspace (`{session_path}/user_library` -> `/workspace/user_library/`) — the same pattern used for skills symlinks. The agent accesses `user_library/` as a relative path; no opencode allowlist changes needed. Sidecar removal is in PR 3 (pure deletion); the new user library delivery mechanism is in PR 4 (steps 23–28).
 
 This preserves `PersistentDocumentWriter.write_raw_file()` and `S3PersistentDocumentWriter` (the S3 write path) while eliminating the sidecar. The `write_documents()` path (connector document serialization) is dead and removed.
 
@@ -222,13 +222,12 @@ No default — must be set when `SANDBOX_BACKEND=kubernetes`. Validated at provi
 
 Purely additive (~160 lines). Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage. Old file-based knowledge code (dead after the AGENTS.template.md rewrite) is left in place and cleaned up in PR 3.
 
-**5. Add onyx-cli to Dockerfile** (`sandbox/kubernetes/docker/Dockerfile`)
+**5. Add onyx-cli to sandbox image** (`sandbox/kubernetes/docker/initial-requirements.txt`)
 
-The binary version must be pinned to the Onyx release — the sandbox image build should pull (or copy) the exact CLI version that matches the backend it talks to. No version mismatch between the CLI and its backend.
+The CLI version must be pinned to the Onyx release — no version mismatch between the CLI and the backend it talks to. Installed as a pip package in the sandbox's Python venv via `initial-requirements.txt`:
 
-```dockerfile
-COPY --chown=sandbox:sandbox onyx-cli /usr/local/bin/onyx-cli
-RUN chmod +x /usr/local/bin/onyx-cli
+```
+onyx-cli==1.0.1
 ```
 
 **6. Add company-search skill template** (`sandbox/kubernetes/docker/skills/company-search/SKILL.md.template`)
@@ -485,68 +484,85 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 
 ### PR 4: User Library Rework (Net New)
 
-New delivery mechanism for raw user library files. With the sidecar removed in PR 3, user library files (spreadsheets, PDFs, etc.) need a new path into the sandbox. This PR adds a shared `/workspace/user_library/` volume, kubectl exec sync, and a Celery task to keep it up to date.
+New delivery mechanism for raw user library files. With the sidecar removed in PR 3, user library files (spreadsheets, PDFs, etc.) need a new path into the sandbox. This PR adds a `/workspace/user_library/` directory inside the existing workspace, `sync_user_library()` on `SandboxManager`, and a Celery task to keep it up to date.
 
-#### Pod spec
+#### SandboxManager abstraction
 
-**23. Add user library volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**23. Add `sync_user_library()` abstract method** (`sandbox/base.py`)
 
-In `_create_sandbox_pod()`:
-- Add a `user-library` EmptyDir volume (~1Gi) mounted at `/workspace/user_library/`
-- Keep AWS credential injection on the **main container** (needed for `aws s3` exec calls for user library sync)
+New abstract method on `SandboxManager` with `sandbox_id`, `user_id`, `tenant_id` parameters. K8s implementation runs a one-shot `kubectl exec` with `aws s3 sync`. Local implementation is a no-op (pass).
 
-#### Celery tasks
+```python
+@abstractmethod
+def sync_user_library(
+    self, sandbox_id: UUID, user_id: UUID, tenant_id: str,
+) -> None: ...
+```
 
-**24. Add `sync_user_library_files` task** (`sandbox/tasks/tasks.py`)
-
-New `sync_user_library_files()` Celery task that:
-1. Finds the user's running sandbox via `get_sandbox_by_user_id()`
-2. Runs a one-shot `kubectl exec` in the main container (not a sidecar): `aws s3 sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/`
-3. Returns immediately — no persistent process
-
-#### Task dispatches
-
-**25. Add user library sync dispatch on upload**
-
-- `server/features/build/api/user_library.py` (~line 223): add `SYNC_USER_LIBRARY_FILES` dispatch. This triggers the new kubectl exec sync so uploaded files appear in the sandbox immediately.
+K8s implementation (`sandbox/kubernetes/kubernetes_sandbox_manager.py`):
+- Runs `aws s3 sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/ --no-progress` via kubectl exec in the `sandbox` container
+- Uses the existing `workspace` EmptyDir volume — `/workspace/user_library/` is a directory baked into the image (not a separate volume)
 
 #### User library sync at session setup
 
-**26. Sync user library on workspace setup** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**24. Call `sync_user_library()` from SessionManager and restore path**
 
-In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
+`sync_user_library()` is called from:
+- `SessionManager.create_session__no_commit()` after `setup_session_workspace()` and `push_dynamic_skills()`
+- The restore path in `sessions_api.py` after `push_dynamic_skills()`
 
-```bash
-aws s3 sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/" /workspace/user_library/
-```
+This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files via a symlink from the session workspace: `{session_path}/user_library` -> `/workspace/user_library/` — the same pattern used for skills symlinks. The agent accesses `user_library/` as a relative path in its session directory. No opencode allowlist changes are needed (the deny-all external_directory policy stays).
 
-This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
+#### Celery tasks
 
-#### OpenCode config
+**25. Add `sync_user_library_files_task`** (`sandbox/tasks/tasks.py`)
 
-**27. Add user library allowlist** (`sandbox/util/opencode_config.py`)
+New Celery task (`OnyxCeleryTask.SYNC_USER_LIBRARY_FILES`) that:
+1. Skips immediately for local backend
+2. Finds the user's running sandbox via `get_sandbox_by_user_id()`
+3. Calls `sandbox_manager.sync_user_library()` to run the S3 sync
+4. Returns immediately — no persistent process
 
-Add `/workspace/user_library` and `/workspace/user_library/**` to the `external_directory` allowlist in `opencode_config.py`.
+#### Task dispatches
+
+**26. Add `_dispatch_user_library_sync` helper and dispatch on upload/delete** (`server/features/build/api/user_library.py`)
+
+New `_dispatch_user_library_sync(user_id, tenant_id)` helper that sends the `SYNC_USER_LIBRARY_FILES` Celery task with `expires=600`. Called after upload (`upload_files`, `upload_zip`) and after delete (`delete_file`). Wraps the dispatch in a try/except so failures don't block the upload response.
+
+#### Session symlink and AGENTS.template.md
+
+**27. Add user library symlink to session setup and update AGENTS.template.md**
+
+Session setup (both `setup_session_workspace()` and `restore_snapshot()`) creates a symlink: `{session_path}/user_library` -> `/workspace/user_library/`. This follows the same pattern as skills symlinks — the agent sees `user_library/` as a relative path in its working directory. No `opencode_config.py` changes are needed; the deny-all external_directory policy stays intact because the symlink lives inside the session workspace.
+
+Update `AGENTS.template.md` to reference `user_library/` (relative path) so the agent knows where to find user-uploaded files.
 
 #### Dockerfile
 
-**28. Add user library directory** (`sandbox/kubernetes/docker/Dockerfile`)
+**28. Add user library directory and onyx-cli** (`sandbox/kubernetes/docker/Dockerfile`)
 
-Add `mkdir -p /workspace/user_library` to the Dockerfile.
+- Add `mkdir -p /workspace/user_library` to the workspace directory creation
+- `onyx-cli` is installed via `initial-requirements.txt` as a pip package (`onyx-cli==1.0.1`), not copied as a binary
 
 #### PR 4 file changes
 
 | Action | File |
 |--------|------|
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — add user-library volume, add user library sync via kubectl exec in setup + restore |
+| Modify | `sandbox/base.py` — add `sync_user_library()` abstract method |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — implement `sync_user_library()` via kubectl exec + `aws s3 sync`; add `user_library` symlink in `setup_session_workspace()` and `restore_snapshot()` |
+| Modify | `sandbox/local/local_sandbox_manager.py` — implement `sync_user_library()` as no-op |
+| Modify | `session/manager.py` — call `sync_user_library()` after `push_dynamic_skills()` in create path |
+| Modify | `api/sessions_api.py` — call `sync_user_library()` in restore path |
+| Modify | `sandbox/tasks/tasks.py` — add `sync_user_library_files_task` |
+| Modify | `server/features/build/api/user_library.py` — add `_dispatch_user_library_sync` helper, dispatch after upload/delete |
 | Modify | `sandbox/kubernetes/docker/Dockerfile` — add `mkdir -p /workspace/user_library` |
-| Modify | `sandbox/util/opencode_config.py` — add `/workspace/user_library` allowlist |
-| Modify | `sandbox/tasks/tasks.py` — add `sync_user_library_files` task |
-| Modify | `server/features/build/api/user_library.py` — add `SYNC_USER_LIBRARY_FILES` dispatch |
+| Modify | `sandbox/kubernetes/docker/initial-requirements.txt` — add `onyx-cli==1.0.1` |
+| Modify | `AGENTS.template.md` — add `user_library/` reference for user-uploaded files |
+| Modify | `configs/constants.py` — add `SYNC_USER_LIBRARY_FILES` to `OnyxCeleryTask` |
 
 #### PR 4 tests
 
 **Smoke tests** (before merging):
 
-1. Upload a spreadsheet via user library, verify it appears at `/workspace/user_library/` in the sandbox.
-2. Upload a file mid-session, verify the agent can access it without restarting.
+1. Upload a spreadsheet via user library, verify it appears at `user_library/` in the session (via the symlink to `/workspace/user_library/`).
+2. Upload a file mid-session, verify the agent can access it at `user_library/` without restarting.

@@ -81,6 +81,33 @@ def get_user_storage_bytes(db_session: Session, user_id: UUID) -> int:
     return int(result or 0)
 
 
+def get_disabled_user_library_paths(db_session: Session, user_id: UUID) -> list[str]:
+    """Get relative paths of user library files with sync_disabled=True."""
+    from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
+
+    stmt = select(DbDocument.semantic_id).where(
+        and_(
+            DbDocument.from_ingestion_api.is_(False),
+            cast(
+                DbDocument.doc_metadata["creator_id"].as_string(),
+                type_=DbDocument.semantic_id.type,
+            )
+            == str(user_id),
+            DbDocument.doc_metadata["sync_disabled"].as_boolean().is_(True),
+        )
+    )
+    rows = db_session.execute(stmt).scalars().all()
+
+    paths: list[str] = []
+    prefix = USER_LIBRARY_SOURCE_DIR
+    for semantic_id in rows:
+        if semantic_id and semantic_id.startswith(prefix):
+            rel = semantic_id[len(prefix) :]
+            if rel:
+                paths.append(rel.lstrip("/"))
+    return paths
+
+
 def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int, int]:
     """Get or create the CRAFT_FILE connector for a user.
 

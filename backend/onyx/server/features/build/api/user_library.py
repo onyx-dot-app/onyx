@@ -39,9 +39,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
@@ -73,6 +76,22 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _dispatch_user_library_sync(user_id: str, tenant_id: str) -> None:
+    """Dispatch a Celery task to sync user library files to the sandbox."""
+    try:
+        celery_app.send_task(
+            OnyxCeleryTask.SYNC_USER_LIBRARY_FILES,
+            kwargs={"user_id": user_id, "tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.SANDBOX,
+            expires=600,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to dispatch user library sync for user %s", user_id, exc_info=True
+        )
+
 
 router = APIRouter(prefix="/user-library")
 
@@ -464,6 +483,7 @@ async def upload_files(
         total_size,
         user.id,
     )
+    _dispatch_user_library_sync(str(user.id), tenant_id)
 
     return UploadResponse(
         entries=uploaded_entries,
@@ -667,6 +687,7 @@ async def upload_zip(
         total_size,
         user.id,
     )
+    _dispatch_user_library_sync(str(user.id), tenant_id)
 
     return UploadResponse(
         entries=uploaded_entries,
@@ -832,5 +853,6 @@ def delete_file(
     # Delete from document table
     delete_document_by_id__no_commit(db_session, document_id)
     db_session.commit()
+    _dispatch_user_library_sync(str(user.id), tenant_id)
 
     return DeleteFileResponse(success=True, deleted=document_id)

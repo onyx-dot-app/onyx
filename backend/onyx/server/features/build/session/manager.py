@@ -71,6 +71,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.db.user_library import get_disabled_user_library_paths
 from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     SSEKeepalive,
@@ -586,6 +587,15 @@ class SessionManager:
             use_demo_data=demo_data_enabled,
         )
         self.push_dynamic_skills(sandbox.id, user_id)
+        try:
+            disabled = get_disabled_user_library_paths(self._db_session, user_id)
+            self._sandbox_manager.sync_user_library(
+                sandbox.id, user_id, tenant_id, disabled_paths=disabled
+            )
+        except Exception:
+            logger.warning(
+                "Failed to sync user library for sandbox %s", sandbox.id, exc_info=True
+            )
 
         sandbox_id = sandbox.id
         logger.info(

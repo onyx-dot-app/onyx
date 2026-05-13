@@ -1123,6 +1123,9 @@ if [ -d /workspace/skills ]; then
     echo "Linked skills to /workspace/skills"
 fi
 
+# Symlink user library (shared pod-level directory synced from S3)
+ln -sf /workspace/user_library {session_path}/user_library
+
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
@@ -1542,6 +1545,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
+
+# Symlink user library
+ln -sf /workspace/user_library {session_path}/user_library
 
 echo "Session config regeneration complete"
 """
@@ -2346,6 +2352,49 @@ echo WRITE_OK"""
                 raise RuntimeError(f"write_sandbox_file failed for {path}: {resp}")
         except ApiException as e:
             raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
+
+    def sync_user_library(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        disabled_paths: list[str] | None = None,
+    ) -> None:
+        pod_name = self._get_pod_name(str(sandbox_id))
+        s3_path = (
+            f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/user_library/"
+        )
+
+        # Build cleanup commands for sync-disabled files
+        cleanup_cmds = ""
+        if disabled_paths:
+            for p in disabled_paths:
+                safe_p = shlex.quote(f"/workspace/user_library/{p.lstrip('/')}")
+                cleanup_cmds += f"rm -f {safe_p}\n"
+
+        script = f"""set -e
+aws s3 sync {shlex.quote(s3_path)} /workspace/user_library/ --delete --no-progress
+{cleanup_cmds}echo SYNC_OK"""
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+            if "SYNC_OK" not in resp:
+                raise RuntimeError(
+                    f"User library sync failed for sandbox {sandbox_id}: {resp}"
+                )
+        except ApiException as e:
+            raise RuntimeError(
+                f"Failed to sync user library for sandbox {sandbox_id}: {e}"
+            ) from e
 
     def get_upload_stats(
         self,

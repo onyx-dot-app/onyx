@@ -400,6 +400,33 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def sync_user_library(
+        self,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        disabled_paths: list[str] | None = None,
+    ) -> None:
+        """Sync user library files from S3 to the sandbox.
+
+        Downloads user-uploaded raw files (spreadsheets, PDFs, etc.) from
+        S3 to /workspace/user_library/ where the agent can access them
+        directly with Python libraries. After sync, removes any files
+        whose paths are in disabled_paths (sync-disabled by the user).
+
+        Args:
+            sandbox_id: The sandbox ID
+            user_id: The user ID (for S3 path construction)
+            tenant_id: The tenant ID (for S3 path construction)
+            disabled_paths: Relative paths within user_library/ to remove
+                after sync (files with sync_disabled=True)
+
+        Raises:
+            RuntimeError: If sync fails
+        """
+        ...
+
+    @abstractmethod
     def get_upload_stats(
         self,
         sandbox_id: UUID,
