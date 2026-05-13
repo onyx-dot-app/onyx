@@ -32,6 +32,7 @@ from onyx.db.models import ScheduledTaskRun
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
+from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
 from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
 
@@ -51,7 +52,7 @@ def create_scheduled_task(
     prompt: str,
     cron_expression: str,
     timezone_name: str,
-    editor_mode: str,
+    editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     now: datetime | None = None,
 ) -> ScheduledTask:
@@ -135,7 +136,7 @@ def update_scheduled_task(
     prompt: str | None = None,
     cron_expression: str | None = None,
     timezone_name: str | None = None,
-    editor_mode: str | None = None,
+    editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:

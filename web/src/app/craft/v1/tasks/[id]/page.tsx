@@ -57,9 +57,9 @@ export default function ScheduledTaskDetailPage() {
       data.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     setBusy(true);
     try {
-      await updateScheduledTask(data.id, { status: next });
+      const updated = await updateScheduledTask(data.id, { status: next });
+      await mutate(updated, { revalidate: false });
       toast.success(next === "ACTIVE" ? "Task resumed." : "Task paused.");
-      void mutate();
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to update status"

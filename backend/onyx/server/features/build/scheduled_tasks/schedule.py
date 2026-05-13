@@ -9,6 +9,10 @@ Single source of truth for the cron/timezone semantics described in
 - ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC;
   ``ZoneInfo`` handles DST so a "9 AM PT weekly" task stays 9 AM local
   across PST/PDT.
+- Editor payloads are strictly typed via the Pydantic models below. Anything
+  reaching ``compile_to_cron`` has already been validated by Pydantic at the
+  HTTP boundary, so the function is a pure transformation — no
+  ``dict[str, Any]`` lookups, no ad-hoc string parsing.
 
 These functions are deliberately stateless and do NOT touch the DB. Wrap
 them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
@@ -16,31 +20,116 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from datetime import timezone
-from typing import Any
+from typing import Literal
 from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfoNotFoundError
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import field_validator
+from pydantic import model_validator
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-# Editor mode names — UI hint only. Stored verbatim on the task row.
-EDITOR_MODE_INTERVAL = "interval"
-EDITOR_MODE_DAILY_WEEKLY = "daily_weekly"
-EDITOR_MODE_ADVANCED = "advanced"
+EditorMode = Literal["interval", "daily_weekly", "advanced"]
+IntervalUnit = Literal["minutes", "hours", "days"]
 
-# Interval-mode unit names.
-INTERVAL_UNIT_MINUTES = "minutes"
-INTERVAL_UNIT_HOURS = "hours"
-INTERVAL_UNIT_DAYS = "days"
+# Pattern accepted from the UI's ``<input type="time">``. 24-hour, 0-23 / 0-59.
+_HH_MM_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
-_VALID_EDITOR_MODES = frozenset(
-    {EDITOR_MODE_INTERVAL, EDITOR_MODE_DAILY_WEEKLY, EDITOR_MODE_ADVANCED}
-)
+
+class _PayloadBase(BaseModel):
+    """Common config for editor payload models — reject unknown fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class IntervalPayload(_PayloadBase):
+    """Validated payload for ``editor_mode == "interval"``."""
+
+    unit: IntervalUnit
+    every: int = Field(ge=1)
+    # Required only when ``unit == "days"``; the model validator enforces
+    # presence. Shape is enforced by ``_validate_time_of_day``.
+    time_of_day: str | None = None
+
+    @field_validator("time_of_day")
+    @classmethod
+    def _validate_time_of_day(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not _HH_MM_RE.match(v):
+            raise ValueError("time_of_day must be in 'HH:MM' form (24-hour)")
+        return v
+
+    @model_validator(mode="after")
+    def _days_requires_time_of_day(self) -> IntervalPayload:
+        if self.unit == "days" and self.time_of_day is None:
+            raise ValueError("time_of_day is required when unit == 'days'")
+        return self
+
+
+class DailyWeeklyPayload(_PayloadBase):
+    """Validated payload for ``editor_mode == "daily_weekly"``.
+
+    Weekdays follow the cron convention (0=Sunday .. 6=Saturday). An empty
+    list means "every day" — equivalent to ``*`` in the weekday cron slot.
+    """
+
+    time_of_day: str
+    weekdays: list[int] = Field(default_factory=list)
+
+    @field_validator("time_of_day")
+    @classmethod
+    def _validate_time_of_day(cls, v: str) -> str:
+        if not _HH_MM_RE.match(v):
+            raise ValueError("time_of_day must be in 'HH:MM' form (24-hour)")
+        return v
+
+    @field_validator("weekdays")
+    @classmethod
+    def _validate_weekdays(cls, v: list[int]) -> list[int]:
+        for d in v:
+            if not 0 <= d <= 6:
+                raise ValueError("weekdays must be ints in 0..6 (0=Sunday)")
+        return v
+
+
+class AdvancedPayload(_PayloadBase):
+    """Validated payload for ``editor_mode == "advanced"``."""
+
+    cron: str
+
+    @field_validator("cron")
+    @classmethod
+    def _validate_cron(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("cron expression is empty")
+        if len(v.split()) != 5:
+            raise ValueError("cron expression must have exactly 5 fields")
+        if not croniter.is_valid(v):
+            raise ValueError(f"invalid cron expression: {v!r}")
+        return v
+
+
+EditorPayload = IntervalPayload | DailyWeeklyPayload | AdvancedPayload
+
+# Map from the editor_mode literal to the payload model that pairs with it.
+# Used by API request validators to dispatch a raw payload dict to the right
+# typed model.
+EDITOR_PAYLOAD_MODELS: dict[EditorMode, type[_PayloadBase]] = {
+    "interval": IntervalPayload,
+    "daily_weekly": DailyWeeklyPayload,
+    "advanced": AdvancedPayload,
+}
 
 
 def validate_timezone(tz: str) -> None:
@@ -55,7 +144,11 @@ def validate_timezone(tz: str) -> None:
 
 
 def _validate_cron(cron: str) -> None:
-    """Raise ``OnyxError(INVALID_INPUT)`` if ``cron`` is not a valid 5-field expression."""
+    """Raise ``OnyxError(INVALID_INPUT)`` if ``cron`` is not a valid 5-field expression.
+
+    Used by the read-side helpers (``compute_next_run_at``, ``next_n_fires``,
+    ``human_readable``) which accept a cron string loaded from the DB.
+    """
     cron = cron.strip()
     if not cron:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Cron expression is empty")
@@ -70,114 +163,49 @@ def _validate_cron(cron: str) -> None:
         )
 
 
-def compile_to_cron(
-    editor_mode: str,
-    editor_payload: dict[str, Any],
-) -> str:
-    """Compile a UI editor payload to a canonical 5-field cron string.
+def _split_hh_mm(value: str) -> tuple[int, int]:
+    """Split an already-validated ``HH:MM`` string into ``(hour, minute)``.
 
-    ``editor_payload`` shape per mode:
-
-    - ``interval``::
-
-          {"every": int, "unit": "minutes"|"hours"|"days",
-           "time_of_day": {"hour": int, "minute": int}}  # required only for unit == "days"
-
-    - ``daily_weekly``::
-
-          {"hour": int, "minute": int, "weekdays": list[int]}
-          # weekdays follow the cron convention (0=Sunday .. 6=Saturday);
-          # an empty/None list means "every day" (`* * * * *` weekday slot).
-
-    - ``advanced``::
-
-          {"cron": "<raw 5-field expression>"}
-
-    Returns:
-        Canonical 5-field cron string.
-
-    Raises:
-        OnyxError(INVALID_INPUT): if the editor mode is unknown or the
-            payload does not produce a valid cron expression.
+    Caller responsibility: ``value`` must have passed the ``_HH_MM_RE`` check
+    on a payload model (i.e. it is non-None and well-formed).
     """
-    if editor_mode not in _VALID_EDITOR_MODES:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Unknown editor_mode {editor_mode!r}",
-        )
+    h, m = value.split(":")
+    return int(h), int(m)
 
-    if editor_mode == EDITOR_MODE_ADVANCED:
-        cron = str(editor_payload.get("cron", "")).strip()
-        _validate_cron(cron)
-        return cron
 
-    if editor_mode == EDITOR_MODE_INTERVAL:
-        every = editor_payload.get("every")
-        unit = editor_payload.get("unit")
-        if not isinstance(every, int) or every < 1:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "interval.every must be a positive integer",
-            )
-        if unit == INTERVAL_UNIT_MINUTES:
+def compile_to_cron(payload: EditorPayload) -> str:
+    """Compile a validated editor payload into a canonical 5-field cron string.
+
+    The payload's invariants (range bounds, ``HH:MM`` shape, required fields
+    per mode) are enforced by Pydantic on construction, so this function is
+    a pure transformation. Out-of-range ``every`` values for the
+    sub-day units fall back to the next-coarser default (matching the
+    historical behavior the UI relies on).
+    """
+    if isinstance(payload, AdvancedPayload):
+        return payload.cron
+
+    if isinstance(payload, IntervalPayload):
+        every = payload.every
+        if payload.unit == "minutes":
+            # ``*/60 * * * *`` is illegal — collapse to "every hour at :00".
             if every > 59:
-                # `*/60 * * * *` is invalid; collapse to "every hour at :00".
-                cron = "0 * * * *"
-            else:
-                cron = f"*/{every} * * * *"
-        elif unit == INTERVAL_UNIT_HOURS:
+                return "0 * * * *"
+            return f"*/{every} * * * *"
+        if payload.unit == "hours":
             if every > 23:
-                cron = "0 0 * * *"
-            else:
-                cron = f"0 */{every} * * *"
-        elif unit == INTERVAL_UNIT_DAYS:
-            tod = editor_payload.get("time_of_day") or {}
-            hour = tod.get("hour")
-            minute = tod.get("minute")
-            if (
-                not isinstance(hour, int)
-                or not 0 <= hour <= 23
-                or not isinstance(minute, int)
-                or not 0 <= minute <= 59
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "interval (days) requires time_of_day.{hour,minute} in valid ranges",
-                )
-            cron = f"{minute} {hour} */{every} * *"
-        else:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Unknown interval unit {unit!r}",
-            )
-        _validate_cron(cron)
-        return cron
+                return "0 0 * * *"
+            return f"0 */{every} * * *"
+        # unit == "days" — model validator guaranteed time_of_day is set.
+        assert payload.time_of_day is not None
+        hour, minute = _split_hh_mm(payload.time_of_day)
+        return f"{minute} {hour} */{every} * *"
 
     # daily_weekly
-    hour = editor_payload.get("hour")
-    minute = editor_payload.get("minute")
-    weekdays = editor_payload.get("weekdays") or []
-    if (
-        not isinstance(hour, int)
-        or not 0 <= hour <= 23
-        or not isinstance(minute, int)
-        or not 0 <= minute <= 59
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "daily_weekly requires hour 0-23 and minute 0-59",
-        )
-    if not isinstance(weekdays, list) or not all(
-        isinstance(d, int) and 0 <= d <= 6 for d in weekdays
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "weekdays must be a list of ints in 0..6 (0=Sunday)",
-        )
-    weekday_field = ",".join(str(d) for d in sorted(set(weekdays))) if weekdays else "*"
-    cron = f"{minute} {hour} * * {weekday_field}"
-    _validate_cron(cron)
-    return cron
+    hour, minute = _split_hh_mm(payload.time_of_day)
+    weekdays = sorted(set(payload.weekdays))
+    weekday_field = ",".join(str(d) for d in weekdays) if weekdays else "*"
+    return f"{minute} {hour} * * {weekday_field}"
 
 
 def compute_next_run_at(cron: str, tz: str, after: datetime) -> datetime:

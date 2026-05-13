@@ -452,6 +452,7 @@ const MemoizedBuildSidebarInner = memo(
                     historyItem={historyItem}
                     isActive={
                       !pathname.startsWith(CRAFT_CONFIGURE_PATH) &&
+                      !pathname.startsWith(CRAFT_TASKS_PATH) &&
                       session?.id === historyItem.id
                     }
                     onLoad={() => handleLoadSession(historyItem.id)}

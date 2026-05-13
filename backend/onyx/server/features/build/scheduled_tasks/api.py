@@ -25,6 +25,7 @@ from fastapi import Response
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -50,6 +51,9 @@ from onyx.db.scheduled_task import update_scheduled_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.scheduled_tasks.schedule import compile_to_cron
+from onyx.server.features.build.scheduled_tasks.schedule import EDITOR_PAYLOAD_MODELS
+from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
+from onyx.server.features.build.scheduled_tasks.schedule import EditorPayload
 from onyx.server.features.build.scheduled_tasks.schedule import human_readable
 from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
 from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
@@ -92,32 +96,67 @@ class _Forbid(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def _dispatch_editor_payload(data: Any) -> Any:
+    """``model_validator(mode="before")`` helper.
+
+    Routes a raw ``editor_payload`` dict to the typed payload model that
+    pairs with ``editor_mode``. After this runs, ``editor_payload`` is a
+    fully validated ``IntervalPayload`` / ``DailyWeeklyPayload`` /
+    ``AdvancedPayload`` instance — never a raw dict. Mismatched shapes
+    surface as Pydantic ``ValidationError`` → 422 at the FastAPI layer.
+    """
+    if not isinstance(data, dict):
+        return data
+    mode = data.get("editor_mode")
+    raw = data.get("editor_payload")
+    if not isinstance(raw, dict):
+        # ``editor_mode`` validation (Literal) catches invalid modes; ``None``
+        # / non-dict payloads fall through to the field-level required check.
+        return data
+    model_cls = EDITOR_PAYLOAD_MODELS.get(mode) if isinstance(mode, str) else None
+    if model_cls is None:
+        # Let the ``editor_mode`` Literal validator produce the canonical
+        # error message; leave the raw payload in place.
+        return data
+    data["editor_payload"] = model_cls.model_validate(raw)
+    return data
+
+
 class ScheduledTaskCreate(_Forbid):
     """Request body for ``POST /scheduled-tasks``."""
 
     name: str = Field(..., min_length=1, max_length=200)
     prompt: str = Field(..., min_length=1)
-    editor_mode: str
-    editor_payload: dict[str, Any]
+    editor_mode: EditorMode
+    editor_payload: EditorPayload
     timezone: str
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
+
+    _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
 
 class ScheduledTaskPatch(_Forbid):
     """Request body for ``PATCH /scheduled-tasks/{id}``.
 
-    All fields are optional; the handler decides whether to recompile the
-    cron expression based on the combination of ``editor_mode`` /
-    ``editor_payload``.
+    All fields are optional; ``editor_mode`` and ``editor_payload`` must be
+    supplied together (enforced below).
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     prompt: str | None = Field(default=None, min_length=1)
-    editor_mode: str | None = None
-    editor_payload: dict[str, Any] | None = None
+    editor_mode: EditorMode | None = None
+    editor_payload: EditorPayload | None = None
     timezone: str | None = None
     status: ScheduledTaskStatus | None = None
+
+    _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
+
+    @model_validator(mode="after")
+    def _editor_pair_consistency(self) -> ScheduledTaskPatch:
+        if (self.editor_mode is None) != (self.editor_payload is None):
+            raise ValueError("editor_mode and editor_payload must be supplied together")
+        return self
 
 
 class RunSummary(BaseModel):
@@ -350,7 +389,7 @@ def create_task(
          and enqueue the executor. Does NOT touch ``next_run_at``.
     """
     validate_timezone(request.timezone)
-    cron_expression = compile_to_cron(request.editor_mode, request.editor_payload)
+    cron_expression = compile_to_cron(request.editor_payload)
 
     task = create_scheduled_task(
         db_session=db_session,
@@ -407,13 +446,10 @@ def patch_task(
     pause/resume) on its own.
     """
     cron_expression: str | None = None
-    if request.editor_mode is not None or request.editor_payload is not None:
-        if request.editor_mode is None or request.editor_payload is None:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "editor_mode and editor_payload must be supplied together",
-            )
-        cron_expression = compile_to_cron(request.editor_mode, request.editor_payload)
+    if request.editor_payload is not None:
+        # ``_editor_pair_consistency`` already guaranteed editor_mode is set
+        # whenever editor_payload is — no runtime check needed here.
+        cron_expression = compile_to_cron(request.editor_payload)
 
     task = update_scheduled_task(
         db_session=db_session,
