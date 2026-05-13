@@ -9,7 +9,7 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Popover, PopoverMenu } from "@opal/components";
+import { Button, LineItemButton, Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
@@ -34,7 +34,6 @@ import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
@@ -42,7 +41,6 @@ import MCPLineItem, {
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
-import { Button } from "@opal/components";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -714,15 +712,19 @@ export default function ActionsPopover({
   };
 
   const mcpFooter = showActiveReauthRow ? (
-    <LineItem
+    <LineItemButton
+      sizePreset="main-ui"
+      variant="section"
+      rounding="sm"
+      center
+      tooltipSide="right"
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
+      title="Re-Authenticate"
       rightChildren={
         <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
       }
-    >
-      Re-Authenticate
-    </LineItem>
+    />
   ) : undefined;
 
   const configuredSources = getConfiguredSources(effectiveAvailableSources);
@@ -923,9 +925,17 @@ export default function ActionsPopover({
         null,
 
         (isAdmin || isCurator) && (
-          <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
-            More Actions
-          </LineItem>
+          <LineItemButton
+            key="more-actions"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            center
+            tooltipSide="right"
+            href="/admin/actions"
+            icon={SvgActions}
+            title="More Actions"
+          />
         ),
       ]}
     </PopoverMenu>
