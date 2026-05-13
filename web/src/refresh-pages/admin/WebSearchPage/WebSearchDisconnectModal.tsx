@@ -29,12 +29,9 @@ export function WebSearchDisconnectModal({
   } = useWebSearchProviders();
 
   const isSearch = disconnectTarget.category === "search";
-
-  const isActive = isSearch
-    ? searchProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false
-    : contentProviders.find((p) => p.id === disconnectTarget.id)?.is_active ??
-      false;
+  const hasActiveProvider = isSearch
+    ? searchProviders.some((p) => p.is_active)
+    : contentProviders.some((p) => p.is_active);
 
   const siblingCategory = isSearch ? "content" : "search";
   const exaSibling =
@@ -43,8 +40,6 @@ export function WebSearchDisconnectModal({
         ? contentProviders.find((p) => p.provider_type === "exa" && p.id > 0)
         : searchProviders.find((p) => p.provider_type === "exa" && p.id > 0)
       : undefined;
-
-  const categoryLabel = isSearch ? "search engine" : "web crawler";
 
   async function handleDisconnect() {
     setIsSubmitting(true);
@@ -84,24 +79,33 @@ export function WebSearchDisconnectModal({
       }
     >
       <Section alignItems="start" gap={0.5}>
-        {isActive ? (
-          <Text as="p" font="main-ui-body" color="text-03">
-            {markdown(
-              `**${disconnectTarget.label}** is the active ${categoryLabel}.`
+        {isSearch ? (
+          <>
+            <Text color="text-03">
+              {markdown(
+                `Web search will no longer be routed through **${disconnectTarget.label}**. Search history will be preserved.`
+              )}
+            </Text>
+            {hasActiveProvider && (
+              <Text color="text-03">
+                Connect another search engine to continue to use web search.
+              </Text>
             )}
-          </Text>
+          </>
         ) : (
-          <Text as="p" font="main-ui-body" color="text-03">
-            {markdown(
-              `${
-                isSearch ? "Web search" : "Web crawling"
-              } will no longer be routed through **${disconnectTarget.label}**.`
+          <>
+            <Text color="text-03">
+              {markdown(
+                `**${disconnectTarget.label}** will no longer be used to read search result web pages.`
+              )}
+            </Text>
+            {hasActiveProvider && (
+              <Text color="text-03">
+                Onyx will fall back to the built-in web crawler.
+              </Text>
             )}
-          </Text>
+          </>
         )}
-        <Text as="p" font="main-ui-body" color="text-03">
-          Search history will be preserved.
-        </Text>
       </Section>
     </ConfirmationModalLayout>
   );
