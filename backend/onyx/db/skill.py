@@ -30,7 +30,17 @@ from onyx.db.models import User__UserGroup
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-_UNSET: Final[Any] = object()
+
+class _UnsetType:
+    """Sentinel distinguishing 'not provided' from None/falsy in patch helpers.
+
+    Typed as a dedicated class (instead of `Final[Any]`) so unions like
+    `str | _UnsetType` retain their real type at the call site — `str | Any`
+    collapses to `Any` and silently disables type checking on the parameter.
+    """
+
+
+_UNSET: Final[_UnsetType] = _UnsetType()
 
 
 def _add_user_visibility_filter(
@@ -185,11 +195,11 @@ def replace_skill_bundle(
 def patch_skill(
     *,
     skill_id: UUID,
-    slug: str | Any = _UNSET,
-    name: str | Any = _UNSET,
-    description: str | Any = _UNSET,
-    is_public: bool | Any = _UNSET,
-    enabled: bool | Any = _UNSET,
+    slug: str | _UnsetType = _UNSET,
+    name: str | _UnsetType = _UNSET,
+    description: str | _UnsetType = _UNSET,
+    is_public: bool | _UnsetType = _UNSET,
+    enabled: bool | _UnsetType = _UNSET,
     db_session: Session,
 ) -> Skill:
     """Partial update of admin-controlled metadata.
@@ -206,7 +216,7 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    if slug is not _UNSET and slug != skill.slug:
+    if not isinstance(slug, _UnsetType) and slug != skill.slug:
         clashing = db_session.scalars(
             select(Skill.id)
             .where(Skill.slug == slug)
@@ -220,13 +230,13 @@ def patch_skill(
             )
         skill.slug = slug
 
-    if name is not _UNSET:
+    if not isinstance(name, _UnsetType):
         skill.name = name
-    if description is not _UNSET:
+    if not isinstance(description, _UnsetType):
         skill.description = description
-    if is_public is not _UNSET:
+    if not isinstance(is_public, _UnsetType):
         skill.is_public = is_public
-    if enabled is not _UNSET:
+    if not isinstance(enabled, _UnsetType):
         skill.enabled = enabled
 
     db_session.flush()
