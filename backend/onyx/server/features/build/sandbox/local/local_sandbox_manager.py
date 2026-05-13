@@ -769,7 +769,7 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,  # noqa: ARG002
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         use_demo_data: bool = False,
     ) -> None:

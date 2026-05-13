@@ -212,7 +212,7 @@ class SandboxManager(ABC):
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         use_demo_data: bool = False,
     ) -> None:
@@ -226,7 +226,8 @@ class SandboxManager(ABC):
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
             tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
+            nextjs_port: Port number for the NextJS dev server, or None to
+                skip starting it (e.g. headless scheduled-task fires).
             llm_config: LLM provider configuration for opencode.json
             use_demo_data: If True, use demo data configuration
 

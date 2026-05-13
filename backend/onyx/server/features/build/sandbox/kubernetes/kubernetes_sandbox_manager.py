@@ -1405,7 +1405,7 @@ echo "SNAPSHOT_CREATED"
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,  # noqa: ARG002
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         use_demo_data: bool = False,
     ) -> None:
@@ -1419,14 +1419,16 @@ echo "SNAPSHOT_CREATED"
         2. Pipe directly to tar for extraction
            (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
         3. Regenerate configuration files (AGENTS.md, opencode.json)
-        4. Start the NextJS dev server
+        4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't attach a preview).
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in S3 (relative path)
             tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
+            nextjs_port: Port number for the NextJS dev server, or None to
+                skip starting it.
             llm_config: LLM provider configuration for opencode.json
             use_demo_data: If True, use demo data configuration
 
@@ -1475,21 +1477,24 @@ echo "SNAPSHOT_RESTORED"
                 use_demo_data=use_demo_data,
             )
 
-            # Start NextJS dev server (check node_modules since restoring from snapshot)
-            start_script = _build_nextjs_start_script(
-                safe_session_path, nextjs_port, check_node_modules=True
-            )
-            k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=["/bin/sh", "-c", start_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
+            # Start NextJS dev server (check node_modules since restoring
+            # from snapshot). Skipped when nextjs_port is None — headless
+            # callers (scheduled tasks) don't attach a preview.
+            if nextjs_port is not None:
+                start_script = _build_nextjs_start_script(
+                    safe_session_path, nextjs_port, check_node_modules=True
+                )
+                k8s_stream(
+                    self._stream_core_api.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=self._namespace,
+                    container="sandbox",
+                    command=["/bin/sh", "-c", start_script],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
@@ -1498,7 +1503,7 @@ echo "SNAPSHOT_RESTORED"
         pod_name: str,
         session_path: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
+        nextjs_port: int | None,
         use_demo_data: bool,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
@@ -1511,7 +1516,9 @@ echo "SNAPSHOT_RESTORED"
             pod_name: The pod name to exec into
             session_path: Path to the session directory (already shlex.quoted)
             llm_config: LLM provider configuration
-            nextjs_port: Port for NextJS (used in AGENTS.md)
+            nextjs_port: Port for NextJS (used in AGENTS.md). None when the
+                dev server is intentionally skipped — the template renders
+                "Unknown" in that case.
             use_demo_data: Whether to use demo data configuration
         """
         # Generate AGENTS.md content
