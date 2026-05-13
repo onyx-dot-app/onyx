@@ -9,8 +9,7 @@ Access model:
 Delete is a hard delete — `delete_skill` removes the row and returns its
 `bundle_file_id` so the caller can drop the blob from the file store
 immediately (skills sync via S3-backed bundles, so blob retention isn't
-needed). The legacy `deleted_at` column from the V1 migration is left
-unset; callers don't filter on it.
+needed).
 
 These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace grants) can roll back atomically.
@@ -38,9 +37,10 @@ from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-# Name of the partial unique index on `skill.slug` (created in the Skills V1
-# migration). Used to translate the specific collision into `DUPLICATE_RESOURCE`.
-SKILL_SLUG_UNIQUE_INDEX = "ux_skill_slug"
+# Name of the unique constraint on `skill.slug` (declared on the model and
+# created by the Skills V1 migration). Used to translate the specific
+# collision into `DUPLICATE_RESOURCE`.
+SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
 
 def _add_user_visibility_filter(
@@ -127,10 +127,10 @@ def create_skill(
     """Insert a new Skill row.
 
     Slug collisions are caught two ways: a pre-check for the fast happy path,
-    and an IntegrityError handler on flush that translates the partial unique
-    index's violation into `OnyxError(DUPLICATE_RESOURCE)` for the concurrent-
-    writer race. Both raise the same structured error so callers never see a
-    raw IntegrityError.
+    and an IntegrityError handler on flush that translates the `uq_skill_slug`
+    constraint violation into `OnyxError(DUPLICATE_RESOURCE)` for the
+    concurrent-writer race. Both raise the same structured error so callers
+    never see a raw IntegrityError.
     """
     existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
     if existing is not None:
@@ -154,7 +154,7 @@ def create_skill(
     try:
         db_session.flush()
     except IntegrityError as e:
-        if is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
+        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
@@ -204,9 +204,9 @@ def patch_skill(
     """Partial update of admin-controlled metadata.
 
     `UNSET` distinguishes "leave alone" from "set to None/falsy". Slug
-    uniqueness is re-checked when the slug changes (the partial unique index
-    is the DB backstop; this raises `DUPLICATE_RESOURCE` first for a clean
-    structured error).
+    uniqueness is re-checked when the slug changes (the `uq_skill_slug`
+    constraint is the DB backstop; this raises `DUPLICATE_RESOURCE` first
+    for a clean structured error).
     """
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
@@ -240,7 +240,7 @@ def patch_skill(
     try:
         db_session.flush()
     except IntegrityError as e:
-        if slug_changed and is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
+        if slug_changed and is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
