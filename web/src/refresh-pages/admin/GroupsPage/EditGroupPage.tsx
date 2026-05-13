@@ -7,6 +7,7 @@ import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
 import { IllustrationContent, InputHorizontal } from "@opal/layouts";
 import { SvgUsers, SvgTrash, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Card from "@/refresh-components/cards/Card";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -19,6 +20,9 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
+import { useSettingsContext } from "@/providers/SettingsProvider";
+import { Tier } from "@/interfaces/settings";
+import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
 import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
@@ -47,6 +51,11 @@ interface EditGroupPageProps {
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const settings = useSettingsContext();
+  const isEnterpriseTier = tierAtLeast(settings?.settings.tier, Tier.ENTERPRISE);
+  const tokenLimitsDisabledTooltip = markdown(
+    "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
+  );
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
@@ -231,8 +240,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         selectedDocSetIds
       );
 
-      // Save token rate limits (create/update/delete)
-      await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
+      // Save token rate limits (create/update/delete) — Enterprise-only
+      if (isEnterpriseTier) {
+        await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
+      }
 
       // Update refs so subsequent saves diff correctly
       initialAgentIdsRef.current = selectedAgentIds;
@@ -441,6 +452,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               <TokenLimitSection
                 limits={tokenLimits}
                 onLimitsChange={setTokenLimits}
+                disabled={!isEnterpriseTier}
+                disabledTooltip={tokenLimitsDisabledTooltip}
               />
 
               {/* Delete This Group */}
