@@ -9,7 +9,7 @@ Adds the Scheduled Tasks feature surface for Craft:
   so no DDL is required; this migration is the marker for the addition).
 
 Revision ID: 28429dd43807
-Revises: 4ff2545411ad
+Revises: 0df3c40e902a
 Create Date: 2026-05-12 11:36:44.389608
 
 """
@@ -20,7 +20,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "28429dd43807"
-down_revision = "b6d184cfdaf3"
+down_revision = "0df3c40e902a"
 branch_labels = None
 depends_on = None
 
