@@ -28,7 +28,8 @@ def _write_skill(
                 f"# {slug}",
                 "",
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     return skill_dir
 
@@ -42,6 +43,14 @@ def test_register_rejects_duplicate_slug(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="already registered"):
         registry.register("shared-slug", second_dir)
+
+
+def test_register_rejects_invalid_slug(tmp_path: Path) -> None:
+    registry = BuiltinSkillRegistry()
+    skill_dir = _write_skill(tmp_path, "invalid-source")
+
+    with pytest.raises(ValueError, match="start with a lowercase letter"):
+        registry.register("Invalid_Slug", skill_dir)
 
 
 def test_register_rejects_missing_skill_md(tmp_path: Path) -> None:

@@ -1,40 +1,55 @@
 import re
 from collections.abc import Callable
 from pathlib import Path
+from threading import Lock
 from typing import ClassVar
 
 import yaml
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import field_validator
 from sqlalchemy.orm import Session
 
 _SLUG_REGEX = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_FRONTMATTER_REGEX = re.compile(
+    r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
+    re.DOTALL,
+)
 _DEFAULT_IS_AVAILABLE: Callable[[Session], bool] = lambda _: True  # noqa: E731
+_SLUG_ERROR = (
+    "Skill slug must start with a lowercase letter, contain only lowercase "
+    "letters, numbers, and hyphens, and be at most 64 characters."
+)
 
 
-class BuiltinSkill(BaseModel):
-    """In-memory entry for an on-disk built-in skill."""
+class Skill(BaseModel):
+    """Common skill metadata shared by built-in and custom skill views."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     slug: str
-    source_dir: Path
     name: str
     description: str
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, slug: str) -> str:
+        if not _SLUG_REGEX.fullmatch(slug):
+            raise ValueError(_SLUG_ERROR)
+        return slug
+
+
+class BuiltinSkill(Skill):
+    """In-memory entry for an on-disk built-in skill."""
+
+    source_dir: Path
     has_template: bool
     is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
     unavailable_reason: str | None = None
     configure_url: str | None = None
 
 
-def _validate_slug(slug: str) -> None:
-    if not _SLUG_REGEX.fullmatch(slug):
-        raise ValueError(
-            f"Skill slug must match ^[a-z][a-z0-9-]{{0,63}}$; got {slug!r}"
-        )
-
-
-def _skill_metadata_path(source_dir: Path) -> tuple[Path, bool]:
+def _select_skill_definition_path(source_dir: Path) -> tuple[Path, bool]:
     skill_md_path = source_dir / "SKILL.md"
     template_path = source_dir / "SKILL.md.template"
 
@@ -46,31 +61,26 @@ def _skill_metadata_path(source_dir: Path) -> tuple[Path, bool]:
 
     raise ValueError(
         f"Built-in skill source directory {source_dir} must contain "
-        "SKILL.md or SKILL.md.template"
+        "either SKILL.md or SKILL.md.template"
     )
 
 
 def _read_frontmatter(path: Path) -> dict[str, object]:
     content = path.read_text(encoding="utf-8")
-    lines = content.splitlines()
+    match = _FRONTMATTER_REGEX.match(content)
+    if match is None:
+        raise ValueError(
+            f"{path} must start with YAML frontmatter delimited by two --- lines"
+        )
 
-    if not lines or lines[0].strip() != "---":
-        raise ValueError(f"{path} must start with YAML frontmatter")
-
-    frontmatter_lines: list[str] = []
-    for line in lines[1:]:
-        if line.strip() == "---":
-            parsed = yaml.safe_load("\n".join(frontmatter_lines)) or {}
-            if not isinstance(parsed, dict):
-                raise ValueError(f"{path} frontmatter must be a mapping")
-            return parsed
-        frontmatter_lines.append(line)
-
-    raise ValueError(f"{path} frontmatter is missing closing --- delimiter")
+    parsed = yaml.safe_load(match.group("frontmatter")) or {}
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{path} frontmatter must be a mapping")
+    return parsed
 
 
 def _read_metadata(source_dir: Path) -> tuple[str, str, bool]:
-    metadata_path, has_template = _skill_metadata_path(source_dir)
+    metadata_path, has_template = _select_skill_definition_path(source_dir)
     frontmatter = _read_frontmatter(metadata_path)
 
     name = frontmatter.get("name")
@@ -88,6 +98,7 @@ class BuiltinSkillRegistry:
     """Process-wide registry populated with on-disk built-in skills at boot."""
 
     _instance: ClassVar["BuiltinSkillRegistry | None"] = None
+    _instance_lock: ClassVar[Lock] = Lock()
 
     def __init__(self) -> None:
         self._skills: dict[str, BuiltinSkill] = {}
@@ -95,12 +106,15 @@ class BuiltinSkillRegistry:
     @classmethod
     def instance(cls) -> "BuiltinSkillRegistry":
         if cls._instance is None:
-            cls._instance = cls()
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = cls()
         return cls._instance
 
     @classmethod
     def _reset_for_testing(cls) -> None:
-        cls._instance = None
+        with cls._instance_lock:
+            cls._instance = None
 
     def register(
         self,
@@ -110,8 +124,6 @@ class BuiltinSkillRegistry:
         unavailable_reason: str | None = None,
         configure_url: str | None = None,
     ) -> None:
-        _validate_slug(slug)
-
         if slug in self._skills:
             raise ValueError(f"Built-in skill {slug!r} is already registered")
 
