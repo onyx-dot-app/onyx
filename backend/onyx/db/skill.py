@@ -12,7 +12,6 @@ multi-step admin flow (e.g. create row + replace grants) can roll back atomicall
 
 from collections.abc import Sequence
 from typing import Any
-from typing import Final
 from uuid import UUID
 
 from sqlalchemy import delete
@@ -28,39 +27,15 @@ from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.utils import is_unique_violation
+from onyx.db.utils import UNSET
+from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
-
-class _UnsetType:
-    """Sentinel distinguishing 'not provided' from None/falsy in patch helpers.
-
-    Typed as a dedicated class (instead of `Final[Any]`) so unions like
-    `str | _UnsetType` retain their real type at the call site — `str | Any`
-    collapses to `Any` and silently disables type checking on the parameter.
-    """
-
-
-_UNSET: Final[_UnsetType] = _UnsetType()
-
 # Name of the partial unique index on `skill.slug` (created in the Skills V1
-# migration). We match on this when translating `IntegrityError` so we only
-# remap the actual slug-collision violation, not FK or other constraint
-# failures.
-_SKILL_SLUG_UNIQUE_INDEX = "ux_skill_slug"
-
-
-def _is_slug_unique_violation(exc: IntegrityError) -> bool:
-    """True iff the IntegrityError came from the slug partial unique index.
-
-    Postgres surfaces the violated constraint via `diag.constraint_name`
-    on the underlying psycopg2 error. Anything else (FK violations on
-    `author_user_id`, NOT NULL, etc.) is left to bubble up.
-    """
-    orig = getattr(exc, "orig", None)
-    diag = getattr(orig, "diag", None)
-    constraint = getattr(diag, "constraint_name", None)
-    return constraint == _SKILL_SLUG_UNIQUE_INDEX
+# migration). Used to translate the specific collision into `DUPLICATE_RESOURCE`.
+SKILL_SLUG_UNIQUE_INDEX = "ux_skill_slug"
 
 
 def _add_user_visibility_filter(
@@ -189,7 +164,7 @@ def create_skill(
             db_session.add(skill)
             db_session.flush()
     except IntegrityError as e:
-        if _is_slug_unique_violation(e):
+        if is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
@@ -229,16 +204,16 @@ def replace_skill_bundle(
 def patch_skill(
     *,
     skill_id: UUID,
-    slug: str | _UnsetType = _UNSET,
-    name: str | _UnsetType = _UNSET,
-    description: str | _UnsetType = _UNSET,
-    is_public: bool | _UnsetType = _UNSET,
-    enabled: bool | _UnsetType = _UNSET,
+    slug: str | UnsetType = UNSET,
+    name: str | UnsetType = UNSET,
+    description: str | UnsetType = UNSET,
+    is_public: bool | UnsetType = UNSET,
+    enabled: bool | UnsetType = UNSET,
     db_session: Session,
 ) -> Skill:
     """Partial update of admin-controlled metadata.
 
-    `_UNSET` distinguishes "leave alone" from "set to None/falsy". Slug
+    `UNSET` distinguishes "leave alone" from "set to None/falsy". Slug
     uniqueness is re-checked when the slug changes (the partial unique index
     is the DB backstop; this raises `DUPLICATE_RESOURCE` first for a clean
     structured error).
@@ -250,9 +225,9 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    slug_changed = not isinstance(slug, _UnsetType) and slug != skill.slug
+    slug_changed = not isinstance(slug, UnsetType) and slug != skill.slug
     if slug_changed:
-        assert not isinstance(slug, _UnsetType)
+        assert not isinstance(slug, UnsetType)
         clashing = db_session.scalars(
             select(Skill.id)
             .where(Skill.slug == slug)
@@ -266,20 +241,20 @@ def patch_skill(
             )
         skill.slug = slug
 
-    if not isinstance(name, _UnsetType):
+    if not isinstance(name, UnsetType):
         skill.name = name
-    if not isinstance(description, _UnsetType):
+    if not isinstance(description, UnsetType):
         skill.description = description
-    if not isinstance(is_public, _UnsetType):
+    if not isinstance(is_public, UnsetType):
         skill.is_public = is_public
-    if not isinstance(enabled, _UnsetType):
+    if not isinstance(enabled, UnsetType):
         skill.enabled = enabled
 
     try:
         with db_session.begin_nested():
             db_session.flush()
     except IntegrityError as e:
-        if slug_changed and _is_slug_unique_violation(e):
+        if slug_changed and is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
