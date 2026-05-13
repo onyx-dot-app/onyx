@@ -19,10 +19,7 @@ import {
   VoiceDisconnectModal,
   type ProviderMode,
 } from "@/refresh-pages/admin/VoicePage/shared";
-import {
-  VOICE_PROVIDER_DETAILS,
-  VOICE_PROVIDER_FALLBACK_ICON,
-} from "@/lib/voice/utils";
+import { getVoiceProviderDetail } from "@/lib/voice/utils";
 import { VoiceProviderView } from "@/lib/voice/types";
 
 interface ModelDetails {
@@ -151,9 +148,7 @@ function ModelCard({
         <VoiceDisconnectModal
           disconnectTarget={{
             providerId: provider?.id ?? 0,
-            providerLabel:
-              VOICE_PROVIDER_DETAILS[model.providerType]?.label ??
-              model.providerType,
+            providerLabel: getVoiceProviderDetail(model.providerType).label,
             providerType: model.providerType,
           }}
           onSuccess={() => onMutate()}
@@ -162,10 +157,7 @@ function ModelCard({
 
       <ProviderCard
         aria-label={`voice-${mode}-${model.id}`}
-        icon={
-          VOICE_PROVIDER_DETAILS[model.providerType]?.icon ??
-          VOICE_PROVIDER_FALLBACK_ICON
-        }
+        icon={getVoiceProviderDetail(model.providerType).icon}
         title={model.label}
         description={model.subtitle}
         status={status}

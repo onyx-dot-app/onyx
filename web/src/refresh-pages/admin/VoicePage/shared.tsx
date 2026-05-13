@@ -30,13 +30,7 @@ import {
   deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import {
-  VOICE_PROVIDER_DETAILS,
-  VOICE_PROVIDER_FALLBACK_ICON,
-  PROVIDER_API_KEY_URLS,
-  PROVIDER_DOCS_URLS,
-  PROVIDER_VOICE_DOCS_URLS,
-  OPENAI_STT_MODELS,
-  OPENAI_TTS_MODELS,
+  getVoiceProviderDetail,
   resolveModelId,
   type ProviderMode,
 } from "@/lib/voice/utils";
@@ -64,14 +58,12 @@ export function VoiceProviderSetupModal({
   onSuccess,
 }: VoiceProviderSetupModalProps) {
   const onClose = useModalClose();
+  const detail = getVoiceProviderDetail(providerType);
   const initialTtsModel = defaultModelId
     ? resolveModelId(defaultModelId)
     : existingProvider?.tts_model ?? "tts-1";
 
   const isEditing = !!existingProvider;
-  const label = VOICE_PROVIDER_DETAILS[providerType]?.label ?? providerType;
-  const ProviderIcon =
-    VOICE_PROVIDER_DETAILS[providerType]?.icon ?? VOICE_PROVIDER_FALLBACK_ICON;
 
   // Non-form state: dynamic voice options
   const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);
@@ -131,7 +123,6 @@ export function VoiceProviderSetupModal({
 
     try {
       if (!shouldUseStoredKey) {
-        // Test connection
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
           api_key: apiKeyChanged ? values.api_key : undefined,
@@ -151,10 +142,9 @@ export function VoiceProviderSetupModal({
         }
       }
 
-      // Save the provider
       const response = await upsertVoiceProvider({
         id: existingProvider?.id,
-        name: label,
+        name: detail.label,
         provider_type: providerType,
         api_key: apiKeyChanged ? values.api_key : undefined,
         api_key_changed: apiKeyChanged,
@@ -199,11 +189,15 @@ export function VoiceProviderSetupModal({
           {({ isSubmitting, dirty, isValid }) => (
             <Form>
               <Modal.Header
-                icon={ProviderIcon}
+                icon={detail.icon}
                 moreIcon1={SvgArrowExchange}
                 moreIcon2={SvgOnyxLogo}
-                title={isEditing ? `Configure ${label}` : `Set up ${label}`}
-                description={`Connect to ${label} and set up your voice models.`}
+                title={
+                  isEditing
+                    ? `Configure ${detail.label}`
+                    : `Set up ${detail.label}`
+                }
+                description={`Connect to ${detail.label} and set up your voice models.`}
                 onClose={onClose}
               />
               <Modal.Body>
@@ -226,7 +220,7 @@ export function VoiceProviderSetupModal({
                   <InputVertical
                     title="API Key"
                     subDescription={markdown(
-                      `Paste your [API key](${PROVIDER_API_KEY_URLS[providerType]}) from ${label} to access your models.`
+                      `Paste your [API key](${detail.apiKeyUrl}) from ${detail.label} to access your models.`
                     )}
                     withLabel="api_key"
                   >
@@ -236,12 +230,12 @@ export function VoiceProviderSetupModal({
                     />
                   </InputVertical>
 
-                  {mode === "stt" && providerType === "openai" && (
+                  {mode === "stt" && (detail.sttModels?.length ?? 0) > 1 && (
                     <InputVertical title="STT Model" withLabel="stt_model">
                       <InputSelectField name="stt_model">
                         <InputSelect.Trigger />
                         <InputSelect.Content>
-                          {OPENAI_STT_MODELS.map((m) => (
+                          {detail.sttModels!.map((m) => (
                             <InputSelect.Item key={m.id} value={m.id}>
                               {m.name}
                             </InputSelect.Item>
@@ -253,7 +247,7 @@ export function VoiceProviderSetupModal({
 
                   {mode === "tts" && (
                     <>
-                      {providerType === "openai" && (
+                      {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
                           title="Default Model"
                           subDescription="This model will be used by Onyx by default for text-to-speech."
@@ -262,7 +256,7 @@ export function VoiceProviderSetupModal({
                           <InputSelectField name="tts_model">
                             <InputSelect.Trigger />
                             <InputSelect.Content>
-                              {OPENAI_TTS_MODELS.map((m) => (
+                              {detail.ttsModels!.map((m) => (
                                 <InputSelect.Item key={m.id} value={m.id}>
                                   {m.name}
                                 </InputSelect.Item>
@@ -276,12 +270,8 @@ export function VoiceProviderSetupModal({
                         title="Voice"
                         subDescription={markdown(
                           `This voice will be used for spoken responses. See full list of supported languages and voices at [${
-                            PROVIDER_VOICE_DOCS_URLS[providerType]?.label ??
-                            label
-                          }](${
-                            PROVIDER_VOICE_DOCS_URLS[providerType]?.url ??
-                            PROVIDER_DOCS_URLS[providerType]
-                          }).`
+                            detail.voiceDocsUrl?.label ?? detail.label
+                          }](${detail.voiceDocsUrl?.url ?? detail.docsUrl}).`
                         )}
                         withLabel="default_voice"
                       >
