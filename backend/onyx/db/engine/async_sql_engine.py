@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import AsyncContextManager
 
-import asyncpg
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
@@ -14,7 +13,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
@@ -36,22 +34,6 @@ from shared_configs.contextvars import get_current_tenant_id
 _ASYNC_ENGINE: AsyncEngine | None = None
 
 
-async def get_async_connection() -> Any:
-    """
-    Custom connection function for async engine when using IAM auth.
-    """
-    host = POSTGRES_HOST
-    port = POSTGRES_PORT
-    user = POSTGRES_USER
-    db = POSTGRES_DB
-    token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
-
-    # asyncpg requires 'ssl="require"' if SSL needed
-    return await asyncpg.connect(
-        user=user, password=token, host=host, port=int(port), database=db, ssl="require"
-    )
-
-
 def get_sqlalchemy_async_engine() -> AsyncEngine:
     global _ASYNC_ENGINE
     if _ASYNC_ENGINE is None:
@@ -66,6 +48,13 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
             connect_args["server_settings"] = {"application_name": app_name}
 
         connect_args["ssl"] = create_ssl_context_if_iam()
+
+        # Disable asyncpg's prepared-statement cache. Required when running
+        # against pgbouncer in transaction pool mode: the server connection
+        # rotates between transactions (with `DISCARD ALL`), so cached named
+        # prepared statements get wiped, leading to intermittent
+        # `prepared statement does not exist` / `MissingGreenlet` errors.
+        connect_args["statement_cache_size"] = 0
 
         engine_kwargs = {
             "connect_args": connect_args,
