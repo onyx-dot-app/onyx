@@ -9,18 +9,24 @@ read it without creating a layering loop.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
 from typing import Any
+
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
 
-@dataclass(frozen=True)
-class OAuthProvider:
-    """Provider-specific OAuth details. Resolved by `app.name`."""
+class OAuthProvider(BaseModel):
+    """Provider-specific OAuth details. Resolved by `app.app_type`."""
+
+    # frozen=True so registry entries can't be mutated at runtime;
+    # arbitrary_types_allowed lets us hold function references as
+    # field values for the extract_* parsers.
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     app_name: str
     authorize_url: str
@@ -32,19 +38,19 @@ class OAuthProvider:
     # Extra static query-string params on the authorize URL (e.g.
     # Google's `access_type=offline&prompt=consent` to get refresh
     # tokens, `response_type=code` where required, etc.).
-    extra_authorize_params: dict[str, str] = field(default_factory=dict)
+    extra_authorize_params: dict[str, str] = Field(default_factory=dict)
     # Parser for the initial-grant token response. Receives the JSON
     # response body and returns the dict to persist in
-    # `user_credentials`.
-    extract_credentials: Callable[[dict[str, Any]], dict[str, Any]] = lambda _body: {}
+    # `user_credentials`. Required (no default) — a misconfigured
+    # provider without a parser would silently return empty creds
+    # and look "successful" to the OAuth route.
+    extract_credentials: Callable[[dict[str, Any]], dict[str, Any]]
     # Parser for the refresh-token response. Slack reshapes the
     # response between initial grant (nested under `authed_user`) and
-    # refresh (flat) — so the two parsers diverge. Returns only the
+    # refresh (flat), so the two parsers diverge. Returns only the
     # fields that should be updated; caller preserves anything not
     # explicitly returned (team_id, authed_user_id, etc.).
-    extract_refresh_credentials: Callable[[dict[str, Any]], dict[str, Any]] = (
-        lambda _body: {}
-    )
+    extract_refresh_credentials: Callable[[dict[str, Any]], dict[str, Any]]
 
 
 # ── Parsers: initial grant ──────────────────────────────────────────
