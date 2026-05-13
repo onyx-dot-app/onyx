@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -339,17 +340,32 @@ def _generate_slack_user(email: str) -> User:
     )
 
 
-def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
+def add_slack_user_if_not_exists(
+    db_session: Session,
+    email: str,
+    enforce_seat_check: Callable[[Session, int], None] | None = None,
+) -> User:
+    """Look up or create the Slack-bot user for ``email``.
+
+    ``enforce_seat_check`` (optional): invoked inside this function's
+    transaction whenever the call would consume a seat — i.e. on
+    brand-new BOT creation OR on EXT_PERM_USER (uncounted) -> BOT
+    (counted) promotion. Must raise on overage.
+    """
     email = email.lower()
     user = get_user_by_email(email, db_session)
     if user is not None:
         # If the user is an external permissioned user, we update it to a slack user
         if user.account_type == AccountType.EXT_PERM_USER:
+            if enforce_seat_check is not None:
+                enforce_seat_check(db_session, 1)
             user.role = UserRole.SLACK_USER
             user.account_type = AccountType.BOT
             db_session.commit()
         return user
 
+    if enforce_seat_check is not None:
+        enforce_seat_check(db_session, 1)
     user = _generate_slack_user(email=email)
     db_session.add(user)
     db_session.commit()
