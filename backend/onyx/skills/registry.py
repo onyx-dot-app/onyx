@@ -79,7 +79,7 @@ def _skill_metadata_path(source_dir: Path) -> tuple[Path, bool]:
 
 
 def _read_frontmatter(path: Path) -> dict[str, object]:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
     if not lines or lines[0].strip() != "---":
