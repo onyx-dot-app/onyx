@@ -287,7 +287,6 @@ class KubernetesSandboxManager(SandboxManager):
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
-        user_id: str,  # noqa: ARG002
         tenant_id: str,
         onyx_pat: str,
     ) -> client.V1Pod:
@@ -772,7 +771,6 @@ class KubernetesSandboxManager(SandboxManager):
             logger.debug("Creating Pod %s", pod_name)
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
-                user_id=str(user_id),
                 tenant_id=tenant_id,
                 onyx_pat=onyx_pat,
             )
