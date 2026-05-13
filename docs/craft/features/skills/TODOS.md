@@ -447,4 +447,4 @@ Listed so agents don't accidentally pick these up. Lift to a real task only if p
 
 _(Append cross-cutting decisions or clarifications that come up during implementation. Don't update the spec mid-flight — record here, surface to the spec at the end of the phase.)_
 
-- _(nothing yet)_
+- 2026-05-13: Phase 1 work is being split across multiple stacked PRs branching off `skills-phase-1`.
