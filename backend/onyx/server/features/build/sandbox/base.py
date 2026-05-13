@@ -124,7 +124,6 @@ class SandboxManager(ABC):
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
-        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -135,7 +134,7 @@ class SandboxManager(ABC):
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
-        - sessions/$session_id/org_info/ (if demo data enabled)
+        - sessions/$session_id/org_info/ (if user_work_area provided)
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -144,9 +143,8 @@ class SandboxManager(ABC):
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, use demo data configuration
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -214,7 +212,6 @@ class SandboxManager(ABC):
         tenant_id: str,
         nextjs_port: int,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
     ) -> None:
         """Restore a session workspace from a snapshot.
 
@@ -228,7 +225,6 @@ class SandboxManager(ABC):
             tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server
             llm_config: LLM provider configuration for opencode.json
-            use_demo_data: If True, use demo data configuration
 
         Raises:
             RuntimeError: If snapshot restoration fails

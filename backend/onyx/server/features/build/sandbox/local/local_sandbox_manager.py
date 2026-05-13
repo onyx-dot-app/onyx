@@ -299,7 +299,6 @@ class LocalSandboxManager(SandboxManager):
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
-        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -310,7 +309,7 @@ class LocalSandboxManager(SandboxManager):
         4. AGENTS.md
         5. .agent/skills/
         6. opencode.json
-        7. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
+        7. org_info/ (if user_work_area provided)
         8. attachments/
         9. Start Next.js dev server for this session
 
@@ -321,9 +320,8 @@ class LocalSandboxManager(SandboxManager):
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, use demo data configuration
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -418,8 +416,7 @@ class LocalSandboxManager(SandboxManager):
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
                 user_name=user_name,
                 user_role=user_role,
-                use_demo_data=use_demo_data,
-                include_org_info=use_demo_data,
+                include_org_info=bool(user_work_area),
             )
             logger.debug("Agent instructions ready")
 
@@ -761,7 +758,6 @@ class LocalSandboxManager(SandboxManager):
         tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
     ) -> None:
         """Not implemented for local backend - workspaces persist on disk.
 

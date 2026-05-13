@@ -127,13 +127,10 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=(
-                request.user_work_area if request.demo_data_enabled else None
-            ),
-            user_level=request.user_level if request.demo_data_enabled else None,
+            user_work_area=request.user_work_area,
+            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
-            demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
 
@@ -482,7 +479,6 @@ def restore_session(
                             tenant_id=tenant_id,
                             nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
                             llm_config=llm_config,
-                            use_demo_data=session.demo_data_enabled,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()

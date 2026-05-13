@@ -32,7 +32,6 @@ def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
-    demo_data_enabled: bool = True,
 ) -> BuildSession:
     """Create a new build session for the given user.
 
@@ -43,23 +42,16 @@ def create_build_session__no_commit(
         user_id: The user ID
         db_session: Database session
         name: Optional session name
-        demo_data_enabled: Whether this session uses demo data (default True)
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
-        demo_data_enabled=demo_data_enabled,
     )
     db_session.add(session)
     db_session.flush()
 
-    logger.info(
-        "Created build session %s for user %s (demo_data=%s)",
-        session.id,
-        user_id,
-        demo_data_enabled,
-    )
+    logger.info("Created build session %s for user %s", session.id, user_id)
     return session
 
 
@@ -106,30 +98,21 @@ def get_user_build_sessions(
 def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
-    demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        demo_data_enabled: Match sessions with this demo_data setting.
-                          If None, matches any session regardless of setting.
     """
-    # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
-    query = db_session.query(BuildSession).filter(
-        BuildSession.user_id == user_id,
-        ~has_messages,  # Sessions with no messages only
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            ~has_messages,
+        )
+        .first()
     )
-
-    if demo_data_enabled is not None:
-        query = query.filter(BuildSession.demo_data_enabled == demo_data_enabled)
-
-    return query.first()
 
 
 def update_session_activity(

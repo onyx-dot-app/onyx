@@ -253,24 +253,9 @@ class KubernetesSandboxManager(SandboxManager):
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        use_demo_data: bool = False,
         include_org_info: bool = False,
     ) -> str:
-        """Load and populate agent instructions from template file.
-
-        Args:
-            provider: LLM provider type
-            model_name: Model name
-            nextjs_port: Next.js port
-            disabled_tools: List of disabled tools
-            user_name: User's name for personalization
-            user_role: User's role/title for personalization
-            use_demo_data: If True, exclude user context from AGENTS.md
-            include_org_info: Whether to include the org_info section (demo data mode)
-
-        Returns:
-            Populated agent instructions content
-        """
+        """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
@@ -280,7 +265,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            use_demo_data=use_demo_data,
             include_org_info=include_org_info,
         )
 
@@ -993,7 +977,6 @@ class KubernetesSandboxManager(SandboxManager):
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
-        use_demo_data: bool = False,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1002,12 +985,8 @@ class KubernetesSandboxManager(SandboxManager):
         2. Copy outputs template from local templates (downloaded during init)
         3. Write AGENTS.md
         4. Write opencode.json with LLM config
-        5. Create org_info/ directory with user identity file (if demo data enabled)
+        5. Create org_info/ directory with user identity file (if user_work_area provided)
         6. Start Next.js dev server
-
-        Note: Snapshot restoration is not supported in Kubernetes mode since the
-        main container doesn't have S3 access. Snapshots would need to be
-        pre-downloaded during pod provisioning if needed.
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -1016,9 +995,8 @@ class KubernetesSandboxManager(SandboxManager):
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, use demo data configuration
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1044,8 +1022,7 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            use_demo_data=use_demo_data,
-            include_org_info=use_demo_data,
+            include_org_info=bool(user_work_area),
         )
 
         # Build opencode config JSON using shared config builder
@@ -1399,17 +1376,12 @@ echo "SNAPSHOT_CREATED"
         tenant_id: str,  # noqa: ARG002
         nextjs_port: int,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
     ) -> None:
         """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
-
-        Execs into the sandbox container to stream the snapshot directly
-        from S3 into the session directory using AWS CLI.
 
         Steps:
         1. Download snapshot from S3 via aws s3 cp in the sandbox container
         2. Pipe directly to tar for extraction
-           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
         3. Regenerate configuration files (AGENTS.md, opencode.json)
         4. Start the NextJS dev server
 
@@ -1420,7 +1392,6 @@ echo "SNAPSHOT_CREATED"
             tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server
             llm_config: LLM provider configuration for opencode.json
-            use_demo_data: If True, use demo data configuration
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -1464,7 +1435,6 @@ echo "SNAPSHOT_RESTORED"
                 session_path=safe_session_path,
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
-                use_demo_data=use_demo_data,
             )
 
             # Start NextJS dev server (check node_modules since restoring from snapshot)
@@ -1491,7 +1461,6 @@ echo "SNAPSHOT_RESTORED"
         session_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
-        use_demo_data: bool,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
@@ -1504,18 +1473,15 @@ echo "SNAPSHOT_RESTORED"
             session_path: Path to the session directory (already shlex.quoted)
             llm_config: LLM provider configuration
             nextjs_port: Port for NextJS (used in AGENTS.md)
-            use_demo_data: Whether to use demo data configuration
         """
-        # Generate AGENTS.md content
         agent_instructions = self._load_agent_instructions(
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=None,  # Not stored, regenerate without personalization
+            user_name=None,
             user_role=None,
-            use_demo_data=use_demo_data,
-            include_org_info=False,  # Don't include org_info for restored sessions
+            include_org_info=False,
         )
 
         # Generate opencode.json

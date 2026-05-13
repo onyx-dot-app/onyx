@@ -247,7 +247,7 @@ export default function BuildChatPanel({
   }, [isRunning, session?.messages]);
 
   const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+    async (message: string, files: BuildFile[]) => {
       if (limits?.isLimited) {
         setShowUpgradeModal(true);
         return;

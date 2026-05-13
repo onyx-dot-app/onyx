@@ -448,7 +448,7 @@ async def upload_files(
         )
 
     # Mark connector as having succeeded (sets last_successful_index_time)
-    # This allows the demo data toggle to be disabled
+    # Mark as having successfully indexed
     update_connector_credential_pair(
         db_session=db_session,
         connector_id=connector_id,
@@ -651,7 +651,7 @@ async def upload_zip(
         )
 
     # Mark connector as having succeeded (sets last_successful_index_time)
-    # This allows the demo data toggle to be disabled
+    # Mark as having successfully indexed
     update_connector_credential_pair(
         db_session=db_session,
         connector_id=connector_id,

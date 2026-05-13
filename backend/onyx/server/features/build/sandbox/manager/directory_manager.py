@@ -262,13 +262,9 @@ class DirectoryManager:
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        use_demo_data: bool = False,
         include_org_info: bool = False,
     ) -> None:
         """Generate AGENTS.md with dynamic configuration.
-
-        Reads the template file and replaces placeholders with actual values
-        including user personalization, LLM configuration, and runtime settings.
 
         Args:
             sandbox_path: Path to the sandbox directory
@@ -278,14 +274,12 @@ class DirectoryManager:
             disabled_tools: List of disabled tools
             user_name: User's name for personalization
             user_role: User's role/title for personalization
-            use_demo_data: If True, exclude user context from AGENTS.md
-            include_org_info: Whether to include the org_info section (demo data mode)
+            include_org_info: Whether to include the org_info section
         """
         agent_md_path = sandbox_path / "AGENTS.md"
         if agent_md_path.exists():
             return
 
-        # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
@@ -295,7 +289,6 @@ class DirectoryManager:
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            use_demo_data=use_demo_data,
             include_org_info=include_org_info,
         )
 
