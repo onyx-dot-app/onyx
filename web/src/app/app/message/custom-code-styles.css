@@ -26,12 +26,6 @@
    These auto-switch for dark mode via colors.css — no dark: modifier needed.
    Note: text-05 = highest contrast, text-01 = lowest. */
 .prose-onyx {
-  /* Match font-main-content-body (24px / 16px). The typography plugin's
-     default `.prose { line-height: 1.75 }` lives in the same @layer as
-     font-main-content-body in v4, so without this override descendants
-     like <li> inherit 1.75 instead of 1.5. */
-  line-height: 1.5;
-
   --tw-prose-body: var(--text-05);
   --tw-prose-headings: var(--text-05);
   --tw-prose-lead: var(--text-04);
