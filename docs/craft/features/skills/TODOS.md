@@ -43,7 +43,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.010-P1.015` Module skeletons
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.020-P1.027` BuiltinSkillRegistry core
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
-- `[WIP @claude-coupled-lattice]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
 - `[WIP @claude-coupled-josephson]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
 - `[REVIEW @claude-collapsing-meson #11064]` `P5.030-P5.038` Phase 5.4 orphan-blob + aged-soft-delete sweep
 
@@ -109,15 +109,15 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.6 DB ops  (spec §3)
 
-- `[WIP @claude-coupled-lattice]` `P1.060` Implement `list_skills_for_user(user, db)` — public OR group-grant query, filtered to **`enabled = True AND deleted_at IS NULL`**. Mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81` (drop the user-direct-grant branch).  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)` — same `enabled = True AND deleted_at IS NULL` filter as `list_skills_for_user`.  (deps: P1.060)
-- `[WIP @claude-coupled-lattice]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — `deleted_at IS NULL` only (admins need disabled skills to re-enable them).  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.063` Implement `list_skills_for_admin(db)` — `deleted_at IS NULL` only (admin UI shows disabled skills; soft-deleted hidden by default).  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
-- `[WIP @claude-coupled-lattice]` `P1.068` Implement `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob NOT removed inline; sweep (P5.031–P5.033) handles it after 14 days.  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.060` Implement `list_skills_for_user(user, db)` — public OR group-grant query, filtered to **`enabled = True AND deleted_at IS NULL`**. Mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81` (drop the user-direct-grant branch).  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)` — same `enabled = True AND deleted_at IS NULL` filter as `list_skills_for_user`.  (deps: P1.060)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — `deleted_at IS NULL` only (admins need disabled skills to re-enable them).  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.063` Implement `list_skills_for_admin(db)` — `deleted_at IS NULL` only (admin UI shows disabled skills; soft-deleted hidden by default).  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
+- `[REVIEW @claude-coupled-lattice #11060]` `P1.068` Implement `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob NOT removed inline; sweep (P5.031–P5.033) handles it after 14 days.  (deps: P1.015)
 
 ---
 
