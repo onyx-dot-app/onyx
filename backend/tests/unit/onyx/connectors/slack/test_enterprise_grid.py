@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from slack_sdk.errors import SlackApiError
 
+from onyx.connectors.slack.connector import _channel_team_id
 from onyx.connectors.slack.connector import _channel_to_hierarchy_node
 from onyx.connectors.slack.connector import fetch_team_url
 from onyx.connectors.slack.connector import get_channels_across_teams
@@ -156,6 +157,19 @@ class TestGetChannelsAcrossTeams:
             result = get_channels_across_teams(MagicMock(), ["T_QUERIED"])
             stamped = {c["id"]: c.get("team") for c in result}
             assert stamped == {"C1": "T_QUERIED", "C2": "T_EXISTING"}
+
+
+class TestChannelTeamId:
+    def test_prefers_team_field(self) -> None:
+        ch = _channel("C1", team="T_LIST", context_team_id="T_INFO")
+        assert _channel_team_id(ch) == "T_LIST"
+
+    def test_falls_back_to_context_team_id(self) -> None:
+        ch = _channel("C1", context_team_id="T_INFO")
+        assert _channel_team_id(ch) == "T_INFO"
+
+    def test_none_when_neither_present(self) -> None:
+        assert _channel_team_id(_channel("C1")) is None
 
 
 class TestChannelToHierarchyNode:

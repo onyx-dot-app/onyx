@@ -43,6 +43,7 @@ class ChannelType(TypedDict):
     previous_names: list[str]
     num_members: int
     team: NotRequired[str]
+    context_team_id: NotRequired[str]
 
 
 class AttachmentType(TypedDict):

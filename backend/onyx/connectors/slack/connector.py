@@ -254,6 +254,12 @@ def _build_doc_id(channel_id: str, thread_ts: str) -> str:
     return f"{channel_id}__{thread_ts}"
 
 
+def _channel_team_id(channel: ChannelType) -> str | None:
+    """Grid workspace id for a channel; ``conversations.info`` returns it as
+    ``context_team_id`` while ``conversations.list`` returns it as ``team``."""
+    return channel.get("team") or channel.get("context_team_id")
+
+
 def thread_to_doc(
     channel: ChannelType,
     thread: ThreadType,
@@ -264,7 +270,7 @@ def thread_to_doc(
     team_id_to_url: dict[str, str] | None = None,
 ) -> Document:
     channel_id = channel["id"]
-    channel_team = channel.get("team")
+    channel_team = _channel_team_id(channel)
 
     initial_sender_expert_info = expert_info_from_slack_id(
         user_id=thread[0].get("user"), client=client, user_cache=user_cache
@@ -432,7 +438,7 @@ def _channel_to_hierarchy_node(
 ) -> HierarchyNode:
     """Convert a Slack channel to a HierarchyNode."""
     resolved_url: str | None = None
-    channel_team = channel.get("team")
+    channel_team = _channel_team_id(channel)
     if channel_team and team_id_to_url is not None:
         resolved_url = team_id_to_url.get(channel_team)
     if not resolved_url:
@@ -724,7 +730,7 @@ def _process_message(
                         message,
                         client,
                         channel["id"],
-                        team_id=channel.get("team"),
+                        team_id=_channel_team_id(channel),
                         team_id_to_url=team_id_to_url,
                     ),
                 ),

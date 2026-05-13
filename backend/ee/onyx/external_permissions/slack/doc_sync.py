@@ -182,12 +182,6 @@ def slack_doc_sync(
         r,
     )
 
-    user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
-    if not user_id_to_email_map:
-        raise ValueError(
-            "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
-        )
-
     grid_team_ids: list[str] | None = None
     try:
         auth_response = slack_client.auth_test()
@@ -195,6 +189,14 @@ def slack_doc_sync(
             grid_team_ids = list_grid_team_ids(slack_client)
     except Exception as e:
         logger.warning("Slack Grid detection during perm sync failed: %s", e)
+
+    user_id_to_email_map = fetch_user_id_to_email_map(
+        slack_client, team_ids=grid_team_ids
+    )
+    if not user_id_to_email_map:
+        raise ValueError(
+            "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
+        )
 
     workspace_permissions = _fetch_workspace_permissions(
         user_id_to_email_map=user_id_to_email_map,
