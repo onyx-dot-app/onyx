@@ -389,6 +389,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source_type: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -489,7 +490,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source_type,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -528,6 +529,7 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        source_type: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
 
@@ -541,6 +543,7 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.source_type = source_type
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
@@ -838,6 +841,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source_type=self.source_type,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -1069,6 +1073,23 @@ class JiraConnector(
     def build_dummy_checkpoint(self) -> JiraConnectorCheckpoint:
         return JiraConnectorCheckpoint(
             has_more=True,
+        )
+
+
+class JiraServiceManagementConnector(JiraConnector):
+    """Connector for Jira Service Management tickets.
+
+    Jira Service Management tickets are Jira issues under service management
+    projects, so the existing Jira issue ingestion, checkpointing, permissions,
+    and JQL filtering logic can be reused directly. Exposing a dedicated source
+    lets admins configure JSM separately from general Jira Software indexing.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(
+            *args,
+            source_type=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            **kwargs,
         )
 
 
