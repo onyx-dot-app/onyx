@@ -49,11 +49,13 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
 
         connect_args["ssl"] = create_ssl_context_if_iam()
 
-        # Disable asyncpg's prepared-statement cache. Required when running
-        # against pgbouncer in transaction pool mode: the server connection
-        # rotates between transactions (with `DISCARD ALL`), so cached named
-        # prepared statements get wiped, leading to intermittent
-        # `prepared statement does not exist` / `MissingGreenlet` errors.
+        # Use unnamed prepared statements (auto-destroyed at end of statement)
+        # instead of asyncpg's default client-side cache of named statements.
+        # Required for pgbouncer transaction pool mode (server connections
+        # rotate with `DISCARD ALL` between txns, wiping cached statements),
+        # and avoids greenlet-bridge races on the first asyncpg connect that
+        # surface as `MissingGreenlet` / `greenlet_spawn has not been called`
+        # on cold async sessions.
         connect_args["statement_cache_size"] = 0
 
         engine_kwargs = {
