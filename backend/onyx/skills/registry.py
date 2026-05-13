@@ -9,10 +9,7 @@ from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 _SLUG_REGEX = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
-
-
-def _always_available(_: Session) -> bool:
-    return True
+_DEFAULT_IS_AVAILABLE: Callable[[Session], bool] = lambda _: True  # noqa: E731
 
 
 class BuiltinSkill(BaseModel):
@@ -25,7 +22,7 @@ class BuiltinSkill(BaseModel):
     name: str
     description: str
     has_template: bool
-    is_available: Callable[[Session], bool] = _always_available
+    is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
     unavailable_reason: str | None = None
     configure_url: str | None = None
 
@@ -109,7 +106,7 @@ class BuiltinSkillRegistry:
         self,
         slug: str,
         source_dir: Path,
-        is_available: Callable[[Session], bool] = _always_available,
+        is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE,
         unavailable_reason: str | None = None,
         configure_url: str | None = None,
     ) -> None:
