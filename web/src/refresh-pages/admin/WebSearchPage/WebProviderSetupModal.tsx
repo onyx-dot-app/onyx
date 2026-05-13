@@ -88,7 +88,11 @@ export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
       : undefined;
 
   const isEditing = !!provider && provider.id > 0;
-  const hasStoredKey = !!provider?.masked_api_key;
+  const hasStoredKey = !!(
+    provider &&
+    provider.id > 0 &&
+    provider.masked_api_key
+  );
 
   const requiresApiKey =
     category === "search"
@@ -119,7 +123,8 @@ export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
         ]?.apiKeyUrl
       : undefined;
 
-  const initialApiKey = provider?.masked_api_key ?? "";
+  const initialApiKey =
+    provider && provider.id > 0 ? provider.masked_api_key ?? "" : "";
 
   const initialConfig = configField
     ? (category === "search"

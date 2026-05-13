@@ -134,29 +134,8 @@ export async function deactivateContentProvider(
 
 export async function disconnectProvider(
   id: number,
-  category: "search" | "content",
-  replacementProviderId: string | null
+  category: "search" | "content"
 ): Promise<void> {
-  if (replacementProviderId && replacementProviderId !== "__none__") {
-    const repId = Number(replacementProviderId);
-    const activateEndpoint =
-      category === "search"
-        ? `/api/admin/web-search/search-providers/${repId}/activate`
-        : `/api/admin/web-search/content-providers/${repId}/activate`;
-    const activateRes = await fetch(activateEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!activateRes.ok) {
-      throw new Error(
-        await parseErrorDetail(
-          activateRes,
-          "Failed to activate replacement provider."
-        )
-      );
-    }
-  }
-
   const res = await fetch(`/api/admin/web-search/${category}-providers/${id}`, {
     method: "DELETE",
   });
@@ -316,7 +295,9 @@ export async function connectProviderFlow({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(siblingPayload),
         }
-      ).catch(() => {});
+      ).catch((err: unknown) => {
+        console.error("Failed to sync Exa sibling provider:", err);
+      });
     }
 
     await mutate();

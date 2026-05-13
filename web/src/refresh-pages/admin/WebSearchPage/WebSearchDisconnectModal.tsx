@@ -49,23 +49,19 @@ export function WebSearchDisconnectModal({
   async function handleDisconnect() {
     setIsSubmitting(true);
     try {
-      await disconnectProvider(
-        disconnectTarget.id,
-        disconnectTarget.category,
-        null
-      );
+      await disconnectProvider(disconnectTarget.id, disconnectTarget.category);
       if (exaSibling) {
-        await disconnectProvider(exaSibling.id, siblingCategory, null);
+        await disconnectProvider(exaSibling.id, siblingCategory);
       }
       toast.success(`${disconnectTarget.label} disconnected`);
-      await mutateSearchProviders();
-      await mutateContentProviders();
       onClose?.();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     } finally {
+      await mutateSearchProviders();
+      await mutateContentProviders();
       setIsSubmitting(false);
     }
   }
