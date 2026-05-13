@@ -10,6 +10,14 @@ import {
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
 import { upsertExternalApp } from "@/app/craft/services/externalAppsService";
+import { Button } from "@opal/components";
+import Text from "@/refresh-components/texts/Text";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import {
+  BuiltInProviderPreset,
+  ExternalAppAdminResponse,
+} from "@/app/craft/v1/apps/registry";
 
 interface ConfigureProviderModalProps {
   open: boolean;
@@ -17,6 +25,11 @@ interface ConfigureProviderModalProps {
   onSaved: () => void;
   descriptor: BuiltInExternalAppDescriptor;
   /** Null → create new instance; non-null → edit existing row. */
+  preset: BuiltInProviderPreset;
+  /**
+   * The existing row for this provider, if any. When provided the form
+   * is pre-filled and the call upserts; when null a new row is created.
+   */
   existingApp: ExternalAppAdminResponse | null;
 }
 
