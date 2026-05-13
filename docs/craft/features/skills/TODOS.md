@@ -40,9 +40,9 @@ If you're an agent picking up work:
 
 _(Update this section as you claim things. Keep it short — just the active `WIP` and `REVIEW` items so anyone glancing at the file can see what's hot.)_
 
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.010-P1.015` Module skeletons
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.020-P1.027` BuiltinSkillRegistry core
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.010-P1.015` Module skeletons
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.020-P1.027` BuiltinSkillRegistry core
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
 - `[WIP @claude-coupled-lattice]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
 - `[WIP @claude-coupled-josephson]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
 - `[REVIEW @claude-collapsing-meson #11064]` `P5.030-P5.038` Phase 5.4 orphan-blob + aged-soft-delete sweep
@@ -64,25 +64,25 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.2 Module skeletons  (spec §2)
 
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.011` Create empty `backend/onyx/skills/registry.py`
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.014` Create empty `backend/onyx/skills/render.py`
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.015` Create empty `backend/onyx/db/skill.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.011` Create empty `backend/onyx/skills/registry.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.014` Create empty `backend/onyx/skills/render.py`
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.015` Create empty `backend/onyx/db/skill.py`
 
 ### 1.3 BuiltinSkillRegistry  (spec §4)
 
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
-- `[REVIEW @codex-charged-perovskite #pending]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `check` returns False; `evaluate_for_admin` returns the unmet requirement with description  (deps: P1.025, P1.026)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `check` returns False; `evaluate_for_admin` returns the unmet requirement with description  (deps: P1.025, P1.026)
 
 ### 1.4 Bundle validator  (spec §5)
 
