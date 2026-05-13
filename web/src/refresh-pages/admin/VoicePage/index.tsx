@@ -3,17 +3,12 @@
 import { useMemo } from "react";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import {
-  useVoiceProviders,
-  VoiceProviderView,
-} from "@/hooks/useVoiceProviders";
+import { useVoiceProviders, type VoiceProviderView } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,
   deactivateVoiceProvider,
-  deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -25,7 +20,7 @@ import {
   VoiceProviderSetupModal,
   VoiceDisconnectModal,
   type ProviderMode,
-} from "@/refresh-pages/admin/VoiceConfigurationPage/shared";
+} from "@/refresh-pages/admin/VoicePage/shared";
 
 interface ModelDetails {
   id: string;
@@ -134,34 +129,6 @@ function ModelCard({
   const setupModal = useCreateModal();
   const disconnectModal = useCreateModal();
 
-  const handleDisconnect = async () => {
-    if (!provider) return;
-    try {
-      const response = await deleteVoiceProvider(provider.id);
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to disconnect provider."
-        );
-      }
-      toast.success(`${getProviderLabel(model.providerType)} disconnected`);
-      onMutate();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Unexpected error occurred."
-      );
-    } finally {
-      disconnectModal.toggle(false);
-    }
-  };
-
-  const handleSetupSuccess = () => {
-    onMutate();
-    setupModal.toggle(false);
-  };
-
   return (
     <>
       <setupModal.Provider>
@@ -170,7 +137,10 @@ function ModelCard({
           existingProvider={status !== "disconnected" ? provider ?? null : null}
           mode={mode}
           defaultModelId={model.id}
-          onSuccess={handleSetupSuccess}
+          onSuccess={() => {
+            onMutate();
+            setupModal.toggle(false);
+          }}
         />
       </setupModal.Provider>
 
@@ -181,8 +151,7 @@ function ModelCard({
             providerLabel: getProviderLabel(model.providerType),
             providerType: model.providerType,
           }}
-          providers={[]}
-          onDisconnect={() => void handleDisconnect()}
+          onSuccess={() => onMutate()}
         />
       </disconnectModal.Provider>
 
@@ -207,7 +176,7 @@ function ModelCard({
   );
 }
 
-export default function VoiceConfigurationPage() {
+export default function VoicePage() {
   const { providers, isLoading, refresh: mutate } = useVoiceProviders();
 
   const providersByType = useMemo(() => {

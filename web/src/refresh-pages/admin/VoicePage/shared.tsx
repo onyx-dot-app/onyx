@@ -6,6 +6,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
 import Modal from "@/refresh-components/Modal";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -26,6 +27,7 @@ import {
   testVoiceProvider,
   upsertVoiceProvider,
   fetchVoicesByType,
+  deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import {
   getProviderIcon as getProviderIconUtil,
@@ -71,6 +73,7 @@ export function VoiceProviderSetupModal({
     : existingProvider?.tts_model ?? "tts-1";
 
   const isEditing = !!existingProvider;
+  const hasStoredKey = !!existingProvider?.has_api_key;
   const label = PROVIDER_LABELS[providerType] ?? providerType;
   const ProviderIcon = getProviderIcon(providerType);
 
@@ -105,7 +108,9 @@ export function VoiceProviderSetupModal({
   }, [providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required("API key is required"),
+    api_key: hasStoredKey
+      ? Yup.string()
+      : Yup.string().required("API key is required"),
     target_uri:
       providerType === "azure"
         ? Yup.string().required("Target URI is required")
@@ -116,7 +121,7 @@ export function VoiceProviderSetupModal({
   });
 
   const initialValues: VoiceFormValues = {
-    api_key: existingProvider?.api_key ?? "",
+    api_key: "",
     target_uri: existingProvider?.target_uri ?? "",
     stt_model: existingProvider?.stt_model ?? "whisper-1",
     tts_model: initialTtsModel,
@@ -127,8 +132,8 @@ export function VoiceProviderSetupModal({
     values: VoiceFormValues,
     { setSubmitting }: { setSubmitting: (v: boolean) => void }
   ) {
-    const apiKeyChanged = values.api_key !== initialValues.api_key;
-    const shouldUseStoredKey = isEditing && !apiKeyChanged;
+    const apiKeyChanged = values.api_key !== "";
+    const shouldUseStoredKey = hasStoredKey && !apiKeyChanged;
 
     try {
       if (!shouldUseStoredKey) {
@@ -190,7 +195,7 @@ export function VoiceProviderSetupModal({
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content width="md">
+      <Modal.Content width="sm">
         <Formik
           initialValues={initialValues}
           validationSchema={validationSchema}
@@ -203,7 +208,7 @@ export function VoiceProviderSetupModal({
                 icon={ProviderIcon}
                 moreIcon1={SvgArrowExchange}
                 moreIcon2={SvgOnyxLogo}
-                title={`Set up ${label}`}
+                title={isEditing ? `Configure ${label}` : `Set up ${label}`}
                 description={`Connect to ${label} and set up your voice models.`}
                 onClose={onClose}
               />
@@ -233,7 +238,11 @@ export function VoiceProviderSetupModal({
                   >
                     <PasswordInputTypeInField
                       name="api_key"
-                      placeholder="API key"
+                      placeholder={
+                        hasStoredKey
+                          ? "Enter new key to replace stored key"
+                          : "API key"
+                      }
                     />
                   </InputVertical>
 
@@ -311,7 +320,7 @@ export function VoiceProviderSetupModal({
                   disabled={isSubmitting || !isValid || !dirty}
                   icon={isSubmitting ? SimpleLoader : undefined}
                 >
-                  {isEditing ? "Save" : "Connect"}
+                  {isEditing ? "Update" : "Connect"}
                 </Button>
               </Modal.Footer>
             </Form>
@@ -326,62 +335,68 @@ export function VoiceProviderSetupModal({
 // VoiceDisconnectModal
 // ---------------------------------------------------------------------------
 
-export const NO_DEFAULT_VALUE = "__none__";
-
 interface VoiceDisconnectModalProps {
   disconnectTarget: {
     providerId: number;
     providerLabel: string;
     providerType: string;
   };
-  providers: VoiceProviderView[];
-  onDisconnect: () => void;
+  onSuccess: () => void;
 }
 
 export function VoiceDisconnectModal({
   disconnectTarget,
-  providers,
-  onDisconnect,
+  onSuccess,
 }: VoiceDisconnectModalProps) {
   const onClose = useModalClose();
-  // Find other configured providers that could serve as replacements
-  const replacementOptions = providers.filter(
-    (p) => p.id !== disconnectTarget.providerId && p.has_api_key
-  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const hasReplacements = replacementOptions.length > 0;
+  async function handleDisconnect() {
+    setIsSubmitting(true);
+    try {
+      const res = await deleteVoiceProvider(disconnectTarget.providerId);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof body?.detail === "string"
+            ? body.detail
+            : "Failed to disconnect provider."
+        );
+      }
+      toast.success(`${disconnectTarget.providerLabel} disconnected`);
+      onSuccess();
+      onClose?.();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Unexpected error occurred."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
-    <Modal open onOpenChange={onClose}>
-      <Modal.Content width="md">
-        <Modal.Header
-          icon={SvgUnplug}
-          title={`Disconnect ${disconnectTarget.providerLabel}`}
-          onClose={onClose}
-        />
-        <Modal.Body>
-          <Section alignItems="start" gap={0.5}>
-            <Text color="text-03">
-              {markdown(
-                `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
-              )}
-            </Text>
-            {!hasReplacements && (
-              <Text color="text-03">
-                Connect another provider to continue using voice.
-              </Text>
-            )}
-          </Section>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button prominence="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={onDisconnect}>
-            Disconnect
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal>
+    <ConfirmationModalLayout
+      icon={SvgUnplug}
+      title={`Disconnect ${disconnectTarget.providerLabel}`}
+      description="This will remove the stored credentials for this provider."
+      submit={
+        <Button
+          variant="danger"
+          onClick={() => void handleDisconnect()}
+          disabled={isSubmitting}
+        >
+          Disconnect
+        </Button>
+      }
+    >
+      <Section alignItems="start" gap={0.5}>
+        <Text color="text-03">
+          {markdown(
+            `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+          )}
+        </Text>
+      </Section>
+    </ConfirmationModalLayout>
   );
 }
