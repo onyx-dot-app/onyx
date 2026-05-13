@@ -1,12 +1,44 @@
 from enum import Enum
 from typing import Any
+from typing import Final
 
 from psycopg2 import errorcodes
 from psycopg2 import OperationalError
+from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 
 from onyx.db.models import Base
+
+
+class UnsetType:
+    """Sentinel distinguishing 'not provided' from None/falsy in patch helpers.
+
+    Use as the default for optional parameters whose caller might legitimately
+    want to set the column to `None`. Typed as a dedicated class so unions
+    like `str | UnsetType` survive type checking — `str | Any` would collapse
+    to `Any` and silently disable enforcement at the call site.
+    """
+
+
+UNSET: Final[UnsetType] = UnsetType()
+
+
+def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
+    """True iff the IntegrityError came from the named unique constraint/index.
+
+    Postgres surfaces the violated constraint via `diag.constraint_name` on
+    the underlying psycopg2 error. Callers can use this to translate the
+    specific collision into a structured `OnyxError(DUPLICATE_RESOURCE)` while
+    letting unrelated integrity errors (FK violations, NOT NULL, etc.) bubble
+    up unchanged.
+    """
+    orig = exc.orig
+    return (
+        isinstance(orig, UniqueViolation)
+        and getattr(orig.diag, "constraint_name", None) == constraint
+    )
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:
