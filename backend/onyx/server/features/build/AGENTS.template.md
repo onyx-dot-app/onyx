@@ -18,12 +18,6 @@ Install packages: `pip install <pkg>` or `npm install <pkg>` (from `outputs/web`
 
 {{ORG_INFO_SECTION}}
 
-## Skills
-
-{{AVAILABLE_SKILLS_SECTION}}
-
-Read the relevant SKILL.md before starting work that the skill covers.
-
 ## Recommended Task Approach Methodology
 
 When presented with a task, you typically:

@@ -282,7 +282,6 @@ class DirectoryManager:
 
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_path=self._skills_path,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
