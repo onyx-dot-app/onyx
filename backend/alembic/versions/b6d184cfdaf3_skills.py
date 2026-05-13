@@ -1,8 +1,8 @@
 """skills
 
-Revision ID: 7632ddcfd011
-Revises: 4ff2545411ad
-Create Date: 2026-05-11 15:28:00.000000
+Revision ID: b6d184cfdaf3
+Revises: 37b5864e9cff
+Create Date: 2026-05-12 18:00:15.431797
 
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "7632ddcfd011"
-down_revision = "4ff2545411ad"
+revision = "b6d184cfdaf3"
+down_revision = "37b5864e9cff"
 branch_labels = None
 depends_on = None
 
