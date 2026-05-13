@@ -36,11 +36,26 @@ from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.registry import CustomSkill
 
 # Name of the unique constraint on `skill.slug` (declared on the model and
 # created by the Skills V1 migration). Used to translate the specific
 # collision into `DUPLICATE_RESOURCE`.
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
+
+
+def _custom_skill_from_model(skill: Skill) -> CustomSkill:
+    return CustomSkill(
+        id=skill.id,
+        slug=skill.slug,
+        name=skill.name,
+        description=skill.description,
+        bundle_file_id=skill.bundle_file_id,
+        bundle_sha256=skill.bundle_sha256,
+        manifest_metadata=skill.manifest_metadata,
+        is_public=skill.is_public,
+        enabled=skill.enabled,
+    )
 
 
 def _add_user_visibility_filter(
@@ -74,19 +89,19 @@ def _add_user_visibility_filter(
     return stmt.where(or_(Skill.is_public.is_(True), group_grant_exists))
 
 
-def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
+def list_skills_for_user(user: User, db_session: Session) -> Sequence[CustomSkill]:
     """Skills the user can use in a session.
 
     Filtered to `enabled = True`: disabled skills never reach the materializer.
     """
     stmt = select(Skill).where(Skill.enabled.is_(True)).order_by(Skill.name)
     stmt = _add_user_visibility_filter(stmt, user)
-    return db_session.scalars(stmt).all()
+    return [_custom_skill_from_model(skill) for skill in db_session.scalars(stmt)]
 
 
 def fetch_skill_for_user(
     skill_id: UUID, user: User, db_session: Session
-) -> Skill | None:
+) -> CustomSkill | None:
     """Single-skill lookup with the same filter as `list_skills_for_user`.
 
     Returns None when the skill does not exist, is disabled, or the user has
@@ -94,22 +109,29 @@ def fetch_skill_for_user(
     """
     stmt = select(Skill).where(Skill.id == skill_id).where(Skill.enabled.is_(True))
     stmt = _add_user_visibility_filter(stmt, user)
-    return db_session.scalars(stmt).one_or_none()
+    skill = db_session.scalars(stmt).one_or_none()
+    return _custom_skill_from_model(skill) if skill is not None else None
 
 
-def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
+def _fetch_skill_model_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
     """Admin lookup (no `enabled` filter — disabled skills are still visible)."""
     stmt = select(Skill).where(Skill.id == skill_id)
     return db_session.scalars(stmt).one_or_none()
 
 
-def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
+def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> CustomSkill | None:
+    """Admin lookup (no `enabled` filter — disabled skills are still visible)."""
+    skill = _fetch_skill_model_for_admin(skill_id, db_session)
+    return _custom_skill_from_model(skill) if skill is not None else None
+
+
+def list_skills_for_admin(db_session: Session) -> Sequence[CustomSkill]:
     """All skills, for the admin UI.
 
     Disabled skills are included so the admin can re-enable them.
     """
     stmt = select(Skill).order_by(Skill.name)
-    return db_session.scalars(stmt).all()
+    return [_custom_skill_from_model(skill) for skill in db_session.scalars(stmt)]
 
 
 def create_skill(
@@ -123,7 +145,7 @@ def create_skill(
     is_public: bool,
     author_user_id: UUID | None,
     db_session: Session,
-) -> Skill:
+) -> CustomSkill:
     """Insert a new Skill row.
 
     Slug collisions are caught two ways: a pre-check for the fast happy path,
@@ -160,7 +182,7 @@ def create_skill(
                 f"A skill with slug '{slug}' already exists.",
             ) from e
         raise
-    return skill
+    return _custom_skill_from_model(skill)
 
 
 def replace_skill_bundle(
@@ -170,13 +192,13 @@ def replace_skill_bundle(
     new_bundle_sha256: str,
     new_manifest_metadata: dict[str, Any],
     db_session: Session,
-) -> tuple[Skill, str]:
+) -> tuple[CustomSkill, str]:
     """Swap a skill's bundle blob.
 
     Returns `(skill, old_bundle_file_id)` so the caller can delete the old
     blob from FileStore AFTER the transaction commits — never inline.
     """
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = _fetch_skill_model_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -188,7 +210,7 @@ def replace_skill_bundle(
     skill.bundle_sha256 = new_bundle_sha256
     skill.manifest_metadata = new_manifest_metadata
     db_session.flush()
-    return skill, old_bundle_file_id
+    return _custom_skill_from_model(skill), old_bundle_file_id
 
 
 def patch_skill(
@@ -200,7 +222,7 @@ def patch_skill(
     is_public: bool | UnsetType = UNSET,
     enabled: bool | UnsetType = UNSET,
     db_session: Session,
-) -> Skill:
+) -> CustomSkill:
     """Partial update of admin-controlled metadata.
 
     `UNSET` distinguishes "leave alone" from "set to None/falsy". Slug
@@ -208,7 +230,7 @@ def patch_skill(
     constraint is the DB backstop; this raises `DUPLICATE_RESOURCE` first
     for a clean structured error).
     """
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = _fetch_skill_model_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -246,7 +268,7 @@ def patch_skill(
                 f"A skill with slug '{slug}' already exists.",
             ) from e
         raise
-    return skill
+    return _custom_skill_from_model(skill)
 
 
 def replace_skill_grants(
@@ -256,7 +278,7 @@ def replace_skill_grants(
 
     Dedups the input. Does not commit — the caller owns the transaction.
     """
-    if fetch_skill_for_admin(skill_id, db_session) is None:
+    if _fetch_skill_model_for_admin(skill_id, db_session) is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"Skill {skill_id} not found.",
@@ -282,7 +304,7 @@ def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
     the transaction commits; running sandbox pods keep their materialized
     copy until the next bundle-sync cycle.
     """
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = _fetch_skill_model_for_admin(skill_id, db_session)
     if skill is None:
         return None
     # TODO: delete the bundle blob from S3 (file store) once the API caller
