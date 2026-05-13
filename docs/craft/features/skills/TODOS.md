@@ -45,6 +45,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[WIP @codex-charged-perovskite]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
 - `[WIP @claude-coupled-lattice]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
 - `[WIP @claude-coupled-josephson]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
+- `[WIP @claude-collapsing-meson]` `P5.030-P5.038` Phase 5.4 orphan-blob + aged-soft-delete sweep
 
 ---
 
@@ -355,15 +356,15 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 ### 5.4 Sweep: orphan blobs + aged soft-deletes  (spec §16)
 
-- `[TODO]` `P5.030` Create `backend/onyx/background/celery/tasks/skills/__init__.py`
-- `[TODO]` `P5.031` Create `backend/onyx/background/celery/tasks/skills/tasks.py` with `@shared_task(name="cleanup_orphaned_skill_blobs")` (must include `expires=3600` per `CLAUDE.md`)
-- `[TODO]` `P5.032` Implement `_orphan_skill_blob_ids(db, older_than)` — FileStore records with `origin = SKILL_BUNDLE`, `created_at < now() - older_than`, whose IDs are NOT referenced by any `skill.bundle_file_id` (crash-recovery path)
-- `[TODO]` `P5.033` Implement `_aged_soft_deleted_skills(db, older_than)` — `Skill` rows with `deleted_at IS NOT NULL AND deleted_at < now() - older_than` (lifecycle-cleanup path)
-- `[TODO]` `P5.034` Task body: for each orphan blob, delete from FileStore; for each aged soft-deleted skill, delete its `bundle_file_id` blob THEN hard-delete the row
-- `[TODO]` `P5.035` Add weekly beat schedule entry
-- `[TODO]` `P5.036` Unit test: orphan blob older than 14 days → deleted by task
-- `[TODO]` `P5.037` Unit test: skill with `deleted_at` older than 14 days → blob deleted AND row hard-deleted
-- `[TODO]` `P5.038` Integration test: soft-delete a skill, run sweep immediately → blob NOT deleted, row still present with `deleted_at` set; advance time by 15 days → run sweep → blob deleted, row gone
+- `[WIP @claude-collapsing-meson]` `P5.030` Create `backend/onyx/background/celery/tasks/skills/__init__.py`
+- `[WIP @claude-collapsing-meson]` `P5.031` Create `backend/onyx/background/celery/tasks/skills/tasks.py` with `@shared_task(name="cleanup_orphaned_skill_blobs")` (must include `expires=3600` per `CLAUDE.md`)
+- `[WIP @claude-collapsing-meson]` `P5.032` Implement `_orphan_skill_blob_ids(db, older_than)` — FileStore records with `origin = SKILL_BUNDLE`, `created_at < now() - older_than`, whose IDs are NOT referenced by any `skill.bundle_file_id` (crash-recovery path)
+- `[WIP @claude-collapsing-meson]` `P5.033` Implement `_aged_soft_deleted_skills(db, older_than)` — `Skill` rows with `deleted_at IS NOT NULL AND deleted_at < now() - older_than` (lifecycle-cleanup path)
+- `[WIP @claude-collapsing-meson]` `P5.034` Task body: for each orphan blob, delete from FileStore; for each aged soft-deleted skill, delete its `bundle_file_id` blob THEN hard-delete the row
+- `[WIP @claude-collapsing-meson]` `P5.035` Add weekly beat schedule entry
+- `[WIP @claude-collapsing-meson]` `P5.036` Unit test: orphan blob older than 14 days → deleted by task
+- `[WIP @claude-collapsing-meson]` `P5.037` Unit test: skill with `deleted_at` older than 14 days → blob deleted AND row hard-deleted
+- `[WIP @claude-collapsing-meson]` `P5.038` Integration test: soft-delete a skill, run sweep immediately → blob NOT deleted, row still present with `deleted_at` set; advance time by 15 days → run sweep → blob deleted, row gone
 
 ### 5.5 Per-session skills UI  (spec §11)
 
