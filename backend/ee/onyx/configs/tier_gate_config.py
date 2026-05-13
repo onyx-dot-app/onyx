@@ -3,55 +3,34 @@
 The `tier_gate` middleware reads this map at startup, sorts entries by
 prefix length (longest first), and enforces them on every request.
 
-Adding or moving a feature is a one-line edit here. There is no separate
-"EE-only" or "Enterprise-only" list — `Tier.BUSINESS` means
-"Business+ tier", `Tier.ENTERPRISE` means "Enterprise only", and
-anything not listed is unrestricted.
+`Tier.BUSINESS` = Business+ tier. `Tier.ENTERPRISE` = Enterprise only.
+Anything not listed is unrestricted. Longest-prefix-wins, so a nested
+path can resolve to a stricter tier than its parent (e.g.
+`/admin/enterprise-settings/scim` is ENTERPRISE even though
+`/admin/enterprise-settings` is BUSINESS).
 """
 
 from onyx.server.settings.models import Tier
 
-# Path prefix → minimum tier required.
-# Longest prefix wins (e.g. /admin/enterprise-settings/scim resolves to
-# ENTERPRISE even though /admin/enterprise-settings is also listed).
 PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     # ----- BUSINESS -----
-    # Query history (admin chat session export)
     "/admin/chat-sessions": Tier.BUSINESS,
     "/admin/chat-session-history": Tier.BUSINESS,
     "/admin/query-history": Tier.BUSINESS,
-    # Service-account API keys. /admin/api-key creates only
-    # account_type=SERVICE_ACCOUNT keys; there is no "user-bound" variant.
-    "/admin/api-key": Tier.BUSINESS,
-    # Custom theming / branding (admin writes — public read is allowed
-    # via /enterprise-settings, which is outside this map)
-    "/admin/enterprise-settings": Tier.BUSINESS,
-    # User Groups + RBAC (Curator / Global Curator roles, group-scoped
-    # access in connectors / agents / credentials / document sets).
-    # All group-related UI on the FE depends on this backend gate.
-    "/manage/admin/user-group": Tier.BUSINESS,
-    # NOTE: Permission sync trigger lives at
-    # /manage/admin/cc-pair/{id}/sync-permissions which can't be
-    # cleanly prefix-matched (variable in the middle). Frontend hides
-    # the option in AccessTypeForm; backend sync triggers remain open.
+    "/admin/usage-report": Tier.BUSINESS,
+    "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
+    "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
+    "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
+    "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
+    # NOTE: /manage/admin/cc-pair/{id}/sync-permissions can't be prefix-matched
+    # (variable in the middle); the FE hides it in AccessTypeForm instead.
     # ----- ENTERPRISE -----
-    # Usage dashboards / reports
-    "/admin/usage-report": Tier.ENTERPRISE,
-    # Custom analytics (JS injection script)
-    "/admin/custom-analytics": Tier.ENTERPRISE,
-    # Standard answers (canned responses)
+    "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
+    "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
     "/manage/admin/standard-answer": Tier.ENTERPRISE,
-    # Analytics endpoints
-    "/analytics": Tier.ENTERPRISE,
-    # Evals
-    "/evals": Tier.ENTERPRISE,
-    # SCIM token management — nested under enterprise-settings, longest
-    # prefix wins so this resolves to ENTERPRISE not BUSINESS.
-    "/admin/enterprise-settings/scim": Tier.ENTERPRISE,
-    # SCIM 2.0 protocol endpoints
-    "/scim": Tier.ENTERPRISE,
-    # Token rate limits (usage limits)
     "/admin/token-rate-limits": Tier.ENTERPRISE,
-    # Custom hooks (outbound webhooks)
-    "/admin/hooks": Tier.ENTERPRISE,
+    "/admin/hooks": Tier.ENTERPRISE,  # outbound webhooks
+    "/analytics": Tier.ENTERPRISE,  # non-admin analytics (e.g. assistant stats)
+    "/evals": Tier.ENTERPRISE,
+    "/scim": Tier.ENTERPRISE,  # SCIM protocol
 }
