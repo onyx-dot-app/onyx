@@ -44,6 +44,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[WIP @codex-charged-perovskite]` `P1.020-P1.027` BuiltinSkillRegistry core
 - `[WIP @codex-charged-perovskite]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
 - `[WIP @claude-coupled-lattice]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
+- `[WIP @claude-coupled-josephson]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
 
 ---
 
@@ -84,17 +85,17 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.4 Bundle validator  (spec §5)
 
-- `[TODO]` `P1.030` Define `InvalidBundleError(OnyxError)` with `INVALID_REQUEST` code  (deps: P1.012)
-- `[TODO]` `P1.031` Implement `validate_custom_bundle(zip_bytes, slug) -> ManifestMetadata` — zip parse, SKILL.md root check, frontmatter parse, no `*.template`  (deps: P1.030)
-- `[TODO]` `P1.032` Add path-traversal + symlink rejection to `validate_custom_bundle`  (deps: P1.031)
-- `[TODO]` `P1.033` Add per-file + total-size streaming check (defaults 25 MiB / 100 MiB)  (deps: P1.031)
+- `[WIP @claude-coupled-josephson]` `P1.030` Define `InvalidBundleError(OnyxError)` with `INVALID_REQUEST` code  (deps: P1.012)
+- `[WIP @claude-coupled-josephson]` `P1.031` Implement `validate_custom_bundle(zip_bytes, slug) -> ManifestMetadata` — zip parse, SKILL.md root check, frontmatter parse, no `*.template`  (deps: P1.030)
+- `[WIP @claude-coupled-josephson]` `P1.032` Add path-traversal + symlink rejection to `validate_custom_bundle`  (deps: P1.031)
+- `[WIP @claude-coupled-josephson]` `P1.033` Add per-file + total-size streaming check (defaults 25 MiB / 100 MiB)  (deps: P1.031)
 - `[TODO]` `P1.035` Add slug regex + reserved-slug check (uses `BuiltinSkillRegistry.reserved_slugs()`)  (deps: P1.031, P1.027)
-- `[TODO]` `P1.036` Implement `_safe_unzip(zip_bytes, dest)` for defensive re-check at materialization
-- `[TODO]` `P1.037` Implement `compute_bundle_sha256(zip_bytes)` — deterministic over raw bytes
-- `[TODO]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir)
-- `[TODO]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`)
-- `[TODO]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.033, P1.035)
-- `[TODO]` `P1.041` Unit test: `compute_bundle_sha256` deterministic across two zips of same content with different timestamps  (deps: P1.037)
+- `[WIP @claude-coupled-josephson]` `P1.036` Implement `_safe_unzip(zip_bytes, dest)` for defensive re-check at materialization
+- `[WIP @claude-coupled-josephson]` `P1.037` Implement `compute_bundle_sha256(zip_bytes)` — deterministic over raw bytes
+- `[WIP @claude-coupled-josephson]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir)
+- `[WIP @claude-coupled-josephson]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`)
+- `[WIP @claude-coupled-josephson]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.033, P1.035)
+- `[WIP @claude-coupled-josephson]` `P1.041` Unit test: `compute_bundle_sha256` deterministic across two zips of same content with different timestamps  (deps: P1.037)
 
 ### 1.5 Materializer  (spec §6)
 
