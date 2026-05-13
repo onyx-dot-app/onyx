@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -14,6 +15,46 @@ from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers import get_provider_for_app
+from onyx.external_apps.refresh import refresh_oauth_tokens
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# Matches `{placeholder}` references inside auth_template values. Used
+# to figure out which credential parameter names the template depends
+# on — those are the names whose values must be present somewhere
+# (org_credentials or user_credentials) before the template can be
+# substituted at injection time.
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
+    placeholders: set[str] = set()
+    for value in auth_template.values():
+        if isinstance(value, str):
+            placeholders.update(_PLACEHOLDER_RE.findall(value))
+    return placeholders
+
+
+def required_user_credential_keys(
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+) -> list[str]:
+    """The credential parameter names a user must supply for this app.
+
+    Computed from the `{placeholder}` references inside `auth_template`
+    values, minus anything `organization_credentials` already pre-fills.
+    Returned sorted so callers get deterministic ordering.
+
+    Note: this looks at the *values* of `auth_template`, not the keys.
+    The keys are HTTP header names (e.g. "Authorization"); the
+    credential parameter names live inside the value templates (e.g.
+    `{access_token}` in `"Bearer {access_token}"`).
+    """
+    return sorted(
+        _placeholders_in_template(auth_template) - organization_credentials.keys()
+    )
 
 
 def is_user_authenticated_for_app(
@@ -316,3 +357,135 @@ def _resolve_credentials(
         else:
             resolved[key] = value
     return resolved
+
+
+def _find_enabled_app_for_url(db_session: Session, url: str) -> ExternalApp | None:
+    """Return the first enabled app whose `upstream_urls` regex
+    fully-matches `url`. Same matching semantics as
+    `get_external_app_credentials` but doesn't join the user
+    credential row — used by `refresh_credentials`, which re-reads the
+    credential row inside an advisory lock anyway.
+    """
+    stmt = (
+        select(ExternalApp)
+        .where(ExternalApp.enabled.is_(True))
+        .order_by(ExternalApp.id)
+    )
+    for app in db_session.scalars(stmt).all():
+        for pattern in app.upstream_urls:
+            if re.fullmatch(pattern, url):
+                return app
+    return None
+
+
+def _acquire_refresh_lock(db_session: Session, app_id: int, user_id: UUID) -> None:
+    """Acquire a Postgres transaction-scoped advisory lock keyed on
+    (app_id, hash(user_id)). Released automatically on commit/rollback.
+
+    Serializes concurrent refresh attempts for the same (app, user)
+    pair across processes — without this, two callers racing to
+    refresh would each try to redeem the same refresh_token, and on
+    providers that rotate refresh_tokens (Slack, Linear) one of them
+    would lose and the user would be locked out.
+
+    UUID → int4 by taking the first 4 bytes of the UUID — random
+    enough that lock-key collisions across unrelated users are
+    vanishingly rare, and a collision just means unrelated users
+    serialize unnecessarily (no correctness impact).
+    """
+    user_key = int.from_bytes(user_id.bytes[:4], "big") % (2**31 - 1)
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:k1, :k2)"),
+        {"k1": app_id, "k2": user_key},
+    )
+
+
+def refresh_credentials(
+    db_session: Session,
+    user_id: UUID,
+    url: str,
+) -> dict[str, Any] | None:
+    """Refresh the user's OAuth tokens for the app matching `url`.
+
+    Looks up the app by `url` (same matching as
+    `get_external_app_credentials`), acquires a per-(app, user)
+    advisory lock so concurrent callers don't race, calls the
+    provider's refresh-token endpoint, merges the new tokens over the
+    existing `user_credentials` (preserving fields the refresh
+    response doesn't carry — team_id, authed_user_id, etc.), commits,
+    and returns the new templated auth dict ready for header
+    injection. Same return shape as `get_external_app_credentials`.
+
+    Returns None if:
+    - no enabled app's `upstream_urls` match the URL
+    - the app isn't a built-in OAuth provider
+    - the user has no stored credentials for the app
+    - no refresh_token is stored (provider doesn't issue refresh
+      tokens, or the original grant didn't include one)
+    - the provider's `client_id`/`client_secret` are not configured
+    - the provider rejected the refresh (revocation, expired refresh
+      token, network/5xx error)
+
+    A None return is the caller's signal that the user must
+    re-authenticate.
+    """
+    matched_app = _find_enabled_app_for_url(db_session, url)
+    if matched_app is None:
+        return None
+
+    provider = get_provider_for_app(matched_app)
+    if provider is None:
+        logger.warning(
+            "refresh_credentials called for app '%s' which is not a "
+            "built-in OAuth provider",
+            matched_app.name,
+        )
+        return None
+
+    # Lock first, then re-read inside the lock so a sibling caller
+    # who already refreshed gets their freshly-written tokens picked
+    # up here instead of us trying to redeem an invalidated
+    # refresh_token.
+    _acquire_refresh_lock(db_session, matched_app.id, user_id)
+
+    user_cred = db_session.scalar(
+        select(ExternalAppUserCredential).where(
+            ExternalAppUserCredential.external_app_id == matched_app.id,
+            ExternalAppUserCredential.user_id == user_id,
+        )
+    )
+    if user_cred is None:
+        return None
+
+    refresh_token = user_cred.user_credentials.get("refresh_token")
+    if not refresh_token:
+        return None
+
+    client_id = matched_app.organization_credentials.get("client_id")
+    client_secret = matched_app.organization_credentials.get("client_secret")
+    if not client_id or not client_secret:
+        logger.warning(
+            "Cannot refresh %s tokens: org_credentials missing "
+            "client_id/client_secret",
+            matched_app.name,
+        )
+        return None
+
+    # Network call held inside the advisory lock so concurrent
+    # refreshes serialize cleanly. Acceptable cost — refresh is rare
+    # (once per token lifetime per user).
+    refreshed = refresh_oauth_tokens(provider, client_id, client_secret, refresh_token)
+    if refreshed is None:
+        return None
+
+    # Merge over existing creds. Providers like Google omit
+    # refresh_token from refresh responses (they don't rotate); the
+    # merge preserves the old refresh_token in that case. Providers
+    # that rotate (Slack, Linear) include the new refresh_token in
+    # `refreshed` and it correctly overwrites the old one.
+    merged = {**user_cred.user_credentials, **refreshed}
+    user_cred.user_credentials = merged
+    db_session.flush()
+    db_session.commit()
+
+    return _resolve_credentials(matched_app, user_cred)
