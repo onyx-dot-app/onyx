@@ -22,6 +22,7 @@ import { Content, IllustrationContent } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import {
   SvgArrowExchange,
+  SvgArrowUpCircle,
   SvgBubbleText,
   SvgFileBroadcast,
   SvgShareWebhook,
@@ -53,6 +54,7 @@ const route = ADMIN_ROUTES.HOOKS;
 
 const HOOK_POINT_ICONS: Record<string, IconFunctionComponent> = {
   document_ingestion: SvgFileBroadcast,
+  document_push: SvgArrowUpCircle,
   query_processing: SvgBubbleText,
 };
 
