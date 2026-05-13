@@ -264,3 +264,99 @@ def test_safe_unzip_rejects_symlink(tmp_path: Path) -> None:
     )
     with pytest.raises(InvalidBundleError, match="symlink"):
         _safe_unzip(zip_bytes, tmp_path / "out")
+
+
+def test_safe_unzip_enforces_per_file_cap(tmp_path: Path) -> None:
+    """Defense-in-depth: even if upload validation is bypassed or the stored
+    blob is tampered, extraction must not write unbounded data to disk."""
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("big.bin", b"\x00" * 64),
+        ]
+    )
+    with pytest.raises(InvalidBundleError, match="exceeds"):
+        _safe_unzip(zip_bytes, tmp_path / "out", per_file_max_bytes=32)
+
+
+def test_safe_unzip_enforces_total_cap(tmp_path: Path) -> None:
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", b"x" * 64),
+            ("a.bin", b"y" * 64),
+            ("b.bin", b"z" * 64),
+        ]
+    )
+    with pytest.raises(InvalidBundleError, match="uncompressed"):
+        _safe_unzip(
+            zip_bytes,
+            tmp_path / "out",
+            per_file_max_bytes=1024,
+            total_max_bytes=128,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Error translation — corrupt / exotic compression
+# ---------------------------------------------------------------------------
+
+
+def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:
+    """Build a valid ZIP_STORED zip, then patch the compression-method field
+    in both the local header and the central directory to ``method``.
+
+    `zipfile.ZipFile(...).writestr()` refuses to write an unknown method, but
+    `zipfile.ZipFile(...).open()` happily reads what it can and raises
+    `NotImplementedError` when it can't — which is exactly the failure mode we
+    want to exercise.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("SKILL.md", payload)
+    raw = bytearray(buf.getvalue())
+    # Patch every occurrence of the compression-method field. In each header
+    # the method is a little-endian uint16 at a fixed offset from the magic.
+    for magic, offset in ((b"PK\x03\x04", 8), (b"PK\x01\x02", 10)):
+        pos = raw.find(magic)
+        if pos != -1:
+            raw[pos + offset : pos + offset + 2] = method.to_bytes(2, "little")
+    return bytes(raw)
+
+
+def test_rejects_unsupported_compression() -> None:
+    """A ZIP using a stdlib-unknown compression method raises NotImplementedError
+    from zf.open() — we must translate that to InvalidBundleError, not a 500."""
+    zip_bytes = _zip_with_patched_compression_method(VALID_FRONTMATTER_MD, method=99)
+    with pytest.raises(InvalidBundleError, match="cannot read"):
+        validate_custom_bundle(zip_bytes, slug="hello")
+
+
+def test_safe_unzip_rejects_unsupported_compression(tmp_path: Path) -> None:
+    zip_bytes = _zip_with_patched_compression_method(VALID_FRONTMATTER_MD, method=99)
+    with pytest.raises(InvalidBundleError, match="cannot extract"):
+        _safe_unzip(zip_bytes, tmp_path / "out")
+
+
+# ---------------------------------------------------------------------------
+# Error code mapping
+# ---------------------------------------------------------------------------
+
+
+def test_size_violation_returns_413() -> None:
+    """Spec §5 size-cap violations should return HTTP 413, not 400."""
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_FRONTMATTER_MD),
+            ("big.bin", b"\x00" * 64),
+        ]
+    )
+    with pytest.raises(InvalidBundleError) as exc_info:
+        validate_custom_bundle(zip_bytes, slug="hello", per_file_max_bytes=32)
+    assert exc_info.value.status_code == 413
+
+
+def test_validation_violation_returns_400() -> None:
+    """Non-size violations still return 400."""
+    with pytest.raises(InvalidBundleError) as exc_info:
+        validate_custom_bundle(b"not a zip", slug="hello")
+    assert exc_info.value.status_code == 400

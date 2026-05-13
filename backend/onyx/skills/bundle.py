@@ -38,8 +38,13 @@ _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 class InvalidBundleError(OnyxError):
     """Raised when a custom skill bundle fails validation."""
 
-    def __init__(self, detail: str) -> None:
-        super().__init__(OnyxErrorCode.INVALID_INPUT, detail)
+    def __init__(
+        self,
+        detail: str,
+        *,
+        error_code: OnyxErrorCode = OnyxErrorCode.INVALID_INPUT,
+    ) -> None:
+        super().__init__(error_code, detail)
 
 
 class ManifestFileEntry(BaseModel):
@@ -181,23 +186,30 @@ def validate_custom_bundle(
                 raise InvalidBundleError("custom skills cannot ship templates")
 
             size = 0
-            with zf.open(info, mode="r") as fh:
-                while True:
-                    chunk = fh.read(64 * 1024)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > per_file_max_bytes:
-                        raise InvalidBundleError(
-                            f"file '{normalized}' exceeds "
-                            f"{per_file_max_bytes // (1024 * 1024)} MiB"
-                        )
-                    total += len(chunk)
-                    if total > total_max_bytes:
-                        raise InvalidBundleError(
-                            f"bundle exceeds "
-                            f"{total_max_bytes // (1024 * 1024)} MiB uncompressed"
-                        )
+            try:
+                with zf.open(info, mode="r") as fh:
+                    while True:
+                        chunk = fh.read(64 * 1024)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > per_file_max_bytes:
+                            raise InvalidBundleError(
+                                f"file '{normalized}' exceeds "
+                                f"{per_file_max_bytes // (1024 * 1024)} MiB",
+                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                            )
+                        total += len(chunk)
+                        if total > total_max_bytes:
+                            raise InvalidBundleError(
+                                f"bundle exceeds "
+                                f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
+                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                            )
+            except InvalidBundleError:
+                raise
+            except Exception as exc:
+                raise InvalidBundleError(f"cannot read '{normalized}': {exc}") from exc
 
             files.append(ManifestFileEntry(path=normalized, size=size))
             if normalized == SKILL_MD_NAME:
@@ -206,7 +218,11 @@ def validate_custom_bundle(
         if skill_md_info is None:
             raise InvalidBundleError("SKILL.md missing at bundle root")
 
-        frontmatter = _parse_frontmatter(zf.read(skill_md_info))
+        try:
+            skill_md_bytes = zf.read(skill_md_info)
+        except Exception as exc:
+            raise InvalidBundleError(f"cannot read 'SKILL.md': {exc}") from exc
+        frontmatter = _parse_frontmatter(skill_md_bytes)
 
     return ManifestMetadata(
         frontmatter=frontmatter,
@@ -216,12 +232,19 @@ def validate_custom_bundle(
     )
 
 
-def _safe_unzip(zip_bytes: bytes, dest: Path) -> None:
+def _safe_unzip(
+    zip_bytes: bytes,
+    dest: Path,
+    *,
+    per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
+    total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
+) -> None:
     """Defensive unzip into ``dest`` for use at materialization time.
 
-    The validator should have already rejected traversal/symlink bundles at
-    upload, but a validator bug shouldn't equal a sandbox escape. We re-check
-    everything here.
+    The validator should have already rejected traversal/symlink/oversized
+    bundles at upload, but a validator bug or a tampered blob shouldn't equal
+    a sandbox escape or a disk-exhaustion incident. We re-check everything
+    here — traversal, symlinks, and the same per-file + total size caps.
     """
     dest.mkdir(parents=True, exist_ok=True)
     dest_resolved = dest.resolve()
@@ -232,6 +255,7 @@ def _safe_unzip(zip_bytes: bytes, dest: Path) -> None:
         raise InvalidBundleError("bundle is not a valid zip")
 
     with zf:
+        total = 0
         for info in zf.infolist():
             if _is_symlink(info):
                 raise InvalidBundleError(
@@ -249,12 +273,34 @@ def _safe_unzip(zip_bytes: bytes, dest: Path) -> None:
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info, mode="r") as src, open(target, "wb") as out:
-                while True:
-                    chunk = src.read(64 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
+            size = 0
+            try:
+                with zf.open(info, mode="r") as src, open(target, "wb") as out:
+                    while True:
+                        chunk = src.read(64 * 1024)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > per_file_max_bytes:
+                            raise InvalidBundleError(
+                                f"file '{normalized}' exceeds "
+                                f"{per_file_max_bytes // (1024 * 1024)} MiB",
+                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                            )
+                        total += len(chunk)
+                        if total > total_max_bytes:
+                            raise InvalidBundleError(
+                                f"bundle exceeds "
+                                f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
+                                error_code=OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                            )
+                        out.write(chunk)
+            except InvalidBundleError:
+                raise
+            except Exception as exc:
+                raise InvalidBundleError(
+                    f"cannot extract '{normalized}': {exc}"
+                ) from exc
 
 
 def compute_bundle_sha256(zip_bytes: bytes) -> str:
