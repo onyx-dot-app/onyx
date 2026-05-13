@@ -29,9 +29,13 @@ export function WebSearchDisconnectModal({
   } = useWebSearchProviders();
 
   const isSearch = disconnectTarget.category === "search";
-  const hasActiveProvider = isSearch
-    ? searchProviders.some((p) => p.is_active)
-    : contentProviders.some((p) => p.is_active);
+  const hasAnotherProvider = isSearch
+    ? searchProviders.some(
+        (p) => p.masked_api_key && p.id !== disconnectTarget.id
+      )
+    : contentProviders.some(
+        (p) => p.masked_api_key && p.id !== disconnectTarget.id
+      );
 
   const siblingCategory = isSearch ? "content" : "search";
   const exaSibling =
@@ -86,7 +90,7 @@ export function WebSearchDisconnectModal({
                 `Web search will no longer be routed through **${disconnectTarget.label}**. Search history will be preserved.`
               )}
             </Text>
-            {hasActiveProvider && (
+            {!hasAnotherProvider && (
               <Text color="text-03">
                 Connect another search engine to continue to use web search.
               </Text>
@@ -99,7 +103,7 @@ export function WebSearchDisconnectModal({
                 `**${disconnectTarget.label}** will no longer be used to read search result web pages.`
               )}
             </Text>
-            {hasActiveProvider && (
+            {!hasAnotherProvider && (
               <Text color="text-03">
                 Onyx will fall back to the built-in web crawler.
               </Text>
