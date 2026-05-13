@@ -373,6 +373,20 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
+def test_document_push_hook_exception_does_not_abort_batch() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
+    ):
+        # Must not raise even when execute_hook raises (e.g. HARD fail strategy).
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+
 def test_document_ingestion_hook_skipped_passes_through() -> None:
     doc = _make_doc()
     with (

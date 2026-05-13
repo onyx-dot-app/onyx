@@ -62,7 +62,7 @@ class DocumentPushSpec(HookPointSpec):
         "Only fires for public connectors in single-tenant deployments."
     )
     default_timeout_seconds = 30.0
-    fail_hard_description = "The document push will be skipped."
+    fail_hard_description = "The indexing batch will fail."
     default_fail_strategy = HookFailStrategy.SOFT
     docs_url = (
         "https://docs.onyx.app/admins/advanced_configs/hook_extensions#document-push"
