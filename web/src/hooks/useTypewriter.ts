@@ -38,6 +38,12 @@ export function useTypewriter(
   const streamFinishedRef = useRef(streamFinished);
   streamFinishedRef.current = streamFinished;
 
+  // Captured once when post-finish drain begins, so the per-frame step
+  // size stays constant instead of decaying with the shrinking backlog.
+  // Dividing the *current* backlog each tick produces geometric decay
+  // and overshoots CATCHUP_FRAMES significantly for long tails.
+  const drainStepRef = useRef<number | null>(null);
+
   // `enabled` controls initial state: animate from 0 vs snap to full for
   // history/voice. Transitions mid-stream are handled via enabledRef in
   // the restart effect so a flip to false doesn't dump the buffered tail
@@ -80,10 +86,19 @@ export function useTypewriter(
         rafIdRef.current = null;
         return;
       }
-      const backlog = targetLen - prev;
-      const charsThisFrame = streamFinishedRef.current
-        ? Math.max(CHARS_PER_FRAME, Math.ceil(backlog / CATCHUP_FRAMES))
-        : CHARS_PER_FRAME;
+      let charsThisFrame: number;
+      if (streamFinishedRef.current) {
+        if (drainStepRef.current === null) {
+          const initialBacklog = targetLen - prev;
+          drainStepRef.current = Math.max(
+            CHARS_PER_FRAME,
+            Math.ceil(initialBacklog / CATCHUP_FRAMES)
+          );
+        }
+        charsThisFrame = drainStepRef.current;
+      } else {
+        charsThisFrame = CHARS_PER_FRAME;
+      }
       const next = Math.min(prev + charsThisFrame, targetLen);
       displayedLengthRef.current = next;
       setDisplayedLength(next);
