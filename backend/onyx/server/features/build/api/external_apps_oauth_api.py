@@ -47,6 +47,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers import get_provider_or_raise
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.api.models import OAuthCallbackRequest
+from onyx.server.features.build.api.models import OAuthCallbackResponse
+from onyx.server.features.build.api.models import OAuthStartResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -103,25 +106,17 @@ def _token_response_is_error(
     return None
 
 
-# ── Pydantic models ─────────────────────────────────────────────────
-
-
-class OAuthStartResponse(BaseModel):
-    authorize_url: str
-
-
-class OAuthCallbackRequest(BaseModel):
-    code: str
-    state: str
-
-
-class OAuthCallbackResponse(BaseModel):
-    success: bool
-    external_app_id: int
+# ── Internal models ─────────────────────────────────────────────────
+# (Request/response models for the public API surface live in
+# `server.features.build.api.models`.)
 
 
 class _OAuthStateRecord(BaseModel):
-    """Redis-stored mapping from a state UUID to the request context."""
+    """Redis-stored mapping from a state UUID to the request context.
+
+    Internal to this module — not part of the HTTP API surface — so it
+    lives here rather than in `models.py`.
+    """
 
     user_id: str
     external_app_id: int
