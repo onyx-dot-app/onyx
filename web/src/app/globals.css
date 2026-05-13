@@ -142,8 +142,10 @@
     margin-top: 0;
     margin-bottom: 0;
     display: inline;
+    /* Make paragraphs inline to reduce vertical space */
   }
 
+  /* Reduce spacing for markdown elements in chat */
   .prose h1,
   .prose h2,
   .prose h3,
@@ -188,10 +190,12 @@
     margin-bottom: 0.5em;
   }
 
+  /* Remove top margin from first child to align with icon */
   .prose > :first-child {
     margin-top: 0;
   }
 
+  /* Remove bottom margin from last child to avoid extra space */
   .prose > :last-child {
     margin-bottom: 0;
   }
