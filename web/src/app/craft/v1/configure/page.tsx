@@ -21,22 +21,21 @@ import {
   SvgFolder,
 } from "@opal/icons";
 import UserLibraryModal from "@/app/craft/v1/configure/components/UserLibraryModal";
-import { Button, Divider, Tooltip } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   getBuildUserPersona,
-  getPersonaInfo,
-  getPositionText,
-  DEMO_COMPANY_NAME,
+  WORK_AREA_OPTIONS,
+  LEVEL_OPTIONS,
   BuildLlmSelection,
   BUILD_MODE_PROVIDERS,
 } from "@/app/craft/onboarding/constants";
 
 export default function BuildConfigPage() {
   const { llmProviders } = useLLMProviders();
-  const { openPersonaEditor, openLlmSetup } = useOnboarding();
+  const { openUserInfoEditor, openLlmSetup } = useOnboarding();
   const [showUserLibraryModal, setShowUserLibraryModal] = useState(false);
 
   const [pendingLlmSelection, setPendingLlmSelection] =
@@ -138,23 +137,17 @@ export default function BuildConfigPage() {
   ]);
 
   const existingPersona = getBuildUserPersona();
-  const workAreaValue = existingPersona?.workArea;
-  const levelValue = existingPersona?.level;
-
-  const personaInfo =
-    workAreaValue && levelValue
-      ? getPersonaInfo(workAreaValue, levelValue)
-      : undefined;
-
-  const personaName = personaInfo?.name;
-  const [firstName, ...lastNameParts] = personaName?.split(" ") || [];
-  const lastName = lastNameParts.join(" ") || "";
-
-  const positionText = workAreaValue
-    ? getPositionText(workAreaValue, levelValue)
+  const roleLabel = existingPersona?.workArea
+    ? WORK_AREA_OPTIONS.find((o) => o.value === existingPersona.workArea)?.label
+    : undefined;
+  const levelLabel = existingPersona?.level
+    ? LEVEL_OPTIONS.find((o) => o.value === existingPersona.level)?.label
+    : undefined;
+  const roleDescription = roleLabel
+    ? levelLabel
+      ? `${roleLabel}, ${levelLabel}`
+      : roleLabel
     : "Not set";
-
-  const hasLlmProvider = (llmProviders?.length ?? 0) > 0;
 
   return (
     <div className="relative w-full h-full">
@@ -195,32 +188,17 @@ export default function BuildConfigPage() {
             >
               <Card>
                 <InputHorizontal
-                  title="Your Persona"
-                  description={
-                    firstName && lastName && positionText
-                      ? `${firstName} ${lastName}, ${positionText} at ${DEMO_COMPANY_NAME}`
-                      : positionText
-                        ? `${positionText} at ${DEMO_COMPANY_NAME}`
-                        : "Not set"
-                  }
+                  title="Your Role"
+                  description={roleDescription}
                   center
                 >
-                  <Tooltip
-                    tooltip={
-                      !hasLlmProvider
-                        ? "Configure an LLM provider first"
-                        : undefined
-                    }
+                  <button
+                    type="button"
+                    onClick={() => openUserInfoEditor()}
+                    className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors"
                   >
-                    <button
-                      type="button"
-                      onClick={() => openPersonaEditor()}
-                      disabled={!hasLlmProvider}
-                      className="p-2 rounded-08 text-text-03 hover:bg-background-tint-02 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <SvgSettings className="w-5 h-5" />
-                    </button>
-                  </Tooltip>
+                    <SvgSettings className="w-5 h-5" />
+                  </button>
                 </InputHorizontal>
               </Card>
               <Card

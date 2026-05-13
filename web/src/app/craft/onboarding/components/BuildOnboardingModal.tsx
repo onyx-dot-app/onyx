@@ -90,7 +90,7 @@ function getStepsForMode(
 
       return steps;
 
-    case "edit-persona":
+    case "edit-user-info":
       return ["user-info"];
 
     case "add-llm":
@@ -420,13 +420,7 @@ export default function BuildOnboardingModal({
           )}
 
           {/* Page 1 - What is Onyx Craft? */}
-          {currentStep === "page1" && (
-            <OnboardingInfoPages
-              step="page1"
-              workArea={workArea}
-              level={level}
-            />
-          )}
+          {currentStep === "page1" && <OnboardingInfoPages step="page1" />}
 
           {/* Navigation buttons */}
           <div className="relative flex justify-between items-center pt-2">
