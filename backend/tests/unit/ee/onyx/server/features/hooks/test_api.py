@@ -64,6 +64,17 @@ class TestCheckSsrfSafety:
         assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
         assert "https" in (exc_info.value.detail or "").lower()
 
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://localhost:8082/api/documents/ingest",
+            "http://127.0.0.1:8082/hook",
+            "http://127.0.0.2/hook",
+        ],
+    )
+    def test_http_allowed_for_loopback(self, url: str) -> None:
+        self._call(url)  # must not raise
+
     # --- private IP blocklist ---
 
     @pytest.mark.parametrize(
