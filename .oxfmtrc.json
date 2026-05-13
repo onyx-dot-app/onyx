@@ -1,13 +1,5 @@
 {
   "printWidth": 80,
   "trailingComma": "es5",
-  "ignorePatterns": [
-    "**/.git",
-    "**/.svn",
-    "**/.hg",
-    "**/node_modules",
-    "**/.next",
-    "**/.vscode",
-    "backend/tests/integration/tests/pruning/website"
-  ]
+  "ignorePatterns": ["backend/tests/integration/tests/pruning/website"]
 }
