@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
@@ -329,15 +330,16 @@ class UpsertExternalAppRequest(BaseModel):
     """Create or update an external app.
 
     If `id` is provided, the row with that id is updated; otherwise a new
-    row is inserted. `upstream_urls` is a list of regex patterns matched by
-    the egress proxy against outbound request URLs. `enabled` is the kill
-    switch the proxy checks before injecting credentials.
+    row is inserted. `upstream_url_patterns` is a list of regex patterns
+    matched by the egress proxy against outbound request URLs. `enabled`
+    is the kill switch the proxy checks before injecting credentials.
     """
 
     id: int | None = None
     name: str
     description: str
-    upstream_urls: list[str]
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
     enabled: bool
@@ -349,7 +351,8 @@ class ExternalAppAdminResponse(BaseModel):
     id: int
     name: str
     description: str
-    upstream_urls: list[str]
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
     enabled: bool
