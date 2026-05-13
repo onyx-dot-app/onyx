@@ -31,7 +31,7 @@ Environment variables override config file values:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ONYX_SERVER_URL` | No | API base URL (default: `https://cloud.onyx.app/api`) |
+| `ONYX_SERVER_URL` | No | Server URL (default: `https://cloud.onyx.app`) |
 | `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
@@ -133,7 +133,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 If a human has already run `onyx-cli chat` (which includes first-time setup), the CLI works out of the box — no additional setup needed. Environment variables can override the config file or serve as an alternative when no config file exists:
 
 ```shell
-export ONYX_SERVER_URL="https://your-onyx-server.com/api"
+export ONYX_SERVER_URL="https://your-onyx-server.com"
 export ONYX_PAT="your-pat"
 ```
 

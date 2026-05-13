@@ -28,13 +28,13 @@ If a human has already run `onyx-cli chat` (which includes first-time setup), th
 Environment variables override the config file and can be used as an alternative when no config file exists:
 
 ```bash
-export ONYX_SERVER_URL="https://your-onyx-server.com/api"  # default: https://cloud.onyx.app/api
+export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: https://cloud.onyx.app
 export ONYX_PAT="your-pat"
 ```
 
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
-| `ONYX_SERVER_URL` | No       | Onyx server base URL (default: `https://cloud.onyx.app/api`) |
+| `ONYX_SERVER_URL` | No       | Onyx server URL (default: `https://cloud.onyx.app`) |
 | `ONYX_PAT`    | Yes      | Personal access token for authentication (unless config file exists) |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
