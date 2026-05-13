@@ -82,8 +82,8 @@ class AttachmentProcessingResult(BaseModel):
 def _make_attachment_link(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    parent_content_id: str | None = None,
-    is_cloud: bool = True,
+    parent_content_id: str | None,
+    is_cloud: bool,
 ) -> str | None:
     download_link = ""
 
@@ -110,7 +110,7 @@ def process_attachment(
     attachment: dict[str, Any],
     parent_content_id: str | None,
     allow_images: bool,
-    is_cloud: bool = True,
+    is_cloud: bool,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
@@ -249,7 +249,7 @@ def convert_attachment_to_content(
     attachment: dict[str, Any],
     page_id: str,
     allow_images: bool,
-    is_cloud: bool = True,
+    is_cloud: bool,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
