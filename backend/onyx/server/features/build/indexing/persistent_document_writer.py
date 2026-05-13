@@ -416,8 +416,7 @@ class S3PersistentDocumentWriter:
         Documents are stored under tenant/user-segregated paths:
         {tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
-        This matches the path that KubernetesSandboxManager syncs from S3
-        into the sandbox's /workspace/files/ directory.
+        This path is used for user library file storage in S3.
         """
         # Tenant and user segregation (matches K8s sandbox init container path)
         parts = [self.tenant_id, "knowledge", self.user_id]

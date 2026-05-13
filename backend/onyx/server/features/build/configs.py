@@ -83,7 +83,7 @@ ATTACHMENTS_DIRECTORY = "attachments"
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
 # Container image for sandbox pods
-# Should include Next.js template, opencode CLI, and demo_data zip
+# Should include Next.js template, opencode CLI, and agent skills
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
     "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.5"
 )

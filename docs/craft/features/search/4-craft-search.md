@@ -517,7 +517,7 @@ New `sync_user_library_files()` Celery task that:
 In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
 
 ```bash
-aws s3 sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/*" /workspace/user_library/
+aws s3 sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/" /workspace/user_library/
 ```
 
 This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
