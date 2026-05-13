@@ -16,7 +16,6 @@ multi-step admin flow (e.g. create row + replace grants) can roll back atomicall
 """
 
 from collections.abc import Sequence
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete
@@ -52,7 +51,6 @@ def _custom_skill_from_model(skill: Skill) -> CustomSkill:
         description=skill.description,
         bundle_file_id=skill.bundle_file_id,
         bundle_sha256=skill.bundle_sha256,
-        manifest_metadata=skill.manifest_metadata,
         is_public=skill.is_public,
         enabled=skill.enabled,
     )
@@ -141,7 +139,6 @@ def create_skill(
     description: str,
     bundle_file_id: str,
     bundle_sha256: str,
-    manifest_metadata: dict[str, Any],
     is_public: bool,
     author_user_id: UUID | None,
     db_session: Session,
@@ -167,7 +164,6 @@ def create_skill(
         description=description,
         bundle_file_id=bundle_file_id,
         bundle_sha256=bundle_sha256,
-        manifest_metadata=manifest_metadata,
         is_public=is_public,
         author_user_id=author_user_id,
         enabled=True,
@@ -190,7 +186,6 @@ def replace_skill_bundle(
     skill_id: UUID,
     new_bundle_file_id: str,
     new_bundle_sha256: str,
-    new_manifest_metadata: dict[str, Any],
     db_session: Session,
 ) -> tuple[CustomSkill, str]:
     """Swap a skill's bundle blob.
@@ -208,7 +203,6 @@ def replace_skill_bundle(
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
-    skill.manifest_metadata = new_manifest_metadata
     db_session.flush()
     return _custom_skill_from_model(skill), old_bundle_file_id
 
