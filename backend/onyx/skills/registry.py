@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from typing import ClassVar
@@ -25,7 +26,14 @@ _SLUG_ERROR = (
 
 
 class Skill(BaseModel):
-    """Common skill metadata shared by built-in and custom skill views."""
+    """Common skill metadata shared by built-in and custom skill views.
+
+    `from_attributes=True` lets subclasses validate directly from
+    SQLAlchemy ORM rows via `model_validate(skill_row)`, so we don't need a
+    per-call hand-written field-copy helper.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
 
     slug: str
     name: str
@@ -39,20 +47,39 @@ class Skill(BaseModel):
         return slug
 
 
-class BuiltinSkill(Skill):
-    """In-memory entry for an on-disk built-in skill."""
+class BuiltinSkillData(Skill):
+    """Serializable identity of a built-in skill.
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    The split exists so wire-shape models (admin API, user API) can extend
+    this directly without inheriting the non-serializable runtime fields on
+    `BuiltinSkill` — a `Path` and a `Callable[[Session], bool]`.
+    """
 
     source: Literal["builtin"] = "builtin"
-    source_dir: Path
     has_template: bool
-    is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
     unavailable_reason: str | None = None
 
 
+class BuiltinSkill(BuiltinSkillData):
+    """Runtime registry entry for an on-disk built-in skill.
+
+    Adds the two fields that aren't appropriate for the wire shape:
+    `source_dir` (server filesystem layout) and `is_available` (a check
+    callable). API responses should extend `BuiltinSkillData` instead.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    source_dir: Path
+    is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
+
+
 class CustomSkill(Skill):
-    """DB-backed skill metadata needed by skill consumers."""
+    """DB-backed skill metadata needed by skill consumers.
+
+    Includes the timestamp / author fields so admin wire shapes can extend
+    this directly rather than re-declaring them.
+    """
 
     source: Literal["custom"] = "custom"
     id: UUID
@@ -60,6 +87,9 @@ class CustomSkill(Skill):
     bundle_sha256: str
     is_public: bool
     enabled: bool
+    author_user_id: UUID | None
+    created_at: datetime
+    updated_at: datetime
 
 
 def _select_skill_definition_path(source_dir: Path) -> tuple[Path, bool]:

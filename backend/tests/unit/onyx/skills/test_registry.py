@@ -1,3 +1,5 @@
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
@@ -68,6 +70,7 @@ def test_shared_skill_shape_is_mutable() -> None:
 
 
 def test_custom_skill_shape_matches_editable_db_metadata() -> None:
+    now = datetime.now(timezone.utc)
     skill = CustomSkill(
         id=uuid4(),
         slug="custom",
@@ -77,6 +80,9 @@ def test_custom_skill_shape_matches_editable_db_metadata() -> None:
         bundle_sha256="a" * 64,
         is_public=False,
         enabled=True,
+        author_user_id=None,
+        created_at=now,
+        updated_at=now,
     )
 
     skill.name = "After"

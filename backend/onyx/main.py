@@ -101,6 +101,8 @@ from onyx.server.features.persona.api import agents_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.search.api import router as search_api_router
+from onyx.server.features.skills.api import admin_router as admin_skills_router
+from onyx.server.features.skills.api import basic_router as skills_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
@@ -486,6 +488,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_persona_router)
     include_router_with_global_prefix_prepended(application, agents_router)
     include_router_with_global_prefix_prepended(application, admin_agents_router)
+    include_router_with_global_prefix_prepended(application, skills_router)
+    include_router_with_global_prefix_prepended(application, admin_skills_router)
     include_router_with_global_prefix_prepended(application, default_assistant_router)
     include_router_with_global_prefix_prepended(application, notification_router)
     include_router_with_global_prefix_prepended(application, tool_router)

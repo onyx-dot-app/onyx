@@ -295,18 +295,27 @@ A process-wide singleton populated at app boot. Each registration captures a `(s
 ```python
 # backend/onyx/skills/registry.py
 
-class BuiltinSkill(BaseModel):
-    """In-memory entry in the BuiltinSkillRegistry. Populated at boot from
-    on-disk source directories."""
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
+class Skill(BaseModel):
+    """Shared base. `from_attributes=True` lets subclasses validate from
+    ORM rows; the slug validator runs at construct time."""
+    model_config = ConfigDict(from_attributes=True)
     slug: str
-    source_dir: Path
-    name: str                                # from SKILL.md frontmatter
-    description: str                         # from SKILL.md frontmatter
+    name: str
+    description: str
+
+class BuiltinSkillData(Skill):
+    """Serializable identity of a built-in skill — what crosses the wire.
+    Admin/user API response models extend this directly."""
+    source: Literal["builtin"] = "builtin"
     has_template: bool
-    is_available: Callable[[Session], bool] = always_available
     unavailable_reason: str | None = None
+
+class BuiltinSkill(BuiltinSkillData):
+    """Runtime registry entry. Adds the two fields that aren't appropriate
+    for the wire shape: a filesystem path and a check callable."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    source_dir: Path
+    is_available: Callable[[Session], bool] = always_available
 
 class BuiltinSkillRegistry:
     """Process-wide. Populated at boot; treated as immutable after."""
@@ -559,42 +568,33 @@ Admins need CRUD on custom skills + a unified listing including built-ins. Users
 **Response models** (FastAPI returns these directly via typed function signatures):
 
 ```python
+# Wire models extend the registry's in-memory types. `BuiltinSkill` itself
+# isn't wire-safe (it carries a `Callable` and a server-internal `Path`),
+# so the registry exposes `BuiltinSkillData` — the serializable subset —
+# for the API to extend.
+
 class SkillsAdminList(BaseModel):
     builtin: list[BuiltinSkillAdmin]
     custom:  list[CustomSkillAdmin]
 
-class BuiltinSkillAdmin(BaseModel):
-    slug: str
-    name: str
-    description: str
-    has_template: bool
-    available: bool
-    unavailable_reason: str | None
+class BuiltinSkillAdmin(BuiltinSkillData):
+    """Inherits slug/name/description/source/has_template/unavailable_reason."""
+    available: bool                          # resolved value of is_available(db)
 
-class CustomSkillAdmin(BaseModel):
-    id: UUID
-    slug: str
-    name: str
-    description: str
-    is_public: bool
-    enabled: bool
-    bundle_sha256: str
-    bundle_size_bytes: int
-    granted_group_ids: list[int]
-    author_user_id: UUID | None
-    created_at: datetime
-    updated_at: datetime
+class CustomSkillAdmin(CustomSkill):
+    """Inherits slug/name/description/source/id/bundle_file_id/bundle_sha256/
+    is_public/enabled/author_user_id/created_at/updated_at. Adds only the
+    two fields not on the row itself."""
+    bundle_size_bytes: int | None            # from FileStore
+    granted_group_ids: list[int]             # from skill__user_group join
 
 class SkillsForUser(BaseModel):
     builtin: list[SkillSummary]
     custom:  list[SkillSummary]
 
-class SkillSummary(BaseModel):
-    slug: str
-    name: str
-    description: str
+class SkillSummary(Skill):
     source: Literal["builtin", "custom"]
-    skill_id: UUID | None   # set for customs, None for built-ins
+    skill_id: UUID | None                    # set for customs, None for built-ins
 ```
 
 **Create-custom-skill flow** (`POST /api/admin/skills/custom`):
@@ -625,6 +625,7 @@ If DB commit fails, new blobs are orphaned (caught by sweep). If FileStore delet
 - **No paging on `/api/admin/skills`.** Expected count is well under 100 per tenant. Add paging if/when this changes.
 - **`SkillSummary` returns `skill_id` for customs only.** Built-ins are identified by slug; customs by UUID (the slug can change). This lets the frontend route correctly.
 - **`enabled` flag exists on the DB row but is not in the V1 admin UI.** Reserved for future "temporarily disable without deleting" use case. The schema is forward-compatible; admin UI can add a toggle later without migration.
+- **Built-in availability is `bool + unavailable_reason: str | None`, not a list of structured `RequirementStatus`.** The registry only models one reason per skill in V1, so a list of requirements is theater — the only honest datum is the optional reason string. When a skill genuinely needs multiple structured prerequisites (e.g. "needs Gemini key AND OAuth scope"), add a sibling `requirements: list[RequirementStatus]` field — additive, non-breaking. Documented in TODOS decisions log 2026-05-13.
 
 ### Todos
 - [ ] Implement universal admin router in `backend/onyx/server/features/skills/api.py`:
@@ -633,7 +634,7 @@ If DB commit fails, new blobs are orphaned (caught by sweep). If FileStore delet
   - [ ] `PATCH /api/admin/skills/custom/{id}` — call `patch_skill(...)`. Re-validate slug uniqueness if changing.
   - [ ] `PUT /api/admin/skills/custom/{id}/bundle` — full replace flow.
   - [ ] `PUT /api/admin/skills/custom/{id}/grants` — call `replace_skill_grants(...)`.
-  - [ ] `DELETE /api/admin/skills/custom/{id}` — call `delete_skill(...)`. Sets `deleted_at = now()`; sweep (§16) ages out the blob + row after 14 days.
+  - [ ] `DELETE /api/admin/skills/custom/{id}` — call `delete_skill(...)`. Phase 1 chose hard-delete (cascades grants, returns `bundle_file_id`); route deletes the blob from FileStore after the DB commit succeeds. Sweep (§16) becomes a crash-recovery safety net rather than the primary cleanup path.
 - [ ] Implement user router (same file):
   - [ ] `GET /api/skills` — built-ins + customs visible to user.
 - [ ] Define Pydantic response models in the same file.

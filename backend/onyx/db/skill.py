@@ -44,16 +44,13 @@ SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
 
 def _custom_skill_from_model(skill: Skill) -> CustomSkill:
-    return CustomSkill(
-        id=skill.id,
-        slug=skill.slug,
-        name=skill.name,
-        description=skill.description,
-        bundle_file_id=skill.bundle_file_id,
-        bundle_sha256=skill.bundle_sha256,
-        is_public=skill.is_public,
-        enabled=skill.enabled,
-    )
+    """Project a `Skill` ORM row to its `CustomSkill` Pydantic view.
+
+    `CustomSkill` has `from_attributes=True` via the `Skill` base, so this
+    is a thin wrapper around `model_validate` — kept for one
+    place-to-update if the projection ever needs to diverge from the row.
+    """
+    return CustomSkill.model_validate(skill)
 
 
 def _add_user_visibility_filter(

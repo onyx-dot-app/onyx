@@ -46,6 +46,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[REVIEW @claude-coupled-lattice #11060]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
 - `[REVIEW @claude-coupled-josephson #11059]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
 - `[REVIEW @claude-collapsing-meson #11064]` `P5.030-P5.038` Phase 5.4 orphan-blob + aged-soft-delete sweep
+- `[WIP @rohoswagger skills-phase-2]` `P2.001-P2.036` Phase 2 universal API surface
 
 ---
 
@@ -128,29 +129,29 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 2.1 Universal admin router  (spec §7)
 
-- `[TODO]` `P2.001` Create `backend/onyx/server/features/skills/__init__.py`
-- `[TODO]` `P2.002` Create `backend/onyx/server/features/skills/api.py` with router scaffolding
-- `[TODO]` `P2.003` Define Pydantic response models: `SkillsAdminList`, `BuiltinSkillAdmin`, `CustomSkillAdmin`, `SkillsForUser`, `SkillSummary`  (deps: P2.002)
-- `[TODO]` `P2.004` Implement `GET /api/admin/skills` — combine `registry.list_all()` (evaluating each built-in's `is_available(db)`) + `list_skills_for_admin(db)`  (deps: P2.003, P1.026, P1.063)
-- `[TODO]` `P2.005` Implement `POST /api/admin/skills/custom` — full create flow per §7 (validate → save blobs → row → grants); inline blob cleanup on failure  (deps: P2.003, P1.031, P1.064, P1.067)
-- `[TODO]` `P2.006` Implement `PATCH /api/admin/skills/custom/{id}` — slug/name/description/is_public/enabled; re-validate slug uniqueness on slug change  (deps: P2.003, P1.066)
-- `[TODO]` `P2.007` Implement `PUT /api/admin/skills/custom/{id}/bundle` — replace flow; delete old blobs AFTER commit  (deps: P2.003, P1.031, P1.065)
-- `[TODO]` `P2.008` Implement `PUT /api/admin/skills/custom/{id}/grants` — atomic group_ids replacement  (deps: P2.003, P1.067)
-- `[TODO]` `P2.009` Implement `DELETE /api/admin/skills/custom/{id}` — soft-delete (do not delete blobs; sweep handles)  (deps: P2.003, P1.068)
+- `[WIP @rohoswagger skills-phase-2]` `P2.001` Create `backend/onyx/server/features/skills/__init__.py`
+- `[WIP @rohoswagger skills-phase-2]` `P2.002` Create `backend/onyx/server/features/skills/api.py` with router scaffolding
+- `[WIP @rohoswagger skills-phase-2]` `P2.003` Define Pydantic response models: `SkillsAdminList`, `BuiltinSkillAdmin`, `CustomSkillAdmin`, `SkillsForUser`, `SkillSummary`  (deps: P2.002)
+- `[WIP @rohoswagger skills-phase-2]` `P2.004` Implement `GET /api/admin/skills` — combine `registry.list_all()` (evaluating each built-in's `is_available(db)`) + `list_skills_for_admin(db)`  (deps: P2.003, P1.026, P1.063)
+- `[WIP @rohoswagger skills-phase-2]` `P2.005` Implement `POST /api/admin/skills/custom` — full create flow per §7 (validate → save blobs → row → grants); inline blob cleanup on failure  (deps: P2.003, P1.031, P1.064, P1.067)
+- `[WIP @rohoswagger skills-phase-2]` `P2.006` Implement `PATCH /api/admin/skills/custom/{id}` — slug/name/description/is_public/enabled; re-validate slug uniqueness on slug change  (deps: P2.003, P1.066)
+- `[WIP @rohoswagger skills-phase-2]` `P2.007` Implement `PUT /api/admin/skills/custom/{id}/bundle` — replace flow; delete old blobs AFTER commit  (deps: P2.003, P1.031, P1.065)
+- `[WIP @rohoswagger skills-phase-2]` `P2.008` Implement `PUT /api/admin/skills/custom/{id}/grants` — atomic group_ids replacement  (deps: P2.003, P1.067)
+- `[WIP @rohoswagger skills-phase-2]` `P2.009` Implement `DELETE /api/admin/skills/custom/{id}` — soft-delete (do not delete blobs; sweep handles)  (deps: P2.003, P1.068)
 
 ### 2.2 User router  (spec §7)
 
-- `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_available`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
+- `[WIP @rohoswagger skills-phase-2]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_available`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
 
 ### 2.3 Wire-up + tests
 
-- `[TODO]` `P2.030` Add admin dependency to admin routes (match existing Onyx pattern)
-- `[TODO]` `P2.031` Wire router into `backend/onyx/main.py` via `app.include_router(...)`  (deps: P2.001-P2.021)
-- `[TODO]` `P2.032` External-dep unit test: POST valid bundle → 200 + row + blob; each invalid bundle → 4xx + no row/blob  (deps: P2.005)
-- `[TODO]` `P2.033` External-dep unit test: replace bundle → old blob deleted after commit  (deps: P2.007)
-- `[TODO]` `P2.034` External-dep unit test: grant to group A → user in A sees it via `GET /api/skills`; user not in A doesn't  (deps: P2.020, P2.008)
-- `[TODO]` `P2.035` External-dep unit test: slug rename via PATCH → uniqueness re-checked  (deps: P2.006)
-- `[TODO]` `P2.036` External-dep unit test: `GET /api/admin/skills` returns `available: false` + populated `requirements` when image-gen provider is not configured  (deps: P2.004)
+- `[WIP @rohoswagger skills-phase-2]` `P2.030` Add admin dependency to admin routes (match existing Onyx pattern)
+- `[WIP @rohoswagger skills-phase-2]` `P2.031` Wire router into `backend/onyx/main.py` via `app.include_router(...)`  (deps: P2.001-P2.021)
+- `[WIP @rohoswagger skills-phase-2]` `P2.032` External-dep unit test: POST valid bundle → 200 + row + blob; each invalid bundle → 4xx + no row/blob  (deps: P2.005)
+- `[WIP @rohoswagger skills-phase-2]` `P2.033` External-dep unit test: replace bundle → old blob deleted after commit  (deps: P2.007)
+- `[WIP @rohoswagger skills-phase-2]` `P2.034` External-dep unit test: grant to group A → user in A sees it via `GET /api/skills`; user not in A doesn't  (deps: P2.020, P2.008)
+- `[WIP @rohoswagger skills-phase-2]` `P2.035` External-dep unit test: slug rename via PATCH → uniqueness re-checked  (deps: P2.006)
+- `[WIP @rohoswagger skills-phase-2]` `P2.036` External-dep unit test: `GET /api/admin/skills` returns `available: false` + populated `requirements` when image-gen provider is not configured  (deps: P2.004)
 
 ---
 
@@ -448,3 +449,8 @@ Listed so agents don't accidentally pick these up. Lift to a real task only if p
 _(Append cross-cutting decisions or clarifications that come up during implementation. Don't update the spec mid-flight — record here, surface to the spec at the end of the phase.)_
 
 - 2026-05-13: Phase 1 work is being split across multiple stacked PRs branching off `skills-phase-1`.
+- 2026-05-13 (Phase 2): Dropped `RequirementStatus` from the `GET /api/admin/skills` response in favor of `unavailable_reason: str | None` directly on `BuiltinSkillAdmin`. The registry only models one reason per skill in V1, so a list-of-requirements shape was 5 fields of theater for 1 string. Recoverable later: add `requirements: list[RequirementStatus]` as a sibling field when a skill genuinely needs multiple structured prerequisites — additive, non-breaking. Spec §7 already reflected the simpler shape; added a tradeoff bullet there explaining the cut.
+- 2026-05-13 (Phase 2): Used `Literal["builtin", "custom"]` for `SkillSummary.source` instead of plain `str` — pydantic enforces the closed set on serialization. Matches the spec.
+- 2026-05-13 (Phase 2): `DELETE /api/admin/skills/custom/{id}` is hard-delete + post-commit blob cleanup (matches the Phase 1 `delete_skill` implementation), not soft-delete-then-sweep as originally spec'd. Sweep (P5.031–P5.034) becomes the crash-recovery safety net rather than the primary cleanup path. Spec §7 todo line is stale on this — see P2.009 wording in this file for the executed behavior.
+- 2026-05-13 (Phase 2): Wire models extend the registry's in-memory models instead of re-declaring overlapping fields. `CustomSkillAdmin` extends `CustomSkill` (picks up `id`, `bundle_file_id`, `bundle_sha256`, `is_public`, `enabled`, `source` + the `Skill` base's slug/name/description with slug validator). `SkillSummary` extends `Skill`. `BuiltinSkillAdmin` extends `Skill` (not `BuiltinSkill`) because the registry's `BuiltinSkill` carries `is_available: Callable` (not JSON-serializable) and `source_dir: Path` (server-internal). Net effect: 8 redeclared fields eliminated; the wire `CustomSkillAdmin` now exposes `bundle_file_id` for admin/FileStore correlation. Spec §7 response model block updated.
+- 2026-05-13 (Phase 2 follow-up): Pushed the dedup further. (1) Split `BuiltinSkill` into `BuiltinSkillData` (serializable subset — `slug/name/description/source/has_template/unavailable_reason`) and `BuiltinSkill(BuiltinSkillData)` adding the runtime-only `source_dir: Path` + `is_available: Callable`. `BuiltinSkillAdmin` now extends `BuiltinSkillData` and adds only `available: bool` — perfectly parallel to `CustomSkillAdmin(CustomSkill)`. (2) Enriched `CustomSkill` with `author_user_id`, `created_at`, `updated_at` (they were on the ORM row but stopped at the Pydantic boundary). `CustomSkillAdmin` now adds only the two truly computed fields (`bundle_size_bytes`, `granted_group_ids`). (3) Added `from_attributes=True` to the `Skill` base config so subclasses can validate directly from ORM rows; `_custom_skill_from_model` is now a one-line `CustomSkill.model_validate(skill)` wrapper. (4) Test boilerplate (`_create(bundle=..., slug=..., name=..., description=..., is_public=..., group_ids=..., user=..., db_session=...)`) collapsed into a `_make_skill(db_session, ...)` factory with happy-path defaults — eight 9-line call sites became one-liners. Net effect: registry's serializable subset now reusable across all consumers; wire layer adds only fields that genuinely don't exist on the registry/row; test surface drops ~60 lines of repeated kwargs.
