@@ -46,26 +46,7 @@ def _check_ssrf_safety(endpoint_url: str) -> None:
 
     Delegates to validate_outbound_http_url with https_only=True.
     Uses BAD_GATEWAY so the frontend maps the error to the Endpoint URL field.
-
-    Loopback addresses (localhost / 127.x.x.x) are exempted from SSRF checks
-    so that local development deployments can use plain http.
     """
-    from urllib.parse import urlparse
-
-    parsed = urlparse(endpoint_url.strip())
-    hostname = (parsed.hostname or "").lower()
-    is_loopback = (
-        hostname == "localhost"
-        or hostname == "127.0.0.1"
-        or hostname.startswith("127.")
-    )
-    if is_loopback:
-        if parsed.scheme not in ("http", "https"):
-            raise OnyxError(
-                OnyxErrorCode.BAD_GATEWAY,
-                f"Invalid URL scheme '{parsed.scheme}'. Only http and https are allowed.",
-            )
-        return
     try:
         validate_outbound_http_url(endpoint_url, https_only=True)
     except (SSRFException, ValueError) as e:
