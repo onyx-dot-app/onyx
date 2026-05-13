@@ -798,6 +798,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
                       onScrollButtonVisibilityChange={setShowScrollButton}
+                      // Defer initial scroll until the model selector
+                      // (sibling that affects viewport height) has loaded.
+                      parentLayoutReady={!llmManager.isLoadingProviders}
                     >
                       <ChatUI
                         liveAgent={liveAgent!}

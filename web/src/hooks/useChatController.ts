@@ -950,7 +950,10 @@ export default function useChatController({
         };
 
         await delay(50);
-        while (!stack.isComplete || !stack.isEmpty()) {
+        while (
+          (!stack.isComplete || !stack.isEmpty()) &&
+          !controller.signal.aborted
+        ) {
           if (stack.isEmpty()) {
             // Flush the burst on the next paint, or idle briefly.
             if (pendingFlush) {
@@ -1292,6 +1295,52 @@ export default function useChatController({
           completeMessageTreeOverride: currentMessageTreeLocal,
           chatSessionId: frozenSessionId!,
         });
+      }
+
+      // If the drain loop exited because the controller was aborted (e.g. user
+      // clicked a branch arrow mid-stream), the streaming consumer never gets
+      // a natural stop packet. Inject one into the orphan assistant message(s)
+      // so usePacketProcessor sees stopPacketSeen=true and the typewriter
+      // cursor stops blinking.
+      //
+      // Read the LIVE store tree (not the local snapshot) so the user's
+      // branch arrow click — which already wrote `parent.latestChildNodeId`
+      // to the store before triggering the abort — isn't overwritten when
+      // we upsert the stop packet.
+      if (controller.signal.aborted) {
+        const orphanNodes: Message[] = isMultiModel
+          ? initialAssistantNodes
+          : [initialAgentNode];
+        const liveTree =
+          useChatSessionStore.getState().sessions.get(frozenSessionId)
+            ?.messageTree ?? null;
+        const messagesToStop = orphanNodes
+          .map((node) => {
+            const existing = liveTree?.get(node.nodeId) ?? node;
+            if (existing.packets.some((p) => p.obj.type === "stop")) {
+              return null;
+            }
+            return {
+              ...existing,
+              packets: [
+                ...existing.packets,
+                {
+                  placement: { turn_index: 0 },
+                  obj: { type: "stop" as const, stop_reason: "user_cancelled" },
+                },
+              ],
+              packetCount:
+                (existing.packetCount ?? existing.packets.length) + 1,
+            } as Message;
+          })
+          .filter((m): m is Message => m !== null);
+        if (messagesToStop.length > 0) {
+          upsertToCompleteMessageTree({
+            messages: messagesToStop,
+            completeMessageTreeOverride: liveTree,
+            chatSessionId: frozenSessionId!,
+          });
+        }
       }
 
       resetRegenerationState(frozenSessionId);
