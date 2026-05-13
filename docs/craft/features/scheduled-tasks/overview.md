@@ -12,33 +12,6 @@ V1 = schedule-only, single-user, no event triggers, no live-attach. The bar:
 a user creates a task in `/craft/v1/tasks`, sees it fire without their
 browser open, and clicks any past run to open the completed session.
 
-## Issues to Address
-
-1. **No headless run path.** `SessionManager._stream_cli_agent_response`
-   (`session/manager.py:1146`) yields SSE to an HTTP client. Scheduled runs
-   need to drain the agent without an attached browser while still
-   persisting everything `send_message` persists.
-2. **No durable "prompt + schedule" record** and **no run history.** A run
-   IS a session, but we still need a small "run" row tying the fired
-   session back to the task with status/timing.
-3. **No scheduler.** `DynamicTenantScheduler` (`apps/beat.py:274`) handles
-   per-tenant task families, not per-row cron entries. We need a DB-driven
-   dispatch loop with `SELECT FOR UPDATE SKIP LOCKED`.
-4. **One sandbox per user.** `Sandbox` is `user_id`-unique
-   (`models.py:5217`). A scheduled fire mid-interactive-use must not
-   trample the active session's workspace.
-5. **Schedule expression non-trivial.** Three editor modes (interval,
-   daily/weekly, raw cron) compile to one canonical form; timezones (incl.
-   DST) must be respected.
-6. **Approvals propagate.** A run may hit the approval boundary — the row
-   needs `awaiting_approval` and a resume hook. Approval *mechanics* are
-   owned by the approvals project; V1 only exposes the state.
-7. **Scheduled-run sessions would leak into the Craft sidebar.** The
-   sidebar query (`get_user_build_sessions`, `build_session.py:82`) lists
-   every `BuildSession` for the user. Each fire creates one, so without a
-   filter the sidebar fills up with scheduled runs. The sidebar must show
-   interactive sessions only.
-
 ## Important Notes
 
 - **A run IS a `BuildSession`.** `scheduled_task_run.session_id` is a FK to
@@ -54,15 +27,6 @@ browser open, and clicks any past run to open the completed session.
   `BuildMessage` rows). SSE endpoint composes the pair with an SSE
   formatter; executor wraps it with a drain-to-completion. Identical
   transcripts, no duplicated code.
-- **Per-sandbox Redis lease** keyed on `sandbox_id` serializes interactive
-  and scheduled prompts inside one pod. `awaiting_approval` releases the
-  lease (humans shouldn't block CPU); resume reacquires.
-- **One beat task + DB dispatch.** `dispatch_due_scheduled_tasks` runs every
-  30 s per tenant. Each tick: `SELECT FROM scheduled_task WHERE status=active
-  AND deleted=false AND next_run_at <= now() FOR UPDATE SKIP LOCKED`,
-  insert `queued` run rows, advance `next_run_at` via `croniter`, enqueue
-  `run_scheduled_task(run_id)` on a new `scheduled_tasks` queue
-  (`expires=900`). Same pattern as `check-for-indexing` / `check-for-pruning`.
 - **Dedicated `scheduled_tasks` Celery worker.** Both the dispatcher and the
   executor run on a new `celery_worker_scheduled_tasks` process registered
   in supervisord, the dev runner, and the Helm chart. Headless agent fires
@@ -107,24 +71,6 @@ browser open, and clicks any past run to open the completed session.
   retry policy, budget caps, run diffing, calendar view, auto-disable on
   N failures, external task-management API.
 
-## Approaches Considered
-
-- **Per-task entries in `DynamicTenantScheduler`** — rejected: scheduler
-  reloads on every CRUD, built for per-tenant task families, doesn't scale
-  to N user rows.
-- **Long-lived sleep threads per task in a worker** — rejected: no
-  crash-safety; doesn't fit Onyx's thread-pool Celery model where time
-  limits are disabled (CLAUDE.md).
-- **Hijack SSE endpoint for "detached" runs** — rejected: HTTP request
-  scope ends before the agent finishes; a dedicated Celery task is the
-  natural place to own headless execution.
-- **Inline runs as JSONB on the task row** — rejected: contention, no FK
-  for `session_id`, hard to paginate/filter.
-- **Winner: two tables + DB-driven dispatcher + fresh `BuildSession` per
-  fire + headless executor reusing `send_message`'s persistence.**
-  Smallest surface, reuses every Craft primitive, crash-safe, matches Onyx
-  idiom.
-
 ## Architecture
 
 ```
@@ -152,85 +98,6 @@ cleanup_stuck_scheduled_runs                    ▼
   queued > 15m → failed (stuck)        BuildMessage rows (existing tables,
   running > budget → failed (timeout)   written by shared persist consumer)
 ```
-
-## Relevant Files / Onyx Subsystems
-
-**Modify:**
-
-- `backend/onyx/db/models.py` — add `ScheduledTask`, `ScheduledTaskRun`,
-  related enums near `BuildSession` (`models.py:5151`); add
-  `SessionOrigin` enum + `BuildSession.origin` column; two new
-  `NotificationType` values.
-- `backend/onyx/server/features/build/db/build_session.py:82` —
-  `get_user_build_sessions` adds `BuildSession.origin == INTERACTIVE` to
-  the filter. Replace the existing user-created index with
-  `(user_id, origin, created_at desc)` so the sidebar stays a single
-  index scan.
-- `SessionManager.create_session__no_commit` (`session/manager.py:383`) —
-  add an `origin: SessionOrigin = INTERACTIVE` parameter; pass through
-  to the `BuildSession` row. Executor calls with `origin=SCHEDULED`.
-- `backend/onyx/server/features/build/session/manager.py:1146` — split
-  `_stream_cli_agent_response` into `_yield_acp_events` +
-  `_persist_acp_events`. SSE endpoint composes the pair; no behavior change
-  for interactive callers.
-- `backend/onyx/server/features/build/api/api.py:64` — mount
-  `scheduled_tasks_router` under existing `/build` prefix.
-- `backend/onyx/background/celery/tasks/beat_schedule.py:200` — add the
-  two beat templates.
-- `backend/onyx/configs/constants.py` — new `OnyxCeleryTask`,
-  `OnyxCeleryQueues.SCHEDULED_TASKS`, `NotificationType` values,
-  `POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME`.
-- `backend/onyx/configs/app_configs.py` — new
-  `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY` env-driven setting.
-- `backend/onyx/server/metrics/metrics_server.py` — register port 9098 for
-  the new `scheduled_tasks` worker in `_DEFAULT_PORTS`.
-- `backend/supervisord.conf` — add a `celery_worker_scheduled_tasks` program
-  block; include its log file in the log-redirect tail.
-- `backend/scripts/dev_run_background_jobs.py` — add the worker command so
-  the local dev runner brings it up alongside the others.
-- `deployment/helm/charts/onyx/values.yaml` + `values-local.yaml` — new
-  `celery_worker_scheduled_tasks` section (replicas, resources, HPA/KEDA
-  autoscaling knobs, labels).
-- `deployment/helm/charts/onyx/templates/celery-worker-servicemonitors.yaml`
-  — append a `ServiceMonitor` entry so Prometheus scrapes the new worker.
-
-**New (backend):**
-
-- `backend/onyx/db/scheduled_task.py` — DB ops mirroring `db/persona.py`:
-  list/fetch/create/update/soft-delete + `claim_due_scheduled_tasks`
-  (the FOR UPDATE SKIP LOCKED), `insert_run`, `mark_run_status`,
-  `list_runs_for_task`, `find_stuck_runs`.
-- `backend/onyx/server/features/build/scheduled_tasks/api.py` — FastAPI
-  router (handlers are thin validator + DB-op calls).
-- `.../scheduled_tasks/schedule.py` — pure helpers `compile_to_cron`,
-  `compute_next_run_at`, `human_readable`. Wraps `croniter` +
-  `cron-descriptor`. No DB access.
-- `.../scheduled_tasks/executor.py` — `run_scheduled_task(run_id)` body.
-- `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py` —
-  `@shared_task` definitions (each enqueue uses `expires=`; per-run timeout
-  enforced inside the task body via monotonic budget check).
-- `backend/onyx/background/celery/configs/scheduled_tasks.py` — Celery
-  config (threads pool, prefetch=1, concurrency from
-  `CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY`).
-- `backend/onyx/background/celery/apps/scheduled_tasks.py` — Celery app
-  with the standard Onyx signal wiring (prerun/postrun metrics,
-  `wait_for_redis` / `wait_for_db`, k8s probe), autodiscovers
-  `onyx.background.celery.tasks.scheduled_tasks`.
-- `backend/onyx/background/celery/versioned_apps/scheduled_tasks.py` —
-  factory stub used by the `celery -A …` CLI entrypoint.
-- `deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*.yaml`
-  — Deployment + HPA + KEDA ScaledObject + metrics Service for the new
-  worker (mirrors the user-file-processing layout).
-- `backend/alembic/versions/<new>.py` — schema migration.
-
-**New (frontend):**
-
-- `web/src/app/craft/v1/tasks/{page.tsx, new/page.tsx, [id]/edit/page.tsx,
-  [id]/page.tsx}` — list, create, edit, detail.
-- `web/src/components/craft/tasks/{ScheduleEditor, RunHistoryTable}.tsx`.
-- `web/src/components/craft/session/ScheduledRunBanner.tsx` — banner in the
-  existing session view.
-- Add "Scheduled Tasks" entry to the Craft left nav.
 
 ## Data Model
 
@@ -361,24 +228,6 @@ serialization lease.
   approval" — deep-linking to the run row.
 - **Mobile:** list/detail tolerable; editor explicitly requires desktop
   (product req 8).
-
-## Cleanup / Migrations
-
-- One Alembic migration: two new tables, two new enum types, new
-  notification-type values, `BuildSession.origin` column
-  (`server_default='interactive'` so existing rows backfill cleanly), and
-  the replacement `(user_id, origin, created_at desc)` index on
-  `build_session`. No data migration.
-- Beat schedule grows two entries: `dispatch-due-scheduled-tasks` (30 s,
-  `expires=60`, MEDIUM, `scheduled_tasks` queue) and
-  `cleanup-stuck-scheduled-runs` (hourly, `expires=3600`, LOW,
-  `scheduled_tasks` queue).
-- New `scheduled_tasks` Celery queue served by a dedicated
-  `celery_worker_scheduled_tasks` process — registered in
-  `backend/supervisord.conf`, `backend/scripts/dev_run_background_jobs.py`,
-  and the Helm chart (`values.yaml`, `values-local.yaml`, and new
-  `celery-worker-scheduled-tasks{,-hpa,-scaledobject,-metrics-service}.yaml`
-  templates). The `heavy` worker no longer serves the queue.
 
 ## Tests
 
