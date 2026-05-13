@@ -99,7 +99,6 @@ def _collect_paginated_channels(
     channels: list[ChannelType] = []
     extra_kwargs: dict[str, Any] = {}
     if team_id is not None:
-        # Enterprise Grid: scope channel listing to a specific workspace
         extra_kwargs["team_id"] = team_id
     for result in make_paginated_slack_api_call(
         client.conversations_list,
@@ -120,11 +119,7 @@ def get_channels(
     get_private: bool = True,
     team_id: str | None = None,
 ) -> list[ChannelType]:
-    """Get all channels in the workspace.
-
-    On Enterprise Grid, pass team_id to scope the listing to a specific
-    workspace within the org.
-    """
+    """Get all channels in the workspace. Pass team_id to scope to one Grid workspace."""
     channels: list[ChannelType] = []
     channel_types = []
     if get_public:
@@ -157,11 +152,7 @@ def get_channels(
 
 
 def list_grid_team_ids(client: WebClient) -> list[str]:
-    """List all team (workspace) IDs in an Enterprise Grid org.
-
-    Requires ``team:read`` (or ``auth.teams:read``) scope on the bot token of
-    an org-level install. Returns an empty list if the call surfaces no teams.
-    """
+    """Return Grid org team IDs via ``auth.teams.list`` (needs ``team:read``)."""
     team_ids: list[str] = []
     for result in make_paginated_slack_api_call(client.auth_teams_list):
         for team in result.get("teams", []):
@@ -192,17 +183,7 @@ def get_channels_across_teams(
     get_public: bool = True,
     get_private: bool = True,
 ) -> list[ChannelType]:
-    """Enumerate channels across every workspace in an Enterprise Grid org.
-
-    Slack returns org-shared channels under each workspace they're shared into,
-    so dedupe by channel id while keeping the first occurrence (which retains
-    the ``team`` field of the home workspace for that listing).
-
-    When ``conversations.list`` is called with an explicit ``team_id``, Slack
-    omits the ``team`` field on each returned channel (it's implicit from the
-    query). Stamp the queried ``team_id`` onto the channel so downstream
-    callers can resolve per-workspace URLs without an extra API round-trip.
-    """
+    """Enumerate Grid org channels across teams; dedupe by id, stamp team_id."""
     seen: set[str] = set()
     merged: list[ChannelType] = []
     for team_id in team_ids:
@@ -449,19 +430,7 @@ def _channel_to_hierarchy_node(
     workspace_url: str | None = None,
     team_id_to_url: dict[str, str] | None = None,
 ) -> HierarchyNode:
-    """Convert a Slack channel to a HierarchyNode.
-
-    Args:
-        channel: The Slack channel object
-        channel_access: External access permissions for the channel
-        workspace_url: Fallback workspace URL for non-Grid installs
-        team_id_to_url: Per-team URL map for Enterprise Grid; when the channel
-            carries a ``team`` field, that workspace's URL is preferred.
-
-    Returns:
-        A HierarchyNode representing the channel
-    """
-    # Prefer the per-team URL on Enterprise Grid so links route to the correct workspace.
+    """Convert a Slack channel to a HierarchyNode."""
     resolved_url: str | None = None
     channel_team = channel.get("team")
     if channel_team and team_id_to_url is not None:
@@ -469,7 +438,6 @@ def _channel_to_hierarchy_node(
     if not resolved_url:
         resolved_url = workspace_url
 
-    # Link format: https://{workspace}.slack.com/archives/{channel_id}
     link = (
         f"{resolved_url.rstrip('/')}/archives/{channel['id']}" if resolved_url else None
     )
@@ -627,9 +595,6 @@ def _get_all_doc_ids(
     Get all document ids in the workspace, channel by channel
     This is pretty identical to get_all_docs, but it returns a set of ids instead of documents
     This makes it an order of magnitude faster than get_all_docs
-
-    On Enterprise Grid, pass ``team_ids`` to enumerate channels across every
-    workspace in the org and ``team_id_to_url`` to build per-workspace links.
     """
 
     if team_ids:
@@ -818,9 +783,7 @@ class SlackConnector(
         self.credentials_provider: CredentialsProviderInterface | None = None
         self.credential_prefix: str | None = None
         self.use_redis: bool = use_redis
-        # Workspace URL for building channel links (e.g., https://myworkspace.slack.com)
         self._workspace_url: str | None = None
-        # Enterprise Grid org state. Empty / False when not on Grid.
         self._is_grid: bool = False
         self._team_ids: list[str] = []
         self._team_id_to_url: dict[str, str] = {}
@@ -970,9 +933,6 @@ class SlackConnector(
         self.text_cleaner = SlackTextCleaner(client=self.client)
         self.credentials_provider = credentials_provider
 
-        # Extract workspace URL from auth_test response for building channel links.
-        # On Enterprise Grid, also enumerate teams in the org so downstream
-        # channel listing / link building can be team-scoped.
         is_grid = False
         try:
             auth_response = self.client.auth_test()
@@ -994,8 +954,6 @@ class SlackConnector(
                     e.response.get("error", ""),
                 )
                 self._team_ids = []
-            # Fan out team.info calls in parallel so a 50+ workspace org doesn't
-            # serialize that many round-trips during connector init.
             if self._team_ids:
                 grid_client = self.client
                 with ThreadPoolExecutor(
@@ -1010,10 +968,7 @@ class SlackConnector(
                         try:
                             url = future.result()
                         except Exception as e:
-                            # Non-SlackApiError (e.g. transient network failures
-                            # past the retry budget) would otherwise abort
-                            # connector init for the whole Grid org. Skip the
-                            # team; channel links fall back to _workspace_url.
+                            # swallow per-team failures so one bad team.info doesn't abort init
                             logger.warning(
                                 "team.info failed for team_id=%s: %s", tid, e
                             )
@@ -1395,10 +1350,7 @@ class SlackConnector(
                     f"Slack API returned a failure: {error_msg}"
                 )
 
-            # 3) Enterprise Grid: confirm we can enumerate workspaces in the
-            # org. Without team:read, channel listing across the Grid org is not
-            # possible. The Slack SDK raises SlackApiError on failure (caught
-            # below), so no inline ok-check is needed here.
+            # 3) Grid: verify team:read by calling auth.teams.list
             if auth_response.get("enterprise_id"):
                 self.fast_client.auth_teams_list(limit=1)
 

@@ -42,7 +42,6 @@ class ChannelType(TypedDict):
     purpose: ChannelTopicPurposeType
     previous_names: list[str]
     num_members: int
-    # Present on Enterprise Grid: id of the workspace (team) this channel belongs to.
     team: NotRequired[str]
 
 

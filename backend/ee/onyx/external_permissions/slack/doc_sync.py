@@ -47,8 +47,6 @@ def _fetch_channel_permissions(
 ) -> dict[str, ExternalAccess]:
     channel_permissions = {}
     if team_ids:
-        # Enterprise Grid: enumerate channels across every workspace in the org
-        # so org-shared and per-workspace channels are all covered.
         public_channels = get_channels_across_teams(
             client=slack_client,
             team_ids=team_ids,
@@ -190,8 +188,6 @@ def slack_doc_sync(
             "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
         )
 
-    # Detect Enterprise Grid via auth_test and enumerate teams once so channel
-    # listing covers every workspace in the org.
     grid_team_ids: list[str] | None = None
     try:
         auth_response = slack_client.auth_test()
