@@ -98,22 +98,17 @@ func Execute() error {
 	rootCmd.AddCommand(newAskCmd(ios))
 	rootCmd.AddCommand(newSearchCmd(ios))
 	rootCmd.AddCommand(newAgentsCmd(ios))
-	rootCmd.AddCommand(newConfigureCmd(ios))
 	rootCmd.AddCommand(newValidateConfigCmd(ios))
 	rootCmd.AddCommand(newServeCmd())
 	rootCmd.AddCommand(newInstallSkillCmd(ios))
 	rootCmd.AddCommand(newExperimentsCmd(ios))
 
-	// Default command: --version first, then TTY check, then chat TUI
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if showVersion {
 			printVersion(ios, cmd)
 			return nil
 		}
-		if !ios.IsInteractive() {
-			return cmd.Help()
-		}
-		return chatCmd.RunE(cmd, args)
+		return cmd.Help()
 	}
 
 	return rootCmd.Execute()

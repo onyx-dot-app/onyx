@@ -2,6 +2,7 @@ import datetime
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from sqlalchemy.orm import Session
 
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
@@ -12,6 +13,8 @@ from onyx.db.models import SlackChannelConfig
 from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
@@ -24,6 +27,7 @@ from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
+from shared_configs.contextvars import get_current_tenant_id
 
 logger_base = setup_logger()
 
@@ -296,11 +300,18 @@ def handle_message(
                 not existing_user.is_active
                 and existing_user.account_type == AccountType.BOT
             ):
+                # Lock + check on the same session that commits activate_user.
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
                 check_seat_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",
                     "check_seat_availability",
                     None,
                 )
+                acquire_lock_fn(db_session, get_current_tenant_id())
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
@@ -331,7 +342,94 @@ def handle_message(
                 invalidate_license_cache_fn()
                 logger.info("Reactivated inactive Slack user %s", message_info.email)
 
-            add_slack_user_if_not_exists(db_session, message_info.email)
+            elif existing_user.account_type == AccountType.EXT_PERM_USER:
+                # Pre-check so the user gets a Slack-side message; the
+                # locked enforcer below is defense-in-depth.
+                check_seat_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                seat_result = check_seat_fn(db_session=db_session)
+                if seat_result is not None and not seat_result.available:
+                    logger.info(
+                        "Blocked Slack-bot promotion of %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
+                    )
+                    respond_in_thread_or_channel(
+                        client=client,
+                        channel=channel,
+                        thread_ts=message_info.msg_to_respond,
+                        text=(
+                            "We weren't able to respond because your organization "
+                            "has reached its user seat limit. Please contact your "
+                            "Onyx administrator to add more seats."
+                        ),
+                    )
+                    return False
+
+            # Defense-in-depth: locks + checks on the same session that
+            # commits the EXT_PERM_USER -> BOT promotion.
+            def _slack_seat_enforcer(session: Session, seats_needed: int) -> None:
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
+                check_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                acquire_lock_fn(session, get_current_tenant_id())
+                result = check_fn(session, seats_needed=seats_needed)
+                if result is not None and not result.available:
+                    raise OnyxError(
+                        OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message
+                    )
+
+            # Snapshot pre-call seat-counted state. ``add_slack_user_if_not_exists``
+            # mutates ``existing_user`` in place on EXT_PERM_USER -> BOT, so
+            # reading ``account_type`` after the call would see the new value
+            # and skip cache invalidation.
+            consumed_seat = existing_user is None or (
+                existing_user.account_type == AccountType.EXT_PERM_USER
+            )
+
+            try:
+                add_slack_user_if_not_exists(
+                    db_session,
+                    message_info.email,
+                    enforce_seat_check=_slack_seat_enforcer,
+                )
+            except OnyxError as e:
+                if e.error_code != OnyxErrorCode.SEAT_LIMIT_EXCEEDED:
+                    raise
+                logger.info(
+                    "Blocked Slack-bot user creation/promotion for %s: %s",
+                    message_info.email,
+                    e.detail,
+                )
+                respond_in_thread_or_channel(
+                    client=client,
+                    channel=channel,
+                    thread_ts=message_info.msg_to_respond,
+                    text=(
+                        "We weren't able to respond because your organization "
+                        "has reached its user seat limit. Please contact your "
+                        "Onyx administrator to add more seats."
+                    ),
+                )
+                return False
+            else:
+                if consumed_seat:
+                    invalidate_fn = fetch_ee_implementation_or_noop(
+                        "onyx.db.license",
+                        "invalidate_license_cache",
+                        None,
+                    )
+                    invalidate_fn()
 
         # first check if we need to respond with a standard answer
         # standard answers should be published in a thread

@@ -87,7 +87,11 @@ class AsanaAPI:
         seen_task_gids: set[str] = set()
         for project_gid in projects_list:
             for task in self._get_tasks_for_project(
-                project_gid, start_date, start_seconds, seen_task_gids
+                project_gid,
+                start_date,
+                start_seconds,
+                seen_task_gids,
+                project_gids,
             ):
                 yield task
         logger.info("Completed fetching %s tasks from Asana", self.task_count)
@@ -102,6 +106,7 @@ class AsanaAPI:
         start_date: str,
         start_seconds: int,
         seen_task_gids: set[str],
+        project_gids: list[str] | None,
     ) -> Iterator[AsanaTask]:
         project = self.project_api.get_project(project_gid, opts={})
         project_name = project.get("name", project_gid)
@@ -111,24 +116,22 @@ class AsanaAPI:
         if project.get("archived"):
             logger.info("Skipping archived project: %s (%s)", project_name, project_gid)
             return
-        if not team_gid:
+        # The team filter narrows the workspace-wide sync. When the user has
+        # picked specific projects via `project_gids`, respect that choice
+        # regardless of team membership — those projects were explicitly
+        # opted in upstream by the project_gid filter in get_tasks.
+        if (
+            project.get("privacy_setting") == "private"
+            and self.team_gid
+            and team_gid != self.team_gid
+            and project_gids is None
+        ):
             logger.info(
-                "Skipping project without a team: %s (%s)", project_name, project_gid
-            )
-            return
-        if project.get("privacy_setting") == "private":
-            if self.team_gid and team_gid != self.team_gid:
-                logger.info(
-                    "Skipping private project not in configured team: %s (%s)",
-                    project_name,
-                    project_gid,
-                )
-                return
-            logger.info(
-                "Processing private project in configured team: %s (%s)",
+                "Skipping private project not in configured team: %s (%s)",
                 project_name,
                 project_gid,
             )
+            return
 
         simple_start_date = start_date.split(".")[0].split("+")[0]
         logger.info(

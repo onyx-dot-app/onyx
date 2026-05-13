@@ -19,13 +19,13 @@ uv pip install onyx-cli
 
 ## Setup
 
-Run the interactive setup:
+Run the interactive chat TUI — on first launch it will guide you through setup:
 
 ```shell
-onyx-cli configure
+onyx-cli chat
 ```
 
-This prompts for your Onyx server URL and personal access token (PAT), tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
+This prompts for your Onyx server URL and personal access token (PAT), tests the connection, and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set). To reconfigure later, use the `/configure` command inside the TUI.
 
 Environment variables override config file values:
 
@@ -39,10 +39,10 @@ Environment variables override config file values:
 
 ## Usage
 
-### Interactive chat (default with terminal)
+### Interactive chat
 
 ```shell
-onyx-cli
+onyx-cli chat
 onyx-cli chat --no-stream-markdown
 ```
 
@@ -110,7 +110,6 @@ Useful hardening flags:
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
 | `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
-| `configure` | Interactive | Configure server URL and PAT (requires terminal) |
 | `serve` | Interactive | Serve the Onyx TUI over SSH |
 
 ### Global Flags
@@ -131,7 +130,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 
 ### Configuration
 
-If a human has already run `onyx-cli configure`, the CLI works out of the box — no additional setup needed. Environment variables can override the config file or serve as an alternative when no config file exists:
+If a human has already run `onyx-cli chat` (which includes first-time setup), the CLI works out of the box — no additional setup needed. Environment variables can override the config file or serve as an alternative when no config file exists:
 
 ```shell
 export ONYX_SERVER_URL="https://your-onyx-server.com/api"

@@ -4,6 +4,12 @@
   @apply w-full overflow-clip;
 }
 
+/* Border color */
+.opal-select-card[data-interactive-state="selected"] {
+  border-color: var(--interactive-foreground);
+}
+
+/* Border style */
 .opal-select-card[data-border="none"] {
   border: none;
 }
@@ -14,9 +20,4 @@
 
 .opal-select-card[data-border="solid"] {
   @apply border;
-}
-
-.opal-select-card[data-border="solid"][data-interactive-state="filled"],
-.opal-select-card[data-border="dashed"][data-interactive-state="filled"] {
-  @apply border-action-link-05;
 }

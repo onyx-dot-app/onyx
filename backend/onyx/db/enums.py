@@ -294,6 +294,11 @@ class SandboxStatus(str, PyEnum):
         return self == SandboxStatus.SLEEPING
 
 
+class PatType(str, PyEnum):
+    USER = "USER"
+    CRAFT = "CRAFT"
+
+
 class ArtifactType(str, PyEnum):
     WEB_APP = "web_app"
     PPTX = "pptx"

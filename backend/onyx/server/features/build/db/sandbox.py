@@ -9,12 +9,57 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.pat import hash_pat
+from onyx.db.enums import PatType
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import PersonalAccessToken
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
+from onyx.db.models import User
+from onyx.db.pat import create_pat
+from onyx.db.pat import revoke_pat
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_PAT_EXPIRATION_DAYS = 30
+
+
+def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str:
+    """Return a valid PAT for this sandbox, minting if needed."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    existing_craft_pats = list(
+        db_session.scalars(
+            select(PersonalAccessToken)
+            .where(PersonalAccessToken.user_id == user.id)
+            .where(PersonalAccessToken.pat_type == PatType.CRAFT)
+            .where(
+                (PersonalAccessToken.expires_at.is_(None))
+                | (PersonalAccessToken.expires_at > now)
+            )
+        ).all()
+    )
+
+    if sandbox.encrypted_pat and len(existing_craft_pats) == 1:
+        raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
+        if hash_pat(raw_token) == existing_craft_pats[0].hashed_token:
+            return raw_token
+
+    for pat in existing_craft_pats:
+        revoke_pat(db_session, pat.id, user.id)
+
+    _pat_record, raw_token = create_pat(
+        db_session=db_session,
+        user_id=user.id,
+        name=f"craft-{user.id}",
+        expiration_days=_PAT_EXPIRATION_DAYS,
+        pat_type=PatType.CRAFT,
+    )
+
+    sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
+    db_session.flush()
+    return raw_token
 
 
 def create_sandbox__no_commit(

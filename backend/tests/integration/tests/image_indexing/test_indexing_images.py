@@ -44,7 +44,6 @@ def test_image_indexing(
 
     SettingsManager.update_settings(
         DATestSettings(
-            search_time_image_analysis_enabled=True,
             image_extraction_and_analysis_enabled=True,
         ),
         user_performing_action=admin_user,
@@ -140,7 +139,6 @@ def test_docx_image_indexing(
 
     SettingsManager.update_settings(
         DATestSettings(
-            search_time_image_analysis_enabled=True,
             image_extraction_and_analysis_enabled=True,
         ),
         user_performing_action=admin_user,
