@@ -35,7 +35,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 | Component | Before | After |
 |-----------|--------|-------|
 | `/workspace/files/` | S3-synced corpus dump | Gone |
-| S3 sidecar container | Runs `s5cmd sync` at pod start | Gone |
+| S3 sidecar container | Runs `aws s3 sync` at pod start | Gone |
 | `onyx-cli` binary | Not present | `/usr/local/bin/onyx-cli` |
 | `company-search` skill | Does not exist | `.opencode/skills/company-search/SKILL.md` with user's sources |
 | `ONYX_PAT` env var | Not set | Per-user PAT, 30-day expiry, re-minted when expired |
@@ -89,7 +89,7 @@ Pods don't live long enough for the PAT to expire mid-session — the 1-hour idl
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They're written to S3 via `PersistentDocumentWriter.write_raw_file()` and currently synced to the sandbox by the file-sync sidecar.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at session setup and after each upload. Sessions access files directly at `/workspace/user_library/`. Details in PR 3, steps 18–20.
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at session setup and after each upload. Sessions access files directly at `/workspace/user_library/`. Sidecar removal is in PR 3 (pure deletion); the new user library delivery mechanism is in PR 4 (steps 23–28).
 
 This preserves `PersistentDocumentWriter.write_raw_file()` and `S3PersistentDocumentWriter` (the S3 write path) while eliminating the sidecar. The `write_documents()` path (connector document serialization) is dead and removed.
 
@@ -220,7 +220,7 @@ No default — must be set when `SANDBOX_BACKEND=kubernetes`. Validated at provi
 
 ### PR 2: Search Tool Wiring
 
-Purely additive (~160 lines). Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage. Old file-based knowledge code (dead after the AGENTS.template.md rewrite) is left in place and cleaned up in PR 2c.
+Purely additive (~160 lines). Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage. Old file-based knowledge code (dead after the AGENTS.template.md rewrite) is left in place and cleaned up in PR 3.
 
 **5. Add onyx-cli to Dockerfile** (`sandbox/kubernetes/docker/Dockerfile`)
 
@@ -287,7 +287,7 @@ Both functions live in `sandbox/skills/rendering.py`:
 
 **9. Rewrite AGENTS.template.md** (`server/features/build/AGENTS.template.md`)
 
-Remove `files/` references and `{{KNOWLEDGE_SOURCES_SECTION}}`. Point the agent at `onyx-cli search` and the company-search skill. Old code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `generate_agents_md.py`, etc.) is NOT removed in this PR — it becomes dead code, cleaned up in PR 2c.
+Remove `files/` references and `{{KNOWLEDGE_SOURCES_SECTION}}`. Point the agent at `onyx-cli search` and the company-search skill. Old code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `generate_agents_md.py`, etc.) is NOT removed in this PR — it becomes dead code, cleaned up in PR 3.
 
 ```markdown
 ### Step 1: Information Retrieval
@@ -331,33 +331,22 @@ Remove `files/` references and `{{KNOWLEDGE_SOURCES_SECTION}}`. Point the agent 
 
 ---
 
-### PR 2c: Dead Code Cleanup
+### PR 3: File Sync Removal (Pure Deletion)
 
-Removes old file-based knowledge code that became dead after PR 2's AGENTS.template.md rewrite. No behavioral change.
-
-- Remove `CONNECTOR_INFO`, `_normalize_connector_name()`, `_scan_directory_to_depth()`, `build_knowledge_sources_section()` from `agent_instructions.py`
-- Remove `generate_agents_md.py` from the Docker image
-- Remove `{{KNOWLEDGE_SOURCES_SECTION}}` replacement logic
-- Remove `files_path` parameter from `generate_agent_instructions()`
-
----
-
-### PR 3: File Sync Removal + User Library Rework
-
-The breaking change. After this PR, `files/` is gone and connector documents are accessed only via search. User library files get a new delivery mechanism (shared volume + kubectl exec sync). Ship after verifying search works end-to-end in PR 2.
+Removal-only (~1500 lines deleted). After this PR, `files/` is gone and connector documents are accessed only via search. No new functionality — user library rework is deferred to PR 4. Ship after verifying search works end-to-end in PR 2.
 
 Grouped by subsystem for clarity, but ships as one PR.
 
 #### Pod spec
 
-**11. Remove S3 sidecar, add user library volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**11. Remove S3 sidecar and files volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
 In `_create_sandbox_pod()`:
 - Remove the `file-sync` sidecar container (`peakcom/s5cmd:v2.3.0`)
-- Replace the `files` EmptyDir volume (5Gi, previously for all connector docs) with a smaller `user-library` EmptyDir volume (~1Gi) mounted at `/workspace/user_library/`
-- Keep AWS credential injection on the **main container** (needed for `s5cmd` exec calls for user library sync) — remove the IRSA service account that was specific to the sidecar
+- Remove the `files` EmptyDir volume (5Gi)
+- Remove the IRSA service account that was specific to the sidecar
 
-Remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` from `configs.py`. **Keep `SANDBOX_S3_BUCKET`** — `S3PersistentDocumentWriter` (user library writes) and the new kubectl exec sync both depend on it.
+Remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` from `configs.py`. **Keep `SANDBOX_S3_BUCKET`** — `S3PersistentDocumentWriter` (user library writes) still depends on it.
 
 #### Session setup / restore
 
@@ -414,37 +403,22 @@ Remove `/workspace/files`, `/workspace/files/**`, `/workspace/demo_data`, and `/
 
 #### Celery tasks
 
-**18. Rework `sync_sandbox_files` into user-library-only sync** (`sandbox/tasks/tasks.py`)
+**18. Remove `sync_sandbox_files` task and helpers** (`sandbox/tasks/tasks.py`)
 
-Replace the current `sync_sandbox_files()` task (~lines 324-394) with a narrower `sync_user_library_files()` task that:
-1. Finds the user's running sandbox via `get_sandbox_by_user_id()`
-2. Runs a one-shot `kubectl exec` in the main container (not a sidecar): `s5cmd sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/`
-3. Returns immediately — no persistent process
+Remove the current `sync_sandbox_files()` task (~lines 324-394) entirely. Connector documents no longer need filesystem sync — they're accessed via search.
 
-Delete `_get_disabled_user_library_paths()` helper (~lines 272-315) — filtered symlinks are gone; the agent sees all user library files.
+Delete `_get_disabled_user_library_paths()` helper (~lines 272-315) — filtered symlinks are gone.
 
-**19. Update task dispatches**
+#### Task dispatches
+
+**19. Remove file sync dispatches**
 
 - `background/indexing/run_docfetching.py` (~lines 940-958): remove the `SANDBOX_FILE_SYNC` dispatch entirely. Connector documents no longer need filesystem sync — they're accessed via search.
-- `server/features/build/api/user_library.py` (~line 223): replace `SANDBOX_FILE_SYNC` dispatch with `SYNC_USER_LIBRARY_FILES` dispatch. This triggers the new kubectl exec sync so uploaded files appear in the sandbox immediately.
-
-#### User library sync at session setup
-
-**20. Sync user library on workspace setup** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
-
-In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
-
-```bash
-s5cmd sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/*" /workspace/user_library/
-```
-
-This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
-
-Add `/workspace/user_library` and `/workspace/user_library/**` to the `external_directory` allowlist in `opencode_config.py`.
+- `server/features/build/api/user_library.py` (~line 223): remove the `SANDBOX_FILE_SYNC` dispatch. (User library upload sync is re-added in PR 4.)
 
 #### Local sandbox
 
-**21. Remove local file sync infrastructure** (`sandbox/manager/directory_manager.py`, `sandbox/local/local_sandbox_manager.py`)
+**20. Remove local file sync infrastructure** (`sandbox/manager/directory_manager.py`, `sandbox/local/local_sandbox_manager.py`)
 
 Remove `setup_files_symlink()`, `_setup_filtered_files()`, `_setup_filtered_user_library()` from `DirectoryManager`.
 
@@ -452,7 +426,7 @@ Remove file-system path construction using `PERSISTENT_DOCUMENT_STORAGE_PATH` fr
 
 #### Persistent document writer
 
-**22. Remove connector document write path, keep user library write path** (`persistent_document_writer.py`, `run_docfetching.py`)
+**21. Remove connector document write path, keep user library write path** (`persistent_document_writer.py`, `run_docfetching.py`)
 
 In `run_docfetching.py`: remove the `get_persistent_document_writer()` import and the code block (~lines 790-818) that writes indexed connector documents to persistent storage. This is the connector-document serialization path — dead now that search replaces file access.
 
@@ -460,9 +434,9 @@ In `persistent_document_writer.py`: remove `write_documents()`, `serialize_docum
 
 #### Demo data
 
-**23. Remove demo data** (`sandbox/kubernetes/docker/Dockerfile`, `sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**22. Remove demo data** (`sandbox/kubernetes/docker/Dockerfile`, `sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
-Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its extraction). Remove the demo-data symlink path in `setup_session_workspace()` and `_regenerate_session_config()`. Remove `/workspace/demo_data` allowlist rules from `opencode_config.py` (covered by step 17). Demo data is no longer a supported path.
+Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its extraction). Remove the demo-data symlink path in `setup_session_workspace()` and `_regenerate_session_config()`. Remove `/workspace/demo_data` allowlist rules from `opencode_config.py` (covered by step 16). Demo data is no longer a supported path.
 
 #### Deleted files
 
@@ -478,17 +452,17 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 |--------|------|
 | Delete | `sandbox/kubernetes/docker/generate_agents_md.py` |
 | Delete | `tests/external_dependency_unit/craft/test_persistent_document_writer.py` |
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — remove sidecar (replace with user-library volume), remove files/ symlink, remove `generate_agents_md.py` calls, remove `sync_files()`, remove `_build_filtered_symlink_script()`, add user library sync via kubectl exec in setup + restore |
-| Modify | `sandbox/kubernetes/docker/Dockerfile` — remove `files/` mkdir, remove `generate_agents_md.py` copy, remove `demo_data.zip` copy + extraction, add `mkdir -p /workspace/user_library` |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — remove sidecar, remove files volume, remove files/ symlink, remove `generate_agents_md.py` calls, remove `sync_files()`, remove `_build_filtered_symlink_script()` |
+| Modify | `sandbox/kubernetes/docker/Dockerfile` — remove `files/` mkdir, remove `generate_agents_md.py` copy, remove `demo_data.zip` copy + extraction |
 | Modify | `sandbox/util/agent_instructions.py` — remove `CONNECTOR_INFO`, `build_knowledge_sources_section()`, helpers, `files_path` param |
 | Modify | `sandbox/util/__init__.py` — already cleared in PR 2; no further changes needed |
-| Modify | `sandbox/util/opencode_config.py` — remove `/workspace/files` allowlist, add `/workspace/user_library` allowlist |
+| Modify | `sandbox/util/opencode_config.py` — remove `/workspace/files` and `/workspace/demo_data` allowlists |
 | Modify | `sandbox/base.py` — remove `sync_files()` abstract method |
 | Modify | `sandbox/local/local_sandbox_manager.py` — remove `sync_files()` impl, remove files/ setup |
 | Modify | `sandbox/manager/directory_manager.py` — remove file symlink helpers |
-| Modify | `sandbox/tasks/tasks.py` — replace `sync_sandbox_files` with `sync_user_library_files`, delete `_get_disabled_user_library_paths()` |
+| Modify | `sandbox/tasks/tasks.py` — remove `sync_sandbox_files` task, delete `_get_disabled_user_library_paths()` |
 | Modify | `background/indexing/run_docfetching.py` — remove persistent writer call + `SANDBOX_FILE_SYNC` dispatch |
-| Modify | `server/features/build/api/user_library.py` — replace `SANDBOX_FILE_SYNC` dispatch with `SYNC_USER_LIBRARY_FILES` |
+| Modify | `server/features/build/api/user_library.py` — remove `SANDBOX_FILE_SYNC` dispatch |
 | Modify | `server/features/build/indexing/persistent_document_writer.py` — remove `write_documents()`, `serialize_document()`, path builder helpers; keep `write_raw_file()`, `delete_raw_file()`, factory |
 | Modify | `server/features/build/session/manager.py` — remove `PERSISTENT_DOCUMENT_STORAGE_PATH` usage |
 | Modify | `server/features/build/configs.py` — remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` (keep `SANDBOX_S3_BUCKET`) |
@@ -506,5 +480,73 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 2. Same query in Onyx chat — top results should overlap.
 3. `find files/` returns nothing.
 4. Session with no sources — SKILL.md says so, agent doesn't hallucinate.
-5. Upload a spreadsheet via user library, verify it appears at `/workspace/user_library/` in the sandbox.
-6. Upload a file mid-session, verify the agent can access it without restarting.
+
+---
+
+### PR 4: User Library Rework (Net New)
+
+New delivery mechanism for raw user library files. With the sidecar removed in PR 3, user library files (spreadsheets, PDFs, etc.) need a new path into the sandbox. This PR adds a shared `/workspace/user_library/` volume, kubectl exec sync, and a Celery task to keep it up to date.
+
+#### Pod spec
+
+**23. Add user library volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+
+In `_create_sandbox_pod()`:
+- Add a `user-library` EmptyDir volume (~1Gi) mounted at `/workspace/user_library/`
+- Keep AWS credential injection on the **main container** (needed for `aws s3` exec calls for user library sync)
+
+#### Celery tasks
+
+**24. Add `sync_user_library_files` task** (`sandbox/tasks/tasks.py`)
+
+New `sync_user_library_files()` Celery task that:
+1. Finds the user's running sandbox via `get_sandbox_by_user_id()`
+2. Runs a one-shot `kubectl exec` in the main container (not a sidecar): `aws s3 sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/`
+3. Returns immediately — no persistent process
+
+#### Task dispatches
+
+**25. Add user library sync dispatch on upload**
+
+- `server/features/build/api/user_library.py` (~line 223): add `SYNC_USER_LIBRARY_FILES` dispatch. This triggers the new kubectl exec sync so uploaded files appear in the sandbox immediately.
+
+#### User library sync at session setup
+
+**26. Sync user library on workspace setup** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+
+In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
+
+```bash
+aws s3 sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/*" /workspace/user_library/
+```
+
+This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
+
+#### OpenCode config
+
+**27. Add user library allowlist** (`sandbox/util/opencode_config.py`)
+
+Add `/workspace/user_library` and `/workspace/user_library/**` to the `external_directory` allowlist in `opencode_config.py`.
+
+#### Dockerfile
+
+**28. Add user library directory** (`sandbox/kubernetes/docker/Dockerfile`)
+
+Add `mkdir -p /workspace/user_library` to the Dockerfile.
+
+#### PR 4 file changes
+
+| Action | File |
+|--------|------|
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — add user-library volume, add user library sync via kubectl exec in setup + restore |
+| Modify | `sandbox/kubernetes/docker/Dockerfile` — add `mkdir -p /workspace/user_library` |
+| Modify | `sandbox/util/opencode_config.py` — add `/workspace/user_library` allowlist |
+| Modify | `sandbox/tasks/tasks.py` — add `sync_user_library_files` task |
+| Modify | `server/features/build/api/user_library.py` — add `SYNC_USER_LIBRARY_FILES` dispatch |
+
+#### PR 4 tests
+
+**Smoke tests** (before merging):
+
+1. Upload a spreadsheet via user library, verify it appears at `/workspace/user_library/` in the sandbox.
+2. Upload a file mid-session, verify the agent can access it without restarting.

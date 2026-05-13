@@ -20,7 +20,6 @@ import httpx
 
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import DEMO_DATA_PATH
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
@@ -164,117 +163,6 @@ class LocalSandboxManager(SandboxManager):
         """
         return self._get_sandbox_path(sandbox_id) / "sessions" / str(session_id)
 
-    def _setup_filtered_files(
-        self,
-        session_path: Path,
-        source_path: Path,
-        excluded_paths: list[str],
-    ) -> None:
-        """Set up files directory with filtered symlinks based on exclusions.
-
-        Instead of symlinking the entire source directory, this creates a files/
-        directory structure where:
-        - Top-level items (except user_library) are symlinked directly
-        - user_library/ is created as a real directory with filtered symlinks
-
-        Args:
-            session_path: Path to the session directory
-            source_path: Path to the user's knowledge files (e.g., /storage/tenant/knowledge/user/)
-            excluded_paths: List of paths within user_library to exclude
-                (e.g., ["/data/file.xlsx", "/reports/old.pdf"])
-        """
-        files_dir = session_path / "files"
-        files_dir.mkdir(parents=True, exist_ok=True)
-
-        # Normalize excluded paths for comparison (remove leading slash)
-        excluded_set = {p.lstrip("/") for p in excluded_paths}
-
-        if not source_path.exists():
-            logger.warning("Source path does not exist: %s", source_path)
-            return
-
-        # Iterate through top-level items in source
-        for item in source_path.iterdir():
-            target_link = files_dir / item.name
-
-            if item.name == "user_library":
-                # user_library needs filtered handling
-                self._setup_filtered_user_library(
-                    target_dir=target_link,
-                    source_dir=item,
-                    excluded_set=excluded_set,
-                    base_path="",
-                )
-            else:
-                # Other directories/files: symlink directly
-                if not target_link.exists():
-                    target_link.symlink_to(item, target_is_directory=item.is_dir())
-
-    def _setup_filtered_user_library(
-        self,
-        target_dir: Path,
-        source_dir: Path,
-        excluded_set: set[str],
-        base_path: str,
-    ) -> bool:
-        """Recursively set up user_library with filtered symlinks.
-
-        Creates directory structure and symlinks only non-excluded files.
-        Only creates directories if they will contain at least one enabled file.
-
-        Args:
-            target_dir: Where to create the filtered structure
-            source_dir: Source user_library directory
-            excluded_set: Set of excluded relative paths (e.g., {"data/file.xlsx"})
-            base_path: Current path relative to user_library root (for recursion)
-
-        Returns:
-            True if any content was created (files or non-empty subdirectories)
-        """
-        if not source_dir.exists():
-            return False
-
-        has_content = False
-
-        for item in source_dir.iterdir():
-            # Build relative path for exclusion check
-            rel_path = (
-                f"{base_path}/{item.name}".lstrip("/") if base_path else item.name
-            )
-            target_link = target_dir / item.name
-
-            if item.is_dir():
-                # Check if entire directory is excluded
-                if rel_path in excluded_set:
-                    logger.debug("Excluding directory: user_library/%s", rel_path)
-                    continue
-
-                # Recurse into directory - only create if it has content
-                subdir_has_content = self._setup_filtered_user_library(
-                    target_dir=target_link,
-                    source_dir=item,
-                    excluded_set=excluded_set,
-                    base_path=rel_path,
-                )
-                if subdir_has_content:
-                    has_content = True
-            else:
-                # Check if file is excluded
-                if rel_path in excluded_set:
-                    logger.debug("Excluding file: user_library/%s", rel_path)
-                    continue
-
-                # Create parent directory if needed (lazy creation)
-                if not target_dir.exists():
-                    target_dir.mkdir(parents=True, exist_ok=True)
-
-                # Create symlink to file
-                if not target_link.exists():
-                    target_link.symlink_to(item)
-                has_content = True
-
-        return has_content
-
     def provision(
         self,
         sandbox_id: UUID,
@@ -406,14 +294,12 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int,
-        file_system_path: str | None = None,
         snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
         use_demo_data: bool = False,
-        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -423,25 +309,21 @@ class LocalSandboxManager(SandboxManager):
         3. .venv/ (from template)
         4. AGENTS.md
         5. .agent/skills/
-        6. files/ (symlink to demo data OR filtered user files)
-        7. opencode.json
-        8. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
-        9. attachments/
-        10. Start Next.js dev server for this session
+        6. opencode.json
+        7. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
+        8. attachments/
+        9. Start Next.js dev server for this session
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to user's knowledge/source files
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
             user_work_area: User's work area for demo persona (e.g., "engineering")
             user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, symlink files/ to demo data; else to user files
-            excluded_user_library_paths: List of paths within user_library/ to exclude
-                (e.g., ["/data/file.xlsx"]). These files won't be linked in the sandbox.
+            use_demo_data: If True, use demo data configuration
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -466,44 +348,6 @@ class LocalSandboxManager(SandboxManager):
         logger.debug("Session directory created at %s", session_path)
 
         try:
-            # Setup files access - choose between demo data or user files
-            if use_demo_data:
-                # Demo mode: symlink to demo data directory
-                symlink_target = Path(DEMO_DATA_PATH)
-                if not symlink_target.exists():
-                    logger.warning(
-                        "Demo data directory does not exist: %s", symlink_target
-                    )
-                logger.info("Setting up files symlink to demo data: %s", symlink_target)
-                self._directory_manager.setup_files_symlink(
-                    session_path, symlink_target
-                )
-            elif file_system_path:
-                source_path = Path(file_system_path)
-                # Check if we have exclusions for user_library
-                if excluded_user_library_paths:
-                    # Create filtered file structure with symlinks to enabled files only
-                    logger.debug(
-                        "Setting up filtered files with %s exclusions",
-                        len(excluded_user_library_paths),
-                    )
-                    self._setup_filtered_files(
-                        session_path=session_path,
-                        source_path=source_path,
-                        excluded_paths=excluded_user_library_paths,
-                    )
-                else:
-                    # No exclusions: simple symlink to entire directory
-                    logger.debug(
-                        "Setting up files symlink to user files: %s", source_path
-                    )
-                    self._directory_manager.setup_files_symlink(
-                        session_path, source_path
-                    )
-            else:
-                raise ValueError("No files symlink target provided")
-            logger.debug("Files ready")
-
             # Setup org_info directory with user identity (at session root)
             if user_work_area:
                 logger.debug(
@@ -1054,32 +898,7 @@ class LocalSandboxManager(SandboxManager):
         return str(Path(*clean_parts)) if clean_parts else "."
 
     def _is_path_allowed(self, session_path: Path, target_path: Path) -> bool:
-        """Check if target_path is allowed for access.
-
-        Allows paths within session_path OR within the files/ symlink.
-        The files/ symlink intentionally points outside session_path to
-        provide access to knowledge files.
-
-        Args:
-            session_path: The session's root directory
-            target_path: The path being accessed
-
-        Returns:
-            True if access is allowed, False otherwise
-        """
-        files_symlink = session_path / "files"
-
-        # Check if path is within the files/ symlink (or is the symlink itself)
-        if files_symlink.is_symlink():
-            try:
-                # Use lexical check (without resolving symlinks)
-                # This handles both the symlink itself (returns '.') and paths within it
-                target_path.relative_to(files_symlink)
-                return True
-            except ValueError:
-                pass
-
-        # Standard check: path must be within session directory
+        """Check if target_path is within the session directory."""
         try:
             target_path.resolve().relative_to(session_path.resolve())
             return True
@@ -1464,31 +1283,3 @@ class LocalSandboxManager(SandboxManager):
             [str(f.relative_to(session_path)) for f in slides],
             False,
         )
-
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,  # noqa: ARG002
-        tenant_id: str,  # noqa: ARG002
-        source: str | None = None,  # noqa: ARG002
-    ) -> bool:
-        """No-op for local mode - files are directly accessible via symlink.
-
-        In local mode, the sandbox's files/ directory is a symlink to the
-        local persistent document storage, so no sync is needed. File visibility
-        in sessions is controlled via filtered symlinks in setup_session_workspace().
-
-        Args:
-            sandbox_id: The sandbox UUID (unused)
-            user_id: The user ID (unused)
-            tenant_id: The tenant ID (unused)
-            source: The source type (unused in local mode)
-
-        Returns:
-            True (always succeeds since no sync is needed)
-        """
-        source_info = f" source={source}" if source else ""
-        logger.debug(
-            "sync_files called for local sandbox %s%s - no-op", sandbox_id, source_info
-        )
-        return True

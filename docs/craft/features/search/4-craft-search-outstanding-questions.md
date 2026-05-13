@@ -73,7 +73,7 @@ The raw token is set as `ONYX_PAT` in the K8s container env vars at pod creation
 
 The file-sync sidecar is removed (search replaces connector document access). But user library files — raw binaries (spreadsheets, PDFs) the agent opens with Python libraries — aren't indexed in Vespa and can't be replaced by search. They still need direct file access.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at:
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
 - **Session setup/resume** — populates the directory, catching any files uploaded while the pod was sleeping
 - **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately
 
@@ -81,7 +81,7 @@ Replace the sidecar with a shared `/workspace/user_library/` directory at the po
 User uploads spreadsheet via API
   └─ write_raw_file() → S3  (existing path, unchanged)
   └─ dispatch SYNC_USER_LIBRARY_FILES Celery task
-      └─ kubectl exec: s5cmd sync s3://.../user_library/ /workspace/user_library/
+      └─ kubectl exec: aws s3 sync s3://.../user_library/ /workspace/user_library/
   └─ file appears in sandbox immediately
 ```
 
@@ -101,12 +101,12 @@ Sessions access files at `/workspace/user_library/` directly — it's a pod-leve
 
 | Method | Purpose | After refactor |
 |--------|---------|----------------|
-| `write_documents()` | Serialize indexed connector docs to JSON files | **Dead.** Search replaces file access. Remove along with `serialize_document()` and path builder helpers. |
+| `write_documents()` | Serialize indexed connector docs to JSON files | **Dead.** Search replaces file access. Removed in PR 3 along with `serialize_document()` and path builder helpers. |
 | `write_raw_file()` | Store user-uploaded binaries (xlsx, pptx, etc.) to S3 | **Alive.** User library uploads still need S3 storage. Keep this method and the factory. |
 
-`SANDBOX_S3_BUCKET` config stays — both the user library write path and the new kubectl exec sync depend on it.
+`SANDBOX_S3_BUCKET` config stays — both the user library write path and the new kubectl exec sync (PR 4) depend on it.
 
-The sync is idempotent — `s5cmd sync` compares checksums and only transfers changed files. If the pod is evicted mid-sync, the next sync recovers cleanly. If the pod is sleeping when an upload happens, files accumulate in S3 and are pulled on resume.
+The sync is idempotent — `aws s3 sync` compares checksums and only transfers changed files. If the pod is evicted mid-sync, the next sync recovers cleanly. If the pod is sleeping when an upload happens, files accumulate in S3 and are pulled on resume.
 
 ### Open question: Docker Compose setups
 

@@ -25,13 +25,7 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
     "PERSISTENT_DOCUMENT_STORAGE_PATH", "/app/file-system"
 )
 
-# Demo Data Path
-# Local: Source tree path (relative to this file)
-# Kubernetes: Baked into container image at /workspace/demo_data
 _THIS_FILE = Path(__file__)
-DEMO_DATA_PATH = str(
-    _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "demo_data"
-)
 
 # Sandbox filesystem paths
 SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
@@ -103,11 +97,6 @@ SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
 # Service account for sandbox pods (NO IRSA - no AWS API access)
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
     "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-runner"
-)
-
-# Service account for init container (has IRSA for S3 access)
-SANDBOX_FILE_SYNC_SERVICE_ACCOUNT = os.environ.get(
-    "SANDBOX_FILE_SYNC_SERVICE_ACCOUNT", "sandbox-file-sync"
 )
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"

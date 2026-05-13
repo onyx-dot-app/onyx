@@ -1,7 +1,7 @@
 """Directory management for sandbox lifecycle.
 
 Supports user-shared sandbox model where:
-- One sandbox per user with shared files/ directory
+- One sandbox per user
 - Per-session workspaces under sessions/$session_id/
 """
 
@@ -34,20 +34,17 @@ class DirectoryManager:
     Responsible for:
     - Creating sandbox directory structure (user-level)
     - Creating session workspace directories (session-level)
-    - Setting up symlinks to knowledge files
     - Copying templates (outputs, venv, skills, AGENTS.md)
     - Cleaning up sandbox/session directories on termination
 
     Directory Structure:
         $base_path/$sandbox_id/
-        ├── files/                     # Symlink to knowledge/source files (SHARED)
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output (from template or snapshot)
             │   │   └── web/           # Next.js app
             │   ├── .venv/             # Python virtual environment
             │   ├── .agent/skills/     # Opencode skills
-            │   ├── files/             # Symlink to sandbox-level files/ (SHARED)
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -87,7 +84,7 @@ class DirectoryManager:
 
         Creates the base directory for a user's sandbox:
         {base_path}/{sandbox_id}/
-        ├── files/                      # Symlink to knowledge/source files (set up separately)
+        ├── skills/                     # Copied from source, shared across sessions
         └── sessions/                   # Container for per-session workspaces
 
         NOTE: This only creates the sandbox-level structure.
@@ -159,21 +156,6 @@ class DirectoryManager:
             Path to sessions/$session_id/
         """
         return sandbox_path / "sessions" / session_id
-
-    def setup_files_symlink(
-        self,
-        sandbox_path: Path,
-        file_system_path: Path,
-    ) -> None:
-        """Create symlink to knowledge/source files.
-
-        Args:
-            sandbox_path: Path to the sandbox directory
-            file_system_path: Path to the source files to link
-        """
-        files_link = sandbox_path / "files"
-        if not files_link.exists():
-            files_link.symlink_to(file_system_path, target_is_directory=True)
 
     def setup_org_info(
         self,
@@ -286,8 +268,7 @@ class DirectoryManager:
         """Generate AGENTS.md with dynamic configuration.
 
         Reads the template file and replaces placeholders with actual values
-        including user personalization, LLM configuration, runtime settings,
-        and dynamically discovered knowledge sources.
+        including user personalization, LLM configuration, and runtime settings.
 
         Args:
             sandbox_path: Path to the sandbox directory
@@ -304,14 +285,10 @@ class DirectoryManager:
         if agent_md_path.exists():
             return
 
-        # Get the files path (symlink to knowledge sources)
-        files_path = sandbox_path / "files"
-
         # Use shared utility to generate content
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=files_path if files_path.exists() else None,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -368,7 +345,7 @@ class DirectoryManager:
             disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
             overwrite: If True, overwrite existing config. If False, preserve existing config.
             dev_mode: If True, allow all external directories (local dev).
-                      If False (default), only whitelist /workspace/files and /workspace/demo_data.
+                      If False (default), deny all external directories.
         """
         config_path = sandbox_path / "opencode.json"
         if not overwrite and config_path.exists():

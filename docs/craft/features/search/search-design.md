@@ -460,26 +460,27 @@ Remove the legacy `files/` corpus sync infrastructure (search replaces it) and r
 
 > **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
 
-> **Implementation note.** This removal happens in a separate PR (PR 3) after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. This ensures the agent has both paths available during the transition and the search tool can be validated before the old path is cut.
+> **Implementation note.** This is split across two PRs. **PR 3 is removal-only** (~1500 lines deleted) — it deletes the old file sync infrastructure after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. **PR 4 is the user library rework** — net new code adding the shared volume, kubectl exec sync, and Celery task for user library delivery. This split keeps PR 3 a clean deletion pass and isolates the new functionality in PR 4.
 
-**File sync removal:**
+**File sync removal (PR 3 — pure deletion):**
 - Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
-- Remove the S3 file-sync sidecar container (`s5cmd sync` at pod start). Search replaces connector document access entirely.
+- Remove the S3 file-sync sidecar container (`aws s3 sync` at pod start). Search replaces connector document access entirely.
 - Remove `build_knowledge_sources_section()`, the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`, `generate_agents_md.py` from the sandbox image, and the `CONNECTOR_INFO` dict.
 - Remove `/workspace/files` and `/workspace/demo_data` allowlist rules from `opencode_config.py`.
+- Remove `sync_files()` methods, `sync_sandbox_files` Celery task, `_get_disabled_user_library_paths()`, file symlink helpers, demo data, and the connector document write path from `PersistentDocumentWriter`.
 - Update `AGENTS.template.md` to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
 
-**User library rework:**
+**User library rework (PR 4 — net new code):**
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They still need direct file access.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at:
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
 - **Session setup/resume** — populates the directory, catching files uploaded while the pod was sleeping.
 - **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately.
 
-Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`s5cmd sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`aws s3 sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
 
-**PersistentDocumentWriter:** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
+**PersistentDocumentWriter (PR 3):** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
 
 - **Preserve `attachments/`** — user-uploaded session files are still read via normal file operations and are not part of this removal.
 
@@ -500,7 +501,7 @@ The `files/` infrastructure is the only delivery mechanism for demo data. Removi
 - **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_API_SERVER_URL` config.
 - **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. Resolved by reusing the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording) — no new source metadata system needed.
 - **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in the follow-up PR 3 (file sync removal).
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in PR 3 (pure deletion). PR 4 adds the new user library delivery mechanism (shared volume + kubectl exec sync).
 - **Decoupled rendering**: The dynamic skill rendering (`render_company_search_skill()` + `write_sandbox_file()`) is deliberately decoupled from the sandbox manager interface. This avoids threading new parameters through `setup_session_workspace()` and `restore_snapshot()`, keeping the manager abstraction clean. The orchestration lives in `SessionManager.push_dynamic_skills()`, which catches all exceptions and logs a warning so failures don't block session setup.
 
 ---
