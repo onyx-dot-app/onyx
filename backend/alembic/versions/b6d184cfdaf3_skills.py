@@ -26,11 +26,6 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("bundle_file_id", sa.String(), nullable=False),
         sa.Column("bundle_sha256", sa.String(length=64), nullable=False),
-        sa.Column(
-            "manifest_metadata",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=False,
-        ),
         sa.Column("author_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("is_public", sa.Boolean(), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False),

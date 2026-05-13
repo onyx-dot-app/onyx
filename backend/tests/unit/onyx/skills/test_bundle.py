@@ -59,10 +59,8 @@ def _valid_bundle() -> bytes:
 
 
 def test_valid_bundle_accepted() -> None:
-    metadata = validate_custom_bundle(_valid_bundle(), slug="hello")
-    paths = sorted(f.path for f in metadata.files)
-    assert paths == ["SKILL.md", "docs/notes.md", "scripts/run.sh"]
-    assert metadata.total_uncompressed_bytes == sum(f.size for f in metadata.files)
+    # No raise = pass; validator returns None.
+    assert validate_custom_bundle(_valid_bundle(), slug="hello") is None
 
 
 # ---------------------------------------------------------------------------

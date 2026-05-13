@@ -13,10 +13,6 @@ import zipfile
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -29,29 +25,6 @@ TEMPLATE_SUFFIX: Final[str] = ".template"
 SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
-
-
-class ManifestFileEntry(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    path: str
-    size: int
-
-
-class ManifestMetadata(BaseModel):
-    """Bundle-content inventory captured at validation time, persisted as
-    JSONB on the ``Skill`` row.
-
-    Only carries bundle facts that the ``Skill`` row itself doesn't already
-    have — the file list and total size, for admin-UI surfacing. Frontmatter
-    name/description live on the row; admins type them into the upload form
-    (with client-side pre-fill via jszip per P4.021).
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    files: list[ManifestFileEntry] = Field(default_factory=list)
-    total_uncompressed_bytes: int = 0
 
 
 def _check_slug(slug: str) -> None:
@@ -106,8 +79,8 @@ def validate_custom_bundle(
     reserved_slugs: set[str] | None = None,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
-) -> ManifestMetadata:
-    """Validate a custom skill bundle.
+) -> None:
+    """Validate a custom skill bundle. Returns on success, raises on failure.
 
     Args:
         zip_bytes: Raw zip bytes uploaded by an admin.
@@ -119,9 +92,6 @@ def validate_custom_bundle(
             Consolidate once the registry lands on skills-phase-1.
         per_file_max_bytes: Per-entry uncompressed cap.
         total_max_bytes: Total uncompressed cap.
-
-    Returns:
-        ManifestMetadata to persist on the ``Skill`` row.
 
     Raises:
         OnyxError(INVALID_INPUT): structural violations (bad slug, missing
@@ -138,7 +108,6 @@ def validate_custom_bundle(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
     with zf:
-        files: list[ManifestFileEntry] = []
         total = 0
         saw_skill_md = False
 
@@ -188,7 +157,6 @@ def validate_custom_bundle(
                     f"cannot read '{normalized}': {exc}",
                 ) from exc
 
-            files.append(ManifestFileEntry(path=normalized, size=size))
             if normalized == SKILL_MD_NAME:
                 saw_skill_md = True
 
@@ -197,8 +165,6 @@ def validate_custom_bundle(
                 OnyxErrorCode.INVALID_INPUT,
                 "SKILL.md missing at bundle root",
             )
-
-    return ManifestMetadata(files=files, total_uncompressed_bytes=total)
 
 
 def _safe_unzip(
