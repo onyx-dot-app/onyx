@@ -43,6 +43,25 @@ class _UnsetType:
 
 _UNSET: Final[_UnsetType] = _UnsetType()
 
+# Name of the partial unique index on `skill.slug` (created in the Skills V1
+# migration). We match on this when translating `IntegrityError` so we only
+# remap the actual slug-collision violation, not FK or other constraint
+# failures.
+_SKILL_SLUG_UNIQUE_INDEX = "ux_skill_slug"
+
+
+def _is_slug_unique_violation(exc: IntegrityError) -> bool:
+    """True iff the IntegrityError came from the slug partial unique index.
+
+    Postgres surfaces the violated constraint via `diag.constraint_name`
+    on the underlying psycopg2 error. Anything else (FK violations on
+    `author_user_id`, NOT NULL, etc.) is left to bubble up.
+    """
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    constraint = getattr(diag, "constraint_name", None)
+    return constraint == _SKILL_SLUG_UNIQUE_INDEX
+
 
 def _add_user_visibility_filter(
     stmt: Select[tuple[Skill]], user: User
@@ -170,10 +189,12 @@ def create_skill(
             db_session.add(skill)
             db_session.flush()
     except IntegrityError as e:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"A skill with slug '{slug}' already exists.",
-        ) from e
+        if _is_slug_unique_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.DUPLICATE_RESOURCE,
+                f"A skill with slug '{slug}' already exists.",
+            ) from e
+        raise
     return skill
 
 
@@ -258,7 +279,7 @@ def patch_skill(
         with db_session.begin_nested():
             db_session.flush()
     except IntegrityError as e:
-        if slug_changed:
+        if slug_changed and _is_slug_unique_violation(e):
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
