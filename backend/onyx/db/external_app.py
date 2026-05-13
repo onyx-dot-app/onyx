@@ -171,7 +171,7 @@ def get_external_app_credentials(
     which auth headers/params to inject into an outbound request.
 
     Returns None when any of:
-    - no enabled app's `upstream_urls` fully match the URL
+    - no enabled app's `upstream_url_patterns` fully match the URL
     - the user has no stored credentials for the matched app
     - the user's stored credentials don't cover every key the app expects
       them to provide
@@ -206,7 +206,7 @@ def get_external_app_credentials(
     )
 
     for app, user_cred in db_session.execute(stmt).all():
-        for pattern in app.upstream_urls:
+        for pattern in app.upstream_url_patterns:
             if re.fullmatch(pattern, url):
                 return _resolve_credentials(app, user_cred)
     return None
