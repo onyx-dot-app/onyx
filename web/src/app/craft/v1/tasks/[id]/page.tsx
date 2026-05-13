@@ -18,7 +18,6 @@ import {
 } from "@opal/icons";
 import {
   deleteScheduledTask,
-  getScheduledTask,
   runScheduledTaskNow,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
@@ -29,6 +28,8 @@ import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/interfaces";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function ScheduledTaskDetailPage() {
   const params = useParams<{ id: string }>();
@@ -36,8 +37,8 @@ export default function ScheduledTaskDetailPage() {
   const taskId = params?.id;
 
   const { data, error, isLoading, mutate } = useSWR<ScheduledTaskDetail>(
-    taskId ? ["scheduled-task", taskId] : null,
-    () => getScheduledTask(taskId as string),
+    taskId ? SWR_KEYS.scheduledTask(taskId) : null,
+    errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
 
@@ -53,11 +54,11 @@ export default function ScheduledTaskDetailPage() {
   const handleToggleStatus = useCallback(async () => {
     if (!data) return;
     const next: ScheduledTaskStatus =
-      data.status === "active" ? "paused" : "active";
+      data.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
     setBusy(true);
     try {
       await updateScheduledTask(data.id, { status: next });
-      toast.success(next === "active" ? "Task resumed." : "Task paused.");
+      toast.success(next === "ACTIVE" ? "Task resumed." : "Task paused.");
       void mutate();
     } catch (err) {
       toast.error(
@@ -75,9 +76,12 @@ export default function ScheduledTaskDetailPage() {
       await runScheduledTaskNow(data.id);
       toast.success(`Queued run for "${data.name}".`);
       void mutate();
-      // The run history table owns a separate SWR key — kick its fetcher so
-      // the newly inserted ``manual_run_now`` row appears immediately.
-      void globalMutate(["scheduled-task-runs", data.id]);
+      // The run history table owns paginated SWR keys under this prefix —
+      // invalidate every variant so the new ``manual_run_now`` row appears.
+      const runsPrefix = SWR_KEYS.scheduledTaskRuns(data.id);
+      void globalMutate(
+        (key) => typeof key === "string" && key.startsWith(runsPrefix)
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start run");
     } finally {
@@ -139,14 +143,14 @@ export default function ScheduledTaskDetailPage() {
                 Run now
               </Button>
               <Button
-                icon={data.status === "active" ? SvgPauseCircle : SvgPlayCircle}
+                icon={data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
                 variant="default"
                 prominence="secondary"
                 onClick={() => void handleToggleStatus()}
                 disabled={busy}
                 data-testid="status-toggle"
               >
-                {data.status === "active" ? "Pause" : "Resume"}
+                {data.status === "ACTIVE" ? "Pause" : "Resume"}
               </Button>
               <Button
                 icon={SvgEdit}

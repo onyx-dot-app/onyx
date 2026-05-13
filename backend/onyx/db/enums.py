@@ -277,8 +277,8 @@ class SessionOrigin(str, PyEnum):
                  are excluded from the Craft sidebar list.
     """
 
-    INTERACTIVE = "interactive"
-    SCHEDULED = "scheduled"
+    INTERACTIVE = "INTERACTIVE"
+    SCHEDULED = "SCHEDULED"
 
 
 class SharingScope(str, PyEnum):
@@ -288,17 +288,17 @@ class SharingScope(str, PyEnum):
 
 
 class ScheduledTaskStatus(str, PyEnum):
-    ACTIVE = "active"
-    PAUSED = "paused"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
 
 
 class ScheduledTaskRunStatus(str, PyEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    AWAITING_APPROVAL = "awaiting_approval"
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
 
     def is_terminal(self) -> bool:
         """Terminal statuses produce no further state transitions in V1."""
@@ -310,8 +310,8 @@ class ScheduledTaskRunStatus(str, PyEnum):
 
 
 class ScheduledTaskTriggerSource(str, PyEnum):
-    SCHEDULED = "scheduled"
-    MANUAL_RUN_NOW = "manual_run_now"
+    SCHEDULED = "SCHEDULED"
+    MANUAL_RUN_NOW = "MANUAL_RUN_NOW"
 
 
 class SandboxStatus(str, PyEnum):

@@ -12,10 +12,7 @@ import { toast } from "@/hooks/useToast";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
-import {
-  deleteScheduledTask,
-  listScheduledTasks,
-} from "@/app/craft/v1/tasks/api";
+import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
   TaskStatusBadge,
@@ -25,13 +22,16 @@ import {
   STARTER_PROMPTS,
   taskDetailPath,
 } from "@/app/craft/v1/tasks/constants";
-import type { ScheduledTaskListItem } from "@/app/craft/v1/tasks/interfaces";
+import type {
+  ScheduledTaskListItem,
+  ScheduledTaskListResponse,
+} from "@/app/craft/v1/tasks/interfaces";
 import {
   formatAbsolute,
   formatRelativeShort,
 } from "@/app/craft/v1/tasks/utils";
-
-const SWR_KEY = ["scheduled-tasks-list"];
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 const tc = createTableColumns<ScheduledTaskListItem>();
 
@@ -121,11 +121,12 @@ function buildColumns(handlers: RowActionHandlers) {
 
 export default function ScheduledTasksListPage() {
   const router = useRouter();
-  const { data, error, isLoading, mutate } = useSWR<ScheduledTaskListItem[]>(
-    SWR_KEY,
-    () => listScheduledTasks(),
+  const { data, error, isLoading, mutate } = useSWR<ScheduledTaskListResponse>(
+    SWR_KEYS.scheduledTasks,
+    errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
+  const tasks = data?.items;
   const [pendingDelete, setPendingDelete] =
     useState<ScheduledTaskListItem | null>(null);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -200,7 +201,7 @@ export default function ScheduledTasksListPage() {
               Try again
             </Button>
           </Section>
-        ) : !data || data.length === 0 ? (
+        ) : !tasks || tasks.length === 0 ? (
           <EmptyState
             onSelectStarter={(prompt) => {
               const params = new URLSearchParams({
@@ -214,7 +215,7 @@ export default function ScheduledTasksListPage() {
           />
         ) : (
           <Table
-            data={data}
+            data={tasks}
             columns={columns}
             getRowId={(row) => row.id}
             selectionBehavior="single-select"

@@ -24,7 +24,7 @@ interface TaskStatusBadgeProps {
 }
 
 export function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
-  const isActive = status === "active";
+  const isActive = status === "ACTIVE";
   const Icon = isActive ? SvgPlayCircle : SvgPauseCircle;
   return (
     <div
@@ -62,42 +62,42 @@ interface RunStatusDisplay {
 
 function getRunStatusDisplay(status: ScheduledTaskRunStatus): RunStatusDisplay {
   switch (status) {
-    case "succeeded":
+    case "SUCCEEDED":
       return {
         label: "Succeeded",
         icon: SvgCheckCircle,
         className: "bg-status-success-01",
         iconClassName: "text-status-success-05",
       };
-    case "failed":
+    case "FAILED":
       return {
         label: "Failed",
         icon: SvgAlertCircle,
         className: "bg-status-error-01",
         iconClassName: "text-status-error-05",
       };
-    case "running":
+    case "RUNNING":
       return {
         label: "Running",
         icon: SvgLoader,
         className: "bg-status-info-01",
         iconClassName: "text-status-info-05 animate-spin",
       };
-    case "queued":
+    case "QUEUED":
       return {
         label: "Queued",
         icon: SvgClock,
         className: "bg-background-tint-02",
         iconClassName: "text-text-03",
       };
-    case "skipped":
+    case "SKIPPED":
       return {
         label: "Skipped",
         icon: SvgClock,
         className: "bg-background-tint-02",
         iconClassName: "text-text-03",
       };
-    case "awaiting_approval":
+    case "AWAITING_APPROVAL":
       return {
         label: "Awaiting approval",
         icon: SvgClock,

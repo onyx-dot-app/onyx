@@ -5,17 +5,17 @@
  * ``backend/onyx/server/features/build/scheduled_tasks/api.py``.
  */
 
-export type ScheduledTaskStatus = "active" | "paused";
+export type ScheduledTaskStatus = "ACTIVE" | "PAUSED";
 
 export type ScheduledTaskRunStatus =
-  | "queued"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "skipped"
-  | "awaiting_approval";
+  | "QUEUED"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "SKIPPED"
+  | "AWAITING_APPROVAL";
 
-export type ScheduledTaskTriggerSource = "scheduled" | "manual_run_now";
+export type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
 
 export type EditorMode = "interval" | "daily_weekly" | "advanced";
 

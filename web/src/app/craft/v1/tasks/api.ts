@@ -7,14 +7,12 @@
  */
 
 import type {
-  ScheduledTaskListResponse,
   ScheduledTaskListItem,
   ScheduledTaskDetail,
   ScheduledTaskCreateBody,
   ScheduledTaskPatchBody,
   ScheduledRunListResponse,
   RunNowResponse,
-  ScheduledRunContextResponse,
 } from "@/app/craft/v1/tasks/interfaces";
 
 const API_BASE = "/api/build/scheduled-tasks";
@@ -31,38 +29,13 @@ async function readError(res: Response, fallback: string): Promise<never> {
 }
 
 // ---------------------------------------------------------------------------
-// List
-// ---------------------------------------------------------------------------
-
-export async function listScheduledTasks(): Promise<ScheduledTaskListItem[]> {
-  const res = await fetch(API_BASE, { method: "GET" });
-  if (!res.ok) await readError(res, "Failed to load scheduled tasks");
-  const body = (await res.json()) as ScheduledTaskListResponse;
-  return body.items;
-}
-
-// SWR fetcher version (returns the raw response shape SWR expects).
-export async function fetchScheduledTasksForSwr(): Promise<
-  ScheduledTaskListItem[]
-> {
-  return listScheduledTasks();
-}
-
-// ---------------------------------------------------------------------------
-// Detail
-// ---------------------------------------------------------------------------
-
-export async function getScheduledTask(
-  taskId: string
-): Promise<ScheduledTaskDetail> {
-  const res = await fetch(`${API_BASE}/${taskId}`, { method: "GET" });
-  if (!res.ok) await readError(res, "Failed to load scheduled task");
-  return (await res.json()) as ScheduledTaskDetail;
-}
-
-// ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
+
+// Read paths (list, detail, run history, scheduled-run context) all go
+// through `useSWR(SWR_KEYS.*, errorHandlingFetcher)` directly — they don't
+// need wrapper helpers here. Pagination on the runs endpoint is still done
+// imperatively for "Load more"; see `listScheduledTaskRuns` below.
 
 export async function createScheduledTask(
   body: ScheduledTaskCreateBody
@@ -122,19 +95,4 @@ export async function listScheduledTaskRuns(
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) await readError(res, "Failed to load runs");
   return (await res.json()) as ScheduledRunListResponse;
-}
-
-// ---------------------------------------------------------------------------
-// Session-view banner
-// ---------------------------------------------------------------------------
-
-export async function fetchScheduledRunContext(
-  sessionId: string
-): Promise<ScheduledRunContextResponse | null> {
-  const res = await fetch(
-    `/api/build/sessions/${sessionId}/scheduled-run-context`
-  );
-  if (res.status === 404) return null;
-  if (!res.ok) await readError(res, "Failed to load scheduled-run context");
-  return (await res.json()) as ScheduledRunContextResponse;
 }

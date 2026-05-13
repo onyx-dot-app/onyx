@@ -4,10 +4,11 @@ import useSWR from "swr";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { SvgArrowLeft, SvgClock } from "@opal/icons";
-import { fetchScheduledRunContext } from "@/app/craft/v1/tasks/api";
 import { taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { formatAbsolute } from "@/app/craft/v1/tasks/utils";
 import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 interface ScheduledRunBannerProps {
   sessionId: string | null;
@@ -24,9 +25,13 @@ interface ScheduledRunBannerProps {
 export default function ScheduledRunBanner({
   sessionId,
 }: ScheduledRunBannerProps) {
-  const { data } = useSWR<ScheduledRunContextResponse | null>(
-    sessionId ? ["scheduled-run-context", sessionId] : null,
-    () => fetchScheduledRunContext(sessionId as string),
+  // 404 is the expected "this session isn't scheduled" signal — the standard
+  // fetcher throws on it, which lands in `error` and falls through the
+  // `if (!data)` guard below to render nothing. `shouldRetryOnError: false`
+  // keeps SWR from hammering the endpoint after a legit 404.
+  const { data } = useSWR<ScheduledRunContextResponse>(
+    sessionId ? SWR_KEYS.scheduledRunContext(sessionId) : null,
+    errorHandlingFetcher,
     { revalidateOnFocus: false, shouldRetryOnError: false }
   );
 

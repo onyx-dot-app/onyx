@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
@@ -14,13 +20,18 @@ import {
   buildSessionPath,
   RUNS_PAGE_SIZE,
 } from "@/app/craft/v1/tasks/constants";
-import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/interfaces";
+import type {
+  ScheduledRunListResponse,
+  ScheduledRunSummary,
+} from "@/app/craft/v1/tasks/interfaces";
 import {
   formatAbsolute,
   formatRelativeShort,
   formatRunDuration,
   getNonClickableReason,
 } from "@/app/craft/v1/tasks/utils";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 interface RunHistoryTableProps {
   taskId: string;
@@ -127,7 +138,7 @@ function buildColumns() {
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row)}>
           <Text mainUiBody text03 nowrap>
-            {value === "manual_run_now" ? "Run Now" : "Schedule"}
+            {value === "MANUAL_RUN_NOW" ? "Run Now" : "Schedule"}
           </Text>
         </NonClickableCell>
       ),
@@ -141,18 +152,22 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const { data, error, isLoading, mutate } = useSWR(
-    ["scheduled-task-runs", taskId],
-    async () => {
-      const res = await listScheduledTaskRuns(taskId, {
-        limit: RUNS_PAGE_SIZE,
-      });
-      setPages([res.items]);
-      setNextCursor(res.next_cursor);
-      return res;
-    },
+  const firstPageUrl = `${SWR_KEYS.scheduledTaskRuns(
+    taskId
+  )}?limit=${RUNS_PAGE_SIZE}`;
+  const { data, error, isLoading, mutate } = useSWR<ScheduledRunListResponse>(
+    firstPageUrl,
+    errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
+
+  // Reset paginated state whenever the first page is (re)fetched so the
+  // table snaps back to page 1 after a revalidation (e.g. "Run Now").
+  useEffect(() => {
+    if (!data) return;
+    setPages([data.items]);
+    setNextCursor(data.next_cursor);
+  }, [data]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor) return;

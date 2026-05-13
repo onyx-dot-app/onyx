@@ -32,30 +32,30 @@ def upgrade() -> None:
     # constraint).
     # ------------------------------------------------------------------
     session_origin_enum = sa.Enum(
-        "interactive",
-        "scheduled",
+        "INTERACTIVE",
+        "SCHEDULED",
         name="sessionorigin",
         native_enum=False,
     )
     scheduled_task_status_enum = sa.Enum(
-        "active",
-        "paused",
+        "ACTIVE",
+        "PAUSED",
         name="scheduledtaskstatus",
         native_enum=False,
     )
     scheduled_task_run_status_enum = sa.Enum(
-        "queued",
-        "running",
-        "succeeded",
-        "failed",
-        "skipped",
-        "awaiting_approval",
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "SKIPPED",
+        "AWAITING_APPROVAL",
         name="scheduledtaskrunstatus",
         native_enum=False,
     )
     scheduled_task_trigger_source_enum = sa.Enum(
-        "scheduled",
-        "manual_run_now",
+        "SCHEDULED",
+        "MANUAL_RUN_NOW",
         name="scheduledtasktriggersource",
         native_enum=False,
     )

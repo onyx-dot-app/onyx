@@ -10,11 +10,12 @@ import Text from "@/refresh-components/texts/Text";
 import ScheduleTaskForm, {
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import { getScheduledTask } from "@/app/craft/v1/tasks/api";
 import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { decodeCronToPayload } from "@/app/craft/v1/tasks/schedule";
 import { getBrowserTimezone } from "@/app/craft/v1/tasks/utils";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function EditScheduledTaskPage() {
   const params = useParams<{ id: string }>();
@@ -22,8 +23,8 @@ export default function EditScheduledTaskPage() {
   const taskId = params?.id;
 
   const { data, error, isLoading } = useSWR<ScheduledTaskDetail>(
-    taskId ? ["scheduled-task", taskId] : null,
-    () => getScheduledTask(taskId as string),
+    taskId ? SWR_KEYS.scheduledTask(taskId) : null,
+    errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
 

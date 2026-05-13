@@ -55,7 +55,7 @@ test.describe("Scheduled Tasks", () => {
 
     // Task is created → we land on the detail page with an active-status chip.
     await page.waitForURL(/\/craft\/v1\/tasks\/[^/]+$/);
-    await expect(page.getByTestId("task-status-active").first()).toBeVisible();
+    await expect(page.getByTestId("task-status-ACTIVE").first()).toBeVisible();
 
     // Trigger an immediate run.
     await page.getByTestId("run-now-button").click();
@@ -64,7 +64,7 @@ test.describe("Scheduled Tasks", () => {
     // run-history wiring is reachable end-to-end. Either outcome is OK
     // for the smoke — we just need a row.
     const terminalRunRow = page
-      .locator('[data-run-status="succeeded"], [data-run-status="failed"]')
+      .locator('[data-run-status="SUCCEEDED"], [data-run-status="FAILED"]')
       .first();
     await expect(terminalRunRow).toBeVisible({ timeout: 60_000 });
   });

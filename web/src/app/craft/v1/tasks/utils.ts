@@ -90,22 +90,22 @@ export function formatRunDuration(
  * Returns a human-readable reason a run row can't be opened as a session,
  * or `null` when the row is clickable.
  *
- * A row is clickable only when the run reached a terminal state (`succeeded`
- * or `failed`) AND has an associated session — every other state means the
+ * A row is clickable only when the run reached a terminal state (`SUCCEEDED`
+ * or `FAILED`) AND has an associated session — every other state means the
  * session view would be missing or mid-flight.
  */
 export function getNonClickableReason(run: ScheduledRunSummary): string | null {
   switch (run.status) {
-    case "queued":
+    case "QUEUED":
       return "This run hasn't started yet — no session to open.";
-    case "running":
+    case "RUNNING":
       return "Run still in progress — open it once it finishes.";
-    case "awaiting_approval":
+    case "AWAITING_APPROVAL":
       return "Run is paused awaiting approval — open it once it resumes.";
-    case "skipped":
+    case "SKIPPED":
       return "This run was skipped because a prior run was still in flight — no session was created.";
-    case "succeeded":
-    case "failed":
+    case "SUCCEEDED":
+    case "FAILED":
       if (!run.session_id) {
         return "This run ended before a session was created.";
       }
