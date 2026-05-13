@@ -9,6 +9,7 @@ from onyx.db.external_app import create_external_app__no_commit
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_user_credentials_by_app_id
+from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app__no_commit
 from onyx.db.external_app import upsert_external_app_user_credential__no_commit
 from onyx.db.models import ExternalApp
@@ -40,16 +41,16 @@ def _to_user_response(
 ) -> ExternalAppUserResponse:
     """Compute the user-facing view of an app.
 
-    `credential_keys` = keys the auth_template references that the org has
-    not pre-filled. `credential_values` is the user's stored values for
-    those same keys (stale keys from prior templates are filtered out so
-    the frontend never renders a field that's no longer relevant).
+    `credential_keys` = `{placeholder}` names referenced by the
+    auth_template's values that the org has not pre-filled. Stale keys
+    the user previously stored for an older template shape are filtered
+    out of `credential_values` so the frontend never renders a field
+    that's no longer relevant. `authenticated` is true iff every
+    required key has a value stored by the user.
     """
-    required_keys = [
-        key
-        for key in app.auth_template.keys()
-        if key not in app.organization_credentials
-    ]
+    required_keys = required_user_credential_keys(
+        app.auth_template, app.organization_credentials
+    )
     stored = user_cred.user_credentials if user_cred is not None else {}
     credential_values = {key: stored[key] for key in required_keys if key in stored}
     authenticated = all(key in credential_values for key in required_keys)
