@@ -262,8 +262,8 @@ def test__build_llm_messages_for_summarization_user_messages() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages,
-        {},  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2
@@ -279,8 +279,8 @@ def test__build_llm_messages_for_summarization_assistant_messages() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages,
-        {},  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 1
@@ -316,8 +316,8 @@ def test__build_llm_messages_for_summarization_skips_tool_responses() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages,
-        {},  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2
@@ -334,8 +334,8 @@ def test__build_llm_messages_for_summarization_skips_empty() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages,
-        {},  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2

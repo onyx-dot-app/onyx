@@ -1429,8 +1429,8 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].completed_until
             yield from _yield_from_folder_crawl(
-                folder_id,
-                resume_start,  # ty: ignore[possibly-unresolved-reference]
+                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                resume_start,
             )
 
         # the times stored in the completion_map aren't used due to the crawling behavior

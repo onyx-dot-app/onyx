@@ -295,8 +295,8 @@ class ScimDAL(DAL):
                 # assignment: union return type widens but query is still Select[tuple[User]]
                 query = _apply_scim_string_op(
                     query,
-                    User.email,
-                    scim_filter,  # ty: ignore[invalid-argument-type]
+                    User.email,  # ty: ignore[invalid-argument-type]
+                    scim_filter,
                 )
             elif attr == "active":
                 query = query.where(
