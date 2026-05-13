@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { useVoiceProviders, type VoiceProviderView } from "@/lib/voice/hooks";
+import { useVoiceProviders } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,
   deactivateVoiceProvider,
@@ -15,12 +15,15 @@ import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
-  getProviderIcon,
-  getProviderLabel,
   VoiceProviderSetupModal,
   VoiceDisconnectModal,
   type ProviderMode,
 } from "@/refresh-pages/admin/VoicePage/shared";
+import {
+  VOICE_PROVIDER_DETAILS,
+  VOICE_PROVIDER_FALLBACK_ICON,
+} from "@/lib/voice/utils";
+import { VoiceProviderView } from "@/lib/voice/types";
 
 interface ModelDetails {
   id: string;
@@ -148,7 +151,9 @@ function ModelCard({
         <VoiceDisconnectModal
           disconnectTarget={{
             providerId: provider?.id ?? 0,
-            providerLabel: getProviderLabel(model.providerType),
+            providerLabel:
+              VOICE_PROVIDER_DETAILS[model.providerType]?.label ??
+              model.providerType,
             providerType: model.providerType,
           }}
           onSuccess={() => onMutate()}
@@ -157,7 +162,10 @@ function ModelCard({
 
       <ProviderCard
         aria-label={`voice-${mode}-${model.id}`}
-        icon={getProviderIcon(model.providerType)}
+        icon={
+          VOICE_PROVIDER_DETAILS[model.providerType]?.icon ??
+          VOICE_PROVIDER_FALLBACK_ICON
+        }
         title={model.label}
         description={model.subtitle}
         status={status}

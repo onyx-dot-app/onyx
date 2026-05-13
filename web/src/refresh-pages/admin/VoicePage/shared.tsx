@@ -30,9 +30,8 @@ import {
   deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import {
-  getProviderIcon as getProviderIconUtil,
-  getProviderLabel as getProviderLabelUtil,
-  PROVIDER_LABELS,
+  VOICE_PROVIDER_DETAILS,
+  VOICE_PROVIDER_FALLBACK_ICON,
   PROVIDER_API_KEY_URLS,
   PROVIDER_DOCS_URLS,
   PROVIDER_VOICE_DOCS_URLS,
@@ -43,10 +42,7 @@ import {
 } from "@/lib/voice/utils";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
-// Re-export for consumers that import from shared
 export { type ProviderMode } from "@/lib/voice/utils";
-export const getProviderIcon = getProviderIconUtil;
-export const getProviderLabel = getProviderLabelUtil;
 
 // ---------------------------------------------------------------------------
 // VoiceProviderSetupModal
@@ -73,8 +69,9 @@ export function VoiceProviderSetupModal({
     : existingProvider?.tts_model ?? "tts-1";
 
   const isEditing = !!existingProvider;
-  const label = PROVIDER_LABELS[providerType] ?? providerType;
-  const ProviderIcon = getProviderIcon(providerType);
+  const label = VOICE_PROVIDER_DETAILS[providerType]?.label ?? providerType;
+  const ProviderIcon =
+    VOICE_PROVIDER_DETAILS[providerType]?.icon ?? VOICE_PROVIDER_FALLBACK_ICON;
 
   // Non-form state: dynamic voice options
   const [voiceOptions, setVoiceOptions] = useState<VoiceOption[]>([]);

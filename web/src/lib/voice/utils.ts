@@ -8,44 +8,18 @@ export type VoiceProviderType = "openai" | "azure" | "elevenlabs";
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
 export type ProviderMode = "stt" | "tts";
 
-/** Returns the logo icon for a given provider type, falling back to a microphone icon. */
-export function getProviderIcon(
-  providerType: VoiceProviderType | (string & {})
-): React.FunctionComponent<IconProps> {
-  switch (providerType) {
-    case "openai":
-      return SvgOpenai;
-    case "azure":
-      return SvgAzure;
-    case "elevenlabs":
-      return SvgElevenLabs;
-    default:
-      return SvgMicrophone;
-  }
-}
-
-/** Returns the display label for a given provider type. */
-export function getProviderLabel(
-  providerType: VoiceProviderType | (string & {})
-): string {
-  switch (providerType) {
-    case "openai":
-      return "OpenAI";
-    case "azure":
-      return "Azure";
-    case "elevenlabs":
-      return "ElevenLabs";
-    default:
-      return providerType;
-  }
-}
-
-/** Full display names used in modal titles and form descriptions. */
-export const PROVIDER_LABELS: Record<string, string> = {
-  openai: "OpenAI",
-  azure: "Azure Speech Services",
-  elevenlabs: "ElevenLabs",
+/** Static display details for each voice provider. Fallback to `SvgMicrophone` / the raw provider_type string for unknown providers. */
+export const VOICE_PROVIDER_DETAILS: Record<
+  string,
+  { label: string; icon: React.FunctionComponent<IconProps> }
+> = {
+  openai: { label: "OpenAI", icon: SvgOpenai },
+  azure: { label: "Azure Speech Services", icon: SvgAzure },
+  elevenlabs: { label: "ElevenLabs", icon: SvgElevenLabs },
 };
+
+/** Fallback icon for provider types not in VOICE_PROVIDER_DETAILS. */
+export const VOICE_PROVIDER_FALLBACK_ICON = SvgMicrophone;
 
 /** Links to each provider's API key management page. */
 export const PROVIDER_API_KEY_URLS: Record<string, string> = {
