@@ -78,11 +78,11 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.023` Implement `register(slug, source_dir, is_available=..., unavailable_reason=None, configure_url=None)` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by `skill.is_available(db) == True`  (deps: P1.020, P1.024)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.025` Implement `list_available(db) -> list[BuiltinSkill]` — filter by `skill.is_available(db) == True`  (deps: P1.020, P1.024)
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.026` Admin callers can derive availability from `BuiltinSkill.is_available`, `unavailable_reason`, and `configure_url`; no separate `BuiltinSkillStatus` DTO in the registry layer  (deps: P1.025)
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
 - `[REVIEW @codex-charged-perovskite #11061]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `is_available` returns False and preserves admin-facing unavailable metadata  (deps: P1.025, P1.026)
+- `[REVIEW @codex-charged-perovskite #11061]` `P1.029` Unit test: `list_available` excludes a skill whose `is_available` returns False and preserves admin-facing unavailable metadata  (deps: P1.025, P1.026)
 
 ### 1.4 Bundle validator  (spec §5)
 
@@ -140,7 +140,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 2.2 User router  (spec §7)
 
-- `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_satisfied`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
+- `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_available`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
 
 ### 2.3 Wire-up + tests
 
@@ -166,7 +166,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P3.003` Register `pptx` built-in (no requirements)  (deps: P3.002)
 - `[TODO]` `P3.004` Register `image-generation` built-in with `is_available=lambda db: get_default_image_generation_config(db) is not None`, `unavailable_reason`, and `configure_url=/admin/configuration/image-generation`  (deps: P3.002, P1.020)
 - `[TODO]` `P3.005` Call `register_craft_builtins(BuiltinSkillRegistry.instance())` from `backend/onyx/main.py` startup (after DB init, before `app.include_router`)  (deps: P3.003, P3.004)
-- `[TODO]` `P3.006` Startup integration test: `assert registry.get("pptx") is not None`; `list_satisfied` excludes `image-generation` when no provider is configured  (deps: P3.005)
+- `[TODO]` `P3.006` Startup integration test: `assert registry.get("pptx") is not None`; `list_available` excludes `image-generation` when no provider is configured  (deps: P3.005)
 
 ### 3.2 Render-context helper
 

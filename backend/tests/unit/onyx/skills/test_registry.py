@@ -76,7 +76,7 @@ def test_reset_for_testing_clears_singleton(tmp_path: Path) -> None:
     assert fresh_registry.get("singleton-skill") is None
 
 
-def test_list_satisfied_excludes_unavailable_skill(
+def test_list_available_excludes_unavailable_skill(
     tmp_path: Path,
 ) -> None:
     registry = BuiltinSkillRegistry()
@@ -93,7 +93,7 @@ def test_list_satisfied_excludes_unavailable_skill(
         configure_url="/admin/configuration/provider",
     )
 
-    assert [skill.slug for skill in registry.list_satisfied(db)] == ["available"]
+    assert [skill.slug for skill in registry.list_available(db)] == ["available"]
 
     unavailable = registry.get("unavailable")
     assert unavailable is not None

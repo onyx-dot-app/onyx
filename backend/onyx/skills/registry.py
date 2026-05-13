@@ -139,7 +139,7 @@ class BuiltinSkillRegistry:
     def list_all(self) -> list[BuiltinSkill]:
         return list(self._skills.values())
 
-    def list_satisfied(self, db: Session) -> list[BuiltinSkill]:
+    def list_available(self, db: Session) -> list[BuiltinSkill]:
         return [skill for skill in self.list_all() if skill.is_available(db)]
 
     def get(self, slug: str) -> BuiltinSkill | None:

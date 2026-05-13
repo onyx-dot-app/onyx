@@ -323,7 +323,7 @@ class BuiltinSkillRegistry:
         """Reads SKILL.md(.template) frontmatter, validates slug, stores entry."""
 
     def list_all(self) -> list[BuiltinSkill]: ...
-    def list_satisfied(self, db: Session) -> list[BuiltinSkill]:
+    def list_available(self, db: Session) -> list[BuiltinSkill]:
         """Built-ins whose availability check returns True. Used by the materializer."""
     def get(self, slug: str) -> BuiltinSkill | None: ...
     def reserved_slugs(self) -> set[str]: ...
@@ -370,14 +370,14 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
 - [ ] Implement `BuiltinSkillRegistry`:
   - [ ] Singleton accessor (`BuiltinSkillRegistry.instance()`).
   - [ ] `register(slug, source_dir, is_available=..., unavailable_reason=None, configure_url=None)` — read frontmatter, validate slug, raise on duplicate or missing SKILL.md.
-  - [ ] `list_all()`, `list_satisfied(db)`, `get(slug)`, `reserved_slugs()`.
+  - [ ] `list_all()`, `list_available(db)`, `get(slug)`, `reserved_slugs()`.
 - [ ] Implement `register_craft_builtins(registry)` in `backend/onyx/server/features/build/skills/builtins_registration.py`:
   - [ ] `pptx` — no requirements.
   - [ ] `image-generation` — requires `get_default_image_generation_config(db) is not None`, deep-link to `/admin/configuration/image-generation`.
 - [ ] Wire the call into `backend/onyx/main.py` startup.
 - [ ] Startup integration tests:
   - [ ] `assert registry.get("pptx") is not None` after app boot.
-  - [ ] `registry.list_satisfied(db)` excludes `image-generation` when no provider is configured; includes it after one is added.
+  - [ ] `registry.list_available(db)` excludes `image-generation` when no provider is configured; includes it after one is added.
 
 ---
 
@@ -494,7 +494,7 @@ def materialize_skills(
 Algorithm:
 
 1. Ensure `dest_path` exists and is empty.
-2. `builtins = BuiltinSkillRegistry.instance().list_satisfied(db_session)` — only built-ins whose availability check returns true. Unsatisfied built-ins are skipped silently; admins see them as "Needs setup" in the admin UI.
+2. `builtins = BuiltinSkillRegistry.instance().list_available(db_session)` — only built-ins whose availability check returns true. Unsatisfied built-ins are skipped silently; admins see them as "Needs setup" in the admin UI.
 3. `customs = list_skills_for_user(user, db_session)` — single SQL query, public-OR-group-grant, filtered to `enabled = True AND deleted_at IS NULL`. Disabled or soft-deleted skills never reach the materialized set.
 4. For each built-in:
    - `shutil.copytree(source_dir, dest_path/slug)`.
