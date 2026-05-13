@@ -20,6 +20,7 @@ from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -138,11 +139,11 @@ def create_skill(
 ) -> Skill:
     """Insert a new Skill row.
 
-    Raises `OnyxError(DUPLICATE_RESOURCE)` if a non-deleted skill with the
-    same slug already exists. The partial unique index on `slug WHERE
-    deleted_at IS NULL` enforces this at the DB layer as a backstop; this
-    helper checks first so the caller gets a clean structured error rather
-    than an IntegrityError.
+    Slug collisions are caught two ways: a pre-check for the fast happy path,
+    and a SAVEPOINT-wrapped flush that translates the partial unique index's
+    IntegrityError into `OnyxError(DUPLICATE_RESOURCE)` for the concurrent-
+    writer race. Both raise the same structured error so callers never see
+    a raw IntegrityError.
     """
     existing = db_session.scalars(
         select(Skill.id).where(Skill.slug == slug).where(Skill.deleted_at.is_(None))
@@ -164,8 +165,15 @@ def create_skill(
         author_user_id=author_user_id,
         enabled=True,
     )
-    db_session.add(skill)
-    db_session.flush()
+    try:
+        with db_session.begin_nested():
+            db_session.add(skill)
+            db_session.flush()
+    except IntegrityError as e:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"A skill with slug '{slug}' already exists.",
+        ) from e
     return skill
 
 
@@ -221,7 +229,9 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    if not isinstance(slug, _UnsetType) and slug != skill.slug:
+    slug_changed = not isinstance(slug, _UnsetType) and slug != skill.slug
+    if slug_changed:
+        assert not isinstance(slug, _UnsetType)
         clashing = db_session.scalars(
             select(Skill.id)
             .where(Skill.slug == slug)
@@ -244,7 +254,16 @@ def patch_skill(
     if not isinstance(enabled, _UnsetType):
         skill.enabled = enabled
 
-    db_session.flush()
+    try:
+        with db_session.begin_nested():
+            db_session.flush()
+    except IntegrityError as e:
+        if slug_changed:
+            raise OnyxError(
+                OnyxErrorCode.DUPLICATE_RESOURCE,
+                f"A skill with slug '{slug}' already exists.",
+            ) from e
+        raise
     return skill
 
 
