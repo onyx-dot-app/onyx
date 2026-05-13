@@ -86,6 +86,13 @@ def get_application() -> FastAPI:
 
     application = get_application_base(lifespan_override=lifespan)
 
+    # Register tier_gate FIRST so it becomes the innermost middleware: Starlette
+    # executes middleware in reverse registration order, and tier_gate must run
+    # AFTER tenant_tracking has populated CURRENT_TENANT_ID_CONTEXTVAR.
+    # Tier gate attaches in both modes; get_tier() resolves per deployment
+    # internally. Reads the unified PATH_PREFIX_MIN_TIER map.
+    add_tier_gate_middleware(application, logger)
+
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
     else:
@@ -93,10 +100,6 @@ def get_application() -> FastAPI:
         # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
         # MT deployments use control plane gating via is_tenant_gated() instead
         add_license_enforcement_middleware(application, logger)
-
-    # Tier gate attaches in both modes; get_tier() resolves per
-    # deployment internally. Reads the unified PATH_PREFIX_MIN_TIER map.
-    add_tier_gate_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:

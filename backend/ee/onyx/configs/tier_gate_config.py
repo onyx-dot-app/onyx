@@ -20,8 +20,6 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/chat-sessions": Tier.BUSINESS,
     "/admin/chat-session-history": Tier.BUSINESS,
     "/admin/query-history": Tier.BUSINESS,
-    # Usage dashboards / reports
-    "/admin/usage-report": Tier.BUSINESS,
     # Service-account API keys. /admin/api-key creates only
     # account_type=SERVICE_ACCOUNT keys; there is no "user-bound" variant.
     "/admin/api-key": Tier.BUSINESS,
@@ -37,6 +35,8 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     # cleanly prefix-matched (variable in the middle). Frontend hides
     # the option in AccessTypeForm; backend sync triggers remain open.
     # ----- ENTERPRISE -----
+    # Usage dashboards / reports
+    "/admin/usage-report": Tier.ENTERPRISE,
     # Custom analytics (JS injection script)
     "/admin/custom-analytics": Tier.ENTERPRISE,
     # Standard answers (canned responses)
