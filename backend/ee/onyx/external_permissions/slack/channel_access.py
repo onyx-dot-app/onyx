@@ -26,11 +26,14 @@ def get_channel_access(
             emails: set[str] = set()
             for tid in channel_team_ids(channel):
                 emails |= team_id_to_user_emails.get(tid, set())
-            return ExternalAccess(
-                external_user_emails=emails,
-                external_user_group_ids=set(),
-                is_public=False,
-            )
+            if len(emails) <= ExternalAccess.MAX_NUM_ENTRIES:
+                return ExternalAccess(
+                    external_user_emails=emails,
+                    external_user_group_ids=set(),
+                    is_public=False,
+                )
+            # Union exceeds the perm-sync size guard; fall through to is_public
+            # so the doc stays accessible instead of being silently dropped.
         return ExternalAccess(
             external_user_emails=set(),
             external_user_group_ids=set(),

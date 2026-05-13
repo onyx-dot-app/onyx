@@ -179,6 +179,28 @@ class TestFetchChannelPermissionsGrid:
                 "z@x.com",
             }
 
+    def test_public_channel_fallback_to_is_public_when_union_exceeds_cap(
+        self,
+    ) -> None:
+        client = MagicMock()
+        big = {f"u{i}@x.com" for i in range(ExternalAccess.MAX_NUM_ENTRIES + 1)}
+        ws_emails = {"T_W1": big}
+        ch = _channel("C_BIG", team="T_W1")
+        with patch(
+            "ee.onyx.external_permissions.slack.doc_sync.get_channels_across_teams"
+        ) as mock_get:
+            mock_get.side_effect = [[ch], []]
+            workspace_perm = _fetch_workspace_permissions({})
+            result = _fetch_channel_permissions(
+                slack_client=client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={},
+                team_ids=["T_W1"],
+                team_id_to_user_emails=ws_emails,
+            )
+            assert result["C_BIG"].is_public is True
+            assert result["C_BIG"].external_user_emails == set()
+
     def test_non_grid_falls_back_to_workspace_permissions(self) -> None:
         client = MagicMock()
         ch = _channel("C1")  # no team field, non-Grid
@@ -233,6 +255,22 @@ class TestEEGetChannelAccessGrid:
         )
         assert access.is_public is False
         assert access.external_user_emails == {"a@x.com", "z@x.com"}
+
+    def test_public_channel_grid_falls_back_to_is_public_when_union_exceeds_cap(
+        self,
+    ) -> None:
+        from onyx.access.models import ExternalAccess as _EA
+
+        big = {f"u{i}@x.com" for i in range(_EA.MAX_NUM_ENTRIES + 1)}
+        ch = _channel("C1", is_private=False, team="T1")
+        access = ee_get_channel_access(
+            MagicMock(),
+            ch,
+            {},
+            team_id_to_user_emails={"T1": big},
+        )
+        assert access.is_public is True
+        assert access.external_user_emails == set()
 
     def test_private_channel_uses_members_path_regardless_of_grid(self) -> None:
         client = MagicMock()

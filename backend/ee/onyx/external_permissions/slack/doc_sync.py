@@ -82,11 +82,16 @@ def _fetch_channel_permissions(
             emails: set[str] = set()
             for tid in channel_team_ids(channel):
                 emails |= team_id_to_user_emails.get(tid, set())
-            channel_permissions[channel_id] = ExternalAccess(
-                external_user_emails=emails,
-                external_user_group_ids=set(),
-                is_public=False,
-            )
+            if len(emails) <= ExternalAccess.MAX_NUM_ENTRIES:
+                channel_permissions[channel_id] = ExternalAccess(
+                    external_user_emails=emails,
+                    external_user_group_ids=set(),
+                    is_public=False,
+                )
+            else:
+                # Union exceeds perm-sync size guard; fall back to is_public so
+                # the doc stays accessible instead of being silently dropped.
+                channel_permissions[channel_id] = ExternalAccess.public()
         else:
             channel_permissions[channel_id] = workspace_permissions
 
