@@ -24,6 +24,12 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=False),
         sa.Column(
+            "app_type",
+            sa.String(),
+            nullable=False,
+            server_default="CUSTOM",
+        ),
+        sa.Column(
             "upstream_urls",
             postgresql.ARRAY(sa.String()),
             nullable=False,
@@ -47,6 +53,18 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.true(),
         ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -60,6 +78,18 @@ def upgrade() -> None:
             postgresql.JSONB(),
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
         ),
         sa.ForeignKeyConstraint(
             ["external_app_id"], ["external_app.id"], ondelete="CASCADE"

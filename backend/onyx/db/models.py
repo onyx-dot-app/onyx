@@ -64,6 +64,7 @@ from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import HookFailStrategy
@@ -5826,6 +5827,25 @@ class ExternalApp(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
+    # Discriminator for the OAuth-provider dispatch layer.
+    # Decoupled from `name` (a human-editable display string) so
+    # renaming an app doesn't silently break OAuth.
+    #
+    # `CUSTOM` covers admin-defined apps that don't go through any
+    # built-in OAuth flow. Built-in values match entries in
+    # `external_apps.providers.PROVIDERS`.
+    #
+    # NOT unique — providers like self-hosted GitLab/Jira can have
+    # multiple distinct instances within one Onyx (each with its own
+    # client_id + base URL) and would all share the same app_type.
+    # Duplicate detection for the typical "one Slack" case happens
+    # at the UI layer.
+    app_type: Mapped[ExternalAppType] = mapped_column(
+        Enum(ExternalAppType, native_enum=False),
+        nullable=False,
+        default=ExternalAppType.CUSTOM,
+        server_default=ExternalAppType.CUSTOM.value,
+    )
     upstream_urls: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )
@@ -5843,6 +5863,17 @@ class ExternalApp(Base):
     )
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
@@ -5869,6 +5900,17 @@ class ExternalAppUserCredential(Base):
     )
     user_credentials: Mapped[dict[str, Any]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=dict
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     external_app: Mapped["ExternalApp"] = relationship(
