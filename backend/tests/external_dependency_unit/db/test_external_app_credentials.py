@@ -19,6 +19,7 @@ from uuid import UUID
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import create_external_app__no_commit
 from onyx.db.external_app import get_external_app_credentials
 from onyx.db.external_app import upsert_external_app_user_credential__no_commit
@@ -39,7 +40,7 @@ _DEFAULT_USER_CREDS: dict[str, Any] = {
     "access_token": "USER_ACCESS_TOKEN",
     "refresh_token": "USER_REFRESH_TOKEN",
 }
-_DEFAULT_UPSTREAM_URLS = [r"https://api\.example\.com/.*"]
+_DEFAULT_UPSTREAM_URL_PATTERNS = [r"https://api\.example\.com/.*"]
 _DEFAULT_MATCHING_URL = "https://api.example.com/users/me"
 
 
@@ -57,17 +58,21 @@ def rollback_session(db_session: Session) -> Generator[Session, None, None]:
 def _create_app(
     db_session: Session,
     name: str = "Test App",
-    upstream_urls: list[str] | None = None,
+    upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, Any] | None = None,
     enabled: bool = True,
+    app_type: ExternalAppType = ExternalAppType.CUSTOM,
 ) -> ExternalApp:
     return create_external_app__no_commit(
         db_session,
         name=name,
         description="test",
-        upstream_urls=(
-            upstream_urls if upstream_urls is not None else list(_DEFAULT_UPSTREAM_URLS)
+        app_type=app_type,
+        upstream_url_patterns=(
+            upstream_url_patterns
+            if upstream_url_patterns is not None
+            else list(_DEFAULT_UPSTREAM_URL_PATTERNS)
         ),
         auth_template=(
             auth_template if auth_template is not None else dict(_DEFAULT_AUTH_TEMPLATE)
@@ -149,7 +154,7 @@ def test_returns_resolved_template_when_no_user_keys_required(
     }
 
 
-def test_matches_any_pattern_in_upstream_urls_list(
+def test_matches_any_pattern_in_upstream_url_patterns_list(
     rollback_session: Session,
 ) -> None:
     """An app with multiple regex patterns matches if *any* of them
@@ -158,7 +163,7 @@ def test_matches_any_pattern_in_upstream_urls_list(
     user = create_test_user(rollback_session, "ea_multi_pattern")
     app = _create_app(
         rollback_session,
-        upstream_urls=[
+        upstream_url_patterns=[
             r"https://api\.example\.com/.*",
             r"https://auth\.example\.com/.*",
         ],
