@@ -5,6 +5,7 @@ import type { VoiceProviderView } from "@/lib/voice/types";
 
 export type { VoiceProviderView };
 
+/** Fetches and caches the list of configured voice providers. */
 export function useVoiceProviders() {
   const { data, error, isLoading, mutate } = useSWR<VoiceProviderView[]>(
     SWR_KEYS.voiceProviders,
