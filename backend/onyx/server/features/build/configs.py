@@ -94,9 +94,9 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
 #                 s3://{bucket}/{tenant_id}/uploads/{session_id}/
 SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
 
-# Service account for sandbox pods (NO IRSA - no AWS API access)
+# Service account for sandbox pods (needs IRSA for S3 snapshot access)
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
-    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-runner"
+    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-file-sync"
 )
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
