@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -44,7 +45,8 @@ def create_external_app__no_commit(
     db_session: Session,
     name: str,
     description: str,
-    upstream_urls: list[str],
+    app_type: ExternalAppType,
+    upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
     enabled: bool,
@@ -52,7 +54,8 @@ def create_external_app__no_commit(
     app = ExternalApp(
         name=name,
         description=description,
-        upstream_urls=upstream_urls,
+        app_type=app_type,
+        upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
         enabled=enabled,
@@ -67,7 +70,8 @@ def update_external_app__no_commit(
     external_app_id: int,
     name: str,
     description: str,
-    upstream_urls: list[str],
+    app_type: ExternalAppType,
+    upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
     enabled: bool,
@@ -85,7 +89,8 @@ def update_external_app__no_commit(
 
     app.name = name
     app.description = description
-    app.upstream_urls = upstream_urls
+    app.app_type = app_type
+    app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
     app.enabled = enabled

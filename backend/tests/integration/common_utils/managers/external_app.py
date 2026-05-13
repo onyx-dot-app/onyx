@@ -2,6 +2,7 @@ from typing import Any
 
 import requests
 
+from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
@@ -24,17 +25,19 @@ class ExternalAppManager:
         user_performing_action: DATestUser,
         name: str,
         description: str,
-        upstream_urls: list[str],
+        upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         enabled: bool = True,
+        app_type: ExternalAppType = ExternalAppType.CUSTOM,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
             None,
             name,
             description,
-            upstream_urls,
+            app_type,
+            upstream_url_patterns,
             auth_template,
             organization_credentials,
             enabled,
@@ -46,17 +49,19 @@ class ExternalAppManager:
         app_id: int,
         name: str,
         description: str,
-        upstream_urls: list[str],
+        upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         enabled: bool = True,
+        app_type: ExternalAppType = ExternalAppType.CUSTOM,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
             app_id,
             name,
             description,
-            upstream_urls,
+            app_type,
+            upstream_url_patterns,
             auth_template,
             organization_credentials,
             enabled,
@@ -68,7 +73,8 @@ class ExternalAppManager:
         app_id: int | None,
         name: str,
         description: str,
-        upstream_urls: list[str],
+        app_type: ExternalAppType,
+        upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         enabled: bool,
@@ -77,7 +83,8 @@ class ExternalAppManager:
             id=app_id,
             name=name,
             description=description,
-            upstream_urls=upstream_urls,
+            app_type=app_type,
+            upstream_url_patterns=upstream_url_patterns,
             auth_template=auth_template,
             organization_credentials=organization_credentials,
             enabled=enabled,

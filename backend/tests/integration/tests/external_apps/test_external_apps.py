@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 import requests
 
+from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
@@ -41,7 +42,7 @@ def _create_test_app(
     defaults: dict[str, Any] = {
         "name": "Test App",
         "description": "An app for testing",
-        "upstream_urls": [r"^https://api\.example\.com/.*$"],
+        "upstream_url_patterns": [r"^https://api\.example\.com/.*$"],
         "auth_template": dict(_AUTH_TEMPLATE),
         "organization_credentials": dict(_ORG_CREDENTIALS),
         "enabled": True,
@@ -64,8 +65,9 @@ def _assert_user_response_shape_is_safe(
     forbidden_fields = {
         "organization_credentials",
         "auth_template",
-        "upstream_urls",
+        "upstream_url_patterns",
         "enabled",
+        "app_type",
     }
     actual_fields = set(user_app.model_fields.keys())
     leaked = forbidden_fields & actual_fields
@@ -100,7 +102,7 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_app.name == "Test App"
     assert admin_app.description == "An app for testing"
     assert admin_app.enabled is True
-    assert admin_app.upstream_urls == [r"^https://api\.example\.com/.*$"]
+    assert admin_app.upstream_url_patterns == [r"^https://api\.example\.com/.*$"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
     assert admin_app.organization_credentials == _ORG_CREDENTIALS
 
@@ -154,7 +156,7 @@ def test_basic_user_cannot_access_admin_routes(
             user_performing_action=basic_user,
             name="Sneaky App",
             description="should not be created",
-            upstream_urls=[],
+            upstream_url_patterns=[],
             auth_template={},
             organization_credentials={},
         )
@@ -172,7 +174,7 @@ def test_basic_user_cannot_access_admin_routes(
             app_id=created.id,
             name="Hijacked",
             description="should not be updated",
-            upstream_urls=[],
+            upstream_url_patterns=[],
             auth_template={},
             organization_credentials={},
         )
@@ -330,7 +332,7 @@ def test_disabled_app_hidden_from_users_but_credentials_preserved_on_re_enable(
         app_id=created.id,
         name=created.name,
         description=created.description,
-        upstream_urls=created.upstream_urls,
+        upstream_url_patterns=created.upstream_url_patterns,
         auth_template=created.auth_template,
         organization_credentials=created.organization_credentials,
         enabled=False,
@@ -349,7 +351,7 @@ def test_disabled_app_hidden_from_users_but_credentials_preserved_on_re_enable(
         app_id=created.id,
         name=created.name,
         description=created.description,
-        upstream_urls=created.upstream_urls,
+        upstream_url_patterns=created.upstream_url_patterns,
         auth_template=created.auth_template,
         organization_credentials=created.organization_credentials,
         enabled=True,
@@ -395,7 +397,7 @@ def test_update_app_reshapes_user_credential_keys(
         app_id=created.id,
         name=created.name,
         description=created.description,
-        upstream_urls=created.upstream_urls,
+        upstream_url_patterns=created.upstream_url_patterns,
         auth_template=created.auth_template,
         organization_credentials=new_org_creds,
         enabled=True,
@@ -435,7 +437,7 @@ def test_update_or_delete_nonexistent_app_returns_404(
             app_id=missing_id,
             name="x",
             description="x",
-            upstream_urls=[],
+            upstream_url_patterns=[],
             auth_template={},
             organization_credentials={},
         )
@@ -510,3 +512,40 @@ def test_partial_credentials_keep_app_unauthenticated_full_org_template_is_immed
     assert org_only_view.credential_keys == []
     assert org_only_view.credential_values == {}
     assert org_only_view.authenticated is True
+
+
+# =============================================================================
+# app_type plumbing
+# =============================================================================
+
+
+def test_app_type_round_trips_and_defaults_to_custom(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """`app_type` is the discriminator the OAuth dispatch layer keys off,
+    so it must survive an upsert round-trip. The default flow (the
+    manager's `create()` with no override) produces a CUSTOM app, and an
+    explicit built-in value (SLACK here) round-trips on both create and
+    update — proving admins can switch an existing row's provider
+    binding without recreating it."""
+    default_app = _create_test_app(admin_user, name="Default-type App")
+    assert default_app.app_type == ExternalAppType.CUSTOM
+
+    slack_app = _create_test_app(
+        admin_user, name="Slack App", app_type=ExternalAppType.SLACK
+    )
+    assert slack_app.app_type == ExternalAppType.SLACK
+
+    updated = ExternalAppManager.update(
+        user_performing_action=admin_user,
+        app_id=slack_app.id,
+        name=slack_app.name,
+        description=slack_app.description,
+        upstream_url_patterns=slack_app.upstream_url_patterns,
+        auth_template=slack_app.auth_template,
+        organization_credentials=slack_app.organization_credentials,
+        enabled=slack_app.enabled,
+        app_type=ExternalAppType.LINEAR,
+    )
+    assert updated.app_type == ExternalAppType.LINEAR
