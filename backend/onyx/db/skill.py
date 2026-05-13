@@ -240,6 +240,11 @@ def replace_skill_grants(
 
     Dedups the input. Does not commit — the caller owns the transaction.
     """
+    if fetch_skill_for_admin(skill_id, db_session) is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Skill {skill_id} not found.",
+        )
     db_session.execute(
         delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill_id)
     )
