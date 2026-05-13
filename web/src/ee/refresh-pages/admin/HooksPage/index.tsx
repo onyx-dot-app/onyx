@@ -387,7 +387,7 @@ function ConnectedHookCard({
               </div>
 
               <Disabled disabled={isBusy}>
-                <div className="flex items-center pb-1 px-1 gap-1">
+                <div className="flex items-center justify-end pb-1 px-1 gap-1">
                   {hook.is_active ? (
                     <>
                       <Hoverable.Item
