@@ -97,7 +97,7 @@ Part 1 (CLI refactor)  ✅ COMPLETE ──────────────�
                                                               │
 Part 2 (Search API)  ✅ COMPLETE ─────────────────────────────┤
                                                               ▼
-Part 3 (CLI search command)  ──► depends on Part 1 + Part 2
+Part 3 (CLI search command)  ✅ COMPLETE ──► depends on Part 1 + Part 2
                                                               │
                                                               ▼
 Part 4 (Craft integration)   ──► depends on Part 1 + Part 2 + Part 3
@@ -322,7 +322,13 @@ The search endpoint lives under `/api/search` (not `/api/build/...` or `/api/cha
 
 ---
 
-## Part 3: CLI Search Command & Agent Tool Surface
+## Part 3: CLI Search Command & Agent Tool Surface (COMPLETE)
+
+> **Status: Implemented.** Key implementation details for Part 4:
+> - **Two commands** — Resolved as separate `search` and `ask` commands. `search` returns retrieved documents with citations; `ask` returns LLM-generated answers. Different backends, different output shapes and cost profiles.
+> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff), `--limit` (max results), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of `llm_facing_text`).
+> - **Default output** — `onyx-cli search` prints `llm_facing_text` (the citation-rich JSON string from `SearchTool`) to stdout. Non-TTY output is truncated to 4096 bytes with a temp file for overflow.
+> - **5-minute timeout** — `doJSONLong()` helper uses a 5-minute HTTP timeout since `SearchTool.run()` includes multiple LLM calls.
 
 ### Objective
 
@@ -341,14 +347,9 @@ The CLI must expose the Part 2 search API's full capabilities through command-li
 - Structured JSON output as an alternative to the default
 - Controls for skipping LLM query expansion / document selection (trade quality for speed/cost)
 
-#### R3.2: Command design — open question
+#### R3.2: Command design — two commands
 
-Whether search-results and LLM-generated-answers are exposed as two separate commands or a single command with a mode flag is an implementation decision. Key considerations:
-
-- **Two commands** (e.g., `search` for results, `ask` for answers): clearer semantics, different backends (search API vs chat endpoint), different output shapes and cost profiles. `ask` already exists.
-- **One command with a flag** (e.g., `search --answer`): simpler agent surface (one tool to learn, one SKILL.md entry), shared flags like `--source`/`--days` apply to both modes. But the command silently switches between very different code paths.
-
-The implementation plan for this part should make and justify this decision.
+Two separate commands: `search` for retrieved results and `ask` for LLM-generated answers. They have different backends (search API vs chat endpoint), different output shapes, and different cost profiles. `ask` already existed; `search` is the new primitive that returns retrieval without generation.
 
 #### R3.3: Default output is LLM-facing JSON
 
@@ -367,9 +368,9 @@ The CLI should have a clear, final set of agent-usable commands. All agent-usabl
 
 Existing commands should be reviewed for consistency with the new search command(s) — flag naming, output format, error format, and truncation behavior should be uniform across the agent-usable surface.
 
-#### R3.5: Persona/agent discovery
+#### R3.5: Persona/agent scoping
 
-Agents need a way to list available personas with enough information to choose one for a scoped search (ID, name, description, attached document sets, search start date). This may be a standalone command or a flag on another command — the implementation plan should decide.
+Persona scoping is exposed as `--agent-id` on the `search` command. When specified, the search inherits the persona's configured document set filters, search start date, and attached documents. No standalone discovery command — agents learn about available personas from the `company-search` SKILL.md or from the user.
 
 ### Key Challenges
 
@@ -384,19 +385,26 @@ Agents need a way to list available personas with enough information to choose o
 
 ### Objective
 
-Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: minting session-scoped PATs, bundling the CLI binary, creating a CLI skill, populating it with the user's available sources, and tearing down the file sync infrastructure.
+Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI binary, creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
+
+> **Architecture summary.** Dynamic skill content (the rendered `company-search` SKILL.md) is written to the pod via a `write_sandbox_file()` / `render_company_search_skill()` pattern that is decoupled from the sandbox manager interface. Content is rendered in `sandbox/skills/rendering.py`, written to `/workspace/skills/` at the pod level (shared across sessions via existing symlinks), and orchestrated by `SessionManager.push_dynamic_skills()`. This avoids threading new parameters through the manager abstraction and provides a clean extension point for future skill bundles.
 
 ### Requirements
 
-#### R4.1: Session-scoped PAT lifecycle
+#### R4.1: Per-user PAT lifecycle
 
-Each Craft session gets a dedicated PAT that exists only for the session's lifetime. This follows the existing pattern of internal service authentication — the Discord bot service already hits the API server directly with a "service account" API key and tenant context is handled there. Craft PATs work the same way: provisioned per session, scoped to the session's user.
+> **Revised from initial design.** The original design specified per-session PATs minted and revoked with each session. During implementation planning, this was changed to per-user PATs stored encrypted at rest — eliminating ~100x PAT row accumulation and all session lifecycle complexity. See [4-craft-search-proposal.md](4-craft-search-proposal.md) for the full rationale.
 
-- **Provisioning**: At session creation, mint a new PAT scoped to the session's user. The PAT name should identify it as session-bound (e.g., `craft-session-{session_id}`). The PAT's permissions are the same as the user's — no elevation, no restriction beyond what the user already has. (PAT scopes will be addressed later by the Permissions system, not this project.)
-- **Injection**: For this version, the PAT value (the raw token, not the hash) is injected directly into the sandbox environment as `ONYX_PAT`. The CLI reads this env var for authentication. The backend URL is injected as `ONYX_SERVER_URL`, pointing at the internal Kube service address (not the public nginx URL, which is irrelevant inside the cluster). Long-term, the raw PAT will not be exposed to the sandbox at all — the egress interception proxy (Craft V1 project #4) will inject credentials server-side on outbound requests, so the sandbox never sees secrets. This direct env var injection is the interim approach until that proxy layer is in place.
-- **Deprovisioning**: When the session ends (user closes it, idle timeout, explicit cleanup), the PAT is revoked. Revoked PATs immediately stop working — any in-flight search requests fail with an auth error.
-- **Expiration**: Session PATs should have a time-based expiration as a safety net (e.g., 24 hours), independent of session lifecycle. If the session cleanup path fails, the PAT still expires.
-- **Audit**: Session PATs are distinguishable from user-created PATs in the PAT list. Users should see them (transparency) but they should be clearly labeled as session-managed and not manually editable.
+Each user's Craft sandbox gets a single PAT that persists across sessions and pod restarts. The PAT is stored encrypted on the `Sandbox` row and injected as a pod-level env var at provisioning time.
+
+- **One PAT per user**, distinguished by a `PatType` enum (`USER`, `CRAFT`) column on `PersonalAccessToken`. The enum uses `name == value` (uppercase), consistent with `AccountType` and `ProcessingMode`. The `server_default` backfills existing rows as `USER` automatically. No name-prefix conventions.
+- **Stored encrypted** on the `Sandbox` row using the existing `EncryptedString` column type (same infrastructure as LLM API keys, connector credentials, OAuth tokens). Decrypted at pod provisioning time. This is necessary because PATs are hashed (SHA256) in the `personal_access_token` table — the raw token can't be recovered from the hash, but the sandbox needs it re-injected on every pod provisioning.
+- **Injected as a pod-level env var** (`ONYX_PAT`) in the K8s pod spec at provisioning time. All sessions in the pod inherit it automatically — no per-session token injection or shared files. `ONYX_SERVER_URL` points at the internal Kube service address (configured via `SANDBOX_API_SERVER_URL`, no default — must be set per deployment).
+- **30-day expiry** as a safety net. At each pod provisioning, `ensure_sandbox_pat()` checks if the stored PAT is still valid. If expired (user was away for 30+ days), it mints a new one. No proactive rotation, no revocation on sleep or termination — pods don't live long enough for the PAT to expire mid-session (1-hour idle timeout << 30-day expiry).
+- **Hidden from user's PAT list and protected from deletion.** `GET /user/pats` and `DELETE /user/pats/{id}` filter by `PatType.USER` at the DB query layer so CRAFT PATs are invisible and unrevocable through the user-facing API. `create_pat()` and `revoke_pat()` flush (not commit) — callers own the transaction boundary.
+- **Future-compatible with egress proxy.** The `encrypted_pat` column is the single source of truth. Today it's read at pod provisioning and set as an env var. When the egress interception proxy ships (Craft V1 project #4), the proxy reads from the same column and injects credentials server-side — the env var goes away, the sandbox never sees the raw token, and the DB storage is unchanged.
+
+The security boundary is the pod, which is already one-per-user. Per-session PATs don't add security within the same pod. PAT scopes will be addressed later by the Permissions system, not this project.
 
 #### R4.2: CLI binary bundling
 
@@ -409,11 +417,11 @@ The onyx-cli binary must be available inside the sandbox:
 
 #### R4.3: CLI skill creation
 
-The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills.md`). The skill consists of:
+The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills/skills.md`). The skill consists of:
 
 - **`SKILL.md.template`**: A template that describes how to use onyx-cli search, rendered at session setup with the user's available sources. This is a built-in skill registered with the `BuiltinSkillRegistry`.
 - **Skill name**: `company-search` (consistent with `search-requirements.md` — reads naturally, brand-neutral).
-- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a per-session SKILL.md that tells the agent:
+- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a SKILL.md that tells the agent:
   - What the search tool is and what it does
   - What sources are available (specific to this user's permissions)
   - Usage examples with the CLI flags
@@ -421,6 +429,18 @@ The search tool is exposed to the agent as a skill (following the existing skill
   - What to do when a source they expect isn't listed
 
 The skill does NOT include a shell script wrapper. The agent calls onyx-cli directly — the CLI is the tool, not a wrapper around curl.
+
+> **Implementation note.** The rendered SKILL.md is written to the **pod-level** `/workspace/skills/` directory, not per-session. The pod is per-user, so all sessions share the same rendered skills via existing symlinks (K8s) or symlinks (local). No migration is needed — the existing delivery mechanism works as-is.
+>
+> The rendering and writing are decoupled from the session manager interface:
+>
+> - **`render_company_search_skill(db_session, user, skills_dir) -> RenderedSkillFile`** in `sandbox/skills/rendering.py` renders the company-search skill template and returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing. `skills_dir` comes from the `SKILLS_TEMPLATE_PATH` config constant.
+> - **`write_sandbox_file(sandbox_id, path, content)`** on `SandboxManager` writes to `/workspace/{path}` on the pod. Generic method for pushing any dynamic content. K8s implementation uses `kubectl exec` + `printf`; local uses `Path.write_text`.
+> - **`SessionManager.push_dynamic_skills()`** orchestrates: calls `render_company_search_skill()` then `write_sandbox_file()` with the result. Catches all exceptions and logs a warning so skill rendering failures don't block session setup. Called after `setup_session_workspace()` in both `create_session__no_commit()` and the restore path in `sessions_api.py`.
+>
+> This means `company_search_skill_md` is NOT passed through `setup_session_workspace()` or `restore_snapshot()`. The rendering is fully decoupled from the manager interface — no parameter threading through the sandbox manager abstraction.
+>
+> **Future direction:** The current push-based `write_sandbox_file()` approach is a stepping stone. Eventually a full skill system will handle multi-file skill bundles. `render_company_search_skill()` handles the company-search template today; adding new skills would mean adding new rendering functions or generalizing the pattern.
 
 #### R4.4: Available sources injection
 
@@ -432,17 +452,36 @@ The skill's source list is populated from the user's actual connector access:
 - The list is a snapshot at session creation — not refreshed mid-session. Connector changes take effect on the next session.
 - If the user has no connected sources, the skill still renders but the source list says so explicitly. The agent should not hallucinate sources.
 
-#### R4.5: Decommission file sync
+> **Implementation note.** Source descriptions reuse the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording where needed) rather than defining a duplicate `SOURCE_DESCRIPTIONS` dict. This keeps source descriptions in one place across the codebase.
 
-Remove the legacy `files/` corpus sync infrastructure (the search tool replaces it):
+#### R4.5: Decommission file sync and rework user library delivery
 
-- **Remove the `files/` directory from sandbox workspace setup.** No more symlink to persistent document storage or demo data.
-- **Remove `PersistentDocumentWriter`** and any Celery tasks that sync documents to persistent storage for sandbox consumption. (Verify no other consumer depends on this path first.)
-- **Remove `build_knowledge_sources_section`** and the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`. The knowledge sources section is replaced by the `company-search` skill's SKILL.md.
-- **Remove `CONNECTOR_INFO` dict** that was only used by the knowledge sources section builder.
-- **Remove `/workspace/files` allowlist rules** from `opencode_config.py`.
-- **Remove the Kubernetes init container** that synced corpus from S3 into the pod (if one exists).
-- **Update `AGENTS.template.md`** to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
+Remove the legacy `files/` corpus sync infrastructure (search replaces it) and replace the file-sync sidecar with a lightweight user library sync mechanism.
+
+> **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
+
+> **Implementation note.** This is split across two PRs. **PR 3 is removal-only** (~1500 lines deleted) — it deletes the old file sync infrastructure after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. **PR 4 is the user library rework** — net new code adding the shared volume, kubectl exec sync, and Celery task for user library delivery. This split keeps PR 3 a clean deletion pass and isolates the new functionality in PR 4.
+
+**File sync removal (PR 3 — pure deletion):**
+- Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
+- Remove the S3 file-sync sidecar container (`aws s3 sync` at pod start). Search replaces connector document access entirely.
+- Remove `build_knowledge_sources_section()`, the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`, `generate_agents_md.py` from the sandbox image, and the `CONNECTOR_INFO` dict.
+- Remove `/workspace/files` and `/workspace/demo_data` allowlist rules from `opencode_config.py`.
+- Remove `sync_files()` methods, `sync_sandbox_files` Celery task, `_get_disabled_user_library_paths()`, file symlink helpers, demo data, and the connector document write path from `PersistentDocumentWriter`.
+- Update `AGENTS.template.md` to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
+
+**User library rework (PR 4 — net new code):**
+
+User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They still need direct file access.
+
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
+- **Session setup/resume** — populates the directory, catching files uploaded while the pod was sleeping.
+- **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately.
+
+Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`aws s3 sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+
+**PersistentDocumentWriter (PR 3):** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
+
 - **Preserve `attachments/`** — user-uploaded session files are still read via normal file operations and are not part of this removal.
 
 #### R4.6: Validation at session start
@@ -453,16 +492,17 @@ Before the agent begins working, verify the search tool is functional:
 - If validation fails (PAT invalid, backend unreachable, search endpoint not available), the session should surface a clear error rather than letting the agent discover the tool is broken mid-task.
 - This uses the capability discovery from Part 1 (R1.6).
 
-#### R4.7: Demo data path
+#### R4.7: Demo data removal
 
-If removing the `files/` infrastructure also removes the only path that demo data uses, demo data goes too. The main plan explicitly permits this: "Remove the legacy files/ corpus directory and demo-data path as part of search/control-plane work." If demo data has an independent path that survives, leave it alone.
+The `files/` infrastructure is the only delivery mechanism for demo data. Removing file sync removes demo data access. Demo data (`demo_data.zip` in the Docker image, `/workspace/demo_data/` directory, demo-data symlink path) is explicitly removed as part of the file sync decommission in R4.5.
 
 ### Key Challenges
 
-- **PAT lifecycle reliability**: The PAT must be revoked when the session ends. If the cleanup path fails (crash, timeout, orphaned sandbox), the time-based expiration is the safety net. But there should also be a periodic sweep that revokes PATs for sessions that no longer exist.
-- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox. This is a Craft-specific networking concern that the CLI itself doesn't care about.
-- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. This data may not exist today and may need to be added to connector metadata or crafted per source type.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. Be aware this will happen and consider whether the deploy sequence matters (deploy search tool before removing file sync, or accept a brief gap).
+- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_API_SERVER_URL` config.
+- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. Resolved by reusing the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording) — no new source metadata system needed.
+- **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in PR 3 (pure deletion). PR 4 adds the new user library delivery mechanism (shared volume + kubectl exec sync).
+- **Decoupled rendering**: The dynamic skill rendering (`render_company_search_skill()` + `write_sandbox_file()`) is deliberately decoupled from the sandbox manager interface. This avoids threading new parameters through `setup_session_workspace()` and `restore_snapshot()`, keeping the manager abstraction clean. The orchestration lives in `SessionManager.push_dynamic_skills()`, which catches all exceptions and logs a warning so failures don't block session setup.
 
 ---
 
@@ -479,11 +519,11 @@ Each part owns its own tests (detailed in part-specific implementation plans), b
 
 ### Security Boundaries
 
-- The sandbox never receives long-lived user credentials. The session PAT is short-lived, scoped, and auto-revoked.
+- The sandbox receives a per-user PAT with a 30-day expiry. The raw token is stored encrypted at rest on the `Sandbox` row (using `EncryptedString`) and injected as a pod-level env var. When the egress proxy ships, the sandbox will no longer see the raw token at all.
 - The CLI config file is not created inside the sandbox. Configuration is env-var-only.
 - The search API enforces the same ACL path as chat search. Cross-tenant leakage is tested.
-- PATs are stored hashed in the database. The raw token exists only in the sandbox environment and the minting response.
-- PAT scopes are out of scope for this project; they will be addressed by the Permissions system. Session PATs currently have the same permissions as the user.
+- PATs are stored hashed in the `personal_access_token` table. The raw token additionally exists encrypted on the `Sandbox` row (for re-injection) and in the pod environment.
+- PAT scopes are out of scope for this project; they will be addressed by the Permissions system. Craft PATs currently have the same permissions as the user.
 
 ### Repo Conventions
 

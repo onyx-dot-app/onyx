@@ -32,6 +32,7 @@ from onyx.db.enums import SessionOrigin
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
+from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
 from onyx.llm.factory import get_default_llm
@@ -49,9 +50,7 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import PERSISTENT_DOCUMENT_STORAGE_PATH
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -66,6 +65,7 @@ from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
 from onyx.server.features.build.db.sandbox import get_sandbox_by_session_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
@@ -77,8 +77,8 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
     SSEKeepalive,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.tasks.tasks import (
-    _get_disabled_user_library_paths,
+from onyx.server.features.build.sandbox.skills.rendering import (
+    render_company_search_skill,
 )
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -381,6 +381,45 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
+    def push_dynamic_skills(self, sandbox_id: UUID, user_id: UUID) -> None:
+        """Render dynamic skill templates and push them to the sandbox."""
+        try:
+            user = fetch_user_by_id(self._db_session, user_id)
+            if not user:
+                logger.warning("Cannot push dynamic skills: user %s not found", user_id)
+                return
+            skill_file = render_company_search_skill(
+                self._db_session, user, Path(SKILLS_TEMPLATE_PATH)
+            )
+            self._sandbox_manager.write_sandbox_file(
+                sandbox_id, skill_file.path, skill_file.content
+            )
+        except Exception:
+            logger.warning(
+                "Failed to push dynamic skills to sandbox %s", sandbox_id, exc_info=True
+            )
+
+    def _provision_sandbox(
+        self,
+        sandbox: Sandbox,
+        user: User,
+        user_id: UUID,
+        tenant_id: str,
+        llm_config: LLMProviderConfig,
+    ) -> None:
+        """Ensure PAT exists and provision the sandbox pod."""
+        onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
+        sandbox_info = self._sandbox_manager.provision(
+            sandbox_id=sandbox.id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            llm_config=llm_config,
+            onyx_pat=onyx_pat,
+        )
+        update_sandbox_status__no_commit(
+            self._db_session, sandbox.id, sandbox_info.status
+        )
+
     def create_session__no_commit(
         self,
         user_id: UUID,
@@ -437,25 +476,6 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
-        # Build tenant/user-specific path for FILE_SYSTEM documents (sandbox isolation)
-        # Each user's sandbox can only access documents they created
-        # Path structure: {base_path}/{tenant_id}/knowledge/{user_id}/
-        # This matches the path structure used by PersistentDocumentWriter
-        if PERSISTENT_DOCUMENT_STORAGE_PATH:
-            user_file_system_path = str(
-                Path(PERSISTENT_DOCUMENT_STORAGE_PATH)
-                / tenant_id
-                / "knowledge"
-                / str(user_id)
-            )
-        else:
-            # Fallback for local development without persistent storage
-            user_file_system_path = "/tmp/onyx-files"
-
-        # Ensure the user's document directory exists (if local)
-        if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-            Path(user_file_system_path).mkdir(parents=True, exist_ok=True)
-
         # Allocate port for this session (per-session port allocation)
         # Both LOCAL and KUBERNETES backends use the same port allocation strategy
         nextjs_port = allocate_nextjs_port(self._db_session)
@@ -478,6 +498,11 @@ class SessionManager:
             nextjs_port,
         )
 
+        # Fetch user early — needed for PAT provisioning and AGENTS.md personalization
+        user = fetch_user_by_id(self._db_session, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
         # Check if user already has a sandbox (one sandbox per user model)
         existing_sandbox = get_sandbox_by_user_id(self._db_session, user_id)
 
@@ -498,16 +523,7 @@ class SessionManager:
                     sandbox_id,
                     user_id,
                 )
-                sandbox_info = self._sandbox_manager.provision(
-                    sandbox_id=sandbox_id,
-                    user_id=user_id,
-                    tenant_id=tenant_id,
-                    llm_config=llm_config,
-                )
-                # Use update function to also set heartbeat when transitioning to RUNNING
-                update_sandbox_status__no_commit(
-                    self._db_session, sandbox_id, sandbox_info.status
-                )
+                self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
             elif sandbox.status.is_active():
                 # Verify pod is healthy before reusing (use short timeout for quick check)
                 if not self._sandbox_manager.health_check(sandbox_id, timeout=5.0):
@@ -527,15 +543,8 @@ class SessionManager:
                     logger.info(
                         "Re-provisioning sandbox %s for user %s", sandbox_id, user_id
                     )
-                    sandbox_info = self._sandbox_manager.provision(
-                        sandbox_id=sandbox_id,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                        llm_config=llm_config,
-                    )
-                    # Use update function to also set heartbeat when transitioning to RUNNING
-                    update_sandbox_status__no_commit(
-                        self._db_session, sandbox_id, sandbox_info.status
+                    self._provision_sandbox(
+                        sandbox, user, user_id, tenant_id, llm_config
                     )
                 else:
                     logger.info(
@@ -564,55 +573,28 @@ class SessionManager:
                 "Created sandbox record %s for session %s", sandbox_id, session_id
             )
 
-            # Provision sandbox (no DB operations inside)
-            sandbox_info = self._sandbox_manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=user_id,
-                tenant_id=tenant_id,
-                llm_config=llm_config,
-            )
-
-            # Update sandbox status (also refreshes heartbeat when transitioning to RUNNING)
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox_id, sandbox_info.status
-            )
+            self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
 
         # Set up session workspace within the sandbox
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox.id
         )
-        # Fetch user data for personalization in AGENTS.md
-        user = fetch_user_by_id(self._db_session, user_id)
-        user_name = user.personal_name if user else None
-        user_role = user.personal_role if user else None
-
-        # Get excluded user library paths (files with sync_disabled=True)
-        # Only query if not using demo data (user library only applies to user files)
-        excluded_user_library_paths: list[str] | None = None
-        if not demo_data_enabled:
-            excluded_user_library_paths = _get_disabled_user_library_paths(
-                self._db_session, str(user_id)
-            )
-            if excluded_user_library_paths:
-                logger.debug(
-                    "Excluding %s disabled user library paths",
-                    len(excluded_user_library_paths),
-                )
+        user_name = user.personal_name
+        user_role = user.personal_role
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
-            file_system_path=user_file_system_path,
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
             use_demo_data=demo_data_enabled,
-            excluded_user_library_paths=excluded_user_library_paths,
         )
+        self.push_dynamic_skills(sandbox.id, user_id)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -679,6 +661,7 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
+                    self.push_dynamic_skills(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -1415,6 +1398,9 @@ class SessionManager:
             },
         )
 
+        events_emitted = 0
+        state = BuildStreamingState(turn_index=0)
+
         try:
             # Verify session exists and belongs to user
             session = get_build_session(session_id, user_id, self._db_session)
@@ -1611,6 +1597,15 @@ class SessionManager:
             # Update heartbeat after successful message exchange
             update_sandbox_heartbeat(self._db_session, sandbox_id)
 
+        except GeneratorExit:
+            logger.warning(
+                "Stream generator closed for session %s after %d events "
+                "(client disconnected mid-stream)",
+                session_id,
+                events_emitted,
+            )
+            self._finalize_persist(session_id, state)
+            return
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())

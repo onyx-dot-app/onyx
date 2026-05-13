@@ -335,12 +335,28 @@ def verify_email_domain(email: str, *, is_registration: bool = False) -> None:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid")
 
 
-def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
-    """Raise HTTPException(402) if adding users would exceed the seat limit.
+def enforce_seat_limit(
+    db_session: Session,
+    seats_needed: int = 1,
+    lock_session: Session | None = None,
+) -> None:
+    """Raise ``OnyxError(SEAT_LIMIT_EXCEEDED)`` if seats would be exceeded.
 
-    No-op for multi-tenant or CE deployments.
+    Self-hosted runs ``check_seat_availability``; cloud delegates to
+    ``enforce_cloud_seat_limit`` which auto-bills via Stripe. Use
+    ``enforce_seat_limit_locked`` when followed by a write in the same
+    transaction.
     """
     if MULTI_TENANT:
+        fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.billing",
+            "enforce_cloud_seat_limit",
+            lambda **_kw: None,
+        )(
+            seats_needed=seats_needed,
+            tenant_id=get_current_tenant_id(),
+            db_session=lock_session,
+        )
         return
 
     result = fetch_ee_implementation_or_noop(
@@ -349,6 +365,52 @@ def enforce_seat_limit(db_session: Session, seats_needed: int = 1) -> None:
 
     if result is not None and not result.available:
         raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message)
+
+
+def enforce_seat_limit_locked(db_session: Session, seats_needed: int = 1) -> None:
+    """Acquire the tenant advisory lock on ``db_session``, then enforce.
+
+    Self-hosted: lock + ``check_seat_availability`` on the caller's
+    session — held until caller commits.
+
+    Cloud: lock + ``get_tenant_count`` + Stripe modify also held on the
+    caller's session — released on caller commit so the seat-consuming
+    write (e.g. ``activate_user``) is covered.
+    """
+    fetch_ee_implementation_or_noop("onyx.db.license", "acquire_seat_lock", None)(
+        db_session, get_current_tenant_id()
+    )
+
+    enforce_seat_limit(db_session, seats_needed=seats_needed, lock_session=db_session)
+
+
+def _user_currently_counts_toward_seats(user: User) -> bool:
+    """Delegate to canonical ``ee/onyx/db/license.py:user_counts_toward_seats``."""
+    return bool(
+        fetch_ee_implementation_or_noop(
+            "onyx.db.license", "user_counts_toward_seats", False
+        )(user)
+    )
+
+
+def _upgrade_will_add_seat(user_before: User, will_become_active: bool) -> bool:
+    """Whether promoting to STANDARD will consume a seat.
+
+    Cloud counts ``UserTenantMapping`` rows, not user attributes — an
+    upgrade leaves the mapping count unchanged, so always seat-neutral
+    in MT. Self-hosted compares the per-user predicate before vs after.
+    """
+    if MULTI_TENANT:
+        return False
+    will_be_counted = will_become_active and user_before.email != ANONYMOUS_USER_EMAIL
+    return will_be_counted and not _user_currently_counts_toward_seats(user_before)
+
+
+def _invalidate_license_cache_after_seat_change() -> None:
+    """Invalidate license cache so middleware re-reads ``used_seats``."""
+    fetch_ee_implementation_or_noop(
+        "onyx.db.license", "invalidate_license_cache", None
+    )()
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -479,11 +541,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             UserRole.ADMIN
                         )
 
-                # Check seat availability for new users (single-tenant only)
-                with get_session_with_current_tenant() as sync_db:
-                    existing = get_user_by_email(user_create.email, sync_db)
-                    if existing is None:
-                        enforce_seat_limit(sync_db)
+                # Lock + check on the same session that does the insert.
+                existing = await self.user_db.session.run_sync(
+                    lambda s: get_user_by_email(user_create.email, s)
+                )
+                if existing is None:
+                    await self.user_db.session.run_sync(
+                        lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+                    )
 
                 user_created = False
                 try:
@@ -598,11 +663,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_id: uuid.UUID,
         user_create: UserCreate,
     ) -> None:
-        """Upgrade a non-web user to STANDARD and assign default groups atomically.
+        """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
-        All writes happen in a single sync transaction so neither the field
-        update nor the group assignment is visible without the other.
+        Enforces the seat limit inside the same transaction when the
+        upgrade flips an uncounted user (EXT_PERM_USER, SERVICE_ACCOUNT)
+        into a counted one.
         """
+        seat_added = False
         with get_session_with_current_tenant() as sync_db:
             sync_user = (
                 sync_db.query(User)
@@ -610,6 +677,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 .first()
             )
             if sync_user:
+                if _upgrade_will_add_seat(
+                    sync_user, will_become_active=bool(sync_user.is_active)
+                ):
+                    enforce_seat_limit_locked(sync_db, seats_needed=1)
+                    seat_added = True
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
                 )
@@ -627,6 +699,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     "User %s not found in sync session during upgrade to standard; skipping upgrade",
                     user_id,
                 )
+        if seat_added:
+            _invalidate_license_cache_after_seat_change()
 
     async def validate_password(  # ty: ignore[invalid-method-override]
         self, password: str, _: schemas.UC | models.UP
@@ -742,9 +816,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 except exceptions.UserNotExists:
                     verify_email_domain(account_email, is_registration=True)
 
-                    # Check seat availability before creating (single-tenant only)
-                    with get_session_with_current_tenant() as sync_db:
-                        enforce_seat_limit(sync_db)
+                    # Lock + check on the same session that does the insert.
+                    await self.user_db.session.run_sync(
+                        lambda s: enforce_seat_limit_locked(s, seats_needed=1)
+                    )
 
                     password = self.password_helper.generate()
                     user_dict = {
@@ -794,16 +869,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         if user_by_session:
                             user = user_by_session
 
-                # If the user is inactive, check seat availability before
-                # upgrading role — otherwise they'd become an inactive BASIC
-                # user who still can't log in.
-                if not user.is_active:
-                    with get_session_with_current_tenant() as sync_db:
-                        enforce_seat_limit(sync_db)
-
-                # Upgrade the user and assign default groups in a single
-                # transaction so neither change is visible without the other.
+                # Lock + check + upgrade in one transaction.
                 was_inactive = not user.is_active
+                seat_added = False
                 with get_session_with_current_tenant() as sync_db:
                     sync_user = (
                         sync_db.query(User)
@@ -811,6 +879,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         .first()
                     )
                     if sync_user:
+                        will_become_active = (
+                            True if was_inactive else bool(sync_user.is_active)
+                        )
+                        if _upgrade_will_add_seat(
+                            sync_user, will_become_active=will_become_active
+                        ):
+                            enforce_seat_limit_locked(sync_db, seats_needed=1)
+                            seat_added = True
                         sync_user.is_verified = is_verified_by_default
                         sync_user.role = UserRole.BASIC
                         sync_user.account_type = AccountType.STANDARD
@@ -818,6 +894,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             sync_user.is_active = True
                         assign_user_to_default_groups__no_commit(sync_db, sync_user)
                         sync_db.commit()
+                if seat_added:
+                    _invalidate_license_cache_after_seat_change()
 
                 # Refresh the async user object so downstream code
                 # (e.g. oidc_expiry check) sees the updated fields.

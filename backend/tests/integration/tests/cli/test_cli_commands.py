@@ -307,19 +307,6 @@ def test_ask_not_configured(
     assert result.returncode == 3
 
 
-# --- configure ---
-
-
-def test_configure_non_tty(
-    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
-) -> None:
-    """configure without TTY returns BadRequest (exit code 2)."""
-    result = run_cli(cli_binary, ["configure"])
-
-    assert result.returncode == 2
-    assert "interactive terminal" in result.stderr.lower()
-
-
 # --- agents ---
 
 

@@ -2,7 +2,6 @@
 export {
   Content,
   type ContentProps,
-  type ContentColor,
   type SizePreset,
   type ContentVariant,
 } from "@opal/layouts/content/components";

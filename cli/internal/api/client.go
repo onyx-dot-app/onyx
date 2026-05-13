@@ -68,7 +68,21 @@ func checkResponse(resp *http.Response) error {
 		return nil
 	}
 	body, _ := io.ReadAll(resp.Body)
+	if isHTMLResponse(resp.Header.Get("Content-Type"), body) {
+		return &OnyxAPIError{
+			StatusCode: resp.StatusCode,
+			Detail:     "server returned HTML instead of JSON — your server URL may be pointing at the web UI instead of the API (try appending /api)",
+		}
+	}
 	return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+}
+
+func isHTMLResponse(contentType string, body []byte) bool {
+	if strings.Contains(contentType, "text/html") {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html")
 }
 
 func wrapTimeoutError(err error) error {

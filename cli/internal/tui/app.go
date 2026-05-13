@@ -28,6 +28,8 @@ type Model struct {
 	width  int
 	height int
 
+	startMode startMode
+
 	// Chat state
 	chatSessionID   *string
 	agentID       int
@@ -68,8 +70,18 @@ func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 	}
 }
 
+// NewFirstRunModel creates a TUI model that auto-enters configure mode on startup.
+func NewFirstRunModel(cfg config.OnyxCliConfig) Model {
+	model := NewModel(cfg, nil)
+	model.startMode = startFirstRun
+	return model
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
 	return loadAgentsCmd(m.client)
 }
 
@@ -94,13 +106,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.textInput.Width = msg.Width - 4
 		if !m.splashShown {
 			m.splashShown = true
-			// bottomHeight = sep + input + sep + status = 4 (approx)
 			viewportHeight := msg.Height - 4
 			if viewportHeight < 1 {
 				viewportHeight = msg.Height
 			}
 			m.viewport.addSplash(viewportHeight)
-			// Delay input focus to let terminal query responses flush
 			return m, tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 				return inputReadyMsg{}
 			})
@@ -157,6 +167,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initInputReady = true
 		m.input.textInput.Focus()
 		m.input.textInput.SetValue("")
+		if m.startMode == startFirstRun {
+			m, cmd := enterConfigureMode(m)
+			return m, tea.Batch(m.input.textInput.Cursor.BlinkCmd(), cmd)
+		}
 		return m, m.input.textInput.Cursor.BlinkCmd()
 
 	case resetQuitMsg:

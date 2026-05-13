@@ -12,7 +12,7 @@ func requireConfig() (config.OnyxCliConfig, error) {
 	cfg := config.Load()
 	if !cfg.IsConfigured() {
 		return cfg, exitcodes.New(exitcodes.NotConfigured,
-			"onyx CLI is not configured\n  Set ONYX_PAT (personal access token) or run: onyx-cli configure")
+			"onyx CLI is not configured\n  Set ONYX_PAT (and optionally ONYX_SERVER_URL), or run: onyx-cli chat to complete first-time setup")
 	}
 	return cfg, nil
 }
