@@ -30,10 +30,11 @@ export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
   const { isAdmin, isCurator } = useUser();
-  const { ccPairs, isLoading } = useCCPairs();
+  const canManageConnectors = isAdmin || isCurator;
+  const { ccPairs, isLoading } = useCCPairs(canManageConnectors);
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  if (isLoading || hasConnectorEverSucceeded || (!isAdmin && !isCurator)) {
+  if (!canManageConnectors || isLoading || hasConnectorEverSucceeded) {
     return null;
   }
 

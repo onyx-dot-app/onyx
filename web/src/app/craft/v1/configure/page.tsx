@@ -37,6 +37,7 @@ import {
 export default function BuildConfigPage() {
   const { llmProviders } = useLLMProviders();
   const { isAdmin, isCurator } = useUser();
+  const canManageConnectors = isAdmin || isCurator;
   const { openUserInfoEditor, openLlmSetup } = useOnboarding();
   const [showUserLibraryModal, setShowUserLibraryModal] = useState(false);
 
@@ -265,7 +266,7 @@ export default function BuildConfigPage() {
                   </button>
                 </InputHorizontal>
               </Card>
-              {(isAdmin || isCurator) && (
+              {canManageConnectors && (
                 <Card>
                   <InputHorizontal
                     title="Connect your data"
