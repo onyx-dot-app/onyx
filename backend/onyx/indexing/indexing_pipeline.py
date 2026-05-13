@@ -1150,17 +1150,12 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            try:
-                execute_hook(
-                    db_session=db_session,
-                    hook_point=HookPoint.DOCUMENT_PUSH,
-                    payload=payload.model_dump(),
-                    response_type=DocumentPushResponse,
-                )
-            except Exception:
-                logger.exception(
-                    "document-push hook raised for doc_id=%s; skipping", doc_id
-                )
+            execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.DOCUMENT_PUSH,
+                payload=payload.model_dump(),
+                response_type=DocumentPushResponse,
+            )
 
 
 @log_function_time(debug_only=True)

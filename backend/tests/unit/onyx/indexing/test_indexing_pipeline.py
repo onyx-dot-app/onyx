@@ -373,7 +373,7 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
-def test_document_push_hook_exception_does_not_abort_batch() -> None:
+def test_document_push_hook_exception_propagates() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
     doc = _make_doc(doc_id="doc1")
@@ -382,8 +382,9 @@ def test_document_push_hook_exception_does_not_abort_batch() -> None:
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
         patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
+        pytest.raises(RuntimeError, match="hard fail"),
     ):
-        # Must not raise even when execute_hook raises (e.g. HARD fail strategy).
+        # Fail strategy is the executor's responsibility — exceptions must propagate.
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
 
 
