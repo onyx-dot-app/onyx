@@ -11,6 +11,7 @@ import {
   SvgSlack,
 } from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
+import useCCPairs from "@/hooks/useCCPairs";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -27,6 +28,13 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
+  const { ccPairs, isLoading } = useCCPairs();
+  const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
+
+  if (isLoading || hasConnectorEverSucceeded) {
+    return null;
+  }
+
   const handleClick = () => {
     window.location.href = "/admin/indexing/status";
   };
