@@ -97,9 +97,6 @@ RUN chown -R sandbox:sandbox /workspace
 COPY --from=amazon/aws-cli:latest /usr/local/aws-cli /usr/local/aws-cli
 RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
 
-# Install onyx-cli (Go binary distributed as pip package)
-RUN pip install onyx-cli==1.0.1
-
 # Switch to non-root user
 USER sandbox
 WORKDIR /workspace
