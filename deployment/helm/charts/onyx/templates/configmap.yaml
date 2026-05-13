@@ -39,3 +39,4 @@ data:
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
   {{- end }}
+  SANDBOX_BACKEND: "kubernetes"
