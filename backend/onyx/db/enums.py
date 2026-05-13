@@ -388,6 +388,7 @@ class LLMModelFlowType(str, PyEnum):
 
 class HookPoint(str, PyEnum):
     DOCUMENT_INGESTION = "document_ingestion"
+    DOCUMENT_PUSH = "document_push"
     QUERY_PROCESSING = "query_processing"
 
 
