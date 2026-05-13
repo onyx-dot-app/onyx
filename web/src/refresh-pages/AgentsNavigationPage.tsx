@@ -81,9 +81,7 @@ export default function AgentsNavigationPage() {
     });
   }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
-  const featuredAgents = [
-    ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.is_featured),
-  ];
+  const featuredAgents = memoizedCurrentlyVisibleAgents.filter((agent) => agent.is_featured);
   const allAgents = memoizedCurrentlyVisibleAgents.filter(
     (agent) => !agent.is_featured
   );

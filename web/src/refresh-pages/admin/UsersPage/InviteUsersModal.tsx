@@ -174,11 +174,7 @@ export default function InviteUsersModal({
             }
             submit={
               <Button
-                disabled={
-                  isSubmitting ||
-                  chips.length === 0 ||
-                  chips.every((c) => c.error)
-                }
+                disabled={isSubmitting || chips.every((c) => c.error)}
                 onClick={handleInvite}
               >
                 Invite

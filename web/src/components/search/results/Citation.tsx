@@ -77,14 +77,14 @@ export function Citation({
         <TooltipTrigger asChild>
           <span
             onClick={() => {
-              document_info?.document
-                ? openDocument(
-                    document_info.document,
-                    document_info.updatePresentingDocument
-                  )
-                : question_info?.question
-                  ? question_info.openQuestion(question_info.question)
-                  : null;
+              if (document_info?.document) {
+                openDocument(
+                  document_info.document,
+                  document_info.updatePresentingDocument
+                );
+              } else if (question_info?.question) {
+                question_info.openQuestion(question_info.question);
+              }
             }}
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out ml-1"
           >
@@ -112,8 +112,8 @@ export function Citation({
             />
           ) : (
             <CompactQuestionCard
-              question={question_info?.question!}
-              openQuestion={question_info?.openQuestion!}
+              question={question_info!.question}
+              openQuestion={question_info!.openQuestion}
             />
           )}
         </TooltipContent>

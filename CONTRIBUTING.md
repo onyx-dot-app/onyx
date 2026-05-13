@@ -167,6 +167,15 @@ npx oxfmt .  # from onyx/web
 
 Pre-commit will also run oxfmt automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
 
+We use `oxlint` for linting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the linter:
+
+```bash
+npx oxlint  # from onyx/web
+npx oxlint --fix  # auto-fix what it can
+```
+
+Pre-commit will also run oxlint automatically. If it reports errors, fix them and commit again.
+
 ---
 
 ## Running the Application

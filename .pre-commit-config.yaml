@@ -153,6 +153,13 @@ repos:
         language: system
         types_or: [html, css, javascript, ts, tsx]
 
+      - id: oxlint
+        name: oxlint
+        entry: bash -c 'cd web && npx oxlint'
+        language: system
+        pass_filenames: false
+        types_or: [javascript, ts, tsx]
+
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:
       #   1. Try updating: cd web && npm update @typescript/native-preview

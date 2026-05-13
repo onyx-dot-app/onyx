@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "nextjs/no-img-element": "off",
+    "react/exhaustive-deps": "off",
+    "typescript/no-unused-vars": "off",
+    "unicorn/no-thenable": "off",
+    "no-unused-vars": [
+      "warn",
+      {
+        "vars": "all",
+        "varsIgnorePattern": "^_",
+        "args": "after-used",
+        "argsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ]
+  },
+  "ignorePatterns": [
+    ".next",
+    "node_modules",
+    "out",
+    "build",
+    "public",
+    "storybook-static",
+    "lib/opal/dist"
+  ],
+  "env": {
+    "builtin": true
+  }
+}
