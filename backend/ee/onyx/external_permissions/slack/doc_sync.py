@@ -11,6 +11,8 @@ from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import get_channels
+from onyx.connectors.slack.connector import get_channels_across_teams
+from onyx.connectors.slack.connector import list_grid_team_ids
 from onyx.connectors.slack.connector import make_paginated_slack_api_call
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -41,24 +43,41 @@ def _fetch_channel_permissions(
     slack_client: WebClient,
     workspace_permissions: ExternalAccess,
     user_id_to_email_map: dict[str, str],
+    team_ids: list[str] | None = None,
 ) -> dict[str, ExternalAccess]:
     channel_permissions = {}
-    public_channels = get_channels(
-        client=slack_client,
-        get_public=True,
-        get_private=False,
-    )
+    if team_ids:
+        # Enterprise Grid: enumerate channels across every workspace in the org
+        # so org-shared and per-workspace channels are all covered.
+        public_channels = get_channels_across_teams(
+            client=slack_client,
+            team_ids=team_ids,
+            get_public=True,
+            get_private=False,
+        )
+        private_channels = get_channels_across_teams(
+            client=slack_client,
+            team_ids=team_ids,
+            get_public=False,
+            get_private=True,
+        )
+    else:
+        public_channels = get_channels(
+            client=slack_client,
+            get_public=True,
+            get_private=False,
+        )
+        private_channels = get_channels(
+            client=slack_client,
+            get_public=False,
+            get_private=True,
+        )
     public_channel_ids = [
         channel["id"] for channel in public_channels if "id" in channel
     ]
     for channel_id in public_channel_ids:
         channel_permissions[channel_id] = workspace_permissions
 
-    private_channels = get_channels(
-        client=slack_client,
-        get_public=False,
-        get_private=True,
-    )
     private_channel_ids = [
         channel["id"] for channel in private_channels if "id" in channel
     ]
@@ -171,6 +190,16 @@ def slack_doc_sync(
             "No user id to email map found. Please check to make sure that your Slack bot token has the `users:read.email` scope"
         )
 
+    # Detect Enterprise Grid via auth_test and enumerate teams once so channel
+    # listing covers every workspace in the org.
+    grid_team_ids: list[str] | None = None
+    try:
+        auth_response = slack_client.auth_test()
+        if auth_response.get("enterprise_id"):
+            grid_team_ids = list_grid_team_ids(slack_client)
+    except Exception as e:
+        logger.warning("Slack Grid detection during perm sync failed: %s", e)
+
     workspace_permissions = _fetch_workspace_permissions(
         user_id_to_email_map=user_id_to_email_map,
     )
@@ -178,6 +207,7 @@ def slack_doc_sync(
         slack_client=slack_client,
         workspace_permissions=workspace_permissions,
         user_id_to_email_map=user_id_to_email_map,
+        team_ids=grid_team_ids,
     )
 
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)

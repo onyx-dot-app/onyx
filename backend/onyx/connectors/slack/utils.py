@@ -35,11 +35,25 @@ def get_base_url(token: str) -> str:
     return client.auth_test()["url"]
 
 
-def get_message_link(event: MessageType, client: WebClient, channel_id: str) -> str:
+def get_message_link(
+    event: MessageType,
+    client: WebClient,
+    channel_id: str,
+    team_id: str | None = None,
+    team_id_to_url: dict[str, str] | None = None,
+) -> str:
     message_ts = event["ts"]
     message_ts_without_dot = message_ts.replace(".", "")
     thread_ts = event.get("thread_ts")
-    base_url = get_base_url(client.token)
+
+    # On Enterprise Grid the channel lives under a specific workspace (team_id).
+    # Prefer that workspace URL so the link opens the correct workspace, falling
+    # back to auth.test on the token (org URL for org-level installs).
+    base_url: str | None = None
+    if team_id and team_id_to_url is not None:
+        base_url = team_id_to_url.get(team_id)
+    if not base_url:
+        base_url = get_base_url(client.token)
 
     link = f"{base_url.rstrip('/')}/archives/{channel_id}/p{message_ts_without_dot}" + (
         f"?thread_ts={thread_ts}" if thread_ts else ""
