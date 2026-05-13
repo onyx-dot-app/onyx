@@ -1,11 +1,13 @@
 from pathlib import Path
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.skills.registry import BuiltinSkill
 from onyx.skills.registry import BuiltinSkillRegistry
+from onyx.skills.registry import CustomSkill
 from onyx.skills.registry import Skill
 
 
@@ -65,6 +67,29 @@ def test_shared_skill_shape_is_mutable() -> None:
     assert skill.description == "After"
 
 
+def test_custom_skill_shape_matches_editable_db_metadata() -> None:
+    skill = CustomSkill(
+        id=uuid4(),
+        slug="custom",
+        name="Before",
+        description="Before",
+        bundle_file_id="file-id",
+        bundle_sha256="a" * 64,
+        manifest_metadata={"version": "1"},
+        is_public=False,
+        enabled=True,
+    )
+
+    skill.name = "After"
+    skill.description = "After"
+    skill.enabled = False
+
+    assert skill.source == "custom"
+    assert skill.name == "After"
+    assert skill.description == "After"
+    assert skill.enabled is False
+
+
 def test_builtin_skill_is_frozen(tmp_path: Path) -> None:
     skill = BuiltinSkill(
         slug="builtin",
@@ -76,6 +101,8 @@ def test_builtin_skill_is_frozen(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="frozen"):
         skill.name = "Changed"
+
+    assert skill.source == "builtin"
 
 
 def test_register_rejects_missing_skill_md(tmp_path: Path) -> None:

@@ -2,7 +2,10 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
+from typing import Any
 from typing import ClassVar
+from typing import Literal
+from uuid import UUID
 
 import yaml
 from pydantic import BaseModel
@@ -42,11 +45,24 @@ class BuiltinSkill(Skill):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    source: Literal["builtin"] = "builtin"
     source_dir: Path
     has_template: bool
     is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
     unavailable_reason: str | None = None
     configure_url: str | None = None
+
+
+class CustomSkill(Skill):
+    """DB-backed skill metadata needed by skill consumers."""
+
+    source: Literal["custom"] = "custom"
+    id: UUID
+    bundle_file_id: str
+    bundle_sha256: str
+    manifest_metadata: dict[str, Any]
+    is_public: bool
+    enabled: bool
 
 
 def _select_skill_definition_path(source_dir: Path) -> tuple[Path, bool]:
