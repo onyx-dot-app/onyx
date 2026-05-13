@@ -47,6 +47,7 @@ from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.db.build_session import release_session_port__no_commit
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
@@ -454,6 +455,19 @@ def _drive_agent(
                 )
             logger.exception("Scheduled run %s failed", run_id)
             return False
+        finally:
+            # Drop the nextjs_port allocation so the [3010, 3100) range
+            # doesn't exhaust after ~90 fires. The session row stays so
+            # the user can still open the past run; `sessions_api`
+            # re-allocates a port on demand when they do.
+            try:
+                release_session_port__no_commit(db_session, session_id)
+                db_session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to release nextjs_port for scheduled-run session %s",
+                    session_id,
+                )
 
 
 # Re-export for the Celery task wrapper.
