@@ -3,6 +3,7 @@
  */
 
 import { formatDistanceToNowStrict, formatRelative } from "date-fns";
+import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/interfaces";
 
 export function getBrowserTimezone(): string {
   try {
@@ -83,4 +84,31 @@ export function formatRunDuration(
   const end = new Date(finishedAt).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end)) return "—";
   return formatDurationMs(end - start);
+}
+
+/**
+ * Returns a human-readable reason a run row can't be opened as a session,
+ * or `null` when the row is clickable.
+ *
+ * A row is clickable only when the run reached a terminal state (`succeeded`
+ * or `failed`) AND has an associated session — every other state means the
+ * session view would be missing or mid-flight.
+ */
+export function getNonClickableReason(run: ScheduledRunSummary): string | null {
+  switch (run.status) {
+    case "queued":
+      return "This run hasn't started yet — no session to open.";
+    case "running":
+      return "Run still in progress — open it once it finishes.";
+    case "awaiting_approval":
+      return "Run is paused awaiting approval — open it once it resumes.";
+    case "skipped":
+      return "This run was skipped because a prior run was still in flight — no session was created.";
+    case "succeeded":
+    case "failed":
+      if (!run.session_id) {
+        return "This run ended before a session was created.";
+      }
+      return null;
+  }
 }

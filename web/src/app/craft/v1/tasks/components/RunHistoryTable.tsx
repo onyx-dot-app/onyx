@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Table, createTableColumns } from "@opal/components";
+import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
+import SvgLock from "@opal/icons/lock";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
@@ -13,24 +14,41 @@ import {
   buildSessionPath,
   RUNS_PAGE_SIZE,
 } from "@/app/craft/v1/tasks/constants";
-import type {
-  ScheduledRunSummary,
-  ScheduledTaskRunStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/interfaces";
 import {
   formatAbsolute,
   formatRelativeShort,
   formatRunDuration,
+  getNonClickableReason,
 } from "@/app/craft/v1/tasks/utils";
 
 interface RunHistoryTableProps {
   taskId: string;
 }
 
-const CLICKABLE_STATUSES: ReadonlySet<ScheduledTaskRunStatus> =
-  new Set<ScheduledTaskRunStatus>(["succeeded", "failed"]);
-
 const tc = createTableColumns<ScheduledRunSummary>();
+
+interface NonClickableCellProps {
+  reason: string | null;
+  children: ReactNode;
+}
+
+// Wraps a cell's content so non-clickable rows get a clear "you can't click
+// this" affordance: dimmed content, ``not-allowed`` cursor, and a tooltip
+// explaining why. Clickable rows pass through unchanged.
+function NonClickableCell({ reason, children }: NonClickableCellProps) {
+  if (!reason) return <>{children}</>;
+  return (
+    <Tooltip tooltip={reason} side="top" delayDuration={150}>
+      <div
+        data-non-clickable="true"
+        className="flex w-full cursor-not-allowed items-center opacity-60"
+      >
+        {children}
+      </div>
+    </Tooltip>
+  );
+}
 
 function buildColumns() {
   return [
@@ -38,37 +56,56 @@ function buildColumns() {
       header: "Started",
       weight: 22,
       enableSorting: false,
-      cell: (value) => (
-        <div className="flex flex-col gap-0.5">
-          <Text mainUiBody text05 nowrap>
-            {formatAbsolute(value)}
-          </Text>
-          <Text secondaryBody text03>
-            {formatRelativeShort(value)}
-          </Text>
-        </div>
+      cell: (value, row) => (
+        <NonClickableCell reason={getNonClickableReason(row)}>
+          <div className="flex flex-col gap-0.5">
+            <Text mainUiBody text05 nowrap>
+              {formatAbsolute(value)}
+            </Text>
+            <Text secondaryBody text03>
+              {formatRelativeShort(value)}
+            </Text>
+          </div>
+        </NonClickableCell>
       ),
     }),
     tc.column("status", {
       header: "Status",
       weight: 14,
       enableSorting: false,
-      cell: (status) => (
-        // Wrapper exposes the status to Playwright (and lets the row's
-        // ``onRowClick`` still navigate via event bubbling).
-        <div data-run-status={status}>
-          <RunStatusBadge status={status} />
-        </div>
-      ),
+      cell: (status, row) => {
+        const reason = getNonClickableReason(row);
+        return (
+          // Wrapper exposes the status to Playwright (and lets the row's
+          // ``onRowClick`` still navigate via event bubbling).
+          <NonClickableCell reason={reason}>
+            <div
+              data-run-status={status}
+              className="inline-flex items-center gap-1.5"
+            >
+              <RunStatusBadge status={status} />
+              {reason && (
+                <SvgLock
+                  size={12}
+                  className="text-text-03"
+                  aria-label="Not openable"
+                />
+              )}
+            </div>
+          </NonClickableCell>
+        );
+      },
     }),
     tc.displayColumn({
       id: "duration",
       header: "Duration",
       width: { weight: 12 },
       cell: (row) => (
-        <Text mainUiBody text03 nowrap>
-          {formatRunDuration(row.started_at, row.finished_at)}
-        </Text>
+        <NonClickableCell reason={getNonClickableReason(row)}>
+          <Text mainUiBody text03 nowrap>
+            {formatRunDuration(row.started_at, row.finished_at)}
+          </Text>
+        </NonClickableCell>
       ),
     }),
     tc.displayColumn({
@@ -76,19 +113,23 @@ function buildColumns() {
       header: "Summary",
       width: { weight: 38 },
       cell: (row) => (
-        <Text mainUiBody text03>
-          {row.summary ?? row.skip_reason ?? row.error_class ?? "—"}
-        </Text>
+        <NonClickableCell reason={getNonClickableReason(row)}>
+          <Text mainUiBody text03>
+            {row.summary ?? row.skip_reason ?? row.error_class ?? "—"}
+          </Text>
+        </NonClickableCell>
       ),
     }),
     tc.column("trigger_source", {
       header: "Trigger",
       weight: 14,
       enableSorting: false,
-      cell: (value) => (
-        <Text mainUiBody text03 nowrap>
-          {value === "manual_run_now" ? "Run Now" : "Schedule"}
-        </Text>
+      cell: (value, row) => (
+        <NonClickableCell reason={getNonClickableReason(row)}>
+          <Text mainUiBody text03 nowrap>
+            {value === "manual_run_now" ? "Run Now" : "Schedule"}
+          </Text>
+        </NonClickableCell>
       ),
     }),
   ];
@@ -179,7 +220,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         getRowId={(row) => row.id}
         selectionBehavior="single-select"
         onRowClick={(row) => {
-          if (CLICKABLE_STATUSES.has(row.status) && row.session_id) {
+          if (!getNonClickableReason(row) && row.session_id) {
             router.push(buildSessionPath(row.session_id));
           }
         }}
