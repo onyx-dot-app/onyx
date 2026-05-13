@@ -29,10 +29,10 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectorBannersRow({
   className,
 }: ConnectorBannersRowProps) {
-  const { ccPairs } = useCCPairs();
+  const { ccPairs, isLoading } = useCCPairs();
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  if (hasConnectorEverSucceeded) {
+  if (isLoading || hasConnectorEverSucceeded) {
     return null;
   }
 
