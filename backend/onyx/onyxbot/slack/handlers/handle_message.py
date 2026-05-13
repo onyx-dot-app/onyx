@@ -344,6 +344,14 @@ def handle_message(
                         OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message
                     )
 
+            # Snapshot pre-call seat-counted state. ``add_slack_user_if_not_exists``
+            # mutates ``existing_user`` in place on EXT_PERM_USER -> BOT, so
+            # reading ``account_type`` after the call would see the new value
+            # and skip cache invalidation.
+            consumed_seat = existing_user is None or (
+                existing_user.account_type == AccountType.EXT_PERM_USER
+            )
+
             try:
                 add_slack_user_if_not_exists(
                     db_session,
@@ -370,11 +378,6 @@ def handle_message(
                 )
                 return False
             else:
-                # Invalidate the license cache whenever the call consumed
-                # a seat: brand-new BOT insert OR EXT_PERM_USER -> BOT.
-                consumed_seat = existing_user is None or (
-                    existing_user.account_type == AccountType.EXT_PERM_USER
-                )
                 if consumed_seat:
                     invalidate_fn = fetch_ee_implementation_or_noop(
                         "onyx.db.license",
