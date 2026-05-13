@@ -118,7 +118,7 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
+        nextjs_port: int | None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,

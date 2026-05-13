@@ -476,9 +476,16 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
-        # Allocate port for this session (per-session port allocation)
-        # Both LOCAL and KUBERNETES backends use the same port allocation strategy
-        nextjs_port = allocate_nextjs_port(self._db_session)
+        # Allocate port for this session (per-session port allocation).
+        # Both LOCAL and KUBERNETES backends use the same port allocation
+        # strategy. Skipped for SCHEDULED sessions: scheduled-task fires
+        # are headless, never attach a preview, and pile up so fast they'd
+        # exhaust the [3010, 3100) range on a busy tenant.
+        nextjs_port: int | None
+        if origin == SessionOrigin.SCHEDULED:
+            nextjs_port = None
+        else:
+            nextjs_port = allocate_nextjs_port(self._db_session)
 
         # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(

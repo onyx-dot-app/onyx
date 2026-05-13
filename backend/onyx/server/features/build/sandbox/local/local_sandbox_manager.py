@@ -293,7 +293,7 @@ class LocalSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
+        nextjs_port: int | None,
         snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
@@ -312,7 +312,9 @@ class LocalSandboxManager(SandboxManager):
         6. opencode.json
         7. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
         8. attachments/
-        9. Start Next.js dev server for this session
+        9. Start Next.js dev server for this session (skipped when
+           ``nextjs_port`` is None — headless callers like the scheduled-task
+           executor don't attach a preview).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -388,21 +390,29 @@ class LocalSandboxManager(SandboxManager):
             )
             logger.debug("Opencode config ready")
 
-            # Start Next.js server on pre-allocated port
-            web_dir = self._directory_manager.get_web_path(
-                sandbox_path, str(session_id)
-            )
-            logger.info(
-                "Starting Next.js server at %s on port %s", web_dir, nextjs_port
-            )
+            # Start Next.js server on pre-allocated port. Skipped for
+            # headless callers (e.g. scheduled-task fires) that pass
+            # `nextjs_port=None`.
+            if nextjs_port is not None:
+                web_dir = self._directory_manager.get_web_path(
+                    sandbox_path, str(session_id)
+                )
+                logger.info(
+                    "Starting Next.js server at %s on port %s", web_dir, nextjs_port
+                )
 
-            nextjs_process = self._process_manager.start_nextjs_server(
-                web_dir, nextjs_port
-            )
-            # Store process for clean shutdown on session delete
-            with self._nextjs_lock:
-                self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
-            logger.info("Next.js server started successfully")
+                nextjs_process = self._process_manager.start_nextjs_server(
+                    web_dir, nextjs_port
+                )
+                # Store process for clean shutdown on session delete
+                with self._nextjs_lock:
+                    self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
+                logger.info("Next.js server started successfully")
+            else:
+                logger.info(
+                    "Skipping Next.js dev server for session %s (no port allocated)",
+                    session_id,
+                )
 
             # Setup venv and AGENTS.md
             logger.debug("Setting up virtual environment")

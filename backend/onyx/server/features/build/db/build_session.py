@@ -573,22 +573,6 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     return result
 
 
-def release_session_port__no_commit(db_session: Session, session_id: UUID) -> None:
-    """Release the nextjs_port allocation for a single session.
-
-    Headless scheduled runs share their user's still-running sandbox, so
-    `clear_nextjs_ports_for_user` (which only fires on sandbox sleep) never
-    drops their port — the range exhausts after ~90 fires. Call this at
-    the end of every scheduled run; `sessions_api` re-allocates on demand
-    when the user later opens the run.
-    """
-    db_session.query(BuildSession).filter(
-        BuildSession.id == session_id,
-        BuildSession.nextjs_port.isnot(None),
-    ).update({BuildSession.nextjs_port: None})
-    db_session.flush()
-
-
 def fetch_llm_provider_by_type_for_build_mode(
     db_session: Session, provider_type: str
 ) -> LLMProviderView | None:

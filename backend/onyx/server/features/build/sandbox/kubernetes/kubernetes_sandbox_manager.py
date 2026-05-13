@@ -987,7 +987,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
+        nextjs_port: int | None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -1003,7 +1003,8 @@ class KubernetesSandboxManager(SandboxManager):
         3. Write AGENTS.md
         4. Write opencode.json with LLM config
         5. Create org_info/ directory with user identity file (if demo data enabled)
-        6. Start Next.js dev server
+        6. Start Next.js dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't need a preview).
 
         Note: Snapshot restoration is not supported in Kubernetes mode since the
         main container doesn't have S3 access. Snapshots would need to be
@@ -1100,9 +1101,16 @@ else
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup)
-        nextjs_start_script = _build_nextjs_start_script(
-            session_path, nextjs_port, check_node_modules=False
+        # Build NextJS startup script (npm install already done in outputs_setup).
+        # Headless callers (scheduled tasks) pass nextjs_port=None and don't
+        # need a dev server — the agent's tools work without one and the
+        # preview iframe isn't attached.
+        nextjs_start_script = (
+            _build_nextjs_start_script(
+                session_path, nextjs_port, check_node_modules=False
+            )
+            if nextjs_port is not None
+            else ""
         )
 
         setup_script = f"""
