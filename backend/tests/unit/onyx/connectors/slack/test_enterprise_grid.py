@@ -145,6 +145,18 @@ class TestGetChannelsAcrossTeams:
             assert get_channels_across_teams(MagicMock(), []) == []
             mock_get_channels.assert_not_called()
 
+    def test_stamps_team_id_when_channel_team_missing(self) -> None:
+        # Slack omits the team field on conversations.list when called with
+        # an explicit team_id. Stamping the queried team_id onto each channel
+        # lets downstream URL resolution work without an extra API call.
+        ch_no_team = _channel("C1")
+        ch_with_team = _channel("C2", team="T_EXISTING")
+        with patch("onyx.connectors.slack.connector.get_channels") as mock_get_channels:
+            mock_get_channels.side_effect = [[ch_no_team, ch_with_team]]
+            result = get_channels_across_teams(MagicMock(), ["T_QUERIED"])
+            stamped = {c["id"]: c.get("team") for c in result}
+            assert stamped == {"C1": "T_QUERIED", "C2": "T_EXISTING"}
+
 
 class TestChannelToHierarchyNode:
     def test_grid_uses_per_team_url(self) -> None:

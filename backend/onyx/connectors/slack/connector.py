@@ -197,6 +197,11 @@ def get_channels_across_teams(
     Slack returns org-shared channels under each workspace they're shared into,
     so dedupe by channel id while keeping the first occurrence (which retains
     the ``team`` field of the home workspace for that listing).
+
+    When ``conversations.list`` is called with an explicit ``team_id``, Slack
+    omits the ``team`` field on each returned channel (it's implicit from the
+    query). Stamp the queried ``team_id`` onto the channel so downstream
+    callers can resolve per-workspace URLs without an extra API round-trip.
     """
     seen: set[str] = set()
     merged: list[ChannelType] = []
@@ -213,6 +218,8 @@ def get_channels_across_teams(
             if not channel_id or channel_id in seen:
                 continue
             seen.add(channel_id)
+            if not channel.get("team"):
+                channel["team"] = team_id
             merged.append(channel)
     return merged
 
@@ -463,7 +470,9 @@ def _channel_to_hierarchy_node(
         resolved_url = workspace_url
 
     # Link format: https://{workspace}.slack.com/archives/{channel_id}
-    link = f"{resolved_url}/archives/{channel['id']}" if resolved_url else None
+    link = (
+        f"{resolved_url.rstrip('/')}/archives/{channel['id']}" if resolved_url else None
+    )
 
     return HierarchyNode(
         raw_node_id=channel["id"],
