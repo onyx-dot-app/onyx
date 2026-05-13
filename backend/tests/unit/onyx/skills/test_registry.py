@@ -75,7 +75,6 @@ def test_custom_skill_shape_matches_editable_db_metadata() -> None:
         description="Before",
         bundle_file_id="file-id",
         bundle_sha256="a" * 64,
-        manifest_metadata={"version": "1"},
         is_public=False,
         enabled=True,
     )

@@ -2,7 +2,6 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
-from typing import Any
 from typing import ClassVar
 from typing import Literal
 from uuid import UUID
@@ -59,7 +58,6 @@ class CustomSkill(Skill):
     id: UUID
     bundle_file_id: str
     bundle_sha256: str
-    manifest_metadata: dict[str, Any]
     is_public: bool
     enabled: bool
 
