@@ -1,4 +1,4 @@
-@reference '../../../_reference.css';
+@reference "#reference.css";
 
 /* ============================================================================
    LinkButton — a bare anchor-style link with a trailing external-link icon.

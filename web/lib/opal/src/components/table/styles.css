@@ -1,4 +1,4 @@
-@reference '../../_reference.css';
+@reference "#reference.css";
 
 /* Imports shared timing tokens (--interactive-duration, --interactive-easing) */
 @import "../../core/interactive/shared.css";
