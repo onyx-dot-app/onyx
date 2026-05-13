@@ -40,7 +40,9 @@ If you're an agent picking up work:
 
 _(Update this section as you claim things. Keep it short — just the active `WIP` and `REVIEW` items so anyone glancing at the file can see what's hot.)_
 
-- _(nothing yet)_
+- `[WIP @codex-charged-perovskite]` `P1.010-P1.015` Module skeletons
+- `[WIP @codex-charged-perovskite]` `P1.020-P1.027` BuiltinSkillRegistry core
+- `[WIP @codex-charged-perovskite]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
 
 ---
 
@@ -59,25 +61,25 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.2 Module skeletons  (spec §2)
 
-- `[TODO]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
-- `[TODO]` `P1.011` Create empty `backend/onyx/skills/registry.py`
-- `[TODO]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
-- `[TODO]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
-- `[TODO]` `P1.014` Create empty `backend/onyx/skills/render.py`
-- `[TODO]` `P1.015` Create empty `backend/onyx/db/skill.py`
+- `[WIP @codex-charged-perovskite]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
+- `[WIP @codex-charged-perovskite]` `P1.011` Create empty `backend/onyx/skills/registry.py`
+- `[WIP @codex-charged-perovskite]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
+- `[WIP @codex-charged-perovskite]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
+- `[WIP @codex-charged-perovskite]` `P1.014` Create empty `backend/onyx/skills/render.py`
+- `[WIP @codex-charged-perovskite]` `P1.015` Create empty `backend/onyx/db/skill.py`
 
 ### 1.3 BuiltinSkillRegistry  (spec §4)
 
-- `[TODO]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
-- `[TODO]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
-- `[TODO]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
-- `[TODO]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
-- `[TODO]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
-- `[TODO]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
-- `[TODO]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
-- `[TODO]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
-- `[TODO]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
-- `[TODO]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `check` returns False; `evaluate_for_admin` returns the unmet requirement with description  (deps: P1.025, P1.026)
+- `[WIP @codex-charged-perovskite]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
+- `[WIP @codex-charged-perovskite]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
+- `[WIP @codex-charged-perovskite]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
+- `[WIP @codex-charged-perovskite]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
+- `[WIP @codex-charged-perovskite]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
+- `[WIP @codex-charged-perovskite]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
+- `[WIP @codex-charged-perovskite]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `check` returns False; `evaluate_for_admin` returns the unmet requirement with description  (deps: P1.025, P1.026)
 
 ### 1.4 Bundle validator  (spec §5)
 
