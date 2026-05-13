@@ -791,10 +791,11 @@ celery_worker_user_file_processing:
   tolerations: []
   affinity: {}
 
-# Dedicated worker for Craft scheduled-task background runs (dispatcher,
-# headless executor, stuck-run sweeper). Isolated from `heavy` because each
-# fire is long-running (LLM + tool calls in a sandbox) and would otherwise
-# starve pruning / perms-sync / csv-export of worker slots.
+# Dedicated worker for Craft scheduled-task headless executor fires.
+# Isolated from `heavy` because each fire is long-running (LLM + tool calls
+# in a sandbox) and would otherwise starve pruning / perms-sync / csv-export
+# of worker slots. The dispatcher and stuck-run sweeper are lightweight
+# DB-only coordination tasks and run on the primary queue instead.
 celery_worker_scheduled_tasks:
   extraEnv: []
   replicaCount: 1
