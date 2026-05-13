@@ -5614,6 +5614,9 @@ class ScheduledTaskRun(Base):
             desc("started_at"),
         ),
         Index("ix_scheduled_task_run_status", "status"),
+        # Session-view banner lookup: get_scheduled_run_context filters by
+        # session_id on every session open.
+        Index("ix_scheduled_task_run_session", "session_id"),
     )
 
 

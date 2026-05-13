@@ -197,6 +197,14 @@ def upgrade() -> None:
         ["status"],
         unique=False,
     )
+    # Session-view banner lookup: get_scheduled_run_context filters by
+    # session_id on every session open.
+    op.create_index(
+        "ix_scheduled_task_run_session",
+        "scheduled_task_run",
+        ["session_id"],
+        unique=False,
+    )
 
     # ------------------------------------------------------------------
     # NotificationType:
@@ -212,6 +220,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_scheduled_task_run_session", table_name="scheduled_task_run")
     op.drop_index("ix_scheduled_task_run_status", table_name="scheduled_task_run")
     op.drop_index("ix_scheduled_task_run_task_started", table_name="scheduled_task_run")
     op.drop_table("scheduled_task_run")
