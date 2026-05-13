@@ -831,7 +831,7 @@ export default function SourceHierarchyBrowser({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="overflow-y-auto max-h-[20rem]"
+        className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
           <GeneralLayouts.Section height="auto" padding={1}>

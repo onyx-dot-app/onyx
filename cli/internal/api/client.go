@@ -29,6 +29,8 @@ type Client struct {
 }
 
 // NewClient creates a new API client from config.
+// ServerURL is the server origin (e.g. "https://cloud.onyx.app").
+// APIURL appends the /api prefix to form the API base URL.
 func NewClient(cfg config.OnyxCliConfig) *Client {
 	var transport *http.Transport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -37,7 +39,7 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		transport = &http.Transport{}
 	}
 	return &Client{
-		baseURL: strings.TrimRight(cfg.ServerURL, "/"),
+		baseURL: config.APIURL(cfg.ServerURL),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
@@ -68,7 +70,21 @@ func checkResponse(resp *http.Response) error {
 		return nil
 	}
 	body, _ := io.ReadAll(resp.Body)
+	if isHTMLResponse(resp.Header.Get("Content-Type"), body) {
+		return &OnyxAPIError{
+			StatusCode: resp.StatusCode,
+			Detail:     "server returned HTML instead of JSON — check that your server URL is correct",
+		}
+	}
 	return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+}
+
+func isHTMLResponse(contentType string, body []byte) bool {
+	if strings.Contains(contentType, "text/html") {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html")
 }
 
 func wrapTimeoutError(err error) error {
@@ -297,7 +313,7 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}, nil
 }
 
-// GetBackendVersion fetches the backend version string from /api/version.
+// GetBackendVersion fetches the backend version string.
 func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 	var resp struct {
 		BackendVersion string `json:"backend_version"`

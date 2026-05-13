@@ -66,7 +66,7 @@ export const csvVariant: PreviewVariant = {
                     key={cIdx}
                     className={cn(
                       cIdx === 0 && "sticky left-0 bg-background-tint-01",
-                      "py-4 px-4 whitespace-normal break-words"
+                      "py-4 px-4 whitespace-normal wrap-break-word"
                     )}
                   >
                     <Text

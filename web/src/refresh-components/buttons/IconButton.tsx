@@ -386,11 +386,7 @@ export default function IconButton({
       {...props}
     >
       <Icon
-        className={cn(
-          small ? "h-[0.75rem] w-[0.75rem]" : "h-[1rem] w-[1rem]",
-          iconClass,
-          iconClassName
-        )}
+        className={cn(small ? "h-3 w-3" : "h-4 w-4", iconClass, iconClassName)}
       />
     </button>
   );

@@ -111,7 +111,7 @@ export default function AgentsNavigationPage() {
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
-            <div className="flex-[2]">
+            <div className="flex-2">
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search agents..."

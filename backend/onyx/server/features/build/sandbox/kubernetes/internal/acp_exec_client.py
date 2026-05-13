@@ -180,8 +180,8 @@ class ACPExecClient:
 
         # Start opencode acp via exec.
         # Set XDG_DATA_HOME so opencode stores session data on the shared
-        # workspace volume (accessible from file-sync container for snapshots)
-        # instead of the container-local ~/.local/share/ filesystem.
+        # workspace volume instead of the container-local ~/.local/share/
+        # filesystem.
         data_dir = shlex.quote(f"{cwd}/.opencode-data")
         safe_cwd = shlex.quote(cwd)
         exec_command = [

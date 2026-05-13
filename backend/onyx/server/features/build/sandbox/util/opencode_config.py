@@ -27,7 +27,7 @@ def build_opencode_config(
         api_base: Optional custom API base URL
         disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
         dev_mode: If True, allow all external directories. If False (Docker/Kubernetes),
-                  only whitelist /workspace/files and /workspace/demo_data.
+                  deny all external directories by default.
 
     Returns:
         Configuration dict ready to be serialized to JSON
@@ -142,16 +142,12 @@ def build_opencode_config(
         "webfetch": "allow",
         # External directory permissions:
         # - dev_mode: Allow all external directories for local development
-        # - Docker/Kubernetes: Whitelist only specific directories
+        # - Docker/Kubernetes: Deny all external directories by default
         "external_directory": (
             "allow"
             if dev_mode
             else {
                 "*": "deny",  # Deny all external directories by default
-                "/workspace/files": "allow",  # Allow files directory
-                "/workspace/files/**": "allow",  # Allow files directory contents
-                "/workspace/demo_data": "allow",  # Allow demo data directory
-                "/workspace/demo_data/**": "allow",  # Allow demo data directory contents
             }
         ),
     }

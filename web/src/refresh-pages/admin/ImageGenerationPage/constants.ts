@@ -38,14 +38,6 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
         description:
           "A capable image generation model from OpenAI with strong prompt adherence.",
       },
-      {
-        image_provider_id: "openai_dalle_3",
-        model_name: "dall-e-3",
-        provider_name: "openai",
-        title: "DALL-E 3",
-        description:
-          "OpenAI image generation model capable of generating rich and expressive images.",
-      },
     ],
   },
   {
@@ -74,14 +66,6 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
         title: "Azure OpenAI GPT Image 1",
         description:
           "GPT Image 1 image generation model hosted on Microsoft Azure.",
-      },
-      {
-        image_provider_id: "azure_dalle_3",
-        model_name: "", // Extracted from deployment in target URI
-        provider_name: "azure",
-        title: "Azure OpenAI DALL-E 3",
-        description:
-          "DALL-E 3 image generation model hosted on Microsoft Azure.",
       },
     ],
   },

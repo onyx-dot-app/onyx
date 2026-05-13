@@ -6,6 +6,7 @@ matplotlib==3.9.1
 matplotlib-inline>=0.1.7
 matplotlib-venn>=1.1.2
 numpy==1.26.4
+onyx-cli==1.0.1
 opencv-python>=4.11.0.86
 openpyxl>=3.1.5
 pandas==2.2.2

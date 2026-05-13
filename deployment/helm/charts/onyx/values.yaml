@@ -791,6 +791,46 @@ celery_worker_user_file_processing:
   tolerations: []
   affinity: {}
 
+# Dedicated worker for Craft scheduled-task headless executor fires.
+# Isolated from `heavy` because each fire is long-running (LLM + tool calls
+# in a sandbox) and would otherwise starve pruning / perms-sync / csv-export
+# of worker slots. The dispatcher and stuck-run sweeper are lightweight
+# DB-only coordination tasks and run on the primary queue instead.
+celery_worker_scheduled_tasks:
+  extraEnv: []
+  replicaCount: 1
+  logLevel: INFO
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+  deploymentLabels:
+    app: celery-worker-scheduled-tasks
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:

@@ -81,7 +81,7 @@ export default function FilePreviewModal({
             </div>
           ) : (
             <div className="w-full overflow-auto max-h-[60vh] rounded-08 bg-background-neutral-02 border border-border-01">
-              <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words text-text-04">
+              <pre className="p-4 text-sm font-mono whitespace-pre-wrap wrap-break-word text-text-04">
                 {content}
               </pre>
             </div>

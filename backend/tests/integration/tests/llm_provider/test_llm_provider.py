@@ -2205,7 +2205,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     _create_image_gen_config(
         admin_user=admin_user,
         image_provider_id=image_gen_provider_id,
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         source_llm_provider_id=regular_provider["id"],
         is_default=True,
     )
@@ -2268,7 +2268,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         image_gen_config_data["is_default"] is True
     ), "Image gen config should be the default"
     assert (
-        image_gen_config_data["model_name"] == "dall-e-3"
+        image_gen_config_data["model_name"] == "gpt-image-1"
     ), "Image gen config should have correct model name"
 
     # Step 5: Verify no mixup - image gen providers don't appear in LLM provider lists

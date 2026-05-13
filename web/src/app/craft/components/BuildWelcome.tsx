@@ -11,11 +11,7 @@ import { getBuildUserPersona } from "@/app/craft/onboarding/constants";
 import { workAreaToPersona } from "@/app/craft/constants/exampleBuildPrompts";
 
 interface BuildWelcomeProps {
-  onSubmit: (
-    message: string,
-    files: BuildFile[],
-    demoDataEnabled: boolean
-  ) => void;
+  onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
@@ -54,7 +50,6 @@ export default function BuildWelcome({
           isRunning={isRunning}
           placeholder="Analyze my data and create a dashboard..."
           sandboxInitializing={sandboxInitializing}
-          isWelcomePage
         />
         <ConnectDataBanner />
         <SuggestedPrompts persona={persona} onPromptClick={handlePromptClick} />

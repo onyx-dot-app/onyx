@@ -26,8 +26,8 @@ const alignClassMap: Record<AlignItems, string> = {
   stretch: "items-stretch",
 };
 const widthClassmap: Record<Exclude<Length, number>, string> = {
-  auto: "w-auto flex-shrink-0",
-  fit: "w-fit flex-shrink-0",
+  auto: "w-auto shrink-0",
+  fit: "w-fit shrink-0",
   full: "w-full",
 };
 const heightClassmap: Record<Exclude<Length, number>, string> = {

@@ -19,8 +19,8 @@ export interface LogoIconProps extends IconProps {
   src: string | StaticImageData;
 }
 
-export const defaultTailwindCSS = "my-auto flex flex-shrink-0 text-default";
-export const defaultTailwindCSSBlue = "my-auto flex flex-shrink-0 text-link";
+export const defaultTailwindCSS = "my-auto flex shrink-0 text-default";
+export const defaultTailwindCSSBlue = "my-auto flex shrink-0 text-link";
 
 export const LogoIcon = ({
   size = 16,
@@ -135,7 +135,7 @@ const createLogoIcon = (
 // ============================================================================
 export const MacIcon = ({
   size = 16,
-  className = "my-auto flex flex-shrink-0 ",
+  className = "my-auto flex shrink-0 ",
 }: IconProps) => {
   return (
     <svg
@@ -210,7 +210,7 @@ export const OnyxLogoTypeIcon = ({
 };
 export const WindowsIcon = ({
   size = 16,
-  className = "my-auto flex flex-shrink-0 ",
+  className = "my-auto flex shrink-0 ",
 }: IconProps) => {
   return (
     <svg

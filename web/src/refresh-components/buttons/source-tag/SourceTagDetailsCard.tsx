@@ -57,7 +57,7 @@ const MetadataChip = memo(function MetadataChip({
         </div>
       )}
 
-      <Text secondaryBody text03 className="px-0.5 max-w-[10rem] truncate">
+      <Text secondaryBody text03 className="px-0.5 max-w-40 truncate">
         {text}
       </Text>
     </div>
@@ -85,7 +85,7 @@ const SourceTagDetailsCardInner = ({
   );
 
   return (
-    <div className="w-[17.5rem] bg-background-neutral-00 border border-border-01 rounded-12 shadow-01 overflow-hidden">
+    <div className="w-70 bg-background-neutral-00 border border-border-01 rounded-12 shadow-01 overflow-hidden">
       {/* Navigation header - only shown for multiple sources */}
       {showNavigation && (
         <div className="flex items-center justify-between p-2 bg-background-tint-01 border-b border-border-01">
@@ -113,7 +113,7 @@ const SourceTagDetailsCardInner = ({
 
       <div className="p-1 flex flex-col gap-1">
         {/* Header with icon and title */}
-        <div className="flex items-start gap-1 p-0.5 min-h-[1.75rem] w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
+        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
           <div className="flex items-center justify-center p-0.5 shrink-0 w-5 h-5">
             {isQuestion ? (
               <SvgQuestionMarkSmall size={16} className="text-text-03" />

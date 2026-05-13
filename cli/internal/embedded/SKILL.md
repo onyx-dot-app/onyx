@@ -23,24 +23,24 @@ pip install onyx-cli
 
 ### 3. Check if configured
 
-If a human has already run `onyx-cli configure`, the CLI is ready — no additional setup needed. The config file at `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set) is read automatically.
+If a human has already run `onyx-cli chat` (which includes first-time setup), the CLI is ready — no additional setup needed. The config file at `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set) is read automatically.
 
 Environment variables override the config file and can be used as an alternative when no config file exists:
 
 ```bash
-export ONYX_SERVER_URL="https://your-onyx-server.com/api"  # default: https://cloud.onyx.app/api
+export ONYX_SERVER_URL="https://your-onyx-server.com"  # default: https://cloud.onyx.app
 export ONYX_PAT="your-pat"
 ```
 
 | Variable          | Required | Description                                              |
 | ----------------- | -------- | -------------------------------------------------------- |
-| `ONYX_SERVER_URL` | No       | Onyx server base URL (default: `https://cloud.onyx.app/api`) |
+| `ONYX_SERVER_URL` | No       | Onyx server URL (default: `https://cloud.onyx.app`) |
 | `ONYX_PAT`    | Yes      | Personal access token for authentication (unless config file exists) |
 | `ONYX_PERSONA_ID` | No       | Default agent/persona ID                                 |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 
 If neither a config file nor environment variables are set, tell the user that `onyx-cli` needs to be configured and ask them to either:
-- Run `onyx-cli configure` interactively, or
+- Run `onyx-cli chat` to complete first-time setup interactively, or
 - Set `ONYX_SERVER_URL` and `ONYX_PAT` environment variables (ONYX_PAT holds your PAT)
 
 ### 4. Verify configuration

@@ -27,7 +27,7 @@ func writeConfig(t *testing.T, dir string, data []byte) {
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	if cfg.ServerURL != "https://cloud.onyx.app/api" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default server URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -55,7 +55,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app/api" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default URL, got %s", cfg.ServerURL)
 	}
 	if cfg.APIKey != "" {
@@ -95,7 +95,7 @@ func TestLoadCorruptFile(t *testing.T) {
 	writeConfig(t, dir, []byte("not valid json {{{"))
 
 	cfg := Load()
-	if cfg.ServerURL != "https://cloud.onyx.app/api" {
+	if cfg.ServerURL != "https://cloud.onyx.app" {
 		t.Errorf("expected default URL on corrupt file, got %s", cfg.ServerURL)
 	}
 }
@@ -250,5 +250,41 @@ func TestSaveCreatesParentDirs(t *testing.T) {
 
 	if !ConfigExists() {
 		t.Error("config file should exist after save")
+	}
+}
+
+func TestAPIURL(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"https://cloud.onyx.app", "https://cloud.onyx.app/api"},
+		{"https://cloud.onyx.app/", "https://cloud.onyx.app/api"},
+		{"http://localhost:8080", "http://localhost:8080/api"},
+		{"http://localhost:3000", "http://localhost:3000/api"},
+	}
+	for _, tc := range cases {
+		got := APIURL(tc.input)
+		if got != tc.want {
+			t.Errorf("APIURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestAPIURLEmptyPrefix(t *testing.T) {
+	t.Setenv("ONYX_API_PREFIX", "")
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"http://localhost:8080", "http://localhost:8080"},
+		{"http://localhost:8080/", "http://localhost:8080"},
+		{"https://cloud.onyx.app", "https://cloud.onyx.app"},
+	}
+	for _, tc := range cases {
+		got := APIURL(tc.input)
+		if got != tc.want {
+			t.Errorf("APIURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }

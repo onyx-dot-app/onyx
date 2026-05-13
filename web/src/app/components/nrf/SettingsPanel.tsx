@@ -126,7 +126,7 @@ export const SettingsPanel = ({
       {/* Backdrop overlay */}
       <div
         className={cn(
-          "fixed inset-0 bg-mask-03 backdrop-blur-sm z-40 transition-opacity duration-300",
+          "fixed inset-0 bg-mask-03 backdrop-blur-xs z-40 transition-opacity duration-300",
           settingsOpen
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
@@ -137,15 +137,15 @@ export const SettingsPanel = ({
       {/* Settings panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 w-[25rem] h-full z-50",
-          "bg-gradient-to-b from-background-tint-02 to-background-tint-01",
-          "backdrop-blur-[24px] border-l border-border-01 overflow-y-auto",
+          "fixed top-0 right-0 w-100 h-full z-50",
+          "bg-linear-to-b from-background-tint-02 to-background-tint-01",
+          "backdrop-blur-xl border-l border-border-01 overflow-y-auto",
           "transition-transform duration-300 ease-out",
           settingsOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-b from-background-tint-02 to-transparent pb-4">
+        <div className="sticky top-0 z-10 bg-linear-to-b from-background-tint-02 to-transparent pb-4">
           <div className="flex items-center justify-between px-6 pt-6 pb-2">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background-tint-02">

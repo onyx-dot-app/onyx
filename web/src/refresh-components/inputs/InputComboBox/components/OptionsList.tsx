@@ -108,7 +108,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           </span>
           <SvgPlus
             className={cn(
-              "w-4 h-4 flex-shrink-0",
+              "w-4 h-4 shrink-0",
               createPrefix ? "text-text-04 mx-1" : "text-text-03 ml-2"
             )}
           />

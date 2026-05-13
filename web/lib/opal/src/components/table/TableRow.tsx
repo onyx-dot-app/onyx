@@ -79,7 +79,7 @@ function SortableTableRow({
             className={cn(
               "absolute right-0 top-1/2 -translate-y-1/2 cursor-grab",
               "opacity-0 group-hover/row:opacity-100 transition-opacity",
-              "flex items-center justify-center rounded"
+              "flex items-center justify-center rounded-sm"
             )}
             aria-label="Drag to reorder"
             onMouseDown={(e) => e.preventDefault()}

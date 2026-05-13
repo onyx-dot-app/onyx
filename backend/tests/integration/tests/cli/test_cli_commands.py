@@ -119,6 +119,7 @@ def run_cli(
         "PATH": os.environ.get("PATH", ""),
         "HOME": os.environ.get("HOME", ""),
         "ONYX_SERVER_URL": server_url,
+        "ONYX_API_PREFIX": "",
         "XDG_CONFIG_HOME": tempfile.mkdtemp(),
     }
     if pat is not None:
@@ -305,19 +306,6 @@ def test_ask_not_configured(
     result = run_cli(cli_binary, ["ask", "test"])
 
     assert result.returncode == 3
-
-
-# --- configure ---
-
-
-def test_configure_non_tty(
-    cli_binary: Path, admin_user: DATestUser  # noqa: ARG001
-) -> None:
-    """configure without TTY returns BadRequest (exit code 2)."""
-    result = run_cli(cli_binary, ["configure"])
-
-    assert result.returncode == 2
-    assert "interactive terminal" in result.stderr.lower()
 
 
 # --- agents ---

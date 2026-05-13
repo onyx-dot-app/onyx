@@ -210,7 +210,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
-            <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
+            <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
               <CustomAgentAvatar
                 size={imageSrc ? 7.5 * 16 : 40}

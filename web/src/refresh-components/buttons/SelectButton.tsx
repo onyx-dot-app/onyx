@@ -148,7 +148,7 @@ export default function SelectButton({
         {rightChevronIcon && (
           <SvgChevronDownSmall
             className={cn(
-              "w-[1rem] h-[1rem] transition-all duration-300 ease-in-out",
+              "w-4 h-4 transition-all duration-300 ease-in-out",
               iconClasses,
               transient && "-rotate-180"
             )}
@@ -165,7 +165,7 @@ export default function SelectButton({
       {/* Hidden element for measuring the natural width of the content */}
       <div
         ref={measureRef}
-        className="flex items-center w-auto h-fit absolute -left-[9999rem] opacity-0 pointer-events-none"
+        className="flex items-center w-auto h-fit absolute -left-39996 opacity-0 pointer-events-none"
       >
         {content}
       </div>
@@ -184,7 +184,7 @@ export default function SelectButton({
       >
         {/* Left icon */}
         {hasLeftIcon && LeftIcon && (
-          <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
+          <LeftIcon className={cn("w-4 h-4", iconClasses)} />
         )}
 
         {/* Animation component */}
@@ -219,7 +219,7 @@ export default function SelectButton({
 
         {/* Right icon */}
         {hasRightIcon && RightIcon && (
-          <RightIcon className={cn("w-[1rem] h-[1rem]", iconClasses)} />
+          <RightIcon className={cn("w-4 h-4", iconClasses)} />
         )}
       </button>
     </>

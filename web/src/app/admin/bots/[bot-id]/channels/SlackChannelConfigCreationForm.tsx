@@ -63,7 +63,7 @@ export const SlackChannelConfigCreationForm = ({
   }, [personas]);
 
   return (
-    <CardSection className="!px-12 max-w-4xl">
+    <CardSection className="px-12! max-w-4xl">
       <Formik
         initialValues={{
           slack_bot_id: slack_bot_id,

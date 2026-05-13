@@ -646,6 +646,12 @@ courlan==1.3.2 \
     --hash=sha256:0b66f4db3a9c39a6e22dd247c72cfaa57d68ea660e94bb2c84ec7db8712af190 \
     --hash=sha256:d0dab52cf5b5b1000ee2839fbc2837e93b2514d3cb5bb61ae158a55b7a04c6be
     # via trafilatura
+cron-descriptor==2.0.8 \
+    --hash=sha256:21fae0e6e0e28b19fd6a08e032c700077fe759e9bc1deb1ebe32f277fbc8ba6c \
+    --hash=sha256:7e487efe14a99a3c1c23bb5302bb75c8bf5d54bca82931bf71f5ae2855939772
+croniter==6.2.2 \
+    --hash=sha256:a5d17b1060974d36251ea4faf388233eca8acf0d09cbd92d35f4c4ac8f279960 \
+    --hash=sha256:ba60832a5ec8e12e51b8691c3309a113d1cf6526bdf1a48150ce8ec7a532d0ab
 cryptography==46.0.7 \
     --hash=sha256:04959522f938493042d595a736e7dbdff6eb6cc2339c11465b3ff89343b65f65 \
     --hash=sha256:128c5edfe5e5938b86b03941e94fac9ee793a94452ad1365c9fc3f4f62216832 \
@@ -2859,6 +2865,7 @@ python-dateutil==2.9.0.post0 \
     #   asana
     #   botocore
     #   celery
+    #   croniter
     #   dateparser
     #   google-cloud-bigquery
     #   htmldate
@@ -3611,6 +3618,7 @@ typing-extensions==4.15.0 \
     #   boto3-stubs
     #   braintrust
     #   cohere
+    #   cron-descriptor
     #   exa-py
     #   exceptiongroup
     #   fastapi

@@ -43,11 +43,11 @@ import { Content } from "@opal/layouts";
 import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
-  sm: "w-[min(var(--container-sm),100%)]",
-  "sm-md": "w-[min(var(--container-sm-md),100%)]",
-  md: "w-[min(var(--container-md),100%)]",
-  lg: "w-[min(var(--container-lg),100%)]",
-  full: "w-[var(--container-full)]",
+  sm: "w-[min(var(--app-container-sm),100%)]",
+  "sm-md": "w-[min(var(--app-container-sm-md),100%)]",
+  md: "w-[min(var(--app-container-md),100%)]",
+  lg: "w-[min(var(--app-container-lg),100%)]",
+  full: "w-(--app-container-full)",
 };
 
 /**
@@ -261,7 +261,7 @@ function SettingsHeader({
       {isSticky && (
         <div
           className={cn(
-            "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            "absolute left-0 right-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
             showShadow && "opacity-100"
           )}
           style={{
@@ -305,10 +305,7 @@ function SettingsBody(
   props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
 ) {
   return (
-    <div
-      className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full"
-      {...props}
-    />
+    <div className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full" {...props} />
   );
 }
 

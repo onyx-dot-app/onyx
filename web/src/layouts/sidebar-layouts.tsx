@@ -212,7 +212,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     return (
       <SidebarFoldedContext.Provider value={folded}>
         {/* Spacer reserves the folded sidebar width in the flex layout */}
-        <div className="shrink-0 w-[3.25rem]" />
+        <div className="shrink-0 w-13" />
 
         {/* Sidebar — fixed so it overlays content when expanded */}
         <div className="fixed inset-y-0 left-0 z-50">

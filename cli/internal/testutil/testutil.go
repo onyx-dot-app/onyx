@@ -26,6 +26,7 @@ func StatusServer(status int) *httptest.Server {
 }
 
 // OnyxServer returns an httptest.Server that simulates the Onyx backend.
+// Routes are mounted under /api to match the production URL layout.
 func OnyxServer(meStatus int) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/me", func(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +38,7 @@ func OnyxServer(meStatus int) *httptest.Server {
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"backend_version": "0.1.0"})
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	})
 	return httptest.NewServer(mux)

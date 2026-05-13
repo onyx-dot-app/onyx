@@ -2,8 +2,8 @@ from datetime import datetime
 from datetime import timezone
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.jira.connector import JiraConnector
 
 
 class JiraServiceManagementConnector(JiraConnector):

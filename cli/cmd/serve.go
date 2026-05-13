@@ -102,7 +102,7 @@ environment variable (the --host-key flag takes precedence).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {
-				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli configure")
+				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli chat to complete first-time setup")
 			}
 			if !cmd.Flags().Changed("host-key") {
 				if v := os.Getenv(config.EnvSSHHostKey); v != "" {

@@ -84,11 +84,11 @@ const Page = async (props: {
             <div className="w-full justify-center mt-6">
               <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
               <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-border-01" />
+                <div className="grow border-t border-border-01" />
                 <Text as="p" mainUiMuted text03 className="mx-2">
                   or
                 </Text>
-                <div className="flex-grow border-t border-border-01" />
+                <div className="grow border-t border-border-01" />
               </div>
             </div>
           )}
