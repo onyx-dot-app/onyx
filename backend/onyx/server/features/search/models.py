@@ -15,8 +15,6 @@ class SearchAPIRequest(BaseModel):
     tags: list[Tag] | None = None
     time_cutoff_days: int | None = Field(None, ge=1)
 
-    num_results: int = Field(default=50, ge=1, le=100)
-
     persona_id: int | None = None
 
     provider: str | None = None

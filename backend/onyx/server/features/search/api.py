@@ -209,7 +209,6 @@ def search(
             starting_citation_num=1,
             original_query=request.query,
             skip_query_expansion=request.skip_query_expansion,
-            num_hits=request.num_results,
             message_history=request.message_history
             or [
                 ChatMinimalTextMessage(
