@@ -127,10 +127,10 @@ def create_skill(
     """Insert a new Skill row.
 
     Slug collisions are caught two ways: a pre-check for the fast happy path,
-    and a SAVEPOINT-wrapped flush that translates the partial unique index's
-    IntegrityError into `OnyxError(DUPLICATE_RESOURCE)` for the concurrent-
-    writer race. Both raise the same structured error so callers never see
-    a raw IntegrityError.
+    and an IntegrityError handler on flush that translates the partial unique
+    index's violation into `OnyxError(DUPLICATE_RESOURCE)` for the concurrent-
+    writer race. Both raise the same structured error so callers never see a
+    raw IntegrityError.
     """
     existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
     if existing is not None:
@@ -150,10 +150,9 @@ def create_skill(
         author_user_id=author_user_id,
         enabled=True,
     )
+    db_session.add(skill)
     try:
-        with db_session.begin_nested():
-            db_session.add(skill)
-            db_session.flush()
+        db_session.flush()
     except IntegrityError as e:
         if is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
             raise OnyxError(
@@ -239,8 +238,7 @@ def patch_skill(
         skill.enabled = enabled
 
     try:
-        with db_session.begin_nested():
-            db_session.flush()
+        db_session.flush()
     except IntegrityError as e:
         if slug_changed and is_unique_violation(e, SKILL_SLUG_UNIQUE_INDEX):
             raise OnyxError(
