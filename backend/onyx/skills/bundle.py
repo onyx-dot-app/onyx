@@ -15,6 +15,7 @@ from typing import Final
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.registry import BuiltinSkillRegistry
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * 1024 * 1024
@@ -76,7 +77,6 @@ def validate_custom_bundle(
     zip_bytes: bytes,
     slug: str,
     *,
-    reserved_slugs: set[str] | None = None,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
 ) -> None:
@@ -85,11 +85,6 @@ def validate_custom_bundle(
     Args:
         zip_bytes: Raw zip bytes uploaded by an admin.
         slug: Caller-supplied slug for this skill.
-        reserved_slugs: Slugs registered as built-ins (rejected here). Caller
-            threads in ``BuiltinSkillRegistry.instance().reserved_slugs()``;
-            we don't call it directly because the registry is a separate
-            in-flight task on this stack and we don't want the import edge.
-            Consolidate once the registry lands on skills-phase-1.
         per_file_max_bytes: Per-entry uncompressed cap.
         total_max_bytes: Total uncompressed cap.
 
@@ -99,7 +94,7 @@ def validate_custom_bundle(
         OnyxError(PAYLOAD_TOO_LARGE): per-file or total size cap exceeded.
     """
     _check_slug(slug)
-    if reserved_slugs and slug in reserved_slugs:
+    if slug in BuiltinSkillRegistry.instance().reserved_slugs():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
 
     try:

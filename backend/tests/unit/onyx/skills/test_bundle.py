@@ -169,11 +169,16 @@ def test_rejects_invalid_slug(bad_slug: str) -> None:
         validate_custom_bundle(_valid_bundle(), slug=bad_slug)
 
 
-def test_rejects_reserved_slug() -> None:
+def test_rejects_reserved_slug(monkeypatch: pytest.MonkeyPatch) -> None:
+    from onyx.skills.registry import BuiltinSkillRegistry
+
+    monkeypatch.setattr(
+        BuiltinSkillRegistry.instance(),
+        "reserved_slugs",
+        lambda: {"pptx", "image-generation"},
+    )
     with pytest.raises(OnyxError, match="reserved"):
-        validate_custom_bundle(
-            _valid_bundle(), slug="pptx", reserved_slugs={"pptx", "image-generation"}
-        )
+        validate_custom_bundle(_valid_bundle(), slug="pptx")
 
 
 # ---------------------------------------------------------------------------
