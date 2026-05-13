@@ -60,8 +60,10 @@ export function WebSearchDisconnectModal({
         error instanceof Error ? error.message : "Unexpected error occurred.";
       toast.error(message);
     } finally {
-      await mutateSearchProviders();
-      await mutateContentProviders();
+      await Promise.allSettled([
+        mutateSearchProviders(),
+        mutateContentProviders(),
+      ]);
       setIsSubmitting(false);
     }
   }
