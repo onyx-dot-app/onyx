@@ -66,6 +66,17 @@ def test_register_detects_template_metadata_source(tmp_path: Path) -> None:
     assert skill.name == "templated"
 
 
+def test_reset_for_testing_clears_singleton(tmp_path: Path) -> None:
+    BuiltinSkillRegistry._reset_for_testing()
+    registry = BuiltinSkillRegistry.instance()
+    registry.register("singleton-skill", _write_skill(tmp_path, "singleton-skill"))
+
+    BuiltinSkillRegistry._reset_for_testing()
+    fresh_registry = BuiltinSkillRegistry.instance()
+
+    assert fresh_registry.get("singleton-skill") is None
+
+
 def test_list_satisfied_and_admin_status_expose_unmet_requirement(
     tmp_path: Path,
 ) -> None:

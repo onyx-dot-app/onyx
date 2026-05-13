@@ -126,6 +126,10 @@ class BuiltinSkillRegistry:
             cls._instance = cls()
         return cls._instance
 
+    @classmethod
+    def _reset_for_testing(cls) -> None:
+        cls._instance = None
+
     def register(
         self,
         slug: str,
