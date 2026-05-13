@@ -5,7 +5,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.skills.registry import BuiltinSkillRegistry
-from onyx.skills.registry import SkillRequirement
 
 
 def _write_skill(
@@ -77,7 +76,7 @@ def test_reset_for_testing_clears_singleton(tmp_path: Path) -> None:
     assert fresh_registry.get("singleton-skill") is None
 
 
-def test_list_satisfied_and_admin_status_expose_unmet_requirement(
+def test_list_satisfied_excludes_unavailable_skill(
     tmp_path: Path,
 ) -> None:
     registry = BuiltinSkillRegistry()
@@ -89,25 +88,15 @@ def test_list_satisfied_and_admin_status_expose_unmet_requirement(
     registry.register(
         "unavailable",
         unavailable_dir,
-        requirements=[
-            SkillRequirement(
-                key="provider",
-                name="Provider",
-                description="Configure the provider first.",
-                configure_url="/admin/configuration/provider",
-                check=lambda _: False,
-            )
-        ],
+        is_available=lambda _: False,
+        unavailable_reason="Configure the provider first.",
+        configure_url="/admin/configuration/provider",
     )
 
     assert [skill.slug for skill in registry.list_satisfied(db)] == ["available"]
 
-    statuses = {status.skill.slug: status for status in registry.evaluate_for_admin(db)}
-    assert statuses["available"].available is True
-    assert statuses["available"].requirements == ()
-    assert statuses["unavailable"].available is False
-    assert statuses["unavailable"].requirements[0].satisfied is False
-    assert (
-        statuses["unavailable"].requirements[0].description
-        == "Configure the provider first."
-    )
+    unavailable = registry.get("unavailable")
+    assert unavailable is not None
+    assert unavailable.is_available(db) is False
+    assert unavailable.unavailable_reason == "Configure the provider first."
+    assert unavailable.configure_url == "/admin/configuration/provider"

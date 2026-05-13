@@ -1,6 +1,5 @@
 import re
 from collections.abc import Callable
-from collections.abc import Sequence
 from pathlib import Path
 from typing import ClassVar
 
@@ -12,16 +11,8 @@ from sqlalchemy.orm import Session
 _SLUG_REGEX = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
 
-class SkillRequirement(BaseModel):
-    """Org-level dependency a built-in skill needs to be usable."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    key: str
-    name: str
-    description: str
-    configure_url: str
-    check: Callable[[Session], bool]
+def _always_available(_: Session) -> bool:
+    return True
 
 
 class BuiltinSkill(BaseModel):
@@ -34,25 +25,9 @@ class BuiltinSkill(BaseModel):
     name: str
     description: str
     has_template: bool
-    requirements: tuple[SkillRequirement, ...] = ()
-
-
-class SkillRequirementStatus(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    key: str
-    name: str
-    description: str
-    configure_url: str
-    satisfied: bool
-
-
-class BuiltinSkillStatus(BaseModel):
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    skill: BuiltinSkill
-    available: bool
-    requirements: tuple[SkillRequirementStatus, ...]
+    is_available: Callable[[Session], bool] = _always_available
+    unavailable_reason: str | None = None
+    configure_url: str | None = None
 
 
 def _validate_slug(slug: str) -> None:
@@ -134,7 +109,9 @@ class BuiltinSkillRegistry:
         self,
         slug: str,
         source_dir: Path,
-        requirements: Sequence[SkillRequirement] = (),
+        is_available: Callable[[Session], bool] = _always_available,
+        unavailable_reason: str | None = None,
+        configure_url: str | None = None,
     ) -> None:
         _validate_slug(slug)
 
@@ -154,41 +131,16 @@ class BuiltinSkillRegistry:
             name=name,
             description=description,
             has_template=has_template,
-            requirements=tuple(requirements),
+            is_available=is_available,
+            unavailable_reason=unavailable_reason,
+            configure_url=configure_url,
         )
 
     def list_all(self) -> list[BuiltinSkill]:
         return list(self._skills.values())
 
     def list_satisfied(self, db: Session) -> list[BuiltinSkill]:
-        return [
-            skill
-            for skill in self.list_all()
-            if all(requirement.check(db) for requirement in skill.requirements)
-        ]
-
-    def evaluate_for_admin(self, db: Session) -> list[BuiltinSkillStatus]:
-        statuses: list[BuiltinSkillStatus] = []
-        for skill in self.list_all():
-            requirement_statuses = tuple(
-                SkillRequirementStatus(
-                    key=requirement.key,
-                    name=requirement.name,
-                    description=requirement.description,
-                    configure_url=requirement.configure_url,
-                    satisfied=requirement.check(db),
-                )
-                for requirement in skill.requirements
-            )
-            statuses.append(
-                BuiltinSkillStatus(
-                    skill=skill,
-                    available=all(status.satisfied for status in requirement_statuses),
-                    requirements=requirement_statuses,
-                )
-            )
-
-        return statuses
+        return [skill for skill in self.list_all() if skill.is_available(db)]
 
     def get(self, slug: str) -> BuiltinSkill | None:
         return self._skills.get(slug)
