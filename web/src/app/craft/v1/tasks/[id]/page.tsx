@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
@@ -41,6 +41,8 @@ export default function ScheduledTaskDetailPage() {
     { revalidateOnFocus: false }
   );
 
+  const { mutate: globalMutate } = useSWRConfig();
+
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -73,12 +75,15 @@ export default function ScheduledTaskDetailPage() {
       await runScheduledTaskNow(data.id);
       toast.success(`Queued run for "${data.name}".`);
       void mutate();
+      // The run history table owns a separate SWR key — kick its fetcher so
+      // the newly inserted ``manual_run_now`` row appears immediately.
+      void globalMutate(["scheduled-task-runs", data.id]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start run");
     } finally {
       setBusy(false);
     }
-  }, [data, mutate]);
+  }, [data, mutate, globalMutate]);
 
   const handleDelete = useCallback(async () => {
     if (!data) return;
