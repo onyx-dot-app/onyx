@@ -25,8 +25,6 @@ _SLUG_ERROR = (
 class Skill(BaseModel):
     """Common skill metadata shared by built-in and custom skill views."""
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
     slug: str
     name: str
     description: str
@@ -41,6 +39,8 @@ class Skill(BaseModel):
 
 class BuiltinSkill(Skill):
     """In-memory entry for an on-disk built-in skill."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     source_dir: Path
     has_template: bool

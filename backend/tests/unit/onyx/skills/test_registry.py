@@ -4,7 +4,9 @@ from typing import cast
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.skills.registry import BuiltinSkill
 from onyx.skills.registry import BuiltinSkillRegistry
+from onyx.skills.registry import Skill
 
 
 def _write_skill(
@@ -51,6 +53,29 @@ def test_register_rejects_invalid_slug(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="start with a lowercase letter"):
         registry.register("Invalid_Slug", skill_dir)
+
+
+def test_shared_skill_shape_is_mutable() -> None:
+    skill = Skill(slug="editable", name="Before", description="Before")
+
+    skill.name = "After"
+    skill.description = "After"
+
+    assert skill.name == "After"
+    assert skill.description == "After"
+
+
+def test_builtin_skill_is_frozen(tmp_path: Path) -> None:
+    skill = BuiltinSkill(
+        slug="builtin",
+        name="Builtin",
+        description="Builtin",
+        source_dir=tmp_path,
+        has_template=False,
+    )
+
+    with pytest.raises(ValueError, match="frozen"):
+        skill.name = "Changed"
 
 
 def test_register_rejects_missing_skill_md(tmp_path: Path) -> None:
