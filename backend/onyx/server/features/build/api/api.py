@@ -23,6 +23,9 @@ from onyx.db.models import User
 from onyx.server.features.build.api.external_apps_api import (
     router as external_apps_router,
 )
+from onyx.server.features.build.api.external_apps_oauth_api import (
+    router as external_apps_oauth_router,
+)
 from onyx.server.features.build.api.messages_api import router as messages_router
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
@@ -66,6 +69,7 @@ router.include_router(messages_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])
+router.include_router(external_apps_oauth_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
