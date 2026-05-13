@@ -1301,6 +1301,13 @@ export default function useChatController({
       resetRegenerationState(frozenSessionId);
       setStreamingStartTime(frozenSessionId, null);
       updateChatStateAction(frozenSessionId, "input");
+      // Error paths replace the streaming node with an empty-packets error
+      // node, so MessageTextRenderer never fires streamFullyDisplayed and
+      // never flips the queue gate back to true. Reset it here so queued
+      // follow-ups aren't silently dropped after a stream failure.
+      if (!streamSucceeded) {
+        setLatestMessageRenderComplete(frozenSessionId, true);
+      }
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
       if (shouldAutoNameChatSessionAfterResponse) {

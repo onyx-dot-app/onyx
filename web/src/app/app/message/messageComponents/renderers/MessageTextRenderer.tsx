@@ -269,17 +269,18 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
-  // Track whether this renderer was ever actively animating during its
-  // lifetime. `animate` flips false the moment the stop packet arrives
-  // (AgentMessage passes `animate={!stopPacketSeen}`), but the typewriter
-  // keeps draining for some time after — so checking `animate` at the
-  // moment `streamFullyDisplayed` fires would always be false for the
-  // active stream. Historical mounts start with animate=false, so this
-  // ref stays false for them.
+  // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
+  // ever goes true→false during a renderer's lifetime, so its mount-time
+  // value distinguishes "actively-streaming renderer" (animate=true) from
+  // "historical mount" (animate=false). Used to gate the queue-release
+  // write below.
   const wasEverAnimatingRef = useRef(animate);
-  if (animate && !wasEverAnimatingRef.current) {
-    wasEverAnimatingRef.current = true;
-  }
+
+  // Bind sessionId at mount so a navigation while the typewriter is still
+  // draining doesn't write the completion flag to the newly-active session.
+  const sessionIdAtMountRef = useRef(
+    useChatSessionStore.getState().currentSessionId
+  );
 
   // Fire onComplete exactly once per mount. `onComplete` is an inline
   // arrow in AgentMessage so its identity changes on every parent render;
@@ -290,13 +291,12 @@ export const MessageTextRenderer: MessageRenderer<
     if (streamFullyDisplayed && !onCompleteFiredRef.current) {
       onCompleteFiredRef.current = true;
       onComplete();
-      // Only the renderer that was actively streaming (ever had
+      // Only the renderer that was actively streaming (mounted with
       // animate=true) flips the chat-session gate back to "rendered".
       // Historical mounts leave the flag alone so they don't release the
       // queue while a newer stream is still in flight.
-      if (wasEverAnimatingRef.current) {
-        const sid = useChatSessionStore.getState().currentSessionId;
-        if (sid) setLatestMessageRenderComplete(sid, true);
+      if (wasEverAnimatingRef.current && sessionIdAtMountRef.current) {
+        setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
       }
     }
   }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
