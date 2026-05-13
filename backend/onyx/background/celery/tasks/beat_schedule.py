@@ -148,8 +148,10 @@ beat_task_templates: list[dict] = [
         },
     },
     # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
-    # Both run on the `scheduled_tasks` queue which is served by the
-    # `heavy` worker in V1.
+    # Both are lightweight DB-only coordination tasks and run on the
+    # primary queue. The dedicated `scheduled_tasks` worker is reserved
+    # for the long-running executor (`run_scheduled_task`); routing the
+    # dispatcher there would let a saturated executor pool stall dispatch.
     {
         "name": "dispatch-due-scheduled-tasks",
         "task": OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
@@ -162,7 +164,7 @@ beat_task_templates: list[dict] = [
             # Drop redundant ticks aggressively; if a tick is more than
             # ~2 schedules behind, the next one supersedes it.
             "expires": 60,
-            "queue": OnyxCeleryQueues.SCHEDULED_TASKS,
+            "queue": OnyxCeleryQueues.PRIMARY,
         },
     },
     {
@@ -172,7 +174,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": 60 * 60,
-            "queue": OnyxCeleryQueues.SCHEDULED_TASKS,
+            "queue": OnyxCeleryQueues.PRIMARY,
         },
     },
     # Sandbox cleanup tasks

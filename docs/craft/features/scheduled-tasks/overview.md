@@ -27,14 +27,17 @@ browser open, and clicks any past run to open the completed session.
   `BuildMessage` rows). SSE endpoint composes the pair with an SSE
   formatter; executor wraps it with a drain-to-completion. Identical
   transcripts, no duplicated code.
-- **Dedicated `scheduled_tasks` Celery worker.** Both the dispatcher and the
-  executor run on a new `celery_worker_scheduled_tasks` process registered
-  in supervisord, the dev runner, and the Helm chart. Headless agent fires
-  are long-running (LLM + tool calls in a sandbox), so colocating them on
-  `heavy` (pruning, perms-sync, csv-export) would let a small handful of
-  fires starve the rest of the heavy queue. Dedicated worker = isolated
-  thread pool, isolated HPA / KEDA scaling, and its own Prometheus port
-  (9098).
+- **Dedicated `scheduled_tasks` Celery worker — executor only.** The
+  long-running executor (`run_scheduled_task`) runs on a new
+  `celery_worker_scheduled_tasks` process registered in supervisord, the
+  dev runner, and the Helm chart. Headless agent fires are long-running
+  (LLM + tool calls in a sandbox), so colocating them on `heavy`
+  (pruning, perms-sync, csv-export) would let a small handful of fires
+  starve the rest of the heavy queue. Dedicated worker = isolated thread
+  pool, isolated HPA / KEDA scaling, and its own Prometheus port (9098).
+  The dispatcher and stuck-run sweeper are pure DB coordination work and
+  run on the **primary** queue instead — routing them to the dedicated
+  pool would let a saturated executor stall dispatch.
 - **Schedule storage:** `(cron_expression, IANA timezone, editor_mode)`.
   All three editor modes compile to cron on save. `croniter` +
   `ZoneInfo(timezone)` handles DST. `editor_mode` is a UI hint only.
@@ -75,7 +78,7 @@ browser open, and clicks any past run to open the completed session.
 
 ```
 Beat (30s, per tenant)                Celery "scheduled_tasks" queue
-                                      (served by celery_worker_scheduled_tasks)
+Primary queue                         (served by celery_worker_scheduled_tasks)
 ──────────────────────                ────────────────────────────────
 dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
   BEGIN;                                if run.status != 'queued': return
@@ -88,11 +91,12 @@ dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
      ├─ insert queued run                  session, task.prompt):
      ├─ next_run_at = croniter             _persist_acp_events([event])
      │     .next(now, tz=task.tz)        if budget exceeded → failed
-     └─ enqueue run_scheduled_task(       if approval required →
-            run_id, expires=900)              awaiting_approval
-  COMMIT;                                mark succeeded / failed
-                                       emit Notification if failed
-Stuck-run sweep (hourly)
+     └─ enqueue run_scheduled_task ───►   if approval required →
+            (run_id, expires=900,             awaiting_approval
+             queue=scheduled_tasks)       mark succeeded / failed
+  COMMIT;                                emit Notification if failed
+
+Stuck-run sweep (hourly, primary queue)
 ──────────────────────                          │
 cleanup_stuck_scheduled_runs                    ▼
   queued > 15m → failed (stuck)        BuildMessage rows (existing tables,

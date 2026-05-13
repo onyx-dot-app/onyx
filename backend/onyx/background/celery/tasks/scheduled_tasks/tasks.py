@@ -1,16 +1,19 @@
 """Celery tasks for Craft Scheduled Tasks.
 
-Three @shared_task wrappers, all running on the `scheduled_tasks` /
-`heavy` queues:
+Three @shared_task wrappers, split across two queues:
 
-- ``dispatch_due_scheduled_tasks`` (per tenant, every 30 s): claims due
-  rows via ``FOR UPDATE SKIP LOCKED``, advances ``next_run_at``, writes
-  either a QUEUED run row (and enqueues the executor) or a SKIPPED row
-  (when a prior run is still in flight).
-- ``run_scheduled_task(run_id)``: thin delegation to
-  ``run_scheduled_task_logic`` in the executor module.
-- ``cleanup_stuck_scheduled_runs`` (hourly): marks runs that have been
-  QUEUED >15 min or RUNNING >45 min as ``failed (stuck)``.
+- ``dispatch_due_scheduled_tasks`` (primary queue, per tenant, every
+  30 s): claims due rows via ``FOR UPDATE SKIP LOCKED``, advances
+  ``next_run_at``, writes either a QUEUED run row (and enqueues the
+  executor onto ``scheduled_tasks``) or a SKIPPED row (when a prior run
+  is still in flight). Lightweight DB-only work, so it lives on primary
+  rather than competing with long-running executor slots.
+- ``run_scheduled_task(run_id)`` (``scheduled_tasks`` queue): thin
+  delegation to ``run_scheduled_task_logic`` in the executor module.
+  The dedicated worker exists for this task.
+- ``cleanup_stuck_scheduled_runs`` (primary queue, hourly): marks runs
+  that have been QUEUED >15 min or RUNNING >45 min as
+  ``failed (stuck)``.
 
 Per CLAUDE.md:
 
