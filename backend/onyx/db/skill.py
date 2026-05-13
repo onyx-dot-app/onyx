@@ -285,6 +285,8 @@ def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
         return None
+    # TODO: delete the bundle blob from S3 (file store) once the API caller
+    # wires this up — currently returned for the caller to handle.
     bundle_file_id = skill.bundle_file_id
     db_session.delete(skill)
     db_session.flush()
