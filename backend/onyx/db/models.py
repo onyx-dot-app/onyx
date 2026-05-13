@@ -4204,9 +4204,6 @@ class Skill(Base):
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    deleted_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4224,14 +4221,7 @@ class Skill(Base):
         viewonly=True,
     )
 
-    __table_args__ = (
-        Index(
-            "ux_skill_slug",
-            "slug",
-            unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
-        ),
-    )
+    __table_args__ = (UniqueConstraint("slug", name="uq_skill_slug"),)
 
 
 """
