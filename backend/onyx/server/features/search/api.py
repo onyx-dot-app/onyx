@@ -24,7 +24,6 @@ from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
@@ -54,37 +53,6 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search")
-
-
-def _build_results(
-    citation_mapping: dict[int, str],
-    llm_facing_text: str,
-) -> list[SearchResult]:
-    """Build SearchResults from the LLM-facing JSON, one per merged section."""
-    if not llm_facing_text:
-        return []
-    parsed = json.loads(llm_facing_text)
-
-    results: list[SearchResult] = []
-    for entry in parsed.get("results", []):
-        citation_id = entry.get("document")
-        if not isinstance(citation_id, int):
-            continue
-        document_id = citation_mapping.get(citation_id)
-        if document_id is None:
-            continue
-        results.append(
-            SearchResult(
-                citation_id=citation_id,
-                document_id=document_id,
-                title=entry["title"],
-                content=entry["content"],
-                link=entry.get("url"),
-                source_type=entry["source_type"],
-                updated_at=entry.get("updated_at"),
-            )
-        )
-    return results
 
 
 @router.post("", dependencies=[Depends(require_vector_db)])
@@ -220,12 +188,19 @@ def search(
         queries=[request.query],
     )
 
-    # 8. Map output
-    search_docs_response = cast(SearchDocsResponse, tool_response.rich_response)
-
+    # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).
+    llm_facing_text = tool_response.llm_facing_response
+    entries = json.loads(llm_facing_text)["results"] if llm_facing_text else []
     return SearchResponse(
-        results=_build_results(
-            search_docs_response.citation_mapping,
-            tool_response.llm_facing_response,
-        ),
+        results=[
+            SearchResult(
+                citation_id=entry["document"],
+                title=entry["title"],
+                content=entry["content"],
+                link=entry.get("url"),
+                source_type=entry["source_type"],
+                updated_at=entry.get("updated_at"),
+            )
+            for entry in entries
+        ],
     )
