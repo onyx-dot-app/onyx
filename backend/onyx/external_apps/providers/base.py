@@ -2,17 +2,20 @@
 
 from abc import ABC
 from abc import abstractmethod
-from dataclasses import dataclass
 from typing import Any
 from typing import ClassVar
+
+from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.db.enums import ExternalAppType
 
 
-@dataclass(frozen=True)
-class OrgCredentialField:
+class OrgCredentialField(BaseModel):
     """One credential field the admin must fill in when configuring a
     built-in provider (e.g. OAuth client_id, client_secret)."""
+
+    model_config = ConfigDict(frozen=True)
 
     key: str
     label: str
