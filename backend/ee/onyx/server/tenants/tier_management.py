@@ -24,6 +24,32 @@ class CachedTier(NamedTuple):
     trial_end: datetime | None
 
 
+def _parse_trial_end(raw: object, tenant_id: str) -> datetime | None:
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid trial_end ISO string for tenant %s: %r",
+            tenant_id,
+            raw,
+        )
+        return None
+    # `datetime.fromisoformat` preserves whatever tzinfo the source string
+    # carried (or None). A naive datetime would `TypeError` against the
+    # tz-aware `datetime.now(timezone.utc)` comparison in `_effective_tier`,
+    # so reject it here rather than poison the cache.
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        logger.warning(
+            "Naive trial_end in cache for tenant %s: %r",
+            tenant_id,
+            raw,
+        )
+        return None
+    return parsed
+
+
 def update_tenant_tier(
     tenant_id: str,
     customer_tier: CustomerTier,
@@ -84,16 +110,6 @@ def get_cached_tier(tenant_id: str) -> CachedTier | None:
         )
         return None
 
-    raw_trial_end = parsed.get("trial_end")
-    trial_end: datetime | None = None
-    if isinstance(raw_trial_end, str):
-        try:
-            trial_end = datetime.fromisoformat(raw_trial_end)
-        except ValueError:
-            logger.warning(
-                "Invalid trial_end ISO string for tenant %s: %r",
-                tenant_id,
-                raw_trial_end,
-            )
+    trial_end = _parse_trial_end(parsed.get("trial_end"), tenant_id)
 
     return CachedTier(customer_tier=customer_tier, trial_end=trial_end)

@@ -6,6 +6,7 @@ else (cache reads/writes, JSON serialization, datetime comparisons) runs for
 real.
 """
 
+import json
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
@@ -129,6 +130,57 @@ def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
     # Allow microsecond drift from ISO round-trip.
     assert cached.trial_end is not None
     assert abs((cached.trial_end - future).total_seconds()) < 1
+
+
+def test_cached_naive_trial_end_is_treated_as_none() -> None:
+    """A cache entry with a naive `trial_end` ISO string must not crash the
+    tz-aware comparison in `_effective_tier`. It should be parsed as `None`
+    (logged) and the tenant should resolve to their unpromoted tier."""
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    payload = json.dumps(
+        {
+            "customer_tier": CustomerTier.BUSINESS.value,
+            # Note: no offset → naive.
+            "trial_end": "2099-01-01T12:00:00",
+        }
+    )
+    redis_client.set(TENANT_TIER_KEY, payload)
+
+    cached = get_cached_tier(TEST_TENANT_ID)
+    assert cached is not None
+    assert cached.customer_tier == CustomerTier.BUSINESS
+    assert cached.trial_end is None
+
+    # End-to-end: must not raise, must fall back to unpromoted BUSINESS.
+    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.BUSINESS
+
+
+def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
+    """If CP ever returns a naive `trial_end` in BillingInformation, the
+    lazy-refresh path must drop it instead of crashing `_effective_tier`."""
+    naive_future = datetime(2099, 1, 1, 12, 0, 0)  # no tzinfo
+    now = datetime.now(timezone.utc)
+    billing = BillingInformation(
+        stripe_subscription_id="sub_test",
+        status="trialing",
+        current_period_start=now - timedelta(days=1),
+        current_period_end=now + timedelta(days=30),
+        number_of_seats=1,
+        cancel_at_period_end=False,
+        canceled_at=None,
+        trial_start=None,
+        trial_end=naive_future,
+        seats=1,
+        payment_method_enabled=False,
+        customer_tier=CustomerTier.BUSINESS,
+    )
+
+    with patch.object(
+        tier_module, "fetch_billing_information", return_value=billing
+    ):
+        result = tier_module.get_tier(TEST_TENANT_ID)
+
+    assert result == Tier.BUSINESS
 
 
 def test_cache_miss_subscription_status_response_falls_back_to_business() -> None:

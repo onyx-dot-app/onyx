@@ -111,6 +111,14 @@ def _extract_billing_state(
     trial_end = getattr(billing, "trial_end", None)
     if not isinstance(trial_end, datetime):
         trial_end = None
+    elif trial_end.tzinfo is None or trial_end.tzinfo.utcoffset(trial_end) is None:
+        # Mirrors the cache-read guard: a naive trial_end would crash the
+        # tz-aware comparison in `_effective_tier`. Drop it and log so a
+        # CP-side regression is visible.
+        logger.warning(
+            "CP returned naive trial_end; dropping: %r", trial_end
+        )
+        trial_end = None
     return customer_tier, trial_end
 
 
