@@ -63,7 +63,9 @@ def _effective_tier(
         and trial_end > datetime.now(timezone.utc)
     ):
         return Tier.ENTERPRISE
-    return _CUSTOMER_TIER_TO_TIER[customer_tier]
+    # Unknown tier (e.g. a future CustomerTier value): fall back to the
+    # cloud floor — BUSINESS — rather than over-granting ENTERPRISE.
+    return _CUSTOMER_TIER_TO_TIER.get(customer_tier, Tier.BUSINESS)
 
 
 def tier_from_license_metadata(metadata: object | None) -> Tier:
