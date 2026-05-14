@@ -60,7 +60,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--active", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -112,7 +112,6 @@ repos:
         language_version: "1.26.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
-
   - repo: https://github.com/sirwart/ripsecrets
     rev: 7d94620933e79b8acaa0cd9e60e9864b07673d86 # frozen: v0.1.11
     hooks:
@@ -122,15 +121,14 @@ repos:
           - --additional-pattern
           - ^sk-[A-Za-z0-9_\-]{20,}$
 
-  - repo: local
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform-fmt
-        name: terraform fmt
-        entry: terraform fmt -recursive
-        language: system
-        pass_filenames: false
+      - id: terraform_fmt
         files: \.tf$
 
+  - repo: local
+    hooks:
       - id: npm-install
         name: npm install
         description: "Automatically run 'npm install' after a checkout, pull or rebase"
