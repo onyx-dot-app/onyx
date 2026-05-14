@@ -39,7 +39,9 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
     doc_batches = gitlab_connector.load_from_state()
     docs = list(itertools.chain(*doc_batches))
     # Assert right number of docs - Adjust if necessary based on test repo state
-    assert len(docs) >= 79
+    # Deduplication ensures that even with multiple branches, identical files
+    # are only indexed once, so the count should remain stable.
+    assert len(docs) == 79
 
     # Find one of each type to validate
     validated_mr = False
