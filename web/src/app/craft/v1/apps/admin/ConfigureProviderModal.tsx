@@ -45,7 +45,7 @@ export default function ConfigureProviderModal({
   }, [open, preset, existingApp]);
 
   const allFilled = preset.required_org_credential_fields.every(
-    (f) => values[f.key]?.trim().length > 0
+    (f) => (values[f.key] ?? "").trim().length > 0
   );
 
   async function save() {
@@ -64,7 +64,8 @@ export default function ConfigureProviderModal({
         id: existingApp?.id ?? null,
         name: preset.name,
         description: preset.description,
-        upstream_urls: preset.upstream_urls,
+        app_type: preset.app_type,
+        upstream_url_patterns: preset.upstream_url_patterns,
         auth_template: preset.auth_template,
         organization_credentials: merged,
         enabled: true,

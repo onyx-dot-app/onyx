@@ -11,6 +11,9 @@ import { IconFunctionComponent } from "@opal/types";
 
 export type BuiltInProviderKey = "slack" | "googleCalendar" | "linear";
 
+// Mirrors `onyx.db.enums.ExternalAppType` on the backend.
+export type ExternalAppType = "SLACK" | "GOOGLE_CALENDAR" | "LINEAR" | "CUSTOM";
+
 export interface OrgCredentialField {
   key: string;
   label: string;
@@ -22,8 +25,10 @@ export interface OrgCredentialField {
 export interface BuiltInProviderPreset {
   /** Must match the backend `OAuth.app_name` so dispatch lines up. */
   name: string;
+  /** Discriminator the backend keys OAuth dispatch off. */
+  app_type: ExternalAppType;
   description: string;
-  upstream_urls: string[];
+  upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   required_org_credential_fields: OrgCredentialField[];
   setup_instructions: string;
@@ -38,9 +43,10 @@ export const BUILT_IN_PROVIDER_REGISTRY: Record<
 > = {
   slack: {
     name: "Slack",
+    app_type: "SLACK",
     description:
       "Read your Slack messages and channels as context inside Onyx Craft.",
-    upstream_urls: ["https://slack\\.com/api/.*"],
+    upstream_url_patterns: ["https://slack\\.com/api/.*"],
     auth_template: {
       Authorization: "Bearer {access_token}",
     },
@@ -71,9 +77,10 @@ export const BUILT_IN_PROVIDER_REGISTRY: Record<
   },
   googleCalendar: {
     name: "Google Calendar",
+    app_type: "GOOGLE_CALENDAR",
     description:
       "Read and create events on your Google Calendar from inside Onyx Craft.",
-    upstream_urls: ["https://www\\.googleapis\\.com/calendar/.*"],
+    upstream_url_patterns: ["https://www\\.googleapis\\.com/calendar/.*"],
     auth_template: {
       Authorization: "Bearer {access_token}",
     },
@@ -105,9 +112,10 @@ export const BUILT_IN_PROVIDER_REGISTRY: Record<
   },
   linear: {
     name: "Linear",
+    app_type: "LINEAR",
     description:
       "Read and create issues, projects, and comments in Linear on the user's behalf.",
-    upstream_urls: ["https://api\\.linear\\.app/.*"],
+    upstream_url_patterns: ["https://api\\.linear\\.app/.*"],
     auth_template: {
       Authorization: "Bearer {access_token}",
     },
@@ -145,7 +153,8 @@ export interface ExternalAppAdminResponse {
   id: number;
   name: string;
   description: string;
-  upstream_urls: string[];
+  app_type: ExternalAppType;
+  upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
   enabled: boolean;
@@ -165,7 +174,7 @@ export function findAppForProvider(
   providerKey: BuiltInProviderKey
 ): ExternalAppAdminResponse | null {
   const preset = BUILT_IN_PROVIDER_REGISTRY[providerKey];
-  return apps.find((a) => a.name === preset.name) ?? null;
+  return apps.find((a) => a.app_type === preset.app_type) ?? null;
 }
 
 export function findUserAppForProvider(
