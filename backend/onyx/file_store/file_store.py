@@ -8,6 +8,7 @@ from typing import Any
 from typing import cast
 from typing import IO
 from typing import NotRequired
+from typing import TYPE_CHECKING
 from typing import TypedDict
 
 import boto3
@@ -39,6 +40,9 @@ from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+if TYPE_CHECKING:
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
 
@@ -295,7 +299,7 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    "S3 bucket '%s' exists but access is forbidden", bucket_name
+                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
@@ -619,25 +623,57 @@ def get_s3_file_store() -> S3BackedFileStore:
     )
 
 
+def get_gcs_file_store() -> "GCSBackedFileStore":
+    """Returns the GCS file store implementation."""
+    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
+    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
+    from onyx.configs.app_configs import GCS_PROJECT_ID
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
+
+    bucket_name = GCS_FILE_STORE_BUCKET_NAME
+    if not bucket_name:
+        raise RuntimeError("GCS_FILE_STORE_BUCKET_NAME is required for GCS file store")
+
+    return GCSBackedFileStore(
+        bucket_name=bucket_name,
+        gcs_prefix=GCS_FILE_STORE_PREFIX,
+        project_id=GCS_PROJECT_ID,
+        service_account_key_path=GCS_SERVICE_ACCOUNT_KEY_PATH,
+        service_account_key_json=GCS_SERVICE_ACCOUNT_KEY_JSON,
+    )
+
+
 def get_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
-    When FILE_STORE_BACKEND=postgres (default):
+    When FILE_STORE_BACKEND=postgres:
     - Files are stored in PostgreSQL using Large Objects.
     - No external storage service (S3/MinIO) is required.
 
-    When FILE_STORE_BACKEND=s3:
+    When FILE_STORE_BACKEND=s3 (default):
     - Supports AWS S3, MinIO, and other S3-compatible storage.
     - Configuration via environment variables:
       - S3_FILE_STORE_BUCKET_NAME, S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, etc.
+
+    When FILE_STORE_BACKEND=gcs:
+    - Uses Google Cloud Storage with ADC/Workload Identity or service account keys.
+    - Configuration via environment variables:
+      - GCS_FILE_STORE_BUCKET_NAME, GCS_PROJECT_ID, GCS_SERVICE_ACCOUNT_KEY_PATH, etc.
     """
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
 
-    if FileStoreType(FILE_STORE_BACKEND) == FileStoreType.POSTGRES:
+    backend = FileStoreType(FILE_STORE_BACKEND)
+
+    if backend == FileStoreType.POSTGRES:
         from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 
         return PostgresBackedFileStore()
+
+    if backend == FileStoreType.GCS:
+        return get_gcs_file_store()
 
     return get_s3_file_store()

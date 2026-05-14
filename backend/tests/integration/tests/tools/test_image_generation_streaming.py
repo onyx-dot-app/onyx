@@ -71,7 +71,9 @@ def test_image_generation_streaming(
         assert "obj" in packet, "Heartbeat packet should have 'obj' field"
         assert (
             packet["obj"].get("type") == StreamingType.IMAGE_GENERATION_HEARTBEAT.value
-        ), f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, got {packet['obj'].get('type')}"
+        ), (
+            f"Expected heartbeat type to be {StreamingType.IMAGE_GENERATION_HEARTBEAT.value}, got {packet['obj'].get('type')}"
+        )
     # 4. Verify image generation tool delta packets with actual image data
     image_tool_results = [
         tool

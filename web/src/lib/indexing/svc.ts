@@ -149,8 +149,7 @@ interface SetNewSearchSettingsArgs {
   providerName: EmbeddingProviderName;
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
-  contextualRagLlmName: string | null;
-  contextualRagLlmProvider: string | null;
+  contextualRagModelConfigurationId: number | null;
 }
 
 export async function setNewSearchSettings({
@@ -158,8 +157,7 @@ export async function setNewSearchSettings({
   providerName,
   switchoverType,
   enableContextualRag,
-  contextualRagLlmName,
-  contextualRagLlmProvider,
+  contextualRagModelConfigurationId,
 }: SetNewSearchSettingsArgs): Promise<Response> {
   // The backend's EmbeddingProvider enum only contains cloud providers
   // (openai/cohere/voyage/google/litellm/azure). Self-hosted models live
@@ -182,8 +180,7 @@ export async function setNewSearchSettings({
       index_name: null,
       multipass_indexing: false,
       enable_contextual_rag: enableContextualRag,
-      contextual_rag_llm_name: contextualRagLlmName,
-      contextual_rag_llm_provider: contextualRagLlmProvider,
+      contextual_rag_model_configuration_id: contextualRagModelConfigurationId,
       switchover_type: switchoverType,
     }),
   });

@@ -69,6 +69,11 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          failed-jobs: nightly-external-dependency-unit-tests
+          details: |
+            *Failed jobs:*
+            nightly-external-dependency-unit-tests
+
+            *To reproduce locally:*
+            `uv run pytest -m nightly backend/tests/external_dependency_unit`
           title: "🚨 Nightly External Dependency Unit Tests failed!"
           ref-name: ${{ github.ref_name }}

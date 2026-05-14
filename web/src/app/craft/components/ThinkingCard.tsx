@@ -69,7 +69,7 @@ export default function ThinkingCard({
             <SvgChevronDown
               className={cn(
                 "size-4 stroke-text-03 transition-transform duration-150",
-                !isOpen && "rotate-[-90deg]"
+                !isOpen && "-rotate-90"
               )}
             />
           </button>
@@ -85,7 +85,9 @@ export default function ThinkingCard({
                 "italic"
               )}
             >
-              <p className="whitespace-pre-wrap break-words m-0">{content}</p>
+              <p className="whitespace-pre-wrap wrap-break-word m-0">
+                {content}
+              </p>
             </div>
           </div>
         </CollapsibleContent>

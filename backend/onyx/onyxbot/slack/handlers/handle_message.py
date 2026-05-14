@@ -2,15 +2,19 @@ import datetime
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from sqlalchemy.orm import Session
 
 from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import ONYX_BOT_REACT_EMOJI
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
+from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackChannelConfig
 from onyx.db.user_preferences import activate_user
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
@@ -23,6 +27,7 @@ from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
+from shared_configs.contextvars import get_current_tenant_id
 
 logger_base = setup_logger()
 
@@ -109,6 +114,26 @@ def remove_scheduled_feedback_reminder(
             )
 
 
+def _resolve_allowlist_user_ids(
+    channel_conf: ChannelConfig | None,
+    client: WebClient,
+) -> tuple[list[str] | None, list[str]]:
+    """Resolve `respond_member_group_list` (emails + group names) to Slack user IDs.
+
+    Returns (resolved_user_ids, missing_entries). `resolved_user_ids` is `None`
+    when no allowlist is configured, meaning the bot has no invocation gate or
+    response-visibility scope for the channel.
+    """
+    allowlist = (channel_conf or {}).get("respond_member_group_list") or None
+    if not allowlist:
+        return None, []
+
+    user_ids, missing_ids = fetch_slack_user_ids_from_emails(allowlist, client)
+    group_user_ids, missing = fetch_user_ids_from_groups(missing_ids, client)
+    resolved = list(set(user_ids + group_user_ids))
+    return resolved, missing
+
+
 def handle_message(
     message_info: SlackMessageInfo,
     slack_channel_config: SlackChannelConfig,
@@ -132,6 +157,45 @@ def handle_message(
     is_slash_command = message_info.is_slash_command
     is_bot_dm = message_info.is_bot_dm
 
+    channel_conf: ChannelConfig | None = (
+        slack_channel_config.channel_config
+        if slack_channel_config and slack_channel_config.channel_config
+        else None
+    )
+
+    # Resolve the allowlist once. Drives both the invocation gate (who can
+    # trigger the bot) and the response-visibility scope (who sees responses).
+    # `None` means no allowlist configured -> no gate, no visibility scoping.
+    allowed_user_ids, missing_allowlist_entries = _resolve_allowlist_user_ids(
+        channel_conf, client
+    )
+    if missing_allowlist_entries:
+        logger.warning(
+            "Failed to find these users/groups in respond_member_group_list: %s",
+            missing_allowlist_entries,
+        )
+        if allowed_user_ids is not None and not allowed_user_ids:
+            # Allowlist is configured but every entry failed to resolve — bot is
+            # silent to everyone until lookups recover. Surface at ERROR so it
+            # alerts instead of hiding in WARN noise.
+            logger.error(
+                "respond_member_group_list is configured but no entries resolved; "
+                "OnyxBot will be silent in this channel until lookups recover"
+            )
+
+    # Invocation gate: drop non-allowlisted senders before emitting telemetry or
+    # creating a Slack-user account row (which would consume a license seat).
+    # Applies even to direct @-tags / DMs — this is a license-seat gate, not a
+    # content filter.
+    if allowed_user_ids is not None and (
+        sender_id is None or sender_id not in allowed_user_ids
+    ):
+        logger.info(
+            "Skipping message: sender %s is not in respond_member_group_list",
+            sender_id,
+        )
+        return False
+
     action = "slack_message"
     if is_slash_command:
         action = "slack_slash_message"
@@ -149,11 +213,8 @@ def handle_message(
         ]
 
     respond_tag_only = False
-    respond_member_group_list = None
 
-    channel_conf = None
-    if slack_channel_config and slack_channel_config.channel_config:
-        channel_conf = slack_channel_config.channel_config
+    if channel_conf:
         if not bypass_filters and "answer_filters" in channel_conf:
             if (
                 "questionmark_prefilter" in channel_conf["answer_filters"]
@@ -171,7 +232,6 @@ def handle_message(
         )
 
         respond_tag_only = channel_conf.get("respond_tag_only") or False
-        respond_member_group_list = channel_conf.get("respond_member_group_list", None)
 
     # Only default config can be disabled.
     # If channel config is disabled, bot should not respond to this message (including DMs)
@@ -184,19 +244,8 @@ def handle_message(
         logger.info("Skipping message: OnyxBot only responds to tags in this channel")
         return False
 
-    # List of user id to send message to, if None, send to everyone in channel
-    send_to: list[str] | None = None
-    missing_users: list[str] | None = None
-    if respond_member_group_list:
-        send_to, missing_ids = fetch_slack_user_ids_from_emails(
-            respond_member_group_list, client
-        )
-
-        user_ids, missing_users = fetch_user_ids_from_groups(missing_ids, client)
-        send_to = list(set(send_to + user_ids)) if send_to else user_ids
-
-        if missing_users:
-            logger.warning("Failed to find these users/groups: %s", missing_users)
+    # Reuses the resolved allowlist as the ephemeral response-visibility scope.
+    send_to: list[str] | None = allowed_user_ids
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
@@ -251,11 +300,18 @@ def handle_message(
                 not existing_user.is_active
                 and existing_user.account_type == AccountType.BOT
             ):
+                # Lock + check on the same session that commits activate_user.
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
                 check_seat_fn = fetch_ee_implementation_or_noop(
                     "onyx.db.license",
                     "check_seat_availability",
                     None,
                 )
+                acquire_lock_fn(db_session, get_current_tenant_id())
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
                     logger.info(
@@ -286,7 +342,94 @@ def handle_message(
                 invalidate_license_cache_fn()
                 logger.info("Reactivated inactive Slack user %s", message_info.email)
 
-            add_slack_user_if_not_exists(db_session, message_info.email)
+            elif existing_user.account_type == AccountType.EXT_PERM_USER:
+                # Pre-check so the user gets a Slack-side message; the
+                # locked enforcer below is defense-in-depth.
+                check_seat_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                seat_result = check_seat_fn(db_session=db_session)
+                if seat_result is not None and not seat_result.available:
+                    logger.info(
+                        "Blocked Slack-bot promotion of %s: %s",
+                        message_info.email,
+                        seat_result.error_message,
+                    )
+                    respond_in_thread_or_channel(
+                        client=client,
+                        channel=channel,
+                        thread_ts=message_info.msg_to_respond,
+                        text=(
+                            "We weren't able to respond because your organization "
+                            "has reached its user seat limit. Please contact your "
+                            "Onyx administrator to add more seats."
+                        ),
+                    )
+                    return False
+
+            # Defense-in-depth: locks + checks on the same session that
+            # commits the EXT_PERM_USER -> BOT promotion.
+            def _slack_seat_enforcer(session: Session, seats_needed: int) -> None:
+                acquire_lock_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "acquire_seat_lock",
+                    None,
+                )
+                check_fn = fetch_ee_implementation_or_noop(
+                    "onyx.db.license",
+                    "check_seat_availability",
+                    None,
+                )
+                acquire_lock_fn(session, get_current_tenant_id())
+                result = check_fn(session, seats_needed=seats_needed)
+                if result is not None and not result.available:
+                    raise OnyxError(
+                        OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message
+                    )
+
+            # Snapshot pre-call seat-counted state. ``add_slack_user_if_not_exists``
+            # mutates ``existing_user`` in place on EXT_PERM_USER -> BOT, so
+            # reading ``account_type`` after the call would see the new value
+            # and skip cache invalidation.
+            consumed_seat = existing_user is None or (
+                existing_user.account_type == AccountType.EXT_PERM_USER
+            )
+
+            try:
+                add_slack_user_if_not_exists(
+                    db_session,
+                    message_info.email,
+                    enforce_seat_check=_slack_seat_enforcer,
+                )
+            except OnyxError as e:
+                if e.error_code != OnyxErrorCode.SEAT_LIMIT_EXCEEDED:
+                    raise
+                logger.info(
+                    "Blocked Slack-bot user creation/promotion for %s: %s",
+                    message_info.email,
+                    e.detail,
+                )
+                respond_in_thread_or_channel(
+                    client=client,
+                    channel=channel,
+                    thread_ts=message_info.msg_to_respond,
+                    text=(
+                        "We weren't able to respond because your organization "
+                        "has reached its user seat limit. Please contact your "
+                        "Onyx administrator to add more seats."
+                    ),
+                )
+                return False
+            else:
+                if consumed_seat:
+                    invalidate_fn = fetch_ee_implementation_or_noop(
+                        "onyx.db.license",
+                        "invalidate_license_cache",
+                        None,
+                    )
+                    invalidate_fn()
 
         # first check if we need to respond with a standard answer
         # standard answers should be published in a thread

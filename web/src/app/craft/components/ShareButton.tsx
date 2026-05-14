@@ -7,7 +7,7 @@ import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@opal/utils";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";

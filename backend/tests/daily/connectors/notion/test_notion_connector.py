@@ -75,9 +75,9 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
                 documents.append(item)
 
     # Verify document count
-    assert (
-        len(documents) == 5
-    ), "Expected exactly 5 documents (root, two children, table entry, and table entry child)"
+    assert len(documents) == 5, (
+        "Expected exactly 5 documents (root, two children, table entry, and table entry child)"
+    )
 
     # Verify HierarchyNodes against ground truth (empty for now)
     expected_hierarchy_nodes: list[HierarchyNode] = []

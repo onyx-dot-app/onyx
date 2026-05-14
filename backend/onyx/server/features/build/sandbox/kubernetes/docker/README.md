@@ -7,12 +7,10 @@ This directory contains the Dockerfile and resources for building the Onyx Craft
 ```
 docker/
 ├── Dockerfile              # Main container image definition
-├── demo_data.zip           # Demo data (extracted to /workspace/demo_data)
-├── skills/                 # Agent skills (image-generation, pptx, etc.)
+├── skills/                 # Agent skills (company-search, image-generation, pptx, etc.)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
-├── generate_agents_md.py   # Script to generate AGENTS.md for sessions
 └── README.md               # This file
 ```
 
@@ -81,11 +79,12 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ## What's Baked Into the Image
 
 - **Base**: `node:20-slim` (Debian-based)
-- **Demo data**: `/workspace/demo_data/` - sample files for demo sessions
-- **Skills**: `/workspace/skills/` - agent skills (image-generation, pptx, etc.)
-- **Templates**: `/workspace/templates/outputs/` - Next.js web app scaffold
+- **Skills**: `/workspace/skills/` — agent skills (company-search, image-generation, pptx)
+- **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
+- **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
+- **AWS CLI**: For S3 snapshot operations
 
 ## Runtime Directory Structure
 
@@ -93,15 +92,12 @@ When a session is created, the following structure is set up in the pod:
 
 ```
 /workspace/
-├── demo_data/              # Baked into image
-├── files/                  # Mounted volume, synced from S3
 ├── skills/                 # Baked into image (agent skills)
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/
         ├── .opencode/
         │   └── skills/     # Symlink to /workspace/skills
-        ├── files/          # Symlink to /workspace/demo_data or /workspace/files
         ├── outputs/        # Copied from templates, contains web app
         ├── attachments/    # User-uploaded files
         ├── org_info/       # Demo persona info (if demo mode)

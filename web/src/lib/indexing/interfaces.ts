@@ -139,8 +139,7 @@ export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
   enable_contextual_rag: boolean;
-  contextual_rag_llm_name: string | null;
-  contextual_rag_llm_provider: string | null;
+  contextual_rag_model_configuration_id: number | null;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
@@ -150,8 +149,7 @@ export interface AdvancedSearchConfiguration {
 }
 
 export interface SavedSearchSettings
-  extends RerankingDetails,
-    AdvancedSearchConfiguration {
+  extends RerankingDetails, AdvancedSearchConfiguration {
   model_name: string;
   model_dim: number;
   normalize: boolean;
@@ -162,7 +160,7 @@ export interface SavedSearchSettings
 }
 
 export interface LLMContextualCost {
-  provider: string;
+  provider_name: string;
   model_name: string;
   cost: number;
 }

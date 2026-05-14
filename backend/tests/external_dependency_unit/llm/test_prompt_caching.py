@@ -264,9 +264,9 @@ def test_openai_prompt_caching_reduces_costs(
 
     # empirically there's a 60% chance of success per attempt, so we expect at least one success in 8 attempts
     # (99.94% probability). we can bump this number if the test is too flaky.
-    assert (
-        successes > 0
-    ), f"Expected at least one success. 0 of {attempts} attempts used prompt caching."
+    assert successes > 0, (
+        f"Expected at least one success. 0 of {attempts} attempts used prompt caching."
+    )
 
 
 @pytest.mark.skipif(
@@ -412,9 +412,9 @@ def test_anthropic_prompt_caching_reduces_costs(
             continue
 
         # Cost should be lower on second call
-        assert (
-            cost2 < cost1
-        ), f"Expected lower cost on cached call. Cost 1: ${cost1:.10f}, Cost 2: ${cost2:.10f}"
+        assert cost2 < cost1, (
+            f"Expected lower cost on cached call. Cost 1: ${cost1:.10f}, Cost 2: ${cost2:.10f}"
+        )
         return
 
     pytest.skip(
@@ -598,9 +598,9 @@ def test_google_genai_prompt_caching_reduces_costs(
             except OSError:
                 pass
 
-    assert (
-        success
-    ), f"Expected Gemini prompt caching evidence across attempts. Last observed metrics: {last_metrics}"
+    assert success, (
+        f"Expected Gemini prompt caching evidence across attempts. Last observed metrics: {last_metrics}"
+    )
 
 
 @pytest.mark.skipif(

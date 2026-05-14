@@ -15,7 +15,7 @@ from ee.onyx.server.enterprise_settings.store import store_analytics_script
 from ee.onyx.server.enterprise_settings.store import store_settings as store_ee_settings
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
@@ -121,7 +121,15 @@ def _seed_llms(
 
     logger.notice("Seeding LLMs")
     for request in llm_upsert_requests:
-        existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
+        if not request.name:
+            # Nameless requests can't be safely matched to an existing provider
+            # without risking overwriting a user-created provider. Skip lookup.
+            continue
+        existing = fetch_existing_llm_provider_by_name_and_type(
+            name=request.name,
+            provider_type=request.provider,
+            db_session=db_session,
+        )
         if existing:
             request.id = existing.id
     seeded_providers: list[LLMProviderView] = []

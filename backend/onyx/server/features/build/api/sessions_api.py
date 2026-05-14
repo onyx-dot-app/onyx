@@ -1,5 +1,6 @@
 """API endpoints for Build Mode session management."""
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -8,6 +9,7 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,9 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
+from onyx.db.scheduled_task import get_scheduled_run_context
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
@@ -127,13 +132,10 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=(
-                request.user_work_area if request.demo_data_enabled else None
-            ),
-            user_level=request.user_level if request.demo_data_enabled else None,
+            user_work_area=request.user_work_area,
+            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
-            demo_data_enabled=request.demo_data_enabled,
         )
         db_session.commit()
 
@@ -480,9 +482,8 @@ def restore_session(
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
                             tenant_id=tenant_id,
-                            nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
+                            nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
-                            use_demo_data=session.demo_data_enabled,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
@@ -499,10 +500,12 @@ def restore_session(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
-                        nextjs_port=session.nextjs_port,  # ty: ignore[invalid-argument-type]
+                        nextjs_port=session.nextjs_port,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
+
+                session_manager.push_dynamic_skills(sandbox.id, user.id)
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",
@@ -884,3 +887,44 @@ def delete_file_endpoint(
         raise HTTPException(status_code=404, detail="File not found")
 
     return Response(status_code=204)
+
+
+# =============================================================================
+# Scheduled Task — session-view banner
+# =============================================================================
+
+
+class ScheduledRunContextResponse(BaseModel):
+    """Context surfaced by the session-view banner when a session came from a
+    scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
+    """
+
+    task_id: str
+    task_name: str
+    started_at: datetime
+
+
+@router.get("/{session_id}/scheduled-run-context")
+def get_session_scheduled_run_context(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ScheduledRunContextResponse:
+    """Return the scheduled-task context for a session, if any.
+
+    The web UI calls this on every session view; a 200 response means
+    "render the banner above the transcript and hide the chat input". A
+    404 means "this is an interactive session, behave normally".
+    """
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user.id,
+    )
+    if context is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
+    return ScheduledRunContextResponse(
+        task_id=str(context["task_id"]),
+        task_name=context["task_name"],
+        started_at=context["started_at"],
+    )

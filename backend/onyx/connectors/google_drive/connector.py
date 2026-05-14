@@ -888,9 +888,9 @@ class GoogleDriveConnector(
                 ):
                     if isinstance(file_or_token, str):
                         logger.debug("Done with max num pages for user %s", user_email)
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
 
@@ -930,9 +930,9 @@ class GoogleDriveConnector(
                     resume_start = curr_stage.completed_until
                     for file_or_token in _yield_from_drive(drive_id, resume_start):
                         if isinstance(file_or_token, str):
-                            checkpoint.completion_map[user_email].next_page_token = (
-                                file_or_token
-                            )
+                            checkpoint.completion_map[
+                                user_email
+                            ].next_page_token = file_or_token
                             return  # done with the max num pages, return checkpoint
                         yield file_or_token
 
@@ -948,9 +948,9 @@ class GoogleDriveConnector(
                 curr_stage.current_folder_or_drive_id = drive_id
                 for file_or_token in _yield_from_drive(drive_id, start):
                     if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
                 curr_stage.current_folder_or_drive_id = None
@@ -1429,7 +1429,8 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].completed_until
             yield from _yield_from_folder_crawl(
-                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                resume_start,
             )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
@@ -2052,6 +2053,47 @@ class GoogleDriveConnector(
                 )
             raise ConnectorValidationError(
                 f"Unexpected error during Google Drive validation: {e}"
+            )
+
+    def probe_directory_admin_permission(self) -> None:
+        """Verify the configured primary admin can call the Workspace directory API.
+
+        Required for permission sync, which calls
+        `admin.directory.users.get` to enumerate Workspace users and groups.
+        A 403 here predicts the same 403 in `_get_drive_members` mid-sync, so
+        misconfigured connectors fail at creation time instead of generating a
+        steady stream of `PermissionError` log lines on every group-sync tick.
+        """
+        admin_service = get_admin_service(
+            creds=self.creds,
+            user_email=self.primary_admin_email,
+        )
+        try:
+            admin_service.users().get(  # ty: ignore[unresolved-attribute]
+                userKey=self.primary_admin_email
+            ).execute()
+        except HttpError as e:
+            status_code = e.resp.status if e.resp else None
+            if status_code == 403:
+                raise InsufficientPermissionsError(
+                    f"Primary admin {self.primary_admin_email} is not authorized "
+                    "on the Google Workspace directory API. Reconnect the connector "
+                    "with an account that has admin directory access."
+                )
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Google Drive credentials (401)."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
+            )
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    f"Google Drive credentials are missing required scopes. {ONYX_SCOPE_INSTRUCTIONS} Full error: {e}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Workspace directory API probe: {e}"
             )
 
     @override

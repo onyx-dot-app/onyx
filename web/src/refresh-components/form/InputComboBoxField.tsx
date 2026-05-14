@@ -11,8 +11,10 @@ import { useOnChangeEvent, useOnChangeValue } from "@/hooks/formHooks";
  * when you need a combo box (free-text input with dropdown suggestions).
  * For a plain combo box without Formik binding, use `InputComboBox` directly.
  */
-export interface InputComboBoxFieldProps
-  extends Omit<InputComboBoxProps, "value"> {
+export interface InputComboBoxFieldProps extends Omit<
+  InputComboBoxProps,
+  "value"
+> {
   name: string;
 }
 

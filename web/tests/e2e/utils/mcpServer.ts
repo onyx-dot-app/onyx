@@ -212,6 +212,74 @@ export async function startMcpApiKeyServer(
 }
 
 /**
+ * Start the MCP per-user API key test server.
+ *
+ * Each request must carry an `Authorization: Bearer mcp_live-<key_id>-<secret>`
+ * header. When `requiredHeaders` is non-empty, every `/mcp/*` request must
+ * also carry those headers (non-empty values), exercising the multi-field
+ * per-user template flow in onyx.
+ *
+ * Pre-shared keys baked into the script:
+ *   - `mcp_live-kid_alice_001-S3cr3tAlice`
+ *   - `mcp_live-kid_bob_001-S3cr3tBob`
+ */
+export async function startMcpPerUserKeyServer(
+  options: StartServerOptions & { requiredHeaders?: string[] } = {}
+): Promise<McpServerProcess> {
+  const bindHost = options.bindHost || DEFAULT_BIND_HOST;
+  const publicHost = options.publicHost || DEFAULT_PUBLIC_HOST;
+  const port = options.port ?? 8007; // avoid clashing with other MCP test servers
+  const pythonBinary = options.pythonBinary || "python3";
+  const readyTimeout = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
+  const requiredHeaders = options.requiredHeaders ?? [];
+
+  const scriptPath =
+    options.scriptPath ||
+    path.resolve(
+      __dirname,
+      "../../../..",
+      "backend/tests/integration/mock_services/mcp_test_server/run_mcp_server_per_user_key.py"
+    );
+  const scriptDir = path.dirname(scriptPath);
+
+  const requiredHeaderArgs = requiredHeaders.flatMap((header) => [
+    "--require-header",
+    header,
+  ]);
+  const proc = spawn(
+    pythonBinary,
+    [scriptPath, port.toString(), ...requiredHeaderArgs],
+    {
+      cwd: scriptDir,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        MCP_SERVER_PORT: port.toString(),
+        MCP_SERVER_HOST: bindHost,
+        MCP_SERVER_PUBLIC_HOST: publicHost,
+      },
+    }
+  );
+
+  proc.stdout.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.log(`[mcp-per-user-key-server] ${message.trimEnd()}`);
+  });
+  proc.stderr.on("data", (chunk) => {
+    const message = chunk.toString();
+    console.error(`[mcp-per-user-key-server:stderr] ${message.trimEnd()}`);
+  });
+
+  proc.on("error", (err) => {
+    console.error("[mcp-per-user-key-server] failed to start", err);
+  });
+
+  await waitForPort(bindHost, port, proc, readyTimeout);
+
+  return new McpServerProcess(proc, bindHost, publicHost, port);
+}
+
+/**
  * Start the MCP Google OAuth Pass-Through test server.
  *
  * This server validates Google OAuth tokens that are passed through from Onyx.

@@ -161,7 +161,7 @@ export default function PptxPreview({
             onClick={goToPrev}
             disabled={currentSlide === 0}
             className={cn(
-              "p-1 rounded",
+              "p-1 rounded-sm",
               currentSlide === 0
                 ? "opacity-30 cursor-not-allowed"
                 : "hover:bg-background-neutral-03 cursor-pointer"
@@ -176,7 +176,7 @@ export default function PptxPreview({
             onClick={goToNext}
             disabled={currentSlide === slideCount - 1}
             className={cn(
-              "p-1 rounded",
+              "p-1 rounded-sm",
               currentSlide === slideCount - 1
                 ? "opacity-30 cursor-not-allowed"
                 : "hover:bg-background-neutral-03 cursor-pointer"

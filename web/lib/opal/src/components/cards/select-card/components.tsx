@@ -1,5 +1,9 @@
 import "@opal/components/cards/select-card/styles.css";
-import type { PaddingVariants, RoundingVariants } from "@opal/types";
+import type {
+  BorderVariants,
+  PaddingVariants,
+  RoundingVariants,
+} from "@opal/types";
 import { paddingVariants, cardRoundingVariants } from "@opal/shared";
 import { cn } from "@opal/utils";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
@@ -39,6 +43,16 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
    */
   rounding?: RoundingVariants;
 
+  /**
+   * Border style.
+   * - `"none"`: no border.
+   * - `"dashed"`: dashed border.
+   * - `"solid"`: solid border.
+   *
+   * @default "solid"
+   */
+  border?: BorderVariants;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 
@@ -74,6 +88,7 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
 function SelectCard({
   padding: paddingProp = "md",
   rounding: roundingProp = "md",
+  border = "solid",
   ref,
   children,
   ...statefulProps
@@ -83,7 +98,11 @@ function SelectCard({
 
   return (
     <Interactive.Stateful {...statefulProps} variant="select-card">
-      <div ref={ref} className={cn("opal-select-card", padding, rounding)}>
+      <div
+        ref={ref}
+        className={cn("opal-select-card", padding, rounding)}
+        data-border={border}
+      >
         {children}
       </div>
     </Interactive.Stateful>

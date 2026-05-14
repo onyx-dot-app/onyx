@@ -52,11 +52,13 @@ def downgrade() -> None:
     )
 
     # Set any remaining NULL task_prompts to empty string before making non-nullable
-    conn.execute(sa.text("""
+    conn.execute(
+        sa.text("""
             UPDATE persona
             SET task_prompt = ''
             WHERE task_prompt IS NULL
-            """))
+            """)
+    )
 
     # Revert task_prompt column to not nullable
     op.alter_column(

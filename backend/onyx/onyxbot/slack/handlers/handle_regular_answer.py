@@ -26,7 +26,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
-from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.onyxbot.slack.utils import get_channel_from_id
@@ -246,16 +245,14 @@ def handle_regular_answer(
         slack_context_str: str | None,
         onyx_user: User,
     ) -> ChatBasicResponse:
-        with get_session_with_current_tenant() as db_session:
-            packets = handle_stream_message_objects(
-                new_msg_req=new_message_request,
-                user=onyx_user,
-                db_session=db_session,
-                bypass_acl=False,
-                additional_context=slack_context_str,
-                slack_context=message_info.slack_context,
-            )
-            answer = gather_stream(packets)
+        packets = handle_stream_message_objects(
+            new_msg_req=new_message_request,
+            user=onyx_user,
+            bypass_acl=False,
+            additional_context=slack_context_str,
+            slack_context=message_info.slack_context,
+        )
+        answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
@@ -412,24 +409,6 @@ def handle_regular_answer(
             unfurl=False,
             send_as_ephemeral=send_as_ephemeral,
         )
-
-        # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
-        # the ephemeral message. This also will give the user a notification which ephemeral message does not.
-        # if there is no message_ts_to_respond_to, and we have made it this far, then this is a /onyx message
-        # so we shouldn't send_team_member_message
-        if (
-            target_receiver_ids
-            and message_ts_to_respond_to is not None
-            and not send_as_ephemeral
-            and target_thread_ts is not None
-        ):
-            send_team_member_message(
-                client=client,
-                channel=channel,
-                thread_ts=target_thread_ts,
-                receiver_ids=target_receiver_ids,
-                send_as_ephemeral=send_as_ephemeral,
-            )
 
         return False
 

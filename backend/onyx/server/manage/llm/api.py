@@ -42,6 +42,7 @@ from onyx.db.models import User
 from onyx.db.persona import user_can_access_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.factory import get_default_llm
@@ -55,6 +56,11 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
+from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_available_well_known_llms,
 )
@@ -271,6 +277,56 @@ def _validate_llm_provider_change(
         )
 
 
+def _validate_and_normalize_vertex_auth(
+    provider: str,
+    custom_config: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Enforce vertex_ai auth-method invariants and strip incompatible fields.
+
+    - Workload Identity (ADC) requires an explicit vertex_project and must not
+      carry a vertex_credentials blob (LiteLLM would otherwise try to use it).
+    - Service account JSON mode requires vertex_credentials.
+    - Missing vertex_auth_method is treated as service_account_json for
+      backwards compatibility with providers created before this field existed.
+    """
+    if provider != LlmProviderNames.VERTEX_AI or custom_config is None:
+        return custom_config
+
+    auth_method = custom_config.get(
+        VERTEX_AUTH_METHOD_KWARG, VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
+    )
+
+    if auth_method == VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY:
+        if MULTI_TENANT:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Workload Identity is not supported in multi-tenant deployments; "
+                "use Service Account JSON instead.",
+            )
+        if not (custom_config.get(VERTEX_PROJECT_KWARG) or "").strip():
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "vertex_project is required when using Workload Identity authentication",
+            )
+        # Don't persist a stale credentials blob alongside a WIF config.
+        return {
+            k: v for k, v in custom_config.items() if k != VERTEX_CREDENTIALS_FILE_KWARG
+        }
+
+    if auth_method == VERTEX_AUTH_METHOD_SERVICE_ACCOUNT:
+        if not (custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG) or "").strip():
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "vertex_credentials is required when using Service Account JSON authentication",
+            )
+        return custom_config
+
+    raise OnyxError(
+        OnyxErrorCode.VALIDATION_ERROR,
+        f"Unsupported vertex_auth_method: {auth_method}",
+    )
+
+
 @admin_router.get("/custom-provider-names")
 def fetch_custom_provider_names(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -350,6 +406,11 @@ def test_llm_configuration(
             )
         if existing_provider and not test_llm_request.custom_config_changed:
             test_custom_config = existing_provider.custom_config
+
+    test_custom_config = _validate_and_normalize_vertex_auth(
+        provider=test_llm_request.provider,
+        custom_config=test_custom_config,
+    )
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -450,23 +511,6 @@ def put_llm_provider(
             id=llm_provider_upsert_request.id, db_session=db_session
         )
 
-    # Check name constraints
-    # TODO: Once port from name to id is complete, unique name will no longer be required
-    if existing_provider and llm_provider_upsert_request.name != existing_provider.name:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Renaming providers is not currently supported",
-        )
-
-    found_provider = fetch_existing_llm_provider(
-        name=llm_provider_upsert_request.name, db_session=db_session
-    )
-    if found_provider is not None and found_provider is not existing_provider:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"Provider with name={llm_provider_upsert_request.name} already exists",
-        )
-
     if existing_provider and is_creation:
         raise OnyxError(
             OnyxErrorCode.DUPLICATE_RESOURCE,
@@ -523,6 +567,11 @@ def put_llm_provider(
         )
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
         llm_provider_upsert_request.custom_config = existing_provider.custom_config
+
+    llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
+        provider=llm_provider_upsert_request.provider,
+        custom_config=llm_provider_upsert_request.custom_config,
+    )
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
@@ -920,7 +969,7 @@ def get_provider_contextual_cost(
             cost = get_llm_contextual_cost(llm)
             costs.append(
                 LLMCost(
-                    provider=provider.name,
+                    provider_name=provider.name or provider.provider,
                     model_name=model_configuration.name,
                     cost=cost,
                 )
@@ -1589,7 +1638,10 @@ def get_bifrost_available_models(
     for model in models:
         try:
             model_id = model.get("id", "")
-            model_name = model.get("name", model_id)
+            # Prefer Bifrost's `normalized_name` (e.g. "Claude Sonnet 4.5"),
+            # which is only populated for models in its pricing catalog;
+            # fall back to the OpenAI-compatible `name`, then the raw id.
+            model_name = model.get("normalized_name") or model.get("name") or model_id
 
             if not model_id:
                 continue

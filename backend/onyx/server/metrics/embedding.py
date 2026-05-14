@@ -1,15 +1,13 @@
 """Prometheus metrics for embedding generation latency and throughput.
 
 Tracks client-side round-trip latency (as seen by callers of
-``EmbeddingModel.encode``) and server-side execution time (as measured inside
-the model server for the local-model path). Both API-provider and local-model
-paths flow through the client-side metric; only the local path populates the
-server-side metric.
+``EmbeddingModel.encode``).
 """
 
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
+from enum import Enum
 
 from prometheus_client import Counter
 from prometheus_client import Gauge
@@ -17,6 +15,19 @@ from prometheus_client import Histogram
 
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
+
+
+class QueryEmbeddingCacheLookupOutcome(str, Enum):
+    HIT = "hit"
+    MISS = "miss"
+    ERROR = "error"
+    SKIPPED = "skipped"
+
+
+class QueryEmbeddingCacheWriteOutcome(str, Enum):
+    SUCCESS = "success"
+    ERROR = "error"
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +83,20 @@ _embeddings_in_progress = Gauge(
     [PROVIDER_LABEL_NAME, TEXT_TYPE_LABEL_NAME],
 )
 
+CACHE_OUTCOME_LABEL_NAME = "outcome"
+
+_query_embedding_cache_lookups_total = Counter(
+    "onyx_query_embedding_cache_lookups_total",
+    "Query-embedding cache lookups, labeled by outcome.",
+    [PROVIDER_LABEL_NAME, CACHE_OUTCOME_LABEL_NAME],
+)
+
+_query_embedding_cache_writes_total = Counter(
+    "onyx_query_embedding_cache_writes_total",
+    "Query-embedding cache writes, labeled by outcome.",
+    [PROVIDER_LABEL_NAME, CACHE_OUTCOME_LABEL_NAME],
+)
+
 
 def provider_label(provider: EmbeddingProvider | None) -> str:
     if provider is None:
@@ -117,6 +142,42 @@ def observe_embedding_client(
             ).inc(num_chars)
     except Exception:
         logger.warning("Failed to record embedding client metrics.", exc_info=True)
+
+
+def observe_query_embedding_cache_lookup(
+    provider: EmbeddingProvider | None,
+    outcome: QueryEmbeddingCacheLookupOutcome,
+    count: int = 1,
+) -> None:
+    """Records the result of cache lookups for query embeddings."""
+    if count <= 0:
+        return
+    try:
+        _query_embedding_cache_lookups_total.labels(
+            provider=provider_label(provider), outcome=outcome.value
+        ).inc(count)
+    except Exception:
+        logger.warning(
+            "Failed to record query-embedding cache lookup metric.", exc_info=True
+        )
+
+
+def observe_query_embedding_cache_write(
+    provider: EmbeddingProvider | None,
+    outcome: QueryEmbeddingCacheWriteOutcome,
+    count: int = 1,
+) -> None:
+    """Records the result of cache writes for query embeddings."""
+    if count <= 0:
+        return
+    try:
+        _query_embedding_cache_writes_total.labels(
+            provider=provider_label(provider), outcome=outcome.value
+        ).inc(count)
+    except Exception:
+        logger.warning(
+            "Failed to record query-embedding cache write metric.", exc_info=True
+        )
 
 
 @contextmanager

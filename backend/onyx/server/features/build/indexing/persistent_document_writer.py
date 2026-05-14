@@ -348,7 +348,7 @@ class S3PersistentDocumentWriter:
     s3://{bucket}/{tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/document.json
 
     This matches the location that KubernetesSandboxManager reads from when
-    provisioning sandboxes (via the sidecar container's s5cmd sync command).
+    provisioning sandboxes.
     """
 
     def __init__(self, tenant_id: str, user_id: str):
@@ -416,8 +416,7 @@ class S3PersistentDocumentWriter:
         Documents are stored under tenant/user-segregated paths:
         {tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
-        This matches the path that KubernetesSandboxManager syncs from:
-        s5cmd sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/
+        This path is used for user library file storage in S3.
         """
         # Tenant and user segregation (matches K8s sandbox init container path)
         parts = [self.tenant_id, "knowledge", self.user_id]

@@ -16,7 +16,7 @@ import {
   SvgBarChart,
   SvgTrash,
 } from "@opal/icons";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
@@ -25,16 +25,16 @@ import {
   deleteAgent,
   toggleAgentFeatured,
   toggleAgentListed,
-} from "@/refresh-pages/admin/AgentsPage/svc";
-import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
+} from "@/lib/agents/svc";
+import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { useAgent } from "@/hooks/useAgents";
+import { useAgent } from "@/lib/agents/hooks";
 import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { useUser } from "@/providers/UserProvider";
 
@@ -43,7 +43,7 @@ import { useUser } from "@/providers/UserProvider";
 // ---------------------------------------------------------------------------
 
 interface AgentRowActionsProps {
-  agent: AgentRow;
+  agent: Agent;
   onMutate: () => void;
 }
 

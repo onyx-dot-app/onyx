@@ -467,9 +467,9 @@ def test_extraction_preserves_parent_hierarchy_raw_node_id(
     result = extract_ids_from_runnable_connector(connector, callback=None)
 
     for doc_id, expected_parent in DOC_PARENT_MAP.items():
-        assert (
-            result.raw_id_to_parent[doc_id] == expected_parent
-        ), f"raw_id_to_parent[{doc_id}] should be {expected_parent}"
+        assert result.raw_id_to_parent[doc_id] == expected_parent, (
+            f"raw_id_to_parent[{doc_id}] should be {expected_parent}"
+        )
 
     # Hierarchy node IDs should NOT be in raw_id_to_parent
     for channel_id in [CHANNEL_A_ID, CHANNEL_B_ID, CHANNEL_C_ID]:
@@ -515,9 +515,9 @@ def test_update_document_parent_hierarchy_nodes(db_session: Session) -> None:
         assert tmp_doc is not None
         doc = tmp_doc
         expected_node_id = node_id_by_raw[raw_parent]
-        assert (
-            doc.parent_hierarchy_node_id == expected_node_id
-        ), f"Document {doc_id} should point to node for {raw_parent}"
+        assert doc.parent_hierarchy_node_id == expected_node_id, (
+            f"Document {doc_id} should point to node for {raw_parent}"
+        )
 
 
 def test_update_document_parent_is_idempotent(db_session: Session) -> None:

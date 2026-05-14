@@ -526,7 +526,7 @@ function parseToolCallProgress(
     isNewFile:
       diffData.oldText || diffData.newText
         ? diffData.isNewFile
-        : patchInfo?.isNew ?? diffData.isNewFile,
+        : (patchInfo?.isNew ?? diffData.isNewFile),
     oldContent: diffData.oldText,
     newContent: diffData.newText,
     todos,

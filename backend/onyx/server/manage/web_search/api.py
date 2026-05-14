@@ -69,7 +69,11 @@ def list_search_providers(
             provider_type=WebSearchProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or {},
-            has_api_key=bool(provider.api_key),
+            masked_api_key=(
+                provider.api_key.get_value(apply_mask=True)
+                if provider.api_key
+                else None
+            ),
         )
         for provider in providers
     ]
@@ -132,7 +136,9 @@ def upsert_search_provider_endpoint(
         provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
@@ -164,7 +170,9 @@ def activate_search_provider(
         provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
@@ -242,7 +250,11 @@ def list_content_providers(
             provider_type=WebContentProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or WebContentProviderConfig(),
-            has_api_key=bool(provider.api_key),
+            masked_api_key=(
+                provider.api_key.get_value(apply_mask=True)
+                if provider.api_key
+                else None
+            ),
         )
         for provider in providers
     ]
@@ -305,7 +317,9 @@ def upsert_content_provider_endpoint(
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or WebContentProviderConfig(),
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
@@ -337,7 +351,9 @@ def activate_content_provider(
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or WebContentProviderConfig(),
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 

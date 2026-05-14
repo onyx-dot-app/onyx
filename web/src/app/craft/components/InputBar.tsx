@@ -10,9 +10,9 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -20,12 +20,8 @@ import {
   BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
-import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
-import { Button } from "@opal/components";
-import { Tooltip } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
@@ -34,10 +30,10 @@ import {
   SvgLoader,
   SvgX,
   SvgPaperclip,
-  SvgOrganization,
   SvgAlertCircle,
 } from "@opal/icons";
 import { useContentEditable } from "@/hooks/useContentEditable";
+import { useUser } from "@/providers/UserProvider";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -46,20 +42,12 @@ export interface InputBarHandle {
 }
 
 export interface InputBarProps {
-  onSubmit: (
-    message: string,
-    files: BuildFile[],
-    demoDataEnabled: boolean
-  ) => void;
+  onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
-  /** When true, removes bottom rounding to allow seamless connection with components below */
   noBottomRounding?: boolean;
-  /** Whether this is the welcome page (no existing session in URL). Used for Demo Data pill. */
-  isWelcomePage?: boolean;
 }
 
 /**
@@ -107,7 +95,7 @@ function BuildFileCard({
       </span>
       <button
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded"
+        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
       >
         <SvgX className="h-3 w-3 text-text-03" />
       </button>
@@ -157,12 +145,10 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
-        isWelcomePage = false,
       },
       ref
     ) => {
-      const router = useRouter();
-      const demoDataEnabled = useDemoDataEnabled();
+      const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -172,10 +158,19 @@ const InputBar = memo(
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
-        insertTextAtCursor,
+        pasteText,
+        handleCopy,
+        handleCut,
         setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
@@ -227,9 +222,10 @@ const InputBar = memo(
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
-          insertTextAtCursor(text);
+
+          pasteText(text);
         },
-        [disabled, uploadFiles, insertTextAtCursor]
+        [disabled, uploadFiles, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -240,7 +236,7 @@ const InputBar = memo(
         const hasFiles = currentMessageFiles.length > 0;
 
         if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          onSubmit(message.trim(), currentMessageFiles);
           clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
@@ -255,12 +251,13 @@ const InputBar = memo(
         onSubmit,
         currentMessageFiles,
         clearFiles,
-        demoDataEnabled,
         clearMessage,
       ]);
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
+          if (handleTileKeyDown(event)) return;
+
           // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
@@ -271,7 +268,7 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit]
+        [handleSubmit, handleTileKeyDown]
       );
 
       const canSubmit =
@@ -328,10 +325,10 @@ const InputBar = memo(
                   "w-full",
                   "h-full",
                   "min-h-[44px]",
-                  "outline-none",
+                  "outline-hidden",
                   "bg-transparent",
                   "whitespace-pre-wrap",
-                  "break-words",
+                  "wrap-break-word",
                   "overscroll-contain",
                   "overflow-y-auto",
                   "px-3",
@@ -350,6 +347,10 @@ const InputBar = memo(
                 aria-placeholder={placeholder}
                 data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
               />
             </div>
 
@@ -365,27 +366,6 @@ const InputBar = memo(
                   prominence="tertiary"
                   onClick={() => fileInputRef.current?.click()}
                 />
-                {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-                {demoDataEnabled && isWelcomePage && (
-                  <Tooltip
-                    tooltip="Switch to your data in the Configure panel!"
-                    side="top"
-                  >
-                    <span>
-                      <SelectButton
-                        disabled={disabled}
-                        leftIcon={SvgOrganization}
-                        engaged={demoDataEnabled}
-                        action
-                        folded
-                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                        className="bg-action-link-01"
-                      >
-                        Demo Data Active
-                      </SelectButton>
-                    </span>
-                  </Tooltip>
-                )}
               </div>
 
               {/* Bottom right controls */}
@@ -406,6 +386,14 @@ const InputBar = memo(
               </div>
             </div>
           </div>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
         </Disabled>
       );
     }

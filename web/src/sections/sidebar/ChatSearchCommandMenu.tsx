@@ -14,7 +14,7 @@ import {
   highlightMatch,
 } from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { useCurrentAgent } from "@/hooks/useAgents";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import {
   useChatSearchOptimistic,

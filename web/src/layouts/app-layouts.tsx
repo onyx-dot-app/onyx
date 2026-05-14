@@ -42,7 +42,7 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Button, LineItemButton, OpenButton } from "@opal/components";
@@ -379,7 +379,7 @@ function Header() {
           className={cn(
             "flex flex-col items-center overflow-hidden",
             pageWithHeaderContent && customHeaderContent
-              ? "order-last basis-full py-2 sm:py-0 sm:order-none sm:basis-auto sm:flex-1"
+              ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
               : "flex-1"
           )}
         >
@@ -435,8 +435,8 @@ function Header() {
 
 const footerMarkdownComponents = {
   p: ({ children }) => (
-    //dont remove the !my-0 class, it's important for the markdown to render without any alignment issues
-    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+    //dont remove the my-0! class, it's important for the markdown to render without any alignment issues
+    <Text as="p" text03 secondaryAction className="my-0! text-center">
       {children}
     </Text>
   ),

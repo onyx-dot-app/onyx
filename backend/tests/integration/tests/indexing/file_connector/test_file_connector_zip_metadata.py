@@ -112,7 +112,7 @@ def test_zip_metadata_handling(
         filename = doc.semantic_id
         if filename in expected_metadata:
             expected = expected_metadata[filename]
-            assert (
-                doc.semantic_id == expected["display_name"]
-            ), f"Display name mismatch for {filename}"
+            assert doc.semantic_id == expected["display_name"], (
+                f"Display name mismatch for {filename}"
+            )
             assert doc.link == expected["link"], f"Link mismatch for {filename}"

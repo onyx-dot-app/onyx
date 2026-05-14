@@ -94,9 +94,7 @@ def calculate_reserved_tokens(
 
     reserved_token_count = token_counter(
         # Annoying that the dict has no attributes now
-        custom_agent_prompt
-        + " "
-        + fake_system_prompt
+        custom_agent_prompt + " " + fake_system_prompt
     )
 
     # Calculate total token count for files in the last message

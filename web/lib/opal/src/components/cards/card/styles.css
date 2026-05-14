@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* ============================================================================
    Plain Card
 ============================================================================ */
@@ -86,8 +88,8 @@
    regardless of any status borderColor applied to the card. */
 
 .opal-card-expandable-header:has(
-    + .opal-card-expandable-wrapper[data-expanded="true"]
-  ) {
+  + .opal-card-expandable-wrapper[data-expanded="true"]
+) {
   @apply border-b-border-01;
 }
 

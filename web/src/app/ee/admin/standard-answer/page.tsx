@@ -240,7 +240,7 @@ const StandardAnswersTable = ({
         <MagnifyingGlass />
         <textarea
           autoFocus
-          className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
+          className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
           placeholder="Find standard answers by keyword/phrase..."

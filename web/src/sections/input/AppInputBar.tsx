@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -21,6 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -52,7 +53,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { Button, SelectButton } from "@opal/components";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
@@ -63,6 +64,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
   useCurrentQueuedMessages,
+  useCurrentLatestMessageRenderComplete,
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -82,7 +84,7 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalPersonaSnapshot | undefined;
+  selectedAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
@@ -132,6 +134,7 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
+    const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
     const enqueueCurrentMessage = useChatSessionStore(
       (state) => state.enqueueCurrentMessage
     );
@@ -141,6 +144,7 @@ const AppInputBar = React.memo(
     const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
       number | null
     >(null);
+    const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
     const inputWrapperRef = useRef<HTMLDivElement>(null);
     const {
@@ -151,17 +155,25 @@ const AppInputBar = React.memo(
       handleInput,
       handleCompositionStart,
       handleCompositionEnd,
-      insertTextAtCursor,
+      pasteText,
+      handleCopy,
+      handleCut,
       setCursorToEnd,
+      handleTileMouseDown,
+      handleTileClick,
+      handleTileKeyDown,
+      tilePopover,
+      dismissTilePopover,
+      updateTileText,
     } = useContentEditable({
       initialContent: initialMessage,
       wrapperRef: inputWrapperRef,
+      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
     });
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { user, isAdmin } = useUser();
     const { state } = useQueryController();
     const isClassifying = state.phase === "classifying";
     const isSearchActive =
@@ -292,14 +304,25 @@ const AppInputBar = React.memo(
 
     const prevChatStateRef = useRef(chatState);
     const prevAwaitingRef = useRef(awaitingPreferredSelection);
+    const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
+      // "Ready" requires the backend to be idle AND the previous answer
+      // to have finished drawing on screen. Without the render-complete
+      // gate, a queued follow-up fires while the smooth-streaming
+      // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" && !prevAwaitingRef.current;
-      const isReady = chatState === "input" && !awaitingPreferredSelection;
+        prevChatStateRef.current === "input" &&
+        !prevAwaitingRef.current &&
+        prevRenderCompleteRef.current;
+      const isReady =
+        chatState === "input" &&
+        !awaitingPreferredSelection &&
+        latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
       prevAwaitingRef.current = awaitingPreferredSelection;
+      prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
@@ -312,6 +335,7 @@ const AppInputBar = React.memo(
     }, [
       chatState,
       awaitingPreferredSelection,
+      latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,
@@ -355,7 +379,8 @@ const AppInputBar = React.memo(
       event.preventDefault();
       const text = event.clipboardData.getData("text/plain");
       if (!text) return;
-      insertTextAtCursor(text);
+
+      pasteText(text);
     }
 
     const handleRemoveMessageFile = useCallback(
@@ -519,7 +544,7 @@ const AppInputBar = React.memo(
           "flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
-            : "opacity-100 p-1 h-[2.75rem] pointer-events-auto",
+            : "opacity-100 p-1 h-11 pointer-events-auto",
           "transition-all duration-150"
         )}
       >
@@ -801,7 +826,7 @@ const AppInputBar = React.memo(
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
-                    className="px-3 py-2 flex-1 flex h-[2.75rem] overflow-hidden"
+                    className="px-3 py-2 flex-1 flex h-11 overflow-hidden"
                   >
                     <div
                       ref={inputRef}
@@ -811,12 +836,16 @@ const AppInputBar = React.memo(
                       contentEditable={!disabled}
                       suppressContentEditableWarning
                       onPaste={handlePaste}
+                      onCopy={handleCopy}
+                      onCut={handleCut}
+                      onMouseDown={handleTileMouseDown}
+                      onClick={handleTileClick}
                       onBlur={() => setHighlightedQueueIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
                       onCompositionEnd={handleCompositionEnd}
-                      className="p-[2px] w-full h-full outline-none bg-transparent whitespace-pre-wrap break-words overflow-y-auto"
+                      className="p-[2px] w-full h-full outline-hidden bg-transparent whitespace-pre-wrap wrap-break-word overflow-y-auto"
                       tabIndex={disabled ? -1 : 0}
                       style={{
                         scrollbarWidth: "thin",
@@ -838,6 +867,8 @@ const AppInputBar = React.memo(
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
+                        if (handleTileKeyDown(event)) return;
+
                         // Queue navigation mode
                         if (highlightedQueueIndex !== null) {
                           if (event.key === "Enter") {
@@ -1019,6 +1050,14 @@ const AppInputBar = React.memo(
                   }}
                 />
               </div>
+            )}
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+              />
             )}
           </div>
         </Disabled>

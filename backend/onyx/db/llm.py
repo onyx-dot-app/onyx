@@ -223,18 +223,7 @@ def upsert_llm_provider(
                 f"LLM provider with id {llm_provider_upsert_request.id} not found"
             )
 
-        if existing_llm_provider.name != llm_provider_upsert_request.name:
-            raise ValueError(
-                f"LLM provider with id {llm_provider_upsert_request.id} name change not allowed"
-            )
     else:
-        existing_llm_provider = fetch_existing_llm_provider(
-            name=llm_provider_upsert_request.name, db_session=db_session
-        )
-        if existing_llm_provider:
-            raise ValueError(
-                f"LLM provider with name '{llm_provider_upsert_request.name}' already exists"
-            )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
@@ -250,6 +239,12 @@ def upsert_llm_provider(
         }
 
     api_base = llm_provider_upsert_request.api_base or None
+    # Only update name when it was explicitly present in the request payload.
+    # Absent = "don't change"; explicit null = "clear"; string = "set".
+    # Pydantic v2 only includes a field in model_fields_set when it appeared
+    # in the input data, so absent and null are distinguishable.
+    if "name" in llm_provider_upsert_request.model_fields_set:
+        existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
@@ -310,7 +305,6 @@ def upsert_llm_provider(
         db_session.flush()
 
     for model_config in llm_provider_upsert_request.model_configurations:
-
         supported_flows = [LLMModelFlowType.CHAT]
         if model_config.supports_image_input:
             supported_flows.append(LLMModelFlowType.VISION)
@@ -524,6 +518,72 @@ def fetch_existing_llm_provider_by_id(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_name_and_type(
+    name: str, provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return the provider matching both display name and provider type.
+
+    Returns None if zero or multiple matches are found — multiple matches mean
+    the name is ambiguous (user may have created a provider with the same name)
+    so the caller should not assume which one to use.
+    """
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.name == name,
+                LLMProviderModel.provider == provider_type,
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+    )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d providers with name='%s' and type='%s'; skipping ambiguous match.",
+            len(results),
+            name,
+            provider_type,
+        )
+        return None
+    return results[0] if results else None
+
+
+def fetch_existing_llm_provider_by_type_nameless(
+    provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return the first unnamed provider of the given type (e.g. "openai").
+
+    Logs a warning if more than one nameless provider of the type exists, since
+    the choice is ambiguous.
+    """
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.provider == provider_type,
+                LLMProviderModel.name.is_(None),
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+    )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d nameless providers of type '%s'; returning the first (id=%d).",
+            len(results),
+            provider_type,
+            results[0].id,
+        )
+    return results[0] if results else None
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:
@@ -682,40 +742,20 @@ def update_no_default_contextual_rag_provider(
 def update_default_contextual_model(
     db_session: Session,
     enable_contextual_rag: bool,
-    contextual_rag_llm_provider: str | None,
-    contextual_rag_llm_name: str | None,
+    model_configuration_id: int | None,
 ) -> None:
     """Sets or clears the default contextual RAG model.
 
     Should be called whenever the PRESENT search settings change
     (e.g. inline update or FUTURE → PRESENT swap).
     """
-    if (
-        not enable_contextual_rag
-        or not contextual_rag_llm_name
-        or not contextual_rag_llm_provider
-    ):
+    if not enable_contextual_rag or model_configuration_id is None:
         update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
-    provider = fetch_existing_llm_provider(
-        name=contextual_rag_llm_provider, db_session=db_session
-    )
-    if not provider:
-        raise ValueError(f"Provider '{contextual_rag_llm_provider}' not found")
-
-    model_config = next(
-        (
-            mc
-            for mc in provider.model_configurations
-            if mc.name == contextual_rag_llm_name
-        ),
-        None,
-    )
+    model_config = db_session.get(ModelConfiguration, model_configuration_id)
     if not model_config:
-        raise ValueError(
-            f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
-        )
+        raise ValueError(f"model_configuration id={model_configuration_id} not found")
 
     add_model_to_flow(
         db_session=db_session,
@@ -724,8 +764,8 @@ def update_default_contextual_model(
     )
     _update_default_model(
         db_session=db_session,
-        provider_id=provider.id,
-        model=contextual_rag_llm_name,
+        provider_id=model_config.llm_provider_id,
+        model=model_config.name,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 

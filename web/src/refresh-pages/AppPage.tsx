@@ -20,7 +20,7 @@ import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
 import NoAgentModal from "@/components/modals/NoAgentModal";
@@ -35,10 +35,10 @@ import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import ModelSelector from "@/refresh-components/popovers/ModelSelector";
-import useAgentController from "@/hooks/useAgentController";
+import { useAgentController } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
-import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
+import { useIsDefaultAgent } from "@/lib/agents/hooks";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
@@ -204,19 +204,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: currentChatSession,
-      onAgentSelect: () => {
-        // Only remove project context if user explicitly selected an agent
-        // (i.e., agentId is present). Avoid clearing project when agentId was removed.
-        const newSearchParams = new URLSearchParams(
-          searchParams?.toString() || ""
-        );
-        if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
-          newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-        }
-      },
+    useAgentController(currentChatSession, () => {
+      // Only remove project context if user explicitly selected an agent
+      // (i.e., agentId is present). Avoid clearing project when agentId was removed.
+      const newSearchParams = new URLSearchParams(
+        searchParams?.toString() || ""
+      );
+      if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
+        newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+        router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+      }
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -294,12 +291,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const filterManager = useFilters();
 
-  const isDefaultAgent = useIsDefaultAgent({
+  const isDefaultAgent = useIsDefaultAgent(
     liveAgent,
-    existingChatSessionId: currentChatSessionId,
-    selectedChatSession: currentChatSession ?? undefined,
-    settings,
-  });
+    currentChatSessionId,
+    currentChatSession ?? undefined,
+    settings
+  );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -658,11 +655,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     retrievalEnabled && !settings.isMobile ? (
       <div
         className={cn(
-          "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-[25rem]" : "w-[0rem]"
+          "shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+          documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
-        <div className="h-full w-[25rem]">
+        <div className="h-full w-100">
           <DocumentsSidebar
             setPresentingDocument={setPresentingDocument}
             modal={false}
@@ -708,7 +705,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return <NoAgentModal />;
   }
 
-  const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
+  const hasAgentStarterMessages =
+    (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
     gridTemplateColumns: "1fr",
@@ -773,7 +771,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none relative"
+              className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Main content grid — 3 rows, animated */}
@@ -881,7 +879,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="end"
-                      className="max-w-[var(--app-page-main-content-width)]"
+                      className="max-w-(--app-page-main-content-width)"
                     >
                       <WelcomeMessage
                         agent={liveAgent}
@@ -913,10 +911,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     sessionFetchError && "hidden"
                   )}
                 >
-                  <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
+                  <div className="relative w-full max-w-(--app-page-main-content-width) flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
-                      <div className="absolute top-[-3.5rem] self-center">
+                      <div className="absolute -top-14 self-center">
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
@@ -1039,7 +1037,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                   {/* ProjectChatSessionList */}
                   {appFocus.isProject() && (
-                    <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">
+                    <div className="w-full max-w-(--app-page-main-content-width) h-full overflow-y-auto overscroll-y-none mx-auto">
                       <ProjectChatSessionList />
                     </div>
                   )}
@@ -1048,9 +1046,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      hasStarterMessages
+                      hasAgentStarterMessages
                     }
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)]"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
                     <Suggestions onSubmit={onSubmit} />
@@ -1059,7 +1057,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SearchUI */}
                   <Fade
                     show={isSearch}
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1 flex flex-col"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width) px-1 flex flex-col"
                   >
                     <Spacer rem={0.75} />
                     <SearchUI onDocumentClick={handleSearchDocumentClick} />

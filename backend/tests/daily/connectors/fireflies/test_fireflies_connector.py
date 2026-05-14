@@ -45,9 +45,9 @@ def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> N
         raise ValueError("Hierarchy node returned from connector")
 
     assert target_doc is not None, "No documents were retrieved from the connector"
-    assert (
-        target_doc.primary_owners is not None
-    ), "No primary owners were retrieved from the connector"
+    assert target_doc.primary_owners is not None, (
+        "No primary owners were retrieved from the connector"
+    )
 
     assert target_doc.id == test_data["id"]
     assert target_doc.semantic_identifier == test_data["semantic_identifier"]
@@ -55,9 +55,9 @@ def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> N
     assert target_doc.secondary_owners == test_data["secondary_owners"]
     assert str(target_doc.doc_updated_at) == test_data["doc_updated_at"]
 
-    assert (
-        target_doc.source == DocumentSource.FIREFLIES
-    ), "Document source is not fireflies"
+    assert target_doc.source == DocumentSource.FIREFLIES, (
+        "Document source is not fireflies"
+    )
     assert target_doc.metadata == test_data["metadata"]
 
     # Check that the test data and the connector data contain the same section data

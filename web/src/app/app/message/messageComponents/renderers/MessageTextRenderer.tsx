@@ -30,6 +30,7 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 /** Maps a visible-char count to a markdown index (skips formatting chars,
  *  extends to word boundary). Used by the voice-sync reveal path only. */
@@ -100,6 +101,9 @@ export const MessageTextRenderer: MessageRenderer<
   children,
 }) => {
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
+  const setLatestMessageRenderComplete = useChatSessionStore(
+    (state) => state.setLatestMessageRenderComplete
+  );
 
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
@@ -265,6 +269,19 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
+  // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
+  // ever goes true→false during a renderer's lifetime, so its mount-time
+  // value distinguishes "actively-streaming renderer" (animate=true) from
+  // "historical mount" (animate=false). Used to gate the queue-release
+  // write below.
+  const wasEverAnimatingRef = useRef(animate);
+
+  // Bind sessionId at mount so a navigation while the typewriter is still
+  // draining doesn't write the completion flag to the newly-active session.
+  const sessionIdAtMountRef = useRef(
+    useChatSessionStore.getState().currentSessionId
+  );
+
   // Fire onComplete exactly once per mount. `onComplete` is an inline
   // arrow in AgentMessage so its identity changes on every parent render;
   // without this guard, each new identity would re-fire the effect once
@@ -274,8 +291,15 @@ export const MessageTextRenderer: MessageRenderer<
     if (streamFullyDisplayed && !onCompleteFiredRef.current) {
       onCompleteFiredRef.current = true;
       onComplete();
+      // Only the renderer that was actively streaming (mounted with
+      // animate=true) flips the chat-session gate back to "rendered".
+      // Historical mounts leave the flag alone so they don't release the
+      // queue while a newer stream is still in flight.
+      if (wasEverAnimatingRef.current && sessionIdAtMountRef.current) {
+        setLatestMessageRenderComplete(sessionIdAtMountRef.current, true);
+      }
     }
-  }, [streamFullyDisplayed, onComplete]);
+  }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
 
   const processedContent = useMemo(
     () => processContent(displayedContent),

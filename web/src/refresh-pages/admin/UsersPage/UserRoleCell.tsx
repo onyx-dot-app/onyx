@@ -9,7 +9,7 @@ import { SvgCheck, SvgGlobe, SvgUser, SvgUserManage } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { toast } from "@/hooks/useToast";
 import { setUserRole } from "./svc";
