@@ -162,7 +162,7 @@ export default function ScrollIndicatorDiv({
       {/* Top indicator */}
       {!disableIndicators && !disableTopIndicator && showTopIndicator && (
         <div
-          className="absolute top-0 left-0 right-0 z-[20] pointer-events-none transition-opacity duration-200"
+          className="absolute top-0 left-0 right-0 z-20 pointer-events-none transition-opacity duration-200"
           style={getIndicatorStyle("top")}
         />
       )}
@@ -183,7 +183,7 @@ export default function ScrollIndicatorDiv({
       {/* Bottom indicator */}
       {!disableIndicators && !disableBottomIndicator && showBottomIndicator && (
         <div
-          className="absolute bottom-0 left-0 right-0 z-[20] pointer-events-none transition-opacity duration-200"
+          className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none transition-opacity duration-200"
           style={getIndicatorStyle("bottom")}
         />
       )}

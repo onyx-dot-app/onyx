@@ -33,11 +33,11 @@ function LLMProviderSkeleton() {
           <div className="w-4 h-4 rounded-full bg-neutral-200" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="h-3 w-1/2 bg-neutral-200 rounded" />
-          <div className="mt-2 h-2 w-3/4 bg-neutral-200 rounded" />
+          <div className="h-3 w-1/2 bg-neutral-200 rounded-sm" />
+          <div className="mt-2 h-2 w-3/4 bg-neutral-200 rounded-sm" />
         </div>
       </div>
-      <div className="h-6 w-16 bg-neutral-200 rounded" />
+      <div className="h-6 w-16 bg-neutral-200 rounded-sm" />
     </div>
   );
 }
@@ -174,7 +174,7 @@ const LLMStep = memo(
                 Array.from({ length: 8 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+                    className="basis-[calc(50%-(--spacing(1))/2)] grow"
                   >
                     <LLMProviderSkeleton />
                   </div>
@@ -194,7 +194,7 @@ const LLMStep = memo(
                     return (
                       <div
                         key={llmDescriptor.name}
-                        className="basis-[calc(50%-theme(spacing.1)/2)] grow"
+                        className="basis-[calc(50%-(--spacing(1))/2)] grow"
                       >
                         <LLMProviderCard
                           title={productName}
@@ -213,7 +213,7 @@ const LLMStep = memo(
                   })}
 
                   {/* Custom provider card */}
-                  <div className="basis-[calc(50%-theme(spacing.1)/2)] grow">
+                  <div className="basis-[calc(50%-(--spacing(1))/2)] grow">
                     <LLMProviderCard
                       title="Custom LLM Provider"
                       subtitle="LiteLLM Compatible APIs"

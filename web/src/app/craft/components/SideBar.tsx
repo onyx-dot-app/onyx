@@ -27,6 +27,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgEditBig,
   SvgArrowLeft,
+  SvgClock,
   SvgSettings,
   SvgMoreHorizontal,
   SvgEdit,
@@ -41,7 +42,11 @@ import {
   DELETE_SUCCESS_DISPLAY_DURATION_MS,
   DELETE_MESSAGE_ROTATION_INTERVAL_MS,
 } from "@/app/craft/constants";
-import { CRAFT_PATH, CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
+import {
+  CRAFT_PATH,
+  CRAFT_CONFIGURE_PATH,
+  CRAFT_TASKS_PATH,
+} from "@/app/craft/v1/constants";
 
 // ============================================================================
 // Fun Deleting Messages
@@ -386,6 +391,20 @@ const MemoizedBuildSidebarInner = memo(
       [folded, pathname]
     );
 
+    const scheduledTasksPanel = useMemo(
+      () => (
+        <SidebarTab
+          icon={SvgClock}
+          folded={folded}
+          href={CRAFT_TASKS_PATH}
+          selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+        >
+          Scheduled Tasks
+        </SidebarTab>
+      ),
+      [folded, pathname]
+    );
+
     const backToChatButton = useMemo(
       () => (
         <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
@@ -412,6 +431,7 @@ const MemoizedBuildSidebarInner = memo(
             <div className="flex flex-col gap-0.5">
               {newBuildButton}
               {buildConfigurePanel}
+              {scheduledTasksPanel}
             </div>
           }
           footer={footer}
@@ -432,6 +452,7 @@ const MemoizedBuildSidebarInner = memo(
                     historyItem={historyItem}
                     isActive={
                       !pathname.startsWith(CRAFT_CONFIGURE_PATH) &&
+                      !pathname.startsWith(CRAFT_TASKS_PATH) &&
                       session?.id === historyItem.id
                     }
                     onLoad={() => handleLoadSession(historyItem.id)}

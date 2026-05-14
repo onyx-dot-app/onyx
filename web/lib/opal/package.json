@@ -10,6 +10,9 @@
   },
   "homepage": "https://github.com/onyx-dot-app/onyx/tree/main/web/lib/opal",
   "type": "module",
+  "imports": {
+    "#reference.css": "./src/_reference.css"
+  },
   "sideEffects": [
     "**/*.css"
   ],

@@ -127,8 +127,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
-            <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
+          <div className="w-4 h-4 flex flex-col items-center justify-center">
+            <LeftIcon className={cn("w-4 h-4", iconClass)} />
           </div>
         )}
         {/* Buttons may conditionally pass text as children (e.g. responsive
@@ -150,8 +150,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           </div>
         )}
         {RightIcon && (
-          <div className="w-[1rem] h-[1rem]">
-            <RightIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
+          <div className="w-4 h-4">
+            <RightIcon className={cn("w-4 h-4", iconClass)} />
           </div>
         )}
       </button>

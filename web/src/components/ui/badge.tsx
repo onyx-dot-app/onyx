@@ -4,7 +4,7 @@ import { Tooltip } from "@opal/components";
 import { cn } from "@opal/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-normal transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2 dark:focus:ring-neutral-300",
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-normal transition-colors focus:outline-hidden focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2 dark:focus:ring-neutral-300",
   {
     variants: {
       variant: {
@@ -86,7 +86,7 @@ function Badge({
       {Icon && (
         <Icon
           className={cn(
-            "mr-1 flex-shrink-0",
+            "mr-1 shrink-0",
             size === "sm" ? "h-3 w-3" : size === "xs" ? "h-2 w-2" : "h-4 w-4"
           )}
         />
@@ -94,7 +94,7 @@ function Badge({
       {circle && (
         <div
           className={cn(
-            "mr-2 rounded-full bg-current opacity-80 flex-shrink-0",
+            "mr-2 rounded-full bg-current opacity-80 shrink-0",
             size === "xs" ? "h-2 w-2" : "h-2.5 w-2.5"
           )}
         />

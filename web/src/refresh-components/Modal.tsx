@@ -78,15 +78,15 @@ const useModalContext = () => {
 
 const widthClasses = {
   full: "w-[80dvw]",
-  xl: "w-[60rem]",
-  lg: "w-[50rem]",
-  md: "w-[40rem]",
-  sm: "w-[30rem]",
+  xl: "w-240",
+  lg: "w-200",
+  md: "w-160",
+  sm: "w-120",
 };
 
 const heightClasses = {
   fit: "h-fit",
-  sm: "max-h-[30rem] overflow-y-auto",
+  sm: "max-h-120 overflow-y-auto",
   lg: "max-h-[calc(100dvh-4rem)] overflow-y-auto",
   full: "h-[80dvh] overflow-y-auto",
 };
@@ -104,15 +104,15 @@ const heightClasses = {
  * </Modal.Content>
  *
  * <Modal.Content width="xl" height="fit">
- *   {/* XL modal: w-[60rem] h-fit *\/}
+ *   {/* XL modal: w-240 h-fit *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="sm">
- *   {/* Small modal: w-[30rem] max-h-[30rem] *\/}
+ *   {/* Small modal: w-120 max-h-120 *\/}
  * </Modal.Content>
  *
  * <Modal.Content width="sm" height="lg">
- *   {/* Tall modal: w-[30rem] max-h-[calc(100dvh-4rem)] *\/}
+ *   {/* Tall modal: w-120 max-h-[calc(100dvh-4rem)] *\/}
  * </Modal.Content>
  * ```
  */
@@ -366,7 +366,7 @@ const ModalContent = React.forwardRef<
                 <div className={cn(cardClasses, "w-full min-h-0")}>
                   {children}
                 </div>
-                <div className="w-full flex-shrink-0">{bottomSlot}</div>
+                <div className="w-full shrink-0">{bottomSlot}</div>
               </div>
             </DialogPrimitive.Content>
           ) : (
@@ -457,7 +457,7 @@ const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
       <div
         tabIndex={-1}
         ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-        className="outline-none"
+        className="outline-hidden"
       >
         <DialogPrimitive.Close asChild>
           <Button

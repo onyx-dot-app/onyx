@@ -2,9 +2,7 @@ import time
 from typing import cast
 from uuid import uuid4
 
-import redis
 from celery import Celery
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -16,6 +14,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.document_set import construct_document_id_select_by_docset
 from onyx.redis.redis_object_helper import RedisObjectHelper
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisDocumentSet(RedisObjectHelper):
@@ -55,7 +54,7 @@ class RedisDocumentSet(RedisObjectHelper):
         max_tasks: int,  # noqa: ARG002
         celery_app: Celery,
         db_session: Session,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         lock: RedisLock,
         tenant_id: str,
     ) -> tuple[int, int] | None:
@@ -104,7 +103,7 @@ class RedisDocumentSet(RedisObjectHelper):
         self.redis.delete(self.fence_key)
 
     @staticmethod
-    def reset_all(r: redis.Redis) -> None:
+    def reset_all(r: TenantRedisClient) -> None:
         for key in r.scan_iter(RedisDocumentSet.TASKSET_PREFIX + "*"):
             r.delete(key)
 

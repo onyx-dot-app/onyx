@@ -26,6 +26,7 @@
         "Celery docfetching",
         "Celery docprocessing",
         "Celery user_file_processing",
+        "Celery scheduled_tasks",
         "Celery beat"
       ],
       "presentation": {
@@ -47,6 +48,7 @@
         "Celery heavy",
         "Celery monitoring",
         "Celery user_file_processing",
+        "Celery scheduled_tasks",
         "Celery docfetching",
         "Celery docprocessing",
         "Celery beat"
@@ -328,6 +330,36 @@
         "group": "2"
       },
       "consoleTitle": "Celery user_file_processing Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery scheduled_tasks",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.scheduled_tasks",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=scheduled_tasks@%n",
+        "-Q",
+        "scheduled_tasks"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "Celery scheduled_tasks Console",
       "justMyCode": false
     },
     {

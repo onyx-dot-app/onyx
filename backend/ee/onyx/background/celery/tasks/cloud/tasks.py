@@ -1,10 +1,8 @@
 import time
-from typing import cast
 
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from redis.client import Redis
 from redis.lock import Lock as RedisLock
 
 from ee.onyx.server.tenants.product_gating import get_gated_tenants
@@ -23,6 +21,7 @@ from onyx.redis.redis_tenant_work_gating import get_active_tenants
 from onyx.redis.redis_tenant_work_gating import observe_active_set_size
 from onyx.redis.redis_tenant_work_gating import record_full_fanout_cycle
 from onyx.redis.redis_tenant_work_gating import record_gate_decision
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 
@@ -30,7 +29,7 @@ _FULL_FANOUT_TIMESTAMP_KEY_PREFIX = "tenant_work_gating_last_full_fanout_ms"
 
 
 def _should_bypass_gate_for_full_fanout(
-    redis_client: Redis, task_name: str, interval_seconds: int
+    redis_client: TenantRedisClient, task_name: str, interval_seconds: int
 ) -> bool:
     """True if at least `interval_seconds` have elapsed since the last
     full-fanout bypass for this task. On True, updates the stored timestamp
@@ -40,7 +39,7 @@ def _should_bypass_gate_for_full_fanout(
     threshold_ms = now_ms - (interval_seconds * 1000)
 
     try:
-        raw = cast(bytes | None, redis_client.get(key))
+        raw = redis_client.get(key)
     except Exception:
         task_logger.exception(f"full-fanout timestamp read failed: task={task_name}")
         # Fail open: treat as "interval elapsed" so we don't skip every

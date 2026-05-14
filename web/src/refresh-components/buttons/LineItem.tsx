@@ -247,15 +247,12 @@ export default function LineItem({
       {Icon && (
         <div
           className={cn(
-            "flex flex-col justify-center items-center h-[1rem] min-w-[1rem]",
+            "flex flex-col justify-center items-center h-4 min-w-4",
             !!(children && description) && "mt-0.5"
           )}
         >
           <Icon
-            className={cn(
-              "h-[1rem] w-[1rem]",
-              strokeIcon && iconClassNames[variant]
-            )}
+            className={cn("h-4 w-4", strokeIcon && iconClassNames[variant])}
           />
         </div>
       )}

@@ -13,7 +13,7 @@ metadata:
   name: sandbox-test
   namespace: onyx-sandboxes
 spec:
-  serviceAccountName: sandbox-runner  # Needs permissions to create/delete pods
+  serviceAccountName: sandbox-file-sync  # Needs permissions to create/delete pods
   containers:
   - name: test
     image: onyxdotapp/onyx-backend:latest

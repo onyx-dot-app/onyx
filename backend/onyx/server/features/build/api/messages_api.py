@@ -99,17 +99,34 @@ def send_message(
         # after the endpoint returns due to dependency cleanup)
         user_id = user.id
         message_content = request.content
+        events_yielded = 0
 
-        with get_session_with_current_tenant() as db_session:
-            # Update sandbox heartbeat - this is the only place we track activity
-            # for determining when a sandbox should be put to sleep
-            sandbox = get_sandbox_by_user_id(db_session, user.id)
-            if sandbox and sandbox.status.is_active():
-                update_sandbox_heartbeat(db_session, sandbox.id)
+        try:
+            with get_session_with_current_tenant() as db_session:
+                # Update sandbox heartbeat - this is the only place we track activity
+                # for determining when a sandbox should be put to sleep
+                sandbox = get_sandbox_by_user_id(db_session, user.id)
+                if sandbox and sandbox.status.is_active():
+                    update_sandbox_heartbeat(db_session, sandbox.id)
 
-            session_manager = SessionManager(db_session)
-            yield from session_manager.send_message(
-                session_id, user_id, message_content
+                session_manager = SessionManager(db_session)
+                for chunk in session_manager.send_message(
+                    session_id, user_id, message_content
+                ):
+                    events_yielded += 1
+                    yield chunk
+        except GeneratorExit:
+            logger.warning(
+                "Stream disconnected for session %s after %d events "
+                "(client likely closed connection)",
+                session_id,
+                events_yielded,
+            )
+        except Exception:
+            logger.exception(
+                "Stream error for session %s after %d events",
+                session_id,
+                events_yielded,
             )
 
     # Stream the CLI agent's response

@@ -38,7 +38,7 @@ const OnboardingFlowInner = ({
   return user.role === UserRole.ADMIN ? (
     showOnboarding ? (
       <div
-        className="flex flex-col items-center justify-center w-full max-w-[var(--app-page-main-content-width)] gap-2 mb-4"
+        className="flex flex-col items-center justify-center w-full max-w-(--app-page-main-content-width) gap-2 mb-4"
         aria-label="onboarding-flow"
       >
         <OnboardingHeader

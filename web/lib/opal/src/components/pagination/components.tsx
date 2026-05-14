@@ -253,9 +253,9 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
             placeholder="Go to page"
             autoFocus
             className={cn(
-              "w-[7rem] bg-transparent px-1.5 py-1 rounded-08",
+              "w-28 bg-transparent px-1.5 py-1 rounded-08",
               containerSizeVariants.lg.height,
-              "border border-border-02 focus:outline-none focus:border-border-04",
+              "border border-border-02 focus:outline-hidden focus:border-border-04",
               "font-main-ui-body",
               "text-text-04 placeholder:text-text-02"
             )}

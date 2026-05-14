@@ -21,6 +21,7 @@
     "COLORTERM": "truecolor",
     "GH_TOKEN": "${localEnv:GH_TOKEN}",
     "MODEL_SERVER_HOST": "inference_model_server",
+    "ONYX_DEVCONTAINER_FIREWALL": "${localEnv:ONYX_DEVCONTAINER_FIREWALL}",
     "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",
     "REDIS_HOST": "cache",
@@ -33,6 +34,6 @@
   "initializeCommand": "docker network create onyx_default 2>/dev/null || true",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && sudo bash /workspace/.devcontainer/init-firewall.sh",
+  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && if [ \"${ONYX_DEVCONTAINER_FIREWALL:-}\" = \"1\" ]; then sudo bash /workspace/.devcontainer/init-firewall.sh; else echo 'Devcontainer firewall disabled. Set ONYX_DEVCONTAINER_FIREWALL=1 on the host before starting the container to enable it.'; fi",
   "waitFor": "postStartCommand"
 }

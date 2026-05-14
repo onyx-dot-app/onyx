@@ -20,8 +20,6 @@ if ! command -v opencode >/dev/null 2>&1; then
 fi
 
 CRAFT_BASE="/app/onyx/server/features/build/sandbox/kubernetes/docker"
-DEMO_DATA_ZIP="${CRAFT_BASE}/demo_data.zip"
-DEMO_DATA_DIR="${CRAFT_BASE}/demo_data"
 # Use environment variables if set, otherwise use defaults
 OUTPUTS_TEMPLATE_PATH="${OUTPUTS_TEMPLATE_PATH:-${CRAFT_BASE}/templates/outputs}"
 VENV_TEMPLATE_PATH="${VENV_TEMPLATE_PATH:-${CRAFT_BASE}/templates/venv}"
@@ -30,14 +28,7 @@ REQUIREMENTS_PATH="${CRAFT_BASE}/initial-requirements.txt"
 
 echo "Setting up Onyx Craft templates..."
 
-# 1. Unzip demo_data.zip if demo_data directory doesn't exist
-if [ ! -d "$DEMO_DATA_DIR" ] && [ -f "$DEMO_DATA_ZIP" ]; then
-    echo "  Extracting demo data..."
-    cd "$CRAFT_BASE" && unzip -q demo_data.zip || { echo "ERROR: Failed to extract demo data" >&2; exit 1; }
-    echo "  Demo data extracted"
-fi
-
-# 2. Create Python venv template if it doesn't exist
+# 1. Create Python venv template if it doesn't exist
 if [ ! -d "$VENV_TEMPLATE_PATH" ] && [ -f "$REQUIREMENTS_PATH" ]; then
     echo "  Creating Python venv template (this may take 30-60 seconds)..."
     python -m venv "$VENV_TEMPLATE_PATH"
@@ -46,7 +37,7 @@ if [ ! -d "$VENV_TEMPLATE_PATH" ] && [ -f "$REQUIREMENTS_PATH" ]; then
     echo "  Python venv template created"
 fi
 
-# 3. Run npm install in web template
+# 2. Run npm install in web template
 if [ -d "$WEB_TEMPLATE_PATH" ]; then
     if ! command -v npm >/dev/null 2>&1; then
         echo "ERROR: npm is not available but ENABLE_CRAFT is enabled." >&2

@@ -6,23 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
-
-// StreamEventMsg wraps a StreamEvent for Bubble Tea.
-type StreamEventMsg struct {
-	Event models.StreamEvent
-}
-
-// StreamDoneMsg signals the stream has ended.
-type StreamDoneMsg struct {
-	Err error
-}
 
 // SendMessageStream starts streaming a chat message response.
 // It reads NDJSON lines, parses them, and sends events on the returned channel.
@@ -64,37 +51,46 @@ func (c *Client) SendMessageStream(
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/api/chat/send-chat-message", nil)
+		req, err := c.newRequest(ctx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
 		if err != nil {
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("request error: %v", err), IsRetryable: false}
 			return
 		}
-
-		req.Body = io.NopCloser(bytes.NewReader(body))
-		req.ContentLength = int64(len(body))
 		req.Header.Set("Content-Type", "application/json")
-		if c.apiKey != "" {
-			bearer := "Bearer " + c.apiKey
-			req.Header.Set("Authorization", bearer)
-			req.Header.Set("X-Onyx-Authorization", bearer)
-		}
 
 		resp, err := c.longHTTPClient.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return // cancelled
 			}
-			ch <- models.ErrorEvent{Error: fmt.Sprintf("connection error: %v", err), IsRetryable: true}
+			wrapped := wrapTimeoutError(err)
+			if apiErr, ok := wrapped.(*OnyxAPIError); ok {
+				ch <- models.ErrorEvent{
+					Error:       apiErr.Error(),
+					IsRetryable: true,
+					StatusCode:  apiErr.StatusCode,
+				}
+			} else {
+				ch <- models.ErrorEvent{Error: fmt.Sprintf("connection error: %v", err), IsRetryable: true}
+			}
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode != 200 {
-			var respBody [4096]byte
-			n, _ := resp.Body.Read(respBody[:])
-			ch <- models.ErrorEvent{
-				Error:       fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody[:n])),
-				IsRetryable: resp.StatusCode >= 500,
+		if err := checkResponse(resp); err != nil {
+			apiErr, ok := err.(*OnyxAPIError)
+			if ok {
+				ch <- models.ErrorEvent{
+					Error:       fmt.Sprintf("HTTP %d: %s", apiErr.StatusCode, apiErr.Detail),
+					IsRetryable: apiErr.StatusCode >= 500,
+					StatusCode:  apiErr.StatusCode,
+				}
+			} else {
+				ch <- models.ErrorEvent{
+					Error:       err.Error(),
+					IsRetryable: false,
+					StatusCode:  resp.StatusCode,
+				}
 			}
 			return
 		}
@@ -121,16 +117,3 @@ func (c *Client) SendMessageStream(
 
 	return ch
 }
-
-// WaitForStreamEvent returns a tea.Cmd that reads one event from the channel.
-// On channel close, it returns StreamDoneMsg.
-func WaitForStreamEvent(ch <-chan models.StreamEvent) tea.Cmd {
-	return func() tea.Msg {
-		event, ok := <-ch
-		if !ok {
-			return StreamDoneMsg{}
-		}
-		return StreamEventMsg{Event: event}
-	}
-}
-

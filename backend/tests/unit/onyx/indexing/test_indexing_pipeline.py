@@ -270,6 +270,124 @@ def _make_doc(
     )
 
 
+# ---------------------------------------------------------------------------
+# _maybe_push_documents
+# ---------------------------------------------------------------------------
+
+_PATCH_MULTI_TENANT = "onyx.indexing.indexing_pipeline.MULTI_TENANT"
+_PATCH_GET_CC_PAIR = "onyx.indexing.indexing_pipeline.get_connector_credential_pair"
+_PATCH_GET_SESSION_AW = (
+    "onyx.indexing.indexing_pipeline.get_session_with_current_tenant"
+)
+_PATCH_EXECUTE_HOOK = "onyx.indexing.indexing_pipeline.execute_hook"
+
+
+def _make_adapter(connector_id: int = 1, credential_id: int = 1) -> MagicMock:
+    adapter = MagicMock()
+    adapter.connector_id = connector_id
+    adapter.credential_id = credential_id
+    return adapter
+
+
+def _make_cc_pair(is_public: bool) -> MagicMock:
+    from onyx.db.enums import AccessType
+
+    cc_pair = MagicMock()
+    cc_pair.access_type = AccessType.PUBLIC if is_public else AccessType.PRIVATE
+    return cc_pair
+
+
+def _make_insertion_records(doc_ids: list[str]) -> list[Any]:
+    from onyx.document_index.interfaces import DocumentInsertionRecord
+
+    return [
+        DocumentInsertionRecord(document_id=d, already_existed=False) for d in doc_ids
+    ]
+
+
+def _make_ctx() -> MagicMock:
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=MagicMock())
+    ctx.__exit__ = MagicMock(return_value=False)
+    return ctx
+
+
+def test_document_push_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_skipped_when_no_insertion_records() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], [])
+    mock_hook.assert_not_called()
+
+
+def test_document_push_skipped_for_non_public_connector() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=False)),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_fires_execute_hook_for_public_doc() -> None:
+    from onyx.db.enums import HookPoint
+    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    mock_hook.assert_called_once()
+    call_kwargs = mock_hook.call_args.kwargs
+    assert call_kwargs["hook_point"] == HookPoint.DOCUMENT_PUSH
+    assert call_kwargs["response_type"] is DocumentPushResponse
+    payload = call_kwargs["payload"]
+    assert payload["document_id"] == "doc1"
+    assert payload["content"] == "Hello"
+
+
+def test_document_push_hook_exception_propagates() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
+        pytest.raises(RuntimeError, match="hard fail"),
+    ):
+        # Fail strategy is the executor's responsibility — exceptions must propagate.
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+
 def test_document_ingestion_hook_skipped_passes_through() -> None:
     doc = _make_doc()
     with (

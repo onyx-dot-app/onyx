@@ -80,6 +80,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_docs_processed
 from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
 from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
@@ -290,7 +291,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
 def try_creating_permissions_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,
+    r: TenantRedisClient,
     tenant_id: str,
 ) -> str | None:
     """Returns a randomized payload id on success.
@@ -752,8 +753,8 @@ def element_update_permissions(
 
 def validate_permission_sync_fences(
     tenant_id: str,
-    r: Redis,
-    r_replica: Redis,
+    r: TenantRedisClient,
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -802,7 +803,7 @@ def validate_permission_sync_fence(
     key_bytes: bytes,
     queued_tasks: set[str],
     reserved_tasks: set[str],
-    r: Redis,
+    r: TenantRedisClient,
     r_celery: Redis,
 ) -> None:
     """Checks for the error condition where an indexing fence is set but the associated celery tasks don't exist.
@@ -906,8 +907,7 @@ def validate_permission_sync_fence(
     for member in r.sscan_iter(redis_connector.permissions.taskset_key):
         tasks_scanned += 1
 
-        member_bytes = cast(bytes, member)
-        member_str = member_bytes.decode("utf-8")
+        member_str = member.decode("utf-8")
         if member_str in queued_tasks:
             continue
 
@@ -956,7 +956,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         self,
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
     ):
         super().__init__()
@@ -1026,7 +1026,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 def monitor_ccpair_permissions_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,  # noqa: ARG001
     db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")

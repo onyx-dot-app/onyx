@@ -59,7 +59,7 @@ import {
 } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -735,7 +735,7 @@ export default function ChatPreferencesPage() {
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
-                              <div key={source} className="w-[10rem]">
+                              <div key={source} className="w-40">
                                 <Card padding="sm" border="solid">
                                   <Content
                                     icon={meta.icon}

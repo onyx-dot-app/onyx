@@ -608,6 +608,14 @@ CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
+# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
+# run one headless agent fire at a time, so this caps simultaneous in-flight
+# scheduled runs per pod. Default is intentionally modest because each fire
+# can be long-running (LLM + tool calls in a sandbox).
+CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
+)
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
 
@@ -1103,18 +1111,10 @@ ENTERPRISE_EDITION_ENABLED = (
 # To configure image generation, please visit the Image Generation page in the Admin Panel.
 #####
 # Azure Image Configurations
-AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
-    "AZURE_DALLE_API_VERSION"
-)
-AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
-    "AZURE_DALLE_API_KEY"
-)
-AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
-    "AZURE_DALLE_API_BASE"
-)
-AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
-    "AZURE_IMAGE_DEPLOYMENT_NAME"
-) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION")
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY")
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
@@ -1329,6 +1329,13 @@ COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
 VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
 OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
+# Whether tenant provisioning auto-creates LLMProvider rows seeded with the
+# *_DEFAULT_API_KEY env vars above. Defaults to True so self-hosted
+# deployments keep the existing behavior. Cloud sets this to False to
+# require new tenants to bring their own LLM keys.
+AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
+    os.environ.get("AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", "true").lower() == "true"
+)
 
 INSTANCE_TYPE = (
     "managed"

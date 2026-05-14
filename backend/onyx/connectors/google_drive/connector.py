@@ -2054,6 +2054,47 @@ class GoogleDriveConnector(
                 f"Unexpected error during Google Drive validation: {e}"
             )
 
+    def probe_directory_admin_permission(self) -> None:
+        """Verify the configured primary admin can call the Workspace directory API.
+
+        Required for permission sync, which calls
+        `admin.directory.users.get` to enumerate Workspace users and groups.
+        A 403 here predicts the same 403 in `_get_drive_members` mid-sync, so
+        misconfigured connectors fail at creation time instead of generating a
+        steady stream of `PermissionError` log lines on every group-sync tick.
+        """
+        admin_service = get_admin_service(
+            creds=self.creds,
+            user_email=self.primary_admin_email,
+        )
+        try:
+            admin_service.users().get(  # ty: ignore[unresolved-attribute]
+                userKey=self.primary_admin_email
+            ).execute()
+        except HttpError as e:
+            status_code = e.resp.status if e.resp else None
+            if status_code == 403:
+                raise InsufficientPermissionsError(
+                    f"Primary admin {self.primary_admin_email} is not authorized "
+                    "on the Google Workspace directory API. Reconnect the connector "
+                    "with an account that has admin directory access."
+                )
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Google Drive credentials (401)."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
+            )
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    f"Google Drive credentials are missing required scopes. {ONYX_SCOPE_INSTRUCTIONS} Full error: {e}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Workspace directory API probe: {e}"
+            )
+
     @override
     def build_dummy_checkpoint(self) -> GoogleDriveCheckpoint:
         return GoogleDriveCheckpoint(

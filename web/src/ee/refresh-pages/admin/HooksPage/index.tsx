@@ -22,6 +22,7 @@ import { Content, IllustrationContent } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import {
   SvgArrowExchange,
+  SvgArrowRightDot,
   SvgBubbleText,
   SvgFileBroadcast,
   SvgShareWebhook,
@@ -53,6 +54,7 @@ const route = ADMIN_ROUTES.HOOKS;
 
 const HOOK_POINT_ICONS: Record<string, IconFunctionComponent> = {
   document_ingestion: SvgFileBroadcast,
+  document_push: SvgArrowRightDot,
   query_processing: SvgBubbleText,
 };
 
@@ -387,7 +389,7 @@ function ConnectedHookCard({
               </div>
 
               <Disabled disabled={isBusy}>
-                <div className="flex items-center pb-1 px-1 gap-1">
+                <div className="flex items-center justify-end pb-1 px-1 gap-1">
                   {hook.is_active ? (
                     <>
                       <Hoverable.Item

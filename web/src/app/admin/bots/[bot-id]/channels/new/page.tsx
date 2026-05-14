@@ -7,7 +7,7 @@ import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";

@@ -2,11 +2,11 @@ from abc import ABC
 from abc import abstractmethod
 
 from celery import Celery
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisObjectHelper(ABC):
@@ -85,7 +85,7 @@ class RedisObjectHelper(ABC):
         max_tasks: int,
         celery_app: Celery,
         db_session: Session,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         lock: RedisLock,
         tenant_id: str,
     ) -> tuple[int, int] | None:

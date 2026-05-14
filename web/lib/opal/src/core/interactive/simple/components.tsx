@@ -71,7 +71,7 @@ function InteractiveSimple({
   const classes = cn(
     "cursor-pointer select-none",
     isDisabled && "cursor-not-allowed",
-    !props.onClick && !href && "!cursor-default !select-auto",
+    !props.onClick && !href && "cursor-default! select-auto!",
     group
   );
 

@@ -74,13 +74,13 @@ const BigButton = forwardRef<HTMLButtonElement, BigButtonProps>(
 
     // Check if className contains text color override
     const hasTextWhiteOverride =
-      className?.includes("!text-white") || className?.includes("text-white");
+      className?.includes("text-white!") || className?.includes("text-white");
     const hasTextBlackOverride =
-      className?.includes("!text-black") || className?.includes("text-black");
+      className?.includes("text-black!") || className?.includes("text-black");
 
     const getTextOverride = () => {
-      if (hasTextWhiteOverride) return "!text-white";
-      if (hasTextBlackOverride) return "!text-black";
+      if (hasTextWhiteOverride) return "text-white!";
+      if (hasTextBlackOverride) return "text-black!";
       return getTextStyle();
     };
 

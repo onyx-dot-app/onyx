@@ -79,7 +79,7 @@ export default function OverflowDiv({
       </div>
       {!disableMask && (
         <div
-          className="absolute bottom-0 left-0 right-0 h-[1rem] z-[20] pointer-events-none"
+          className="absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none"
           style={{
             background: `linear-gradient(to bottom, transparent, ${backgroundColor})`,
           }}

@@ -1,0 +1,33 @@
+---
+name: company-search
+description: Search company knowledge using onyx-cli. Returns permissioned, citation-rich results from connected sources.
+---
+
+# company-search
+
+Search the company's knowledge base — restricted to what the current user has
+permission to see.
+
+## Sources Available in This Session
+
+{{AVAILABLE_SOURCES_SECTION}}
+
+If a source you'd expect isn't listed, it isn't connected for this user — do not
+assume it exists.
+
+## Usage
+
+    onyx-cli search "<query>"
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
+| `--days` | Only return results from the last N days | `--days 30` |
+| `--limit` | Maximum number of results | `--limit 5` |
+
+## Output
+
+Stdout is JSON with a top-level `results` array. Each result has a `document`
+field (the citation ID), plus `title`, `content`, `source_type`, and other
+metadata. Cite results by their `document` number when referencing them in your
+response.

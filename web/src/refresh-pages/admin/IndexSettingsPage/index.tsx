@@ -459,7 +459,7 @@ function ProviderGroup({
       </providerCreationModal.Provider>
 
       <GeneralLayouts.Section gap={0.25}>
-        <div className="px-1 pt-1 w-full h-[var(--opal-line-height-lg)]">
+        <div className="px-1 pt-1 w-full h-(--opal-line-height-lg)">
           <GeneralLayouts.Section flexDirection="row" gap={0}>
             <Spacer horizontal rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
@@ -1248,7 +1248,7 @@ export default function IndexSettingsPage() {
                                         )}
 
                                         <GeneralLayouts.Section gap={0.25}>
-                                          <div className="px-1 pt-1 w-full h-[var(--opal-line-height-lg)]">
+                                          <div className="px-1 pt-1 w-full h-(--opal-line-height-lg)">
                                             <GeneralLayouts.Section
                                               flexDirection="row"
                                               gap={0}

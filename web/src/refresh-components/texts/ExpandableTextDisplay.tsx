@@ -239,7 +239,7 @@ export default function ExpandableTextDisplay({
       return (
         <div>
           {isTruncated && (
-            <Text as="p" text03 mainUiMuted className="!my-0">
+            <Text as="p" text03 mainUiMuted className="my-0!">
               …
             </Text>
           )}

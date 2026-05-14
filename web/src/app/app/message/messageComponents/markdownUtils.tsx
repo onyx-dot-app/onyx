@@ -72,7 +72,7 @@ export function ScrollableTable({
           ref={tableRef}
           className={cn(
             className,
-            "min-w-full !my-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+            "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
           )}
           {...props}
         >

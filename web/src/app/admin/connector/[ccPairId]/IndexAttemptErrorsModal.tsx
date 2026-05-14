@@ -58,7 +58,7 @@ export default function IndexAttemptErrorsModal({
           height="fit"
         />
         <Modal.Body height="full">
-          <div className="flex flex-col gap-2 flex-shrink-0">
+          <div className="flex flex-col gap-2 shrink-0">
             <Text as="p">
               Below are the errors encountered during indexing. Each row
               represents a failed document or entity.
@@ -83,7 +83,7 @@ export default function IndexAttemptErrorsModal({
               <TableBody>
                 {errors.items.length > 0 ? (
                   errors.items.map((error) => (
-                    <TableRow key={error.id} className="h-[4rem]">
+                    <TableRow key={error.id} className="h-16">
                       <TableCell>
                         {localizeAndPrettify(error.time_created)}
                       </TableCell>
@@ -102,7 +102,7 @@ export default function IndexAttemptErrorsModal({
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center h-[2rem] overflow-y-auto whitespace-normal">
+                        <div className="flex items-center h-8 overflow-y-auto whitespace-normal">
                           {error.failure_message}
                         </div>
                       </TableCell>
@@ -120,7 +120,7 @@ export default function IndexAttemptErrorsModal({
                     </TableRow>
                   ))
                 ) : (
-                  <TableRow className="h-[4rem]">
+                  <TableRow className="h-16">
                     <TableCell
                       colSpan={4}
                       className="text-center py-8 text-text-03"

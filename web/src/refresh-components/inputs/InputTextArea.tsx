@@ -125,7 +125,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           disabled={disabled}
           readOnly={isReadOnly}
           className={cn(
-            "w-full min-w-0 flex-1 min-h-[3rem] bg-transparent focus:outline-none p-0.5",
+            "w-full min-w-0 flex-1 min-h-12 bg-transparent focus:outline-hidden p-0.5",
             resizeClass,
             innerClasses[variant],
             textClasses[variant]

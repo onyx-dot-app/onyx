@@ -18,7 +18,6 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
-from redis import Redis
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import ConnectionErrorRetryHandler
@@ -68,6 +67,7 @@ from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -747,7 +747,7 @@ class SlackConnector(
 
     @staticmethod
     def make_slack_web_client(
-        prefix: str, token: str, max_retry_count: int, r: Redis
+        prefix: str, token: str, max_retry_count: int, r: TenantRedisClient
     ) -> WebClient:
         delay_lock = SlackConnector.make_delay_lock(prefix)
         delay_key = SlackConnector.make_delay_key(prefix)

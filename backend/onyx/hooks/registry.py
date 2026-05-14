@@ -1,11 +1,13 @@
 from onyx.db.enums import HookPoint
 from onyx.hooks.points.base import HookPointSpec
 from onyx.hooks.points.document_ingestion import DocumentIngestionSpec
+from onyx.hooks.points.document_push import DocumentPushSpec
 from onyx.hooks.points.query_processing import QueryProcessingSpec
 
 # Internal: use `monkeypatch.setattr(registry_module, "_REGISTRY", {...})` to override in tests.
 _REGISTRY: dict[HookPoint, HookPointSpec] = {
     HookPoint.DOCUMENT_INGESTION: DocumentIngestionSpec(),
+    HookPoint.DOCUMENT_PUSH: DocumentPushSpec(),
     HookPoint.QUERY_PROCESSING: QueryProcessingSpec(),
 }
 
