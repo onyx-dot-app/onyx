@@ -36,9 +36,7 @@ dependencies:
     repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
     alias: nginx
-  # redis-operator installs the Redis CRD that the 'redis' chart's Custom
-  # Resource binds to. Without this, a fresh cluster fails with "no matches
-  # for kind Redis" because the CRD is missing.
+  # Installs the Redis CRD that the 'redis' subchart's CR binds to.
   - name: redis-operator
     version: 0.24.0
     repository: https://ot-container-kit.github.io/helm-charts

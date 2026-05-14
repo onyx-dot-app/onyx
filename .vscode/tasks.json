@@ -164,22 +164,17 @@
     },
     {
       "label": "k8s: telepresence intercept api_server",
-      "detail": "Replace the api_server pod with your laptop. Writes cluster env to .vscode/.env.k8s.",
+      "detail": "Idempotently connect + intercept api_server. Writes cluster env to .vscode/.env.k8s. Wired as preLaunchTask on every (k8s) launch config.",
       "type": "shell",
-      "command": "telepresence",
+      "command": "bash",
       "args": [
-        "intercept",
-        "onyx-api-server",
-        "--namespace",
-        "onyx",
-        "--port",
-        "8080:8080",
-        "--env-file",
-        "${workspaceFolder}/.vscode/.env.k8s"
+        "-c",
+        "set -e; telepresence connect -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file ${workspaceFolder}/.vscode/.env.k8s; if [ -f ${workspaceFolder}/.vscode/.env.k8s.local ]; then echo '' >> ${workspaceFolder}/.vscode/.env.k8s; cat ${workspaceFolder}/.vscode/.env.k8s.local >> ${workspaceFolder}/.vscode/.env.k8s; fi"
       ],
       "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false
       },
       "problemMatcher": []
     },

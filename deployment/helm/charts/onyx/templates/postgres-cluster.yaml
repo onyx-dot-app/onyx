@@ -1,12 +1,7 @@
 {{- /*
-CloudNativePG Cluster custom resource. The chart's `cloudnative-pg` subchart
-(aliased as `postgresql`) installs the CNPG *operator* — but the operator
-needs a Cluster CR to act on. Without this template, a fresh install brings
-up the operator with no actual postgres pod, and `<release>-<name>-rw` (used
-by POSTGRES_HOST in templates/configmap.yaml) does not resolve.
-
-The Cluster name MUST match `<release>-<postgresql.nameOverride>` so the
-generated `-rw` Service aligns with POSTGRES_HOST.
+CNPG Cluster CR — the `postgresql` subchart only installs the operator, so
+without this no postgres pod is created. Name MUST be
+`<release>-<postgresql.nameOverride>` to match POSTGRES_HOST in configmap.yaml.
 */}}
 {{- if .Values.postgresql.enabled }}
 apiVersion: postgresql.cnpg.io/v1

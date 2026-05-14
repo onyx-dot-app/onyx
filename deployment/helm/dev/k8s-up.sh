@@ -2,11 +2,7 @@
 #
 # k8s-up.sh — bring up an Onyx dev cluster on the local machine.
 #
-# Idempotent: safe to run repeatedly. Creates a kind cluster named `onyx-dev`
-# if it doesn't exist, installs / upgrades the Onyx helm chart with the
-# local-dev overlay, and prints the next steps for telepresence + vscode.
-#
-# See docs/dev/local-kubernetes.md for the full workflow and rationale.
+# Idempotent. See docs/dev/local-kubernetes.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/k8s-up.sh
@@ -32,6 +28,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
 VALUES_OVERLAY="$CHART_DIR/values-localdev.yaml"
 
+require() {
+  local bin="$1"
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    echo "error: '$bin' is required but not on PATH" >&2
+    echo "see docs/dev/local-kubernetes.md for installation" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cluster-name)         CLUSTER_NAME="$2"; shift 2 ;;
@@ -50,15 +55,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-require() {
-  local bin="$1"
-  if ! command -v "$bin" >/dev/null 2>&1; then
-    echo "error: '$bin' is required but not on PATH" >&2
-    echo "see docs/dev/local-kubernetes.md for installation" >&2
-    exit 1
-  fi
-}
-
 require kind
 require helm
 require kubectl
@@ -74,13 +70,11 @@ if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   fi
 fi
 
-# Switch kubectl context to the kind cluster (kind names its contexts kind-<name>).
 kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
 
-# Safety: refuse to operate unless the current context is exactly the kind
-# cluster we expect ('kind-<cluster-name>'). The 'onyx' namespace also exists
-# in our prod EKS clusters, and the dev may have other kind clusters for
-# other projects — so neither namespace nor a loose 'kind-*' match is safe.
+# Refuse to operate unless the current context is exactly the expected kind
+# cluster: the 'onyx' namespace exists in prod EKS too, and other kind clusters
+# may also be present.
 EXPECTED_CTX="kind-$CLUSTER_NAME"
 CURRENT_CTX="$(kubectl config current-context)"
 if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
@@ -99,21 +93,17 @@ fi
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE"
 
+# Use an isolated helm repo config: helm matches chart deps by repo NAME, so a
+# stale dev-global repo with a colliding name (we've seen this with
+# 'code-interpreter') can shadow ours and break the install.
 echo "preparing isolated helm repo config ..."
-# We run helm with its own repo config + cache for this install. Why:
-# helm matches chart dependencies to registered repos by NAME (not by URL).
-# If the dev has a stale repo whose name collides with one of our deps but
-# points at a wrong/404 URL (we've seen this with 'code-interpreter'), helm
-# picks it over ours and the install fails. Isolating helm's config sidesteps
-# all of that — we never touch the dev's global helm state.
 HELM_DEV_HOME="$(mktemp -d -t onyx-dev-helm-XXXXXX)"
 export HELM_REPOSITORY_CONFIG="$HELM_DEV_HOME/repositories.yaml"
 export HELM_REPOSITORY_CACHE="$HELM_DEV_HOME/cache"
 mkdir -p "$HELM_REPOSITORY_CACHE"
 trap 'rm -rf "$HELM_DEV_HOME"' EXIT
 
-# Register the repos the chart needs, named to match the dep names in
-# Chart.yaml (helm matches by name).
+# Repo names must match the dep names in Chart.yaml.
 helm repo add cloudnative-pg  https://cloudnative-pg.github.io/charts          >/dev/null
 helm repo add vespa           https://onyx-dot-app.github.io/vespa-helm-charts >/dev/null
 helm repo add opensearch      https://opensearch-project.github.io/helm-charts >/dev/null
@@ -126,15 +116,11 @@ helm repo update >/dev/null
 echo "updating chart dependencies ..."
 helm dependency update "$CHART_DIR" >/dev/null
 
-# Generate a password on first install if not provided. Subsequent upgrades
-# reuse the existing Secret, so the password flag is only needed once.
+# Generate a password on first install only; upgrades reuse the existing Secret.
 PW_FLAG=()
 if ! kubectl -n "$NAMESPACE" get secret onyx-opensearch >/dev/null 2>&1; then
   if [[ -z "$OPENSEARCH_PASSWORD" ]]; then
-    # 24 hex chars, prefixed with 'Aa1!' so it satisfies OpenSearch's
-    # complexity requirements (upper, lower, digit, symbol). Using openssl
-    # avoids the `tr </dev/urandom | head` SIGPIPE pattern that breaks under
-    # `set -o pipefail`.
+    # Prefix 'Aa1!' satisfies OpenSearch's complexity rule (upper/lower/digit/symbol).
     OPENSEARCH_PASSWORD="Aa1!$(openssl rand -hex 12)"
     echo "generated opensearch admin password: $OPENSEARCH_PASSWORD"
     echo "(stored in k8s Secret onyx-opensearch — retrieve with:"
@@ -144,9 +130,8 @@ if ! kubectl -n "$NAMESPACE" get secret onyx-opensearch >/dev/null 2>&1; then
 fi
 
 echo "helm upgrade --install onyx ..."
-# ${PW_FLAG[@]+"${PW_FLAG[@]}"} expands to nothing when the array is empty —
-# bare "${PW_FLAG[@]}" errors under `set -u` on subsequent runs (after the
-# OpenSearch secret exists and we don't re-supply the password).
+# ${PW_FLAG[@]+"${PW_FLAG[@]}"} expands to nothing when empty; bare
+# "${PW_FLAG[@]}" errors under `set -u` on subsequent runs.
 helm upgrade --install onyx "$CHART_DIR" \
   -n "$NAMESPACE" \
   -f "$VALUES_OVERLAY" \
@@ -176,9 +161,7 @@ next steps:
          --port 8080:8080 \\
          --env-file .vscode/.env.k8s
 
-  4. open vscode and run the "Run All Onyx Services" launch profile. With
-     intercept active, the local api_server inherits the cluster's env
-     (postgres creds, redis url, sandbox secret, etc.).
+  4. open vscode and run the "Run All Onyx Services" launch profile.
 
 teardown:
   deployment/helm/dev/k8s-down.sh

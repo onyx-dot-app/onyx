@@ -2,9 +2,8 @@
 #
 # k8s-down.sh — tear down the Onyx dev cluster.
 #
-# By default, uninstalls the helm release and deletes the kind cluster, which
-# wipes everything. Pass --keep-cluster to keep the kind cluster running with
-# Onyx uninstalled (useful when you want to reinstall against the same node).
+# Default: uninstall the helm release and delete the kind cluster (wipes data).
+# --keep-cluster preserves the cluster and its PVCs for reinstall.
 #
 # Usage:
 #   deployment/helm/dev/k8s-down.sh
@@ -44,8 +43,8 @@ fi
 
 kubectl config use-context "kind-$CLUSTER_NAME" >/dev/null
 
-# Safety: refuse to operate unless the current context is exactly the kind
-# cluster we expect. See k8s-up.sh for why a loose match isn't safe.
+# Same context safety guard as k8s-up.sh — the 'onyx' namespace exists in prod
+# EKS too, so refuse anything but the exact expected kind context.
 EXPECTED_CTX="kind-$CLUSTER_NAME"
 CURRENT_CTX="$(kubectl config current-context)"
 if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
@@ -55,17 +54,14 @@ if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
 fi
 
 if [[ "$KEEP_CLUSTER" -eq 1 ]]; then
-  # We deliberately do NOT delete PVCs here. Postgres, opensearch, vespa, and
-  # minio data survive `helm uninstall` so the next install can reuse it —
-  # which is usually what you want during iteration. If you need a clean slate,
-  # delete the cluster instead (omit --keep-cluster) or manually:
-  #   kubectl -n $NAMESPACE delete pvc --all
+  # PVCs are intentionally left intact so the next install reuses postgres /
+  # opensearch / vespa / minio data. For a clean slate, omit --keep-cluster
+  # or run: kubectl -n $NAMESPACE delete pvc --all
   echo "uninstalling helm release 'onyx' in namespace '$NAMESPACE' ..."
   helm uninstall onyx -n "$NAMESPACE" 2>/dev/null || true
 
   echo "done. cluster 'kind-$CLUSTER_NAME' is preserved (PVCs intact)."
 else
-  # Full teardown: kind delete drops the node container, taking all PVCs with it.
   echo "deleting kind cluster '$CLUSTER_NAME' (this wipes all cluster data) ..."
   kind delete cluster --name "$CLUSTER_NAME"
 fi

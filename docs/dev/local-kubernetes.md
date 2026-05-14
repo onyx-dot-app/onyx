@@ -1,59 +1,43 @@
 # Local Kubernetes Development
 
-How to develop Onyx against a local Kubernetes cluster on your laptop, with the
-vscode debugger attached to api_server / celery / web.
-
-This is an alternative to the default dev path (docker-compose deps +
-`SANDBOX_BACKEND=local`), not a replacement. Use it when you're working on code
-that only makes sense inside a real cluster.
+How to develop Onyx against a local kind cluster, with the vscode debugger
+attached to api_server / celery / web.
 
 ## When you need this
 
-Most Onyx development does **not** require a local k8s cluster. The default
-path in [CONTRIBUTING.md](../../CONTRIBUTING.md) — docker-compose for the deps,
-vscode debugger for the application, `SANDBOX_BACKEND=local` — is faster and
-matches what 90% of the codebase exercises.
+Most Onyx development does **not** need this. The default path in
+[CONTRIBUTING.md](../../CONTRIBUTING.md) — docker-compose deps + vscode
+debugger + `SANDBOX_BACKEND=local` — is faster and covers ~90% of the codebase.
 
-Today the only feature that needs this setup is **Onyx Craft (build mode)**
+Today the only feature that requires this setup is **Onyx Craft (build mode)**
 with `SANDBOX_BACKEND=kubernetes`: sandboxes are real pods (services, PVCs,
-in-pod daemons, cluster-internal DNS), and any work that touches the pod
-spec, the sandbox image, or the cluster-side push / auth paths has to be
-exercised on a real cluster.
+in-pod daemons, cluster-internal DNS), so any work touching the pod spec, the
+sandbox image, or the cluster-side push / auth paths must be exercised on a
+real cluster.
 
-If you're not working on Craft, stop here and use the default dev path.
+If you're not working on Craft, stop here.
 
 ## Prerequisites
 
-Tools (all available via `brew` on macOS):
-
-- **`kind`** — local kubernetes-in-docker
-- **`helm`** — chart deploys
-- **`kubectl`** — cluster CLI
-- **`telepresence`** — host ↔ cluster bridge (only required if you want to run
-  application processes on the host instead of in the cluster)
-- **Docker Desktop** running, with at least 8 CPU / 16 GB allocated to the VM
+Assumes you already have the CONTRIBUTING.md prereqs (Python 3.11, uv,
+Node.js 22, the venv, `.vscode/.env`). Docker Desktop must be running with
+at least 8 CPU / 16 GB allocated.
 
 ```bash
-brew install kind helm kubectl telepresence
+brew install kind helm kubectl
+
+# OSS telepresence (not the Ambassador/blackbird build).
+curl -fLo /opt/homebrew/bin/telepresence \
+  https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64
+chmod +x /opt/homebrew/bin/telepresence
+
+# Passwordless sudo for the telepresence daemon. Required: the daemon needs
+# sudo to install DNS resolvers + a VPN interface, and vscode preLaunchTasks
+# can't answer an interactive prompt.
+echo "$USER ALL=(ALL) NOPASSWD: /opt/homebrew/bin/telepresence" \
+  | sudo tee /etc/sudoers.d/telepresence
+sudo chmod 0440 /etc/sudoers.d/telepresence
 ```
-
-The CONTRIBUTING.md prerequisites (Python 3.11, uv, Node.js 22, the venv,
-`.vscode/.env`) all still apply — k8s mode adds to that setup, it doesn't
-replace it.
-
-## Running from vscode
-
-All cluster lifecycle and telepresence commands are also exposed as vscode
-tasks (Cmd+Shift+P → "Tasks: Run Task"):
-
-- `k8s: cluster up`
-- `k8s: cluster down (full teardown)`
-- `k8s: helm uninstall (keep cluster + data)`
-- `k8s: telepresence connect`
-- `k8s: telepresence intercept api_server`
-- `k8s: telepresence quit`
-
-You can do the whole loop without leaving the editor.
 
 ## One-time setup
 
@@ -63,130 +47,97 @@ You can do the whole loop without leaving the editor.
 deployment/helm/dev/k8s-up.sh
 ```
 
-Or run the **`k8s: cluster up`** task from vscode.
+Or run the **`k8s: cluster up`** vscode task. The script is idempotent and
+refuses to run unless your kubectl context is exactly `kind-onyx-dev` (guards
+against pointing at prod EKS, since the `onyx` namespace exists there too).
 
-This is idempotent and does roughly:
-
-- `kind create cluster --name onyx-dev` (if it doesn't exist)
-- Switches kubectl to the `kind-onyx-dev` context
-- **Refuses to run unless the current context is exactly `kind-onyx-dev`**
-  (or whatever you pass via `--cluster-name`). The `onyx` namespace exists
-  in our prod EKS clusters too, and you might have other kind clusters for
-  other projects — neither namespace nor a loose `kind-*` match would be
-  safe, so the script demands an exact context match
-- `helm dependency update` on the Onyx chart
-- `helm upgrade --install onyx … -f values-localdev.yaml` into namespace `onyx`
-- Generates an OpenSearch admin password on first install and stores it in the
-  `onyx-opensearch` Secret
-
-Watch the pods come up:
+Watch pods:
 
 ```bash
 kubectl -n onyx get pods -w
 ```
 
-Expected steady state: ~12–15 pods, all `Running`. Vespa and CNPG-postgres are
-the slowest to ready (1–3 minutes).
+Expected: ~12–15 pods `Running`. Vespa and CNPG-postgres take 1–3 minutes on
+first boot.
 
-#### Known issue: CNPG operator on Docker Desktop
-
-Chris hit this in Dec 2025: the CloudNativePG operator's `unable to setup PKI
-infrastructure: no operator deployment found` error. It's a known interaction
-between the CNPG chart and Docker Desktop's kubernetes-in-docker (#eng-infra,
-2025-12-01). If you hit it:
-
-- Switch to `kind` instead of Docker Desktop's bundled k8s
-- Or use a deployed dev cluster (`st-dev`) and skip the local cluster entirely
-
-### 2. Wire your host to the cluster
-
-You have two options. Pick based on what you're developing.
-
-**Option A — `telepresence connect`** (host gets cluster DNS)
+Install the in-cluster traffic-manager once per cluster:
 
 ```bash
-telepresence helm install     # one-time, installs traffic-manager
-telepresence connect -n onyx
+telepresence helm install
 ```
 
-After this, `*.svc.cluster.local` resolves from your laptop, and your local
-api_server can reach in-cluster postgres / redis / sandbox pods directly. The
-cluster sees your local process's traffic as coming from the
-`traffic-manager` pod.
+#### Known issue: CNPG operator on Docker Desktop k8s
 
-**Sufficient for:** sandbox provisioning and most Craft work.
+CloudNativePG fails with `unable to setup PKI infrastructure: no operator
+deployment found` against Docker Desktop's bundled kubernetes. Use kind (the
+default in `k8s-up.sh`) or a deployed dev cluster (`st-dev`).
 
-**Not sufficient for:** features that depend on the **source pod's identity**
-from the cluster's perspective — sandbox pods seeing requests as coming from
-`app.kubernetes.io/name: onyx-api-server` (NetworkPolicies, pod-selector
-auth), env vars injected from k8s Secrets into the api_server pod (e.g. an
-upcoming `ONYX_SANDBOX_PUSH_SECRET`), etc. Use Option B for those.
+## Daily workflow
 
-**Option B — `telepresence intercept`** (replaces the api_server pod with your laptop)
+### vscode tasks
 
-```bash
-telepresence intercept onyx-api-server \
-  --namespace onyx \
-  --port 8080:8080 \
-  --env-file .vscode/.env.k8s
-```
+All cluster + telepresence commands are exposed as tasks (Cmd+Shift+P → Tasks:
+Run Task):
 
-Installs a traffic-agent sidecar in the real api_server pod, routes inbound
-traffic to your laptop, and dumps the pod's env into `.vscode/.env.k8s`. From
-the cluster's perspective, your local process **is** the api_server pod —
-labels, secrets, service account, all of it.
+- `k8s: cluster up`
+- `k8s: cluster down (full teardown)`
+- `k8s: helm uninstall (keep cluster + data)`
+- `k8s: telepresence connect`
+- `k8s: telepresence intercept api_server`
+- `k8s: telepresence quit`
 
-**Use this when:** you're working on Craft features that exercise pod
-identity from the cluster side — NetworkPolicies between api_server and
-sandbox pods, k8s Secret injection, service-account-scoped behavior.
+### Run your local processes
 
-### 3. Run your local processes
+Open the debug panel and pick one:
 
-Open the vscode debug panel and run one of:
+- **Web / API (k8s)** — web + api only. Model server stays in-cluster. Fine
+  for most Craft work.
+- **Run All Onyx Services (k8s)** — full local stack including every celery
+  worker + beat.
 
-- **"Web / API (k8s)"** — quickest, just web + api. Model server runs in the cluster, so no need for a local one. Fine for most Craft work.
-- **"Run All Onyx Services (k8s)"** — full local stack: web + api + every celery worker + beat. Pick this if you need celery in the loop. Breakpoints in celery code work, but worker code changes require restarting the worker manually.
-- **"Run All Onyx Services (k8s, watch)"** — same as above, but celery workers auto-restart on `*.py` file changes via `watchdog`'s `watchmedo auto-restart`. Trade-off: **breakpoints inside celery do not hit** in watch mode — the debugger attaches to `watchmedo`, not to the celery subprocess it spawns. Use the non-watch variant when you need to step through worker code.
+Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
+`preLaunchTask`. vscode dedupes the task across the compound, so one run
+connects + (re)creates the intercept idempotently. No manual telepresence
+invocation needed.
 
-Watch mode requires the `watchdog` package:
+The intercept points cluster ingress to your local api_server using the same
+labels, secrets, and service account as the real pod — NetworkPolicies and
+pod-selector auth work transparently.
 
-```bash
-uv pip install watchdog
-```
+Celery workers don't get intercepted (they pull from redis, no inbound HTTP).
+They reach in-cluster redis via telepresence's DNS bridge. The chart scales
+in-cluster celery to 0 so your local workers are the only consumers.
 
-Every `(k8s)` profile sources `.vscode/.env.k8s` (written by `telepresence
-intercept`) and sets `SANDBOX_BACKEND=kubernetes`. They're identical to the
-non-k8s profiles otherwise — same celery args, same uvicorn flags, etc.
+Both api and celery get hot reload via `watchfiles.run_process`
+(`backend/scripts/dev_celery_reload.py`) and breakpoints work in both —
+debugpy follows the reloader's fork via `subProcess: true`.
 
-Note: celery workers don't get intercepted (they pull from redis, no inbound
-HTTP). They just connect to in-cluster redis via `telepresence connect`'s DNS
-bridging and pull tasks. The chart scales all cluster celery to 0 so your
-local workers are the only consumers — breakpoints actually hit (in non-watch
-mode).
+The individual `Celery <name> (k8s)` configs are hidden from the picker
+(`presentation.hidden: true`). Surface them by flipping `hidden` to `false`
+in `.vscode/launch.json` if you need a single worker.
 
-Visit `http://localhost:3000` in a browser. The web server runs locally and
-talks to the locally-running api_server (intercepted from the cluster).
+Every `(k8s)` profile sources `.vscode/.env.k8s` (written by
+`telepresence intercept --env-file`) and sets `SANDBOX_BACKEND=kubernetes`.
 
-## Iteration loop
+Visit `http://localhost:3000` once running.
 
-The big iteration-time matrix:
+### Iteration loop
 
 | What you changed | Cycle time | What to do |
 |---|---|---|
 | Python in api_server / celery / model_server | ~instant | uvicorn / debugpy reloads. No cluster touch. |
 | Frontend (`web/`) | ~instant | Next.js HMR. |
-| Helm chart templates / values | 10–30s | `deployment/helm/dev/k8s-up.sh` (it's `helm upgrade --install`, idempotent). |
-| Backend image (`Dockerfile`) | 60–180s | `docker build backend/` → `kind load docker-image …` → `kubectl rollout restart deployment/<thing>`. |
-| Sandbox image (`backend/onyx/server/features/build/sandbox/kubernetes/docker/`) | 60–180s | Same — build, `kind load`, restart any running sandbox pods. New sandboxes pick up the new image immediately. |
+| Helm chart templates / values | 10–30s | Re-run `k8s-up.sh`. |
+| Backend image (`Dockerfile`) | 60–180s | `docker build` → `kind load docker-image` → `kubectl rollout restart`. |
+| Sandbox image (`backend/onyx/server/features/build/sandbox/kubernetes/docker/`) | 60–180s | Same. New sandboxes pick up the new image immediately. |
 
 ### Building and loading local images
 
 ```bash
-# Backend image
 docker build -t onyxdotapp/onyx-backend:dev backend/
 kind load docker-image onyxdotapp/onyx-backend:dev --name onyx-dev
 
-# Tell the chart to use it (only needed once per session)
+# Point the chart at it (once per session)
 helm upgrade onyx deployment/helm/charts/onyx \
   -n onyx \
   -f deployment/helm/charts/onyx/values-localdev.yaml \
@@ -194,39 +145,31 @@ helm upgrade onyx deployment/helm/charts/onyx \
   --set api.image.pullPolicy=IfNotPresent \
   --set celery_shared.image.tag=dev
 
-# Or restart the deployments to re-pull
 kubectl -n onyx rollout restart deployment/onyx-api-server
 ```
 
-The `kind load docker-image` step ships the image directly to the kind node's
-containerd — no registry push, no pull credentials.
+`kind load` ships straight to the kind node's containerd — no registry push.
 
 ### Avoid this loop when you can
 
-For pure-python work that doesn't depend on cluster-only behavior, develop the
-underlying logic against unit tests or external-dependency-unit tests first,
-and only round-trip through the cluster for the parts that need it. Sandbox
-safe-extract logic, push wire format, tarball round-trips — all testable
-against a temp dir on your laptop. See `backend/tests/README.md` for the test
-matrix.
+For logic that doesn't depend on cluster-only behavior (safe-extract, push
+wire format, tarball round-trips), drive it from unit / external-dependency-unit
+tests against a temp dir. See `backend/tests/README.md`.
 
 ## Data persistence
 
-Persistence stays **enabled** in `values-localdev.yaml`, just with shrunk PVC
-sizes. In kind, PVCs are host-paths inside the kind node container, so:
+Persistence is enabled in `values-localdev.yaml` with shrunk PVCs. kind PVCs
+are host-paths inside the kind node container.
 
 | Action | Data survives? |
 |---|---|
-| `helm upgrade` (any chart change) | yes |
-| `kubectl rollout restart …` | yes |
-| Docker Desktop restart / laptop reboot | yes (kind cluster restarts with its data) |
-| `k8s-down.sh --keep-cluster` (helm uninstall, cluster kept) | yes (PVCs left intact for the next install) |
-| `k8s-down.sh` (full teardown — `kind delete cluster`) | no (cluster and PVCs gone) |
+| `helm upgrade` | yes |
+| `kubectl rollout restart` | yes |
+| Docker Desktop restart / laptop reboot | yes |
+| `k8s-down.sh --keep-cluster` | yes |
+| `k8s-down.sh` (full teardown) | no |
 
-So your test users, indexed connectors, file uploads, etc. survive normal
-iteration. The only thing that wipes them is an explicit full teardown.
-
-If you do need a clean slate without nuking the cluster:
+Clean slate without nuking the cluster:
 
 ```bash
 kubectl -n onyx delete pvc --all
@@ -235,76 +178,68 @@ deployment/helm/dev/k8s-up.sh
 
 ## Tear-down
 
-Wipe everything:
-
 ```bash
-deployment/helm/dev/k8s-down.sh
-```
-
-Keep the kind cluster but uninstall Onyx (faster re-install, data preserved):
-
-```bash
-deployment/helm/dev/k8s-down.sh --keep-cluster
-```
-
-Stop telepresence:
-
-```bash
-telepresence quit
+deployment/helm/dev/k8s-down.sh                 # wipe everything
+deployment/helm/dev/k8s-down.sh --keep-cluster  # uninstall Onyx, keep data
+telepresence quit                                # stop the host-side daemon
 ```
 
 ## Common issues
 
-**Pods stuck `Pending`** — almost always resources. Bump Docker Desktop's
-allocation (Settings → Resources). The `values-localdev.yaml` overlay targets
-~8 CPU / 12 GB for the chart; if Docker has less, eviction kicks in.
+- **Pods stuck `Pending`** — bump Docker Desktop resources. Overlay targets
+  ~8 CPU / 12 GB.
+- **Vespa stuck `0/1 Ready`** — give it 2–3 minutes. After 5, check
+  `kubectl -n onyx describe pod da-vespa-0`.
+- **CNPG `no operator deployment found`** — use kind, not Docker Desktop k8s.
+- **Helm `context deadline exceeded`** — chart dep update timed out. Re-run
+  `k8s-up.sh`.
+- **`telepresence intercept` says "ambiguous workload"** — pass
+  `--namespace onyx` explicitly.
+- **Sandbox pod unreachable from local api_server** — a NetworkPolicy is
+  blocking the traffic-manager source. Use intercept (not connect) or disable
+  the policy in your override values.
+- **Kubeconfig clashes with prod context** — isolate:
 
-**Vespa stuck `0/1 Ready`** — give it 2–3 minutes on first install. The Vespa
-container takes a long time to converge. If it still isn't ready after 5
-minutes: `kubectl -n onyx describe pod da-vespa-0` and check events.
+  ```bash
+  export KUBECONFIG=$HOME/.kube/onyx-dev-config
+  kind create cluster --name onyx-dev --kubeconfig $KUBECONFIG
+  ```
 
-**CNPG postgres won't start with "no operator deployment found"** — see the
-Docker Desktop note above. Use kind.
+  Then set the same `KUBECONFIG` in `.vscode/.env.k8s`.
 
-**Helm install fails with "context deadline exceeded"** — chart dependency
-update timed out. Re-run `k8s-up.sh`; it's idempotent.
-
-**`telepresence intercept` says "ambiguous workload"** — your namespace flag
-isn't being read. Pass `--namespace onyx` explicitly.
-
-**Sandbox pod can't be reached from local api_server** — if a NetworkPolicy
-is enforcing api-server-only ingress, you're on Option A (`connect`) and the
-traffic-manager source is being blocked. Switch to Option B (`intercept`),
-or turn the relevant NetworkPolicy off in your override values for dev.
-
-**Kubeconfig clashes with a remote prod context** — kind writes to your
-default `~/.kube/config`. To isolate:
-
-```bash
-export KUBECONFIG=$HOME/.kube/onyx-dev-config
-kind create cluster --name onyx-dev --kubeconfig $KUBECONFIG
-```
-
-Then point vscode at the same `KUBECONFIG` in `.vscode/.env.k8s`.
-
-## What's checked in
+## Files
 
 | Path | Purpose |
 |---|---|
-| `deployment/helm/charts/onyx/values-localdev.yaml` | Helm overlay: shrunk PVCs and resources, no ingress / monitoring / code-interpreter. |
-| `deployment/helm/dev/k8s-up.sh` | Idempotent cluster bring-up. |
-| `deployment/helm/dev/k8s-down.sh` | Tear-down (full or keep-cluster). |
-| `.vscode/launch.json` → `API Server (k8s)`, `Web / Model / API (k8s)` | Debugger profiles that source `.vscode/.env.k8s` and set `SANDBOX_BACKEND=kubernetes`. |
-| `.vscode/tasks.json` → `k8s: …` | One-click cluster up/down, telepresence connect/intercept/quit. |
-| `.vscode/.env.k8s` | **Not** checked in. Generated by `telepresence intercept --env-file`. |
+| `deployment/helm/charts/onyx/values-localdev.yaml` | Laptop overlay. |
+| `deployment/helm/dev/k8s-up.sh` / `k8s-down.sh` | Bring-up / teardown. |
+| `.vscode/launch.json` `(k8s)` configs | Debugger profiles. |
+| `.vscode/tasks.json` `k8s: …` | One-click cluster + telepresence. |
+| `.vscode/.env.k8s` | Generated each preLaunchTask run by `telepresence intercept --env-file`; `.env.k8s.local` is appended last. **Not** checked in. |
+| `.vscode/.env.k8s.local` | User-maintained personal env overrides. **Not** checked in. |
 
-If you find yourself working around a gap in one of these artifacts, fix the
-artifact and update this doc — they're meant to be the canonical setup.
+### `.env.k8s.local`
+
+Start from your existing `.vscode/.env`, then **remove** any keys that should
+come from the cluster — overriding these breaks DNS or auth into cluster
+services:
+
+- `POSTGRES_*`, `REDIS_*`, `OPENSEARCH_*`, `VESPA_HOST`
+- `S3_*` (MinIO endpoint + creds)
+- `MODEL_SERVER_HOST`, `INDEXING_MODEL_SERVER_HOST`
+- `INTERNAL_URL`
+
+Also drop `SANDBOX_BACKEND=local`-only keys (`SANDBOX_BASE_PATH`,
+`OUTPUTS_TEMPLATE_PATH`, `VENV_TEMPLATE_PATH`,
+`PERSISTENT_DOCUMENT_STORAGE_PATH`).
+
+Keep personal vars: API keys (OPENAI, BRAINTRUST, EXA), log levels,
+password-rule relaxations, feature flags, OAuth client IDs.
 
 ## References
 
-- [CONTRIBUTING.md — Development Setup](../../CONTRIBUTING.md#development-setup) — the default (non-k8s) dev path
-- [deployment/helm/README.md](../../deployment/helm/README.md) — chart-maintainer notes (different audience)
-- [backend/onyx/server/features/build/sandbox/README.md](../../backend/onyx/server/features/build/sandbox/README.md) — sandbox subsystem
-- [Telepresence docs](https://www.telepresence.io/docs/) — connect vs. intercept semantics
-- [kind docs](https://kind.sigs.k8s.io/) — local cluster runtime
+- [CONTRIBUTING.md — Development Setup](../../CONTRIBUTING.md#development-setup)
+- [deployment/helm/README.md](../../deployment/helm/README.md)
+- [backend/onyx/server/features/build/sandbox/README.md](../../backend/onyx/server/features/build/sandbox/README.md)
+- [Telepresence docs](https://www.telepresence.io/docs/)
+- [kind docs](https://kind.sigs.k8s.io/)

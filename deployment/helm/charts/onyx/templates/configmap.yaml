@@ -19,10 +19,8 @@ data:
   ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
   {{- end }}
   {{- if .Values.redis.enabled }}
-  # The redis subchart's redis-operator provisions a Redis Custom Resource and
-  # creates a Service named after the CR (no `-master` suffix). Standalone
-  # Redis does not produce a `<name>-master` service — that pattern is only
-  # for RedisReplication CRs, which this chart does not use.
+  # Standalone Redis CR produces a Service named after the CR (no `-master`
+  # suffix — that suffix is only for RedisReplication CRs).
   REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}
   {{- end }}
   MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"

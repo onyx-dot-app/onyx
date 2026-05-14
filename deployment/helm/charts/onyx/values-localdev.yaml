@@ -1,50 +1,17 @@
-# =============================================================================
-# ONYX LOCAL DEV — laptop-friendly overlay for kind / minikube / k3d clusters
-# =============================================================================
-# Use this overlay when you are *developing Onyx itself* against a local
-# Kubernetes cluster (kind/minikube/k3d). Pairs with telepresence intercept so
-# you can run api_server / celery / web from your vscode debugger while the
-# rest of the stack (postgres, redis, opensearch, vespa, minio, sandbox pods)
-# runs in the cluster.
+# Onyx local-dev overlay for kind/minikube/k3d.
 #
-# What this overlay turns off vs. values.yaml:
-#   - Ingress / nginx LoadBalancer — port-forward instead.
-#   - Letsencrypt — pointless without a real domain.
-#   - Monitoring (grafana dashboards, ServiceMonitor) — adds CRD requirements
-#     and you don't need it on a laptop.
-#   - Code interpreter — separate service, opt in only if you're working on it.
-#   - Shrunk resource requests and PVC sizes across the board so the stack
-#     fits on a reasonable laptop (target: <16 GB RAM, <8 CPU, <30 GB disk).
-#
-# Data persistence:
-#   Persistence stays ENABLED for postgres, opensearch, vespa, minio. With
-#   kind, PVCs are backed by host-paths inside the kind node container — they
-#   survive `helm upgrade`, `kubectl rollout restart`, and `docker restart`,
-#   so your dev data (user accounts, indexed docs, file store) is preserved
-#   across normal iteration. Data is destroyed only by `kind delete cluster`
-#   (i.e. the full teardown path of k8s-down.sh).
-#
-# What this overlay does NOT do:
-#   - It does not set any secrets. You must still supply
-#     auth.opensearch.values.opensearch_admin_password on first install.
-#   - It does not point images at locally-built tags. Use --set api.image.tag=
-#     etc. if you're iterating on backend / sandbox images via `kind load`.
-#
-# Usage:
-#   helm install onyx ./deployment/helm/charts/onyx \
-#     -n onyx \
-#     -f ./deployment/helm/charts/onyx/values-localdev.yaml \
-#     --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
+# Shrinks resources and disables prod-only features so the chart fits on a
+# laptop. Pairs with telepresence intercept so api_server / celery / web run
+# in your vscode debugger while the rest of the stack runs in-cluster.
 #
 # See docs/dev/local-kubernetes.md for the full workflow.
-# =============================================================================
 
-# ---- Persistence: enabled, but shrunk to laptop-friendly sizes ----
+# ---- Persistence (kept on, sized for a laptop) ----
 
 postgresql:
   cluster:
     storage:
-      size: 2Gi   # CNPG always uses a PVC; 2 Gi is plenty for dev
+      size: 2Gi
 
 vespa:
   volumeClaimTemplates:
@@ -82,8 +49,7 @@ minio:
   persistence:
     enabled: true
     size: 5Gi
-  # The minio chart defaults to a 16 GiB memory request, which alone blows the
-  # laptop budget. Cap it to something reasonable for dev.
+  # Upstream chart defaults to a 16 GiB memory request.
   resources:
     requests:
       cpu: 100m
@@ -92,7 +58,7 @@ minio:
       cpu: 500m
       memory: 1Gi
 
-# ---- Networking: skip ingress, port-forward instead ----
+# ---- Networking (port-forward instead of ingress) ----
 
 ingress:
   enabled: false
@@ -103,11 +69,10 @@ letsencrypt:
 nginx:
   controller:
     service:
-      # ClusterIP avoids spinning up a LoadBalancer (kind has no LB provider
-      # by default; port-forward to nginx for browser access).
+      # kind has no LoadBalancer provider.
       type: ClusterIP
 
-# ---- Monitoring: off ----
+# ---- Monitoring ----
 
 monitoring:
   grafana:
@@ -116,21 +81,17 @@ monitoring:
   serviceMonitors:
     enabled: false
 
-# ---- Code interpreter: opt-in only ----
+# ---- Code interpreter ----
 
 codeInterpreter:
   enabled: false
 
-# ---- Application pods: scaled down ----
+# ---- App pods ----
 #
-# In the local-dev workflow, you run api_server / celery / web / mcp in your
-# vscode debugger on the host (via `telepresence intercept`). The chart's own
-# Deployments are scaled to 0 so they don't consume resources, crash-loop, or
-# confuse the cluster state — EXCEPT api_server, which stays at 1 because
-# `telepresence intercept onyx-api-server` needs a Deployment with a running
-# pod template to inject the traffic-agent sidecar into. The api-server pod
-# itself can CrashLoopBackOff — that's fine, intercept doesn't care about the
-# main container's health.
+# Scaled to 0 since you run these locally via telepresence intercept.
+# api stays at 1: `telepresence intercept onyx-api-server` needs a Deployment
+# with a running pod template to inject the traffic-agent sidecar (the main
+# container is free to CrashLoopBackOff).
 
 api:
   replicaCount: 1
@@ -172,8 +133,7 @@ celery_worker_scheduled_tasks:
 celery_worker_monitoring:
   replicaCount: 0
 
-# slackbot / discordbot / mcpServer use .enabled gates (not replicaCount) —
-# setting replicaCount=0 doesn't suppress them.
+# slackbot / discordbot / mcpServer use .enabled (not replicaCount).
 slackbot:
   enabled: false
 
@@ -212,4 +172,3 @@ redis:
       limits:
         cpu: 250m
         memory: 256Mi
-

@@ -5,12 +5,7 @@
 
 # Local testing
 
-> **This section is for chart-maintainer testing** (rendering, ct, basic
-> install). If you're developing Onyx Craft against a local kind cluster —
-> vscode debugger, telepresence intercept, sandbox iteration loop — see
-> [docs/dev/local-kubernetes.md](../../docs/dev/local-kubernetes.md), which
-> covers the full developer workflow and ships with `values-localdev.yaml`
-> plus `dev/k8s-up.sh` / `dev/k8s-down.sh`.
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](../../docs/dev/local-kubernetes.md).
 
 ## One time setup
 * brew install kind

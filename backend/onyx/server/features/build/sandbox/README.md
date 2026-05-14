@@ -25,8 +25,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Automatic snapshots to S3
    - Auto-cleanup of idle sandboxes
    - Production-ready with resource isolation
-   - To develop Craft against a local cluster (kind + telepresence + vscode),
-     see [docs/dev/local-kubernetes.md](../../../../../../docs/dev/local-kubernetes.md).
+   - For local-cluster development, see [docs/dev/local-kubernetes.md](../../../../../../docs/dev/local-kubernetes.md).
 
 ### Directory Structure
 
