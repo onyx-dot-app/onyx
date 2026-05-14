@@ -29,7 +29,7 @@ After this refactor, onyx-cli has two modes determined by TTY detection:
 
 Conventions for all agent-usable commands:
 - Results to stdout, progress/errors to stderr
-- Non-TTY output truncated to 4096 bytes with full response in temp file (agents can read more if needed)
+- Non-TTY output truncated to 50000 bytes with full response in temp file (agents can read more if needed)
 - No ANSI codes, no interactive prompts
 - Every failure has a distinct exit code and an actionable error message on stderr
 
@@ -73,7 +73,7 @@ The CLI is a Go project at `cli/` (Go 1.26.1, Cobra + Bubble Tea), distributed a
 - **Entry point**: `main.go` → `cmd.Execute()` → Cobra root command
 - **Default command**: previously fell through to `chatCmd.RunE` unconditionally — crashes without TTY
 - **TTY detection**: `golang.org/x/term.IsTerminal(fd)`, used inline in `ask.go` (stdout) and `configure.go` (stdin)
-- **`ask` output**: `overflow.Writer` truncates to 4096 bytes for non-TTY. `--json` emits NDJSON stream events.
+- **`ask` output**: `overflow.Writer` truncates to 50000 bytes for non-TTY. `--json` emits NDJSON stream events.
 - **`configure`**: Previously had both interactive wizard and non-interactive flag path (`--server-url`/`--api-key`)
 - **`validate-config`**: Human-readable text only, no `--json`, no capability detection
 - **Exit codes**: 0–5 previously defined in `internal/exitcodes/codes.go`. HTTP errors mostly fell through to `General = 1`.
@@ -92,7 +92,7 @@ The CLI is a Go project at `cli/` (Go 1.26.1, Cobra + Bubble Tea), distributed a
 
 **2. Keep non-TTY output truncation (no change)** (`cmd/ask.go`, `internal/overflow/writer.go`)
 
-The existing truncation behavior is correct for agents. Coding agents have tool call output limits — dumping a full LLM response into the agent's context window wastes tokens. The current design handles this well: full response goes to a temp file, first 4096 bytes go to stdout, and the agent gets the file path to read more if needed. No changes required.
+The existing truncation behavior is correct for agents. Coding agents have tool call output limits — dumping a full LLM response into the agent's context window wastes tokens. The current design handles this well: full response goes to a temp file, first 50000 bytes go to stdout, and the agent gets the file path to read more if needed. No changes required.
 
 **3. Remove `configure` non-interactive path** (`cmd/configure.go`)
 

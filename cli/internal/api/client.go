@@ -21,11 +21,17 @@ import (
 )
 
 // Client is the Onyx API client.
+//
+// Three http.Clients are kept so each call site can pick a timeout matched to
+// its expected work: 30s for quick JSON endpoints, 60s for /search (which
+// runs LLM query expansion + relevance selection), and 5min for streaming
+// chat responses and uploads.
 type Client struct {
-	baseURL        string
-	apiKey         string
-	httpClient     *http.Client // default 30s timeout for quick requests
-	longHTTPClient *http.Client // 5min timeout for streaming/uploads
+	baseURL             string
+	apiKey              string
+	httpClient          *http.Client // 30s
+	searchHTTPClient    *http.Client // 60s
+	streamingHTTPClient *http.Client // 5min
 }
 
 // NewClient creates a new API client from config.
@@ -45,7 +51,11 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 			Timeout:   30 * time.Second,
 			Transport: transport,
 		},
-		longHTTPClient: &http.Client{
+		searchHTTPClient: &http.Client{
+			Timeout:   60 * time.Second,
+			Transport: transport,
+		},
+		streamingHTTPClient: &http.Client{
 			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
@@ -133,14 +143,10 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 	return c.doJSONWith(ctx, c.httpClient, method, path, reqBody, result)
 }
 
-func (c *Client) doJSONLong(ctx context.Context, method, path string, reqBody any, result any) error {
-	return c.doJSONWith(ctx, c.longHTTPClient, method, path, reqBody, result)
-}
-
 // Search calls POST /api/search and returns the response.
 func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error) {
 	var resp models.SearchResponse
-	if err := c.doJSONLong(ctx, "POST", "/search", req, &resp); err != nil {
+	if err := c.doJSONWith(ctx, c.searchHTTPClient, "POST", "/search", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -286,7 +292,7 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := c.longHTTPClient.Do(req)
+	resp, err := c.streamingHTTPClient.Do(req)
 	if err != nil {
 		return nil, wrapTimeoutError(err)
 	}

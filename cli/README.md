@@ -126,7 +126,7 @@ When called without a TTY (e.g., by an AI agent or piped into another command), 
 - **No subcommand**: prints help and exits 0 (instead of launching the TUI)
 - **Results to stdout**, progress/errors to stderr
 - **No ANSI codes** or interactive prompts
-- **`ask` output truncated** to 4096 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
+- **`ask` output truncated** to 50000 bytes by default; full response saved to a temp file. Use `--max-output 0` to disable.
 
 ### Configuration
 

@@ -140,7 +140,7 @@ Non-interactive mode output must be optimized for LLM consumption:
 - `--json` flag switches to structured JSON (for programmatic consumers)
 - `--quiet` flag suppresses progress/status output (already exists on `ask`)
 - Progress and status information goes to stderr; results go to stdout (clean pipe separation)
-- Non-TTY output is truncated to 4096 bytes with the full response saved to a temp file. This is intentional — coding agents have tool call output limits, and the temp file path lets the agent read more if needed. The `--max-output` flag provides an override.
+- Non-TTY output is truncated to 50000 bytes with the full response saved to a temp file. This is intentional — coding agents have tool call output limits, and the temp file path lets the agent read more if needed. The `--max-output` flag provides an override.
 
 #### R1.3: Configuration isolation
 
@@ -195,6 +195,8 @@ The CLI's `install-skill` command installs a `SKILL.md` for agent harnesses (Cla
 > - **Integration tests** — `backend/tests/integration/tests/search/test_search_api.py`.
 > - **`message_history` support** — Added beyond the original plan. Callers with conversation context can pass it in for better query expansion (resolves pronouns, follow-ups, etc.).
 > - **Field naming** — LLM override fields use `provider`/`model`, consistent with the rest of the API surface.
+>
+> ⚠️ **The request/response examples in the Part 2 subsections below describe the original design and are stale.** The shipped contract dropped `num_results`, `time_cutoff_days`, `chunk_ind`, `blurb`, `score`, `llm_facing_text`, and `citation_mapping`; `content` (full chunk for LLM-selected docs, blurb fallback) is the single content field; only LLM-selected docs are returned. See `backend/onyx/server/features/search/models.py` for the authoritative shapes.
 
 ### Objective
 
@@ -326,9 +328,9 @@ The search endpoint lives under `/api/search` (not `/api/build/...` or `/api/cha
 
 > **Status: Implemented.** Key implementation details for Part 4:
 > - **Two commands** — Resolved as separate `search` and `ask` commands. `search` returns retrieved documents with citations; `ask` returns LLM-generated answers. Different backends, different output shapes and cost profiles.
-> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff), `--limit` (max results), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of `llm_facing_text`).
-> - **Default output** — `onyx-cli search` prints `llm_facing_text` (the citation-rich JSON string from `SearchTool`) to stdout. Non-TTY output is truncated to 4096 bytes with a temp file for overflow.
-> - **5-minute timeout** — `doJSONLong()` helper uses a 5-minute HTTP timeout since `SearchTool.run()` includes multiple LLM calls.
+> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff, converted to an ISO timestamp client-side and sent as `time_cutoff`), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of the lean projection). No per-call result-count knob; `/api/search` runs the chat-flow-equivalent pool (50 hits → ≤25 chunks).
+> - **Default output** — `onyx-cli search` prints a lean projection — `{"results": [{title, url, source_type, content, updated_at}, ...]}` — to stdout. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each (the server populates `content` directly on each `SearchResult`, so consumers never fall back). Non-TTY output is truncated to 50000 bytes with a temp file for overflow.
+> - **60s timeout** — `Client.Search` uses a dedicated `searchHTTPClient` with a 60s timeout. The search path runs LLM query expansion + relevance selection but does not generate a full answer, so it doesn't need the 5-minute long-timeout client; 60s is the right middle ground for two short LLM calls.
 
 ### Objective
 

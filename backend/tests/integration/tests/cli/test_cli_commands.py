@@ -32,7 +32,7 @@ Test Suite:
 16. test_version_flag - Prints client and server version
 17. test_experiments - Lists feature flags
 18. test_search_returns_results - Search returns seeded document content
-19. test_search_raw - --raw outputs full SearchAPIResponse as JSON
+19. test_search_raw - --raw outputs full SearchResponse as JSON
 20. test_search_truncation - --max-output truncates with temp file path
 21. test_search_no_query - No query returns exit code 2
 22. test_search_bad_pat - Invalid PAT returns exit code 4
@@ -405,7 +405,7 @@ def test_search_raw(
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
 ) -> None:
-    """--raw outputs the full SearchAPIResponse as JSON."""
+    """--raw outputs the full SearchResponse as JSON."""
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     phrase = "cli-search-raw-unique-phrase"
     doc = DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
@@ -419,9 +419,6 @@ def test_search_raw(
     data = json.loads(result.stdout)
     assert isinstance(data["results"], list)
     assert len(data["results"]) > 0
-    assert isinstance(data["llm_facing_text"], str)
-    assert len(data["llm_facing_text"]) > 0
-    assert isinstance(data["citation_mapping"], dict)
 
     result_doc_ids = {r["document_id"] for r in data["results"]}
     assert doc.id in result_doc_ids
