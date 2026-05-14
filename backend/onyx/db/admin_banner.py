@@ -53,6 +53,15 @@ def set_admin_banner(
     ).delete(synchronize_session=False)
 
     user_ids = list(db_session.scalars(_eligible_user_ids_query()).all())
+    if not user_ids:
+        db_session.commit()
+        logger.info(
+            "Admin banner cleared for tenant with no eligible users (title=%s chars, content=%s chars)",
+            len(title),
+            len(content) if content else 0,
+        )
+        return None
+
     batch_create_notifications(
         user_ids,
         NotificationType.ADMIN_BANNER,
