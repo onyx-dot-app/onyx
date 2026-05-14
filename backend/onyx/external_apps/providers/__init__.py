@@ -3,7 +3,8 @@
 Adding a provider: create `<name>.py` with an `OAuth` subclass (plus
 `StandardFlatRefresh` or a custom `Refresh` if it supports refresh),
 add an `ExternalAppType` enum value, and append the class to
-`_PROVIDER_CLASSES`.
+`_PROVIDER_CLASSES`. The admin UI's "built-in providers" list is
+served from this registry — no frontend change needed.
 """
 
 from onyx.db.enums import ExternalAppType
@@ -11,11 +12,14 @@ from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuth
+from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import Refresh
 from onyx.external_apps.providers.base import StandardFlatRefresh
 from onyx.external_apps.providers.google_calendar import GoogleCalendarOAuth
 from onyx.external_apps.providers.linear import LinearOAuth
 from onyx.external_apps.providers.slack import SlackOAuth
+from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
+from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
 _PROVIDER_CLASSES: list[type[OAuth]] = [
     SlackOAuth,
@@ -43,6 +47,48 @@ def get_provider_or_raise(app: ExternalApp) -> OAuth:
     return provider
 
 
+def _descriptor_for(provider_cls: type[OAuth]) -> BuiltInExternalAppDescriptor:
+    return BuiltInExternalAppDescriptor(
+        app_type=provider_cls.app_type,
+        name=provider_cls.app_name,
+        description=provider_cls.description,
+        upstream_url_patterns=list(provider_cls.upstream_url_patterns),
+        auth_template=dict(provider_cls.auth_template),
+        required_org_credential_fields=[
+            _to_credential_field_descriptor(f)
+            for f in provider_cls.required_org_credential_fields
+        ],
+        setup_instructions=provider_cls.setup_instructions,
+    )
+
+
+def _to_credential_field_descriptor(
+    field: OrgCredentialField,
+) -> OrgCredentialFieldDescriptor:
+    return OrgCredentialFieldDescriptor(
+        key=field.key,
+        label=field.label,
+        description=field.description,
+        secret=field.secret,
+    )
+
+
+def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
+    """All registered built-in providers as Pydantic descriptors. The
+    admin UI fetches this list to render the Manage Apps page."""
+    return [_descriptor_for(cls) for cls in _PROVIDER_CLASSES]
+
+
+def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
+    for cls in _PROVIDER_CLASSES:
+        if cls.app_type == app_type:
+            return _descriptor_for(cls)
+    raise OnyxError(
+        OnyxErrorCode.NOT_FOUND,
+        f"No built-in app for app_type={app_type}.",
+    )
+
+
 __all__ = [
     "OAuth",
     "Refresh",
@@ -53,4 +99,6 @@ __all__ = [
     "PROVIDERS",
     "get_provider_for_app",
     "get_provider_or_raise",
+    "fetch_available_built_in_apps",
+    "fetch_built_in_app",
 ]

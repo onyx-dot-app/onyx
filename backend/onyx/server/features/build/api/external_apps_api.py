@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
@@ -16,6 +17,9 @@ from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
+from onyx.external_apps.providers import fetch_available_built_in_apps
+from onyx.external_apps.providers import fetch_built_in_app
+from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
@@ -148,6 +152,22 @@ def list_external_apps_admin(
 ) -> list[ExternalAppAdminResponse]:
     apps = get_external_apps(db_session=db_session)
     return [_to_admin_response(app) for app in apps]
+
+
+@router.get("/admin/apps/built-in/options")
+def list_built_in_external_apps(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[BuiltInExternalAppDescriptor]:
+    """Backend-defined presets for the admin "Configure" UI."""
+    return fetch_available_built_in_apps()
+
+
+@router.get("/admin/apps/built-in/options/{app_type}")
+def get_built_in_external_app(
+    app_type: ExternalAppType,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> BuiltInExternalAppDescriptor:
+    return fetch_built_in_app(app_type)
 
 
 @router.delete("/admin/apps/{external_app_id}")

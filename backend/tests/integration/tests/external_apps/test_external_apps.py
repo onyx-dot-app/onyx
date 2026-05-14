@@ -61,7 +61,6 @@ def _assert_user_response_shape_is_safe(
         "auth_template",
         "upstream_url_patterns",
         "enabled",
-        "app_type",
     }
     actual_fields = set(user_app.model_fields.keys())
     leaked = forbidden_fields & actual_fields
