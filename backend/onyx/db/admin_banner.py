@@ -1,5 +1,8 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import NotificationType
@@ -12,13 +15,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _eligible_user_ids_query():  # type: ignore[no-untyped-def]
+def _eligible_user_ids_query() -> Select[tuple[UUID]]:
     return select(User.id).where(  # ty: ignore[no-matching-overload]
-        User.is_active == True,  # noqa: E712
+        User.is_active.is_(True),  # ty: ignore[unresolved-attribute]
         User.account_type.notin_([AccountType.BOT, AccountType.EXT_PERM_USER]),
-        User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(  # ty: ignore[unresolved-attribute]
-            False
-        ),
+        ~User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN),
     )
 
 
