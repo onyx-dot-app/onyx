@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
-from ee.onyx.configs.tier_gate_config import PATH_PREFIX_MIN_TIER
+from ee.onyx.configs.license_enforcement_config import PATH_PREFIX_MIN_TIER
 from ee.onyx.utils.tier import get_tier
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.server.settings.models import Tier

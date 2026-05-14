@@ -129,10 +129,6 @@ HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 
 GATED_TENANTS_KEY = "gated_tenants"
 
-# Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
-TENANT_TIER_KEY = "customer_tier"
-TENANT_TIER_CACHE_TTL_SECONDS = 3600
-
 # License enforcement - when True, blocks API access for gated/expired licenses
 LICENSE_ENFORCEMENT_ENABLED = (
     os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"

@@ -15,11 +15,11 @@ from unittest.mock import patch
 
 import pytest
 
-from ee.onyx.configs.app_configs import TENANT_TIER_KEY
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.tier_management import get_cached_tier
+from ee.onyx.server.tenants.tier_management import TENANT_TIER_KEY
 from ee.onyx.server.tenants.tier_management import update_tenant_tier
 from ee.onyx.utils import tier as tier_module
 from onyx.redis.redis_pool import get_redis_client

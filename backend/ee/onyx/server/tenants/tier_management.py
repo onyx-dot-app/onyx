@@ -9,12 +9,14 @@ from datetime import datetime
 from typing import cast
 from typing import NamedTuple
 
-from ee.onyx.configs.app_configs import TENANT_TIER_CACHE_TTL_SECONDS
-from ee.onyx.configs.app_configs import TENANT_TIER_KEY
 from ee.onyx.server.license.models import CustomerTier
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.logger import setup_logger
+
+# Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
+TENANT_TIER_KEY = "customer_tier"
+TENANT_TIER_CACHE_TTL_SECONDS = 86400  # 24h fallback; CP push is the primary refresh
 
 logger = setup_logger()
 

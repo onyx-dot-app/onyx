@@ -1,14 +1,20 @@
-"""Constants for license enforcement.
+"""Constants for license enforcement and per-feature tier gating.
 
-Single source of truth for paths that bypass license enforcement
-(always-accessible paths needed for auth, billing, health checks, etc.).
+Two related concerns live here, both consumed by the `tier_gate` middleware:
 
-Per-feature tier gating lives in `tier_gate_config.PATH_PREFIX_MIN_TIER`
-and is enforced by the `tier_gate` middleware.
+1. `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` — paths that bypass license
+   enforcement entirely (auth, billing, health checks, etc.).
+2. `PATH_PREFIX_MIN_TIER` — minimum tier required to access a given path
+   prefix. `Tier.BUSINESS` = Business+. `Tier.ENTERPRISE` = Enterprise only.
+   Longest-prefix-wins, so a nested path can resolve to a stricter tier
+   than its parent (e.g. `/admin/enterprise-settings/scim` is ENTERPRISE
+   even though `/admin/enterprise-settings` is BUSINESS).
 
 Import these constants in both production code and tests to ensure
 consistency.
 """
+
+from onyx.server.settings.models import Tier
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
 # These enable users to:
@@ -51,3 +57,26 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
     }
 )
 
+
+PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
+    # ----- BUSINESS -----
+    "/admin/chat-sessions": Tier.BUSINESS,
+    "/admin/chat-session-history": Tier.BUSINESS,
+    "/admin/query-history": Tier.BUSINESS,
+    "/admin/usage-report": Tier.BUSINESS,
+    "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
+    "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
+    "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
+    "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
+    # NOTE: /manage/admin/cc-pair/{id}/sync-permissions can't be prefix-matched
+    # (variable in the middle); the FE hides it in AccessTypeForm instead.
+    # ----- ENTERPRISE -----
+    "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
+    "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
+    "/manage/admin/standard-answer": Tier.ENTERPRISE,
+    "/admin/token-rate-limits": Tier.ENTERPRISE,
+    "/admin/hooks": Tier.ENTERPRISE,  # outbound webhooks
+    "/analytics": Tier.ENTERPRISE,  # non-admin analytics (e.g. assistant stats)
+    "/evals": Tier.ENTERPRISE,
+    "/scim": Tier.ENTERPRISE,  # SCIM protocol
+}
