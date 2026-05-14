@@ -1,3 +1,5 @@
+> **Archived.** This task board references `skills_plan.md` (also archived) and tracks tasks against the old per-session-materialization / push-pipeline design. The forward-looking plan now lives in `../skills-api-plan.md`; the requirements baseline is `../skills-requirements.md`; the implemented DB layer is documented in `../skills-db-layer-status.md`. The single decisions-log entry at the bottom of this file ("2026-05-13: Phase 1 work is being split across multiple stacked PRs branching off `skills-phase-1`") is preserved here for traceability. Kept for historical context only — do not use as an implementation reference.
+
 # Skills V1 — Live Task Board
 
 **Source of truth for execution status.** The design lives in [`skills_plan.md`](./skills_plan.md). The current state of work lives here.
@@ -40,11 +42,11 @@ If you're an agent picking up work:
 
 _(Update this section as you claim things. Keep it short — just the active `WIP` and `REVIEW` items so anyone glancing at the file can see what's hot.)_
 
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.010-P1.015` Module skeletons
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.020-P1.027` BuiltinSkillRegistry core
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
+- `[WIP @codex-charged-perovskite]` `P1.010-P1.015` Module skeletons
+- `[WIP @codex-charged-perovskite]` `P1.020-P1.027` BuiltinSkillRegistry core
+- `[WIP @codex-charged-perovskite]` `P1.028-P1.029` BuiltinSkillRegistry unit tests
+- `[WIP @claude-coupled-lattice]` `P1.060-P1.068` Phase 1.6 DB ops (`backend/onyx/db/skill.py`)
+- `[WIP @claude-coupled-josephson]` `P1.030-P1.041` Bundle validator (excl. P1.035 reserved-slug check — depends on registry WIP)
 - `[REVIEW @claude-collapsing-meson #11064]` `P5.030-P5.038` Phase 5.4 orphan-blob + aged-soft-delete sweep
 
 ---
@@ -64,39 +66,39 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.2 Module skeletons  (spec §2)
 
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.011` Create empty `backend/onyx/skills/registry.py`
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.014` Create empty `backend/onyx/skills/render.py`
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.015` Create empty `backend/onyx/db/skill.py`
+- `[WIP @codex-charged-perovskite]` `P1.010` Create empty `backend/onyx/skills/__init__.py`
+- `[WIP @codex-charged-perovskite]` `P1.011` Create empty `backend/onyx/skills/registry.py`
+- `[WIP @codex-charged-perovskite]` `P1.012` Create empty `backend/onyx/skills/bundle.py`
+- `[WIP @codex-charged-perovskite]` `P1.013` Create empty `backend/onyx/skills/materialize.py`
+- `[WIP @codex-charged-perovskite]` `P1.014` Create empty `backend/onyx/skills/render.py`
+- `[WIP @codex-charged-perovskite]` `P1.015` Create empty `backend/onyx/db/skill.py`
 
 ### 1.3 BuiltinSkillRegistry  (spec §4)
 
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.020` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with frozen + arbitrary-types config, including optional `is_available` and `unavailable_reason` fields  (deps: P1.011)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.021` Keep built-in availability as a single optional callable on `BuiltinSkill`; do not introduce a separate `SkillRequirement` abstraction in V1  (deps: P1.020)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.023` Implement `register(slug, source_dir, is_available=..., unavailable_reason=None)` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.025` Implement `list_available(db) -> list[BuiltinSkill]` — filter by `skill.is_available(db) == True`  (deps: P1.020, P1.024)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.026` Admin callers can derive availability from `BuiltinSkill.is_available` and `unavailable_reason`; no separate `BuiltinSkillStatus` DTO in the registry layer  (deps: P1.025)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
-- `[REVIEW @codex-charged-perovskite #11061]` `P1.029` Unit test: `list_available` excludes a skill whose `is_available` returns False and preserves admin-facing unavailable metadata  (deps: P1.025, P1.026)
+- `[WIP @codex-charged-perovskite]` `P1.020` Define `SkillRequirement` in `registry.py` as a Pydantic `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` (matches codebase convention; `arbitrary_types_allowed` is required for `Callable` + `Session`)  (deps: P1.011)
+- `[WIP @codex-charged-perovskite]` `P1.021` Define `BuiltinSkill` in `registry.py` as a Pydantic `BaseModel` with the same frozen + arbitrary-types config  (deps: P1.011)
+- `[WIP @codex-charged-perovskite]` `P1.022` Implement `BuiltinSkillRegistry` singleton accessor (`.instance()`)  (deps: P1.021)
+- `[WIP @codex-charged-perovskite]` `P1.023` Implement `register(slug, source_dir, requirements=[])` — read frontmatter, detect `SKILL.md.template` presence, slug regex validation, raise on duplicate or missing SKILL.md  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.024` Implement `list_all() -> list[BuiltinSkill]`  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.025` Implement `list_satisfied(db) -> list[BuiltinSkill]` — filter by all `requirement.check(db) == True`  (deps: P1.020, P1.024)
+- `[WIP @codex-charged-perovskite]` `P1.026` Implement `evaluate_for_admin(db) -> list[BuiltinSkillStatus]` for admin UI  (deps: P1.025)
+- `[WIP @codex-charged-perovskite]` `P1.027` Implement `get(slug)` and `reserved_slugs()`  (deps: P1.022)
+- `[WIP @codex-charged-perovskite]` `P1.028` Unit test: register two slugs with collision → raise; register with missing SKILL.md → raise  (deps: P1.023)
+- `[WIP @codex-charged-perovskite]` `P1.029` Unit test: `list_satisfied` excludes a skill whose `check` returns False; `evaluate_for_admin` returns the unmet requirement with description  (deps: P1.025, P1.026)
 
 ### 1.4 Bundle validator  (spec §5)
 
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.030` Define `InvalidBundleError(OnyxError)` with `INVALID_REQUEST` code  (deps: P1.012)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.031` Implement `validate_custom_bundle(zip_bytes, slug) -> ManifestMetadata` — zip parse, SKILL.md root check, frontmatter parse, no `*.template`  (deps: P1.030)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.032` Add path-traversal + symlink rejection to `validate_custom_bundle`  (deps: P1.031)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.033` Add per-file + total-size streaming check (defaults 25 MiB / 100 MiB)  (deps: P1.031)
+- `[WIP @claude-coupled-josephson]` `P1.030` Define `InvalidBundleError(OnyxError)` with `INVALID_REQUEST` code  (deps: P1.012)
+- `[WIP @claude-coupled-josephson]` `P1.031` Implement `validate_custom_bundle(zip_bytes, slug) -> ManifestMetadata` — zip parse, SKILL.md root check, frontmatter parse, no `*.template`  (deps: P1.030)
+- `[WIP @claude-coupled-josephson]` `P1.032` Add path-traversal + symlink rejection to `validate_custom_bundle`  (deps: P1.031)
+- `[WIP @claude-coupled-josephson]` `P1.033` Add per-file + total-size streaming check (defaults 25 MiB / 100 MiB)  (deps: P1.031)
 - `[TODO]` `P1.035` Add slug regex + reserved-slug check (uses `BuiltinSkillRegistry.reserved_slugs()`)  (deps: P1.031, P1.027)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.036` Implement `_safe_unzip(zip_bytes, dest)` for defensive re-check at materialization
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.037` Implement `compute_bundle_sha256(zip_bytes)` — deterministic over raw bytes
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.033, P1.035)
-- `[REVIEW @claude-coupled-josephson #11059]` `P1.041` Unit test: `compute_bundle_sha256` deterministic across two zips of same content with different timestamps  (deps: P1.037)
+- `[WIP @claude-coupled-josephson]` `P1.036` Implement `_safe_unzip(zip_bytes, dest)` for defensive re-check at materialization
+- `[WIP @claude-coupled-josephson]` `P1.037` Implement `compute_bundle_sha256(zip_bytes)` — deterministic over raw bytes
+- `[WIP @claude-coupled-josephson]` `P1.038` Unit test fixture: valid bundle zip (`SKILL.md` + frontmatter + scripts dir)
+- `[WIP @claude-coupled-josephson]` `P1.039` Unit test fixture: invalid bundles, one per failure mode (no SKILL.md, traversal entry, symlink, oversized, contains `*.template`)
+- `[WIP @claude-coupled-josephson]` `P1.040` Unit test: each invalid fixture rejected with the correct error reason  (deps: P1.039, P1.031-P1.033, P1.035)
+- `[WIP @claude-coupled-josephson]` `P1.041` Unit test: `compute_bundle_sha256` deterministic across two zips of same content with different timestamps  (deps: P1.037)
 
 ### 1.5 Materializer  (spec §6)
 
@@ -109,15 +111,15 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 1.6 DB ops  (spec §3)
 
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.060` Implement `list_skills_for_user(user, db)` — public OR group-grant query, filtered to **`enabled = True AND deleted_at IS NULL`**. Mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81` (drop the user-direct-grant branch).  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)` — same `enabled = True AND deleted_at IS NULL` filter as `list_skills_for_user`.  (deps: P1.060)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — `deleted_at IS NULL` only (admins need disabled skills to re-enable them).  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.063` Implement `list_skills_for_admin(db)` — `deleted_at IS NULL` only (admin UI shows disabled skills; soft-deleted hidden by default).  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
-- `[REVIEW @claude-coupled-lattice #11060]` `P1.068` Implement `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob NOT removed inline; sweep (P5.031–P5.033) handles it after 14 days.  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.060` Implement `list_skills_for_user(user, db)` — public OR group-grant query, filtered to **`enabled = True AND deleted_at IS NULL`**. Mirror `fetch_persona_by_id_for_user` at `backend/onyx/db/persona.py:81` (drop the user-direct-grant branch).  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.061` Implement `fetch_skill_for_user(skill_id, user, db)` — same `enabled = True AND deleted_at IS NULL` filter as `list_skills_for_user`.  (deps: P1.060)
+- `[WIP @claude-coupled-lattice]` `P1.062` Implement `fetch_skill_for_admin(skill_id, db)` — `deleted_at IS NULL` only (admins need disabled skills to re-enable them).  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.063` Implement `list_skills_for_admin(db)` — `deleted_at IS NULL` only (admin UI shows disabled skills; soft-deleted hidden by default).  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.064` Implement `create_skill(slug, name, description, bundle_file_id, bundle_sha256, manifest_metadata, is_public, author_user_id, db) -> Skill`  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.065` Implement `replace_skill_bundle(skill_id, new_bundle_file_id, new_sha256, new_manifest_metadata, db) -> Skill` — returns `old_bundle_file_id` for caller blob cleanup  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.066` Implement `patch_skill(...)` — partial update; re-validate slug uniqueness if changing  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.067` Implement `replace_skill_grants(skill_id, group_ids, db)` — atomic delete + insert in one transaction  (deps: P1.015)
+- `[WIP @claude-coupled-lattice]` `P1.068` Implement `delete_skill(skill_id, db) -> None` — soft-delete by setting `deleted_at = func.now()`. Blob NOT removed inline; sweep (P5.031–P5.033) handles it after 14 days.  (deps: P1.015)
 
 ---
 
@@ -130,8 +132,8 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 - `[TODO]` `P2.001` Create `backend/onyx/server/features/skills/__init__.py`
 - `[TODO]` `P2.002` Create `backend/onyx/server/features/skills/api.py` with router scaffolding
-- `[TODO]` `P2.003` Define Pydantic response models: `SkillsAdminList`, `BuiltinSkillAdmin`, `CustomSkillAdmin`, `SkillsForUser`, `SkillSummary`  (deps: P2.002)
-- `[TODO]` `P2.004` Implement `GET /api/admin/skills` — combine `registry.list_all()` (evaluating each built-in's `is_available(db)`) + `list_skills_for_admin(db)`  (deps: P2.003, P1.026, P1.063)
+- `[TODO]` `P2.003` Define Pydantic response models: `SkillsAdminList`, `BuiltinSkillAdmin`, `RequirementStatus`, `CustomSkillAdmin`, `SkillsForUser`, `SkillSummary`  (deps: P2.002)
+- `[TODO]` `P2.004` Implement `GET /api/admin/skills` — combine `registry.evaluate_for_admin(db)` + `list_skills_for_admin(db)`  (deps: P2.003, P1.026, P1.063)
 - `[TODO]` `P2.005` Implement `POST /api/admin/skills/custom` — full create flow per §7 (validate → save blobs → row → grants); inline blob cleanup on failure  (deps: P2.003, P1.031, P1.064, P1.067)
 - `[TODO]` `P2.006` Implement `PATCH /api/admin/skills/custom/{id}` — slug/name/description/is_public/enabled; re-validate slug uniqueness on slug change  (deps: P2.003, P1.066)
 - `[TODO]` `P2.007` Implement `PUT /api/admin/skills/custom/{id}/bundle` — replace flow; delete old blobs AFTER commit  (deps: P2.003, P1.031, P1.065)
@@ -140,7 +142,7 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 
 ### 2.2 User router  (spec §7)
 
-- `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_available`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
+- `[TODO]` `P2.020` Implement `GET /api/skills` — built-ins (filtered by `list_satisfied`) + customs visible to user  (deps: P2.003, P1.025, P1.060)
 
 ### 2.3 Wire-up + tests
 
@@ -164,9 +166,9 @@ _(Update this section as you claim things. Keep it short — just the active `WI
 - `[TODO]` `P3.001` Create `backend/onyx/server/features/build/skills/__init__.py`
 - `[TODO]` `P3.002` Create `backend/onyx/server/features/build/skills/builtins_registration.py` with `register_craft_builtins(registry)`  (deps: P3.001, P1.022)
 - `[TODO]` `P3.003` Register `pptx` built-in (no requirements)  (deps: P3.002)
-- `[TODO]` `P3.004` Register `image-generation` built-in with `is_available=lambda db: get_default_image_generation_config(db) is not None` and `unavailable_reason`  (deps: P3.002, P1.020)
+- `[TODO]` `P3.004` Register `image-generation` built-in with `SkillRequirement` checking `get_default_image_generation_config(db) is not None`, `configure_url=/admin/configuration/image-generation`  (deps: P3.002, P1.020)
 - `[TODO]` `P3.005` Call `register_craft_builtins(BuiltinSkillRegistry.instance())` from `backend/onyx/main.py` startup (after DB init, before `app.include_router`)  (deps: P3.003, P3.004)
-- `[TODO]` `P3.006` Startup integration test: `assert registry.get("pptx") is not None`; `list_available` excludes `image-generation` when no provider is configured  (deps: P3.005)
+- `[TODO]` `P3.006` Startup integration test: `assert registry.get("pptx") is not None`; `list_satisfied` excludes `image-generation` when no provider is configured  (deps: P3.005)
 
 ### 3.2 Render-context helper
 
@@ -280,7 +282,7 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 - `[TODO]` `P4.010` `web/src/app/admin/skills/SkillsList.tsx` — table renderer using `@opal/components` Table
 - `[TODO]` `P4.011` `web/src/app/admin/skills/SkillRow.tsx` — icon + name + slug + description + source badge + access + action menu
 - `[TODO]` `P4.012` `web/src/app/admin/skills/SourceBadge.tsx` — Platform / Custom pill
-- `[TODO]` `P4.013` Access column rendering: `Available` for satisfied built-ins, `Needs setup · Configure →` for unmet; frontend derives configure routes from built-in slugs  (deps: P4.011)
+- `[TODO]` `P4.013` Access column rendering: `Available` for satisfied built-ins, `Needs setup · Configure →` (deep-link to `requirements[0].configure_url`) for unmet  (deps: P4.011)
 - `[TODO]` `P4.014` Search + filters: by name/slug, source (All/Platform/Custom), availability
 - `[TODO]` `P4.015` Loading / error / empty states
 
@@ -307,8 +309,8 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 ### 4.5 Built-in detail drawer
 
 - `[TODO]` `P4.040` `BuiltinDetailDrawer.tsx` — read-only metadata (name, slug, description, source path, files, frontmatter)
-- `[TODO]` `P4.041` Availability section: show `Available` or the built-in's `unavailable_reason`; frontend derives any Configure button route from the built-in slug  (deps: P4.040)
-- `[TODO]` `P4.042` Section omitted entirely if the built-in is available and has no setup copy/link
+- `[TODO]` `P4.041` Requirements section: list each `RequirementStatus` with ✓ if satisfied or ! + Configure button if missing  (deps: P4.040)
+- `[TODO]` `P4.042` Section omitted entirely if skill has no requirements
 
 ### 4.6 Edit / Replace / Grants / Delete modals
 
@@ -434,7 +436,7 @@ Listed so agents don't accidentally pick these up. Lift to a real task only if p
 - `[SKIP]` `V15.008` Per-skill permission declarations (network/fs/integrations)
 - `[SKIP]` `V15.009` Skill provenance / signing
 - `[SKIP]` `V15.010` Content scanning at upload (intentionally — false-confidence risk)
-- `[SKIP]` `V15.011` Shared/bundled availability-check modules
+- `[SKIP]` `V15.011` Shared/bundled `SkillRequirement` modules
 - `[SKIP]` `V15.012` In-browser skill editor
 - `[SKIP]` `V15.013` Slug rename history table
 - `[SKIP]` `V15.014` **Skill author tooling** — CLI scaffolder (`onyx-cli skill new`), local validator (`onyx-cli skill validate`), `--dry-run` upload mode, format-spec docs page. V1 assumes a developer hand-crafts the zip; the example-skill download (P4.025–P4.027) is the V1 cold-start aid. Pairs with V15.015 (user-authored skills) but useful for admin-authored too.
@@ -447,4 +449,4 @@ Listed so agents don't accidentally pick these up. Lift to a real task only if p
 
 _(Append cross-cutting decisions or clarifications that come up during implementation. Don't update the spec mid-flight — record here, surface to the spec at the end of the phase.)_
 
-- 2026-05-13: Phase 1 work is being split across multiple stacked PRs branching off `skills-phase-1`.
+- _(nothing yet)_

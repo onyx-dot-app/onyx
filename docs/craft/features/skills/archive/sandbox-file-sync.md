@@ -1,3 +1,5 @@
+> **Archived.** Superseded by the S3-mounted-bucket delivery model described in `../skills-requirements.md` §5. The push-pipeline / tarball / kubectl-exec abstraction designed here is no longer the direction for skill delivery to sandboxes. Kept for historical context only — do not use as an implementation reference.
+
 # Sandbox File Sync — Generic Bundle Abstraction
 
 **Status**: design · **Owner**: Roshan · **Date**: 2026-05-12
