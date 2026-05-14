@@ -6,8 +6,8 @@ Value at TENANT_TIER_KEY is a JSON blob:
 
 import json
 from datetime import datetime
-from typing import NamedTuple
 from typing import cast
+from typing import NamedTuple
 
 from ee.onyx.configs.app_configs import TENANT_TIER_CACHE_TTL_SECONDS
 from ee.onyx.configs.app_configs import TENANT_TIER_KEY

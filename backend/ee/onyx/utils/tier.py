@@ -48,9 +48,7 @@ _CUSTOMER_TIER_TO_TIER: dict[CustomerTier, Tier] = {
 }
 
 
-def _effective_tier(
-    customer_tier: CustomerTier, trial_end: datetime | None
-) -> Tier:
+def _effective_tier(customer_tier: CustomerTier, trial_end: datetime | None) -> Tier:
     """Apply the cloud trial-business → enterprise promotion.
 
     A BUSINESS tenant whose `trial_end` is still in the future is resolved
@@ -117,9 +115,7 @@ def _extract_billing_state(
         # Mirrors the cache-read guard: a naive trial_end would crash the
         # tz-aware comparison in `_effective_tier`. Drop it and log so a
         # CP-side regression is visible.
-        logger.warning(
-            "CP returned naive trial_end; dropping: %r", trial_end
-        )
+        logger.warning("CP returned naive trial_end; dropping: %r", trial_end)
         trial_end = None
     return customer_tier, trial_end
 

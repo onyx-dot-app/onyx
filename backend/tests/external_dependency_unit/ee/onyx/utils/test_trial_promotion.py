@@ -117,9 +117,7 @@ def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
     future = datetime.now(timezone.utc) + timedelta(days=3)
     billing = _billing_info(CustomerTier.BUSINESS, future)
 
-    with patch.object(
-        tier_module, "fetch_billing_information", return_value=billing
-    ):
+    with patch.object(tier_module, "fetch_billing_information", return_value=billing):
         result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.ENTERPRISE
@@ -175,9 +173,7 @@ def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
         customer_tier=CustomerTier.BUSINESS,
     )
 
-    with patch.object(
-        tier_module, "fetch_billing_information", return_value=billing
-    ):
+    with patch.object(tier_module, "fetch_billing_information", return_value=billing):
         result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.BUSINESS
@@ -188,9 +184,7 @@ def test_cache_miss_subscription_status_response_falls_back_to_business() -> Non
     `get_tier()` falls back to BUSINESS without caching."""
     response = SubscriptionStatusResponse(subscribed=False, customer_tier=None)
 
-    with patch.object(
-        tier_module, "fetch_billing_information", return_value=response
-    ):
+    with patch.object(tier_module, "fetch_billing_information", return_value=response):
         result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.BUSINESS

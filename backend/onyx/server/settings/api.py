@@ -82,9 +82,8 @@ def admin_put_settings(
     # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
     # middleware uses, so the FE has one shape to handle for tier-rejected
     # writes.
-    if (
-        settings.search_ui_enabled != existing.search_ui_enabled
-        and not tier_at_least(current_tier, Tier.BUSINESS)
+    if settings.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
+        current_tier, Tier.BUSINESS
     ):
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,
