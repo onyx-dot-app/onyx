@@ -1,12 +1,3 @@
-"""OAuth provider registry.
-
-Adding a provider: create `<name>.py` with an `OAuth` subclass (plus
-`StandardFlatRefresh` or a custom `Refresh` if it supports refresh),
-add an `ExternalAppType` enum value, and append the class to
-`_PROVIDER_CLASSES`. The admin UI's "built-in providers" list is
-served from this registry — no frontend change needed.
-"""
-
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
