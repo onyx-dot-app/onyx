@@ -399,6 +399,7 @@ def test_search_returns_results(
 
 
 def test_search_raw(
+    reset: None,  # noqa: ARG001
     cli_binary: Path,
     pat_token: str,
     admin_user: DATestUser,
