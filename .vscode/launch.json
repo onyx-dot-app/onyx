@@ -38,13 +38,6 @@
       }
     },
     {
-      "name": "Web / API (k8s)",
-      "configurations": ["Web Server", "API Server (k8s)"],
-      "presentation": {
-        "group": "1"
-      }
-    },
-    {
       "name": "Run All Onyx Services (k8s)",
       "configurations": [
         "Web Server",

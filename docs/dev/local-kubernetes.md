@@ -26,17 +26,31 @@ at least 8 CPU / 16 GB allocated.
 ```bash
 brew install kind helm kubectl
 
-# OSS telepresence (not the Ambassador/blackbird build).
 curl -fLo /opt/homebrew/bin/telepresence \
   https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64
 chmod +x /opt/homebrew/bin/telepresence
+```
 
-# Passwordless sudo for the telepresence daemon. Required: the daemon needs
-# sudo to install DNS resolvers + a VPN interface, and vscode preLaunchTasks
-# can't answer an interactive prompt.
+The telepresence network daemon needs sudo to set up DNS resolvers and a VPN
+interface. vscode's preLaunchTask can't answer an interactive sudo prompt, so
+pick one:
+
+**A. Passwordless sudo (set once, never prompted)**
+
+```bash
 echo "$USER ALL=(ALL) NOPASSWD: /opt/homebrew/bin/telepresence" \
   | sudo tee /etc/sudoers.d/telepresence
 sudo chmod 0440 /etc/sudoers.d/telepresence
+```
+
+**B. Manual `connect` once per dev session**
+
+Run this in a terminal at the start of each session (after reboot or
+`telepresence quit`). You'll get one sudo prompt; the daemon stays alive
+afterward and subsequent preLaunchTask runs need no further sudo:
+
+```bash
+telepresence connect -n onyx
 ```
 
 ## One-time setup
@@ -57,8 +71,7 @@ Watch pods:
 kubectl -n onyx get pods -w
 ```
 
-Expected: ~12–15 pods `Running`. Vespa and CNPG-postgres take 1–3 minutes on
-first boot.
+Vespa and CNPG-postgres take a minute or two on first boot.
 
 Install the in-cluster traffic-manager once per cluster:
 
@@ -88,12 +101,8 @@ Run Task):
 
 ### Run your local processes
 
-Open the debug panel and pick one:
-
-- **Web / API (k8s)** — web + api only. Model server stays in-cluster. Fine
-  for most Craft work.
-- **Run All Onyx Services (k8s)** — full local stack including every celery
-  worker + beat.
+Open the debug panel and pick **Run All Onyx Services (k8s)** — web + api +
+every celery worker + beat. Model server stays in-cluster.
 
 Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
 `preLaunchTask`. vscode dedupes the task across the compound, so one run
@@ -184,45 +193,15 @@ deployment/helm/dev/k8s-down.sh --keep-cluster  # uninstall Onyx, keep data
 telepresence quit                                # stop the host-side daemon
 ```
 
-## Common issues
+## `.env.k8s.local`
 
-- **Pods stuck `Pending`** — bump Docker Desktop resources. Overlay targets
-  ~8 CPU / 12 GB.
-- **Vespa stuck `0/1 Ready`** — give it 2–3 minutes. After 5, check
-  `kubectl -n onyx describe pod da-vespa-0`.
-- **CNPG `no operator deployment found`** — use kind, not Docker Desktop k8s.
-- **Helm `context deadline exceeded`** — chart dep update timed out. Re-run
-  `k8s-up.sh`.
-- **`telepresence intercept` says "ambiguous workload"** — pass
-  `--namespace onyx` explicitly.
-- **Sandbox pod unreachable from local api_server** — a NetworkPolicy is
-  blocking the traffic-manager source. Use intercept (not connect) or disable
-  the policy in your override values.
-- **Kubeconfig clashes with prod context** — isolate:
+`.env.k8s` is regenerated each preLaunchTask run by `telepresence intercept
+--env-file`; `.env.k8s.local` is then appended (last-wins). Neither is
+checked in.
 
-  ```bash
-  export KUBECONFIG=$HOME/.kube/onyx-dev-config
-  kind create cluster --name onyx-dev --kubeconfig $KUBECONFIG
-  ```
-
-  Then set the same `KUBECONFIG` in `.vscode/.env.k8s`.
-
-## Files
-
-| Path | Purpose |
-|---|---|
-| `deployment/helm/charts/onyx/values-localdev.yaml` | Laptop overlay. |
-| `deployment/helm/dev/k8s-up.sh` / `k8s-down.sh` | Bring-up / teardown. |
-| `.vscode/launch.json` `(k8s)` configs | Debugger profiles. |
-| `.vscode/tasks.json` `k8s: …` | One-click cluster + telepresence. |
-| `.vscode/.env.k8s` | Generated each preLaunchTask run by `telepresence intercept --env-file`; `.env.k8s.local` is appended last. **Not** checked in. |
-| `.vscode/.env.k8s.local` | User-maintained personal env overrides. **Not** checked in. |
-
-### `.env.k8s.local`
-
-Start from your existing `.vscode/.env`, then **remove** any keys that should
-come from the cluster — overriding these breaks DNS or auth into cluster
-services:
+Start `.env.k8s.local` from your existing `.vscode/.env`, then **remove** any
+keys that should come from the cluster — overriding these breaks DNS or auth
+into cluster services:
 
 - `POSTGRES_*`, `REDIS_*`, `OPENSEARCH_*`, `VESPA_HOST`
 - `S3_*` (MinIO endpoint + creds)

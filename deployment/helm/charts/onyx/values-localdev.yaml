@@ -6,6 +6,13 @@
 #
 # See docs/dev/local-kubernetes.md for the full workflow.
 
+# Track nightly `edge` builds instead of `latest` (a released tag) — keeps
+# in-cluster images closer to main, reducing schema/code skew with local
+# source. Always-pull so kind picks up edge updates.
+global:
+  version: edge
+  pullPolicy: Always
+
 # ---- Persistence (kept on, sized for a laptop) ----
 
 postgresql:
