@@ -164,7 +164,7 @@ class GitlabConnector(LoadConnector, PollConnector):
 
         # Fetch code files
         if self.include_code_files:
-            processed_blob_shas: set[str] = set()
+            processed_path_blobs: set[tuple[str, str]] = set()
             all_branches = list(project.branches.list(iterator=True))
             default_branch = project.default_branch
             # Sort branches: default branch first, then alphabetically
@@ -186,10 +186,10 @@ class GitlabConnector(LoadConnector, PollConnector):
                                 continue
 
                             if file["type"] == "blob":
-                                blob_sha = file["id"]
-                                if blob_sha in processed_blob_shas:
+                                path_blob = (file["path"], file["id"])
+                                if path_blob in processed_path_blobs:
                                     continue
-                                processed_blob_shas.add(blob_sha)
+                                processed_path_blobs.add(path_blob)
 
                                 code_doc_batch.append(
                                     _convert_code_to_document(

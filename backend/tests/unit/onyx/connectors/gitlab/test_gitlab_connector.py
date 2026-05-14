@@ -119,3 +119,70 @@ def test_gitlab_fetch_different_blobs():
     # Verify both exist
     assert any(d.metadata["branch"] == "main" for d in all_docs)
     assert any(d.metadata["branch"] == "dev" for d in all_docs)
+
+
+def test_gitlab_fetch_identical_content_different_paths():
+    # Mocking GitLab project
+    mock_gitlab_client = MagicMock()
+    mock_gitlab_client.url = "https://gitlab.com"
+    mock_project = MagicMock()
+    mock_gitlab_client.projects.get.return_value = mock_project
+    mock_project.default_branch = "main"
+
+    mock_branch_main = MagicMock()
+    mock_branch_main.name = "main"
+    mock_project.branches.list.return_value = [mock_branch_main]
+
+    # Two different files with identical content (same blob SHA)
+    def mock_repository_tree(*_args, **kwargs):
+        return [
+            {
+                "path": "pkg1/__init__.py",
+                "type": "blob",
+                "name": "__init__.py",
+                "id": "blob_shared_sha",
+            },
+            {
+                "path": "pkg2/__init__.py",
+                "type": "blob",
+                "name": "__init__.py",
+                "id": "blob_shared_sha",
+            },
+        ]
+
+    mock_project.repository_tree.side_effect = mock_repository_tree
+
+    # Mocking project.files.get
+    mock_file_obj = MagicMock()
+    mock_file_obj.decode.return_value.decode.return_value = "content"
+    mock_project.files.get.return_value = mock_file_obj
+
+    connector = GitlabConnector(
+        project_owner="owner",
+        project_name="repo",
+        include_code_files=True,
+        include_mrs=False,
+        include_issues=False,
+    )
+    connector.gitlab_client = mock_gitlab_client
+
+    # Run fetch
+    doc_batches = list(connector._fetch_from_gitlab())
+
+    # Check results
+    all_docs = []
+    for batch in doc_batches:
+        for item in batch:
+            if isinstance(item, Document):
+                all_docs.append(item)
+
+    # Should have 2 documents even though content is identical, because paths are different
+    assert len(all_docs) == 2
+    assert any(
+        d.id == "https://gitlab.com/owner/repo/-/blob/main/pkg1/__init__.py"
+        for d in all_docs
+    )
+    assert any(
+        d.id == "https://gitlab.com/owner/repo/-/blob/main/pkg2/__init__.py"
+        for d in all_docs
+    )
