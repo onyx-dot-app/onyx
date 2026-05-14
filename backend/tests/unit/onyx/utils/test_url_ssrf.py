@@ -462,3 +462,69 @@ class TestValidateOutboundHttpUrl:
     def test_blocks_unspecified_ipv4_when_private_is_enabled(self) -> None:
         with pytest.raises(SSRFException, match="loopback/unspecified"):
             validate_outbound_http_url("http://0.0.0.0/", allow_private_network=True)
+
+    def test_blocks_dns_name_resolving_to_loopback_when_private_is_enabled(
+        self,
+    ) -> None:
+        """A DNS name that resolves to 127.0.0.1 must be blocked even on the
+        opt-out path — e.g. an attacker-controlled `loopback.attacker.com`
+        record could otherwise reach the app host's loopback."""
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("127.0.0.1", 80))]
+            with pytest.raises(SSRFException, match="resolves to loopback"):
+                validate_outbound_http_url(
+                    "http://loopback.attacker.com/",
+                    allow_private_network=True,
+                )
+
+    def test_blocks_dns_name_resolving_to_ipv6_loopback_when_private_is_enabled(
+        self,
+    ) -> None:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(30, 1, 6, "", ("::1", 80, 0, 0))]
+            with pytest.raises(SSRFException, match="resolves to loopback"):
+                validate_outbound_http_url(
+                    "http://loopback6.attacker.com/",
+                    allow_private_network=True,
+                )
+
+    def test_blocks_dns_name_resolving_to_unspecified_when_private_is_enabled(
+        self,
+    ) -> None:
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("0.0.0.0", 80))]
+            with pytest.raises(SSRFException, match="resolves to loopback"):
+                validate_outbound_http_url(
+                    "http://unspecified.attacker.com/",
+                    allow_private_network=True,
+                )
+
+    def test_allows_dns_name_resolving_to_rfc1918_when_private_is_enabled(
+        self,
+    ) -> None:
+        """The whole point of the opt-out: a DNS name resolving to RFC1918
+        should still succeed."""
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.5", 443))]
+            validated = validate_outbound_http_url(
+                "https://js.jpl.nasa.gov/", allow_private_network=True
+            )
+            assert validated == "https://js.jpl.nasa.gov/"
+
+    def test_dns_failure_does_not_raise_when_private_is_enabled(self) -> None:
+        """If DNS resolution fails during the loopback pre-check, don't
+        reject — internal-only names that aren't resolvable from the
+        validation context should still be allowed (the actual request will
+        fail on its own if the name is truly broken). The loopback guard is
+        defense-in-depth, not the primary gatekeeper on this path."""
+        import socket as socket_module
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.side_effect = socket_module.gaierror(
+                "Name resolution failed"
+            )
+            validated = validate_outbound_http_url(
+                "https://internal-only.company.com/",
+                allow_private_network=True,
+            )
+            assert validated == "https://internal-only.company.com/"

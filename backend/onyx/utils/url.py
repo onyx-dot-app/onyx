@@ -57,6 +57,37 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
+def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
+    """Resolve ``hostname`` via DNS and return the first address that is
+    loopback or unspecified, or None if none of them are.
+
+    Used on the ``allow_private_network=True`` path to maintain the loopback
+    floor for DNS names — a hostname like ``loopback.attacker.com`` that
+    resolves to ``127.0.0.1`` must not be reachable just because private
+    networks are otherwise allowed. RFC1918 / link-local results are
+    *not* flagged here; opting into those is the whole point of the flag.
+
+    Returns None on DNS failure — the actual request will fail naturally
+    if the name is unresolvable, and an internal-only name that's
+    legitimately reachable from the runtime but not from the validation
+    context shouldn't get spuriously rejected here.
+    """
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return None
+
+    for info in addr_info:
+        ip_str = str(info[4][0])
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if ip_obj.is_loopback or ip_obj.is_unspecified:
+            return ip_str
+    return None
+
+
 def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     """
     Validate a URL for SSRF and resolve it to a safe IP address.
@@ -187,22 +218,32 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
-    # Loopback (127.0.0.0/8, ::1) and unspecified (0.0.0.0, ::) IP literals
+    # Loopback (127.0.0.0/8, ::1) and unspecified (0.0.0.0, ::) addresses
     # are *always* blocked, even when allow_private_network=True. Opting into
     # private networks means RFC1918 / link-local services in the operator's
     # VPC — never the application host's own loopback, which would expose
     # admin APIs, sidecars, etc. running on the same machine.
     try:
         ip_obj = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Hostname is a DNS name. On the opt-out path, _validate_and_resolve_url
+        # would otherwise be skipped — but the always-blocked floor still needs
+        # to apply, or a name like `loopback.attacker.com` resolving to
+        # 127.0.0.1 would slip through. RFC1918/link-local results stay
+        # allowed since opting in is the whole point of the flag.
+        if allow_private_network:
+            blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
+            if blocked_ip is not None:
+                raise SSRFException(
+                    f"Hostname '{parsed.hostname}' resolves to loopback/"
+                    f"unspecified IP '{blocked_ip}'. Access is not allowed."
+                )
+    else:
         if ip_obj.is_loopback or ip_obj.is_unspecified:
             raise SSRFException(
                 f"Access to loopback/unspecified IP '{parsed.hostname}' "
                 f"is not allowed."
             )
-    except ValueError:
-        # Not an IP literal — DNS resolution handles loopback/private cases
-        # when allow_private_network=False.
-        pass
 
     if not allow_private_network:
         _validate_and_resolve_url(normalized_url)
