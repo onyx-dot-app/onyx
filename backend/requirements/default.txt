@@ -230,9 +230,9 @@ attrs==25.4.0 \
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.11 \
-    --hash=sha256:64db35b9b01aeccb4715a6c9a6613a06f2bd7be2ab9d2eb89edd1dfc7580a38f \
-    --hash=sha256:c8687a9a26451c51a34a06fa17bb97cb15bba46a6a626755e2d7f50da8bff3e3
+authlib==1.6.12 \
+    --hash=sha256:0656d8482f28fc8221929d5f35b2bde5d13e10555ebc06b4561b0d622e83b1bd \
+    --hash=sha256:e9229ad7fde610b139dd12f5edbe97eab9ee78bfb85691247e767727850b99ab
     # via fastmcp
 azure-cognitiveservices-speech==1.38.0 \
     --hash=sha256:16a530e6c646eb49ea0bc05cb45a9d28b99e4b67613f6c3a6c54e26e6bf65241 \
@@ -1552,9 +1552,9 @@ langdetect==1.0.9 \
 langfuse==3.10.0 \
     --hash=sha256:7a9254103da50cabcf46a7e7ae9d2cf1f8267f09b6036abdb4a9c6f2f3d15104 \
     --hash=sha256:c7c10607c6fe560990d0973566afd3c5513f7ff97cc31691af72711ad5441d8c
-langsmith==0.7.32 \
-    --hash=sha256:b59b8e106d0e4c4842e158229296086e2aa7c561e3f602acda73d3ad0062e915 \
-    --hash=sha256:e1fde928990c4c52f47dc5132708cec674355d9101723d564183e965f383bf5f
+langsmith==0.8.0 \
+    --hash=sha256:12cc4bc5622b835a6d841964d6034df3617bdb912dae0c1381fd0a68a9b3a3ef \
+    --hash=sha256:59fe5b2a56bbbe14a08aa76691f84b49e8675dd21e11b57d80c6db8c08bac2e3
     # via langchain-core
 lazy-imports==1.0.1 \
     --hash=sha256:7d3e4b1547cb574ec7ef3c47a074673e2612330b2b50bf7eec939f2c393fc261 \

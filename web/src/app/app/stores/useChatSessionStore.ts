@@ -47,6 +47,12 @@ interface ChatSessionData {
 
   // Queued messages
   queuedMessages: QueuedMessage[];
+
+  // True once the latest assistant message has fully rendered to the
+  // user (backend stream done AND smooth-streaming typewriter caught up).
+  // Gates queued-message dispatch so a follow-up isn't sent while the
+  // previous answer is still drawing on screen.
+  latestMessageRenderComplete: boolean;
 }
 
 interface ChatSessionStore {
@@ -143,6 +149,12 @@ interface ChatSessionStore {
   enqueueCurrentMessage: (message: string) => void;
   removeCurrentQueuedMessage: (index: number) => void;
 
+  // Actions - Render completion
+  setLatestMessageRenderComplete: (
+    sessionId: string,
+    complete: boolean
+  ) => void;
+
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
@@ -183,6 +195,7 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   queuedMessages: [],
+  latestMessageRenderComplete: true,
   ...initialData,
 });
 
@@ -542,6 +555,14 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     }
   },
 
+  setLatestMessageRenderComplete: (sessionId: string, complete: boolean) => {
+    const session = get().sessions.get(sessionId);
+    if (!session || session.latestMessageRenderComplete === complete) return;
+    get().updateSessionData(sessionId, {
+      latestMessageRenderComplete: complete,
+    });
+  },
+
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
     get().updateSessionData(sessionId, { abortController: controller });
@@ -716,4 +737,13 @@ export const useCurrentQueuedMessages = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+  });
+
+export const useCurrentLatestMessageRenderComplete = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.latestMessageRenderComplete ?? true;
   });
