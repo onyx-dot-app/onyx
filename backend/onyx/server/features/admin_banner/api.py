@@ -12,6 +12,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Notification
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 MAX_TITLE_LEN = 200
 MAX_CONTENT_LEN = 2000
@@ -55,8 +57,20 @@ def upsert_admin_banner(
     db_session: Session = Depends(get_session),
 ) -> AdminBannerResponse:
     title = request.title.strip()
-    content = request.content.strip() if request.content else None
-    banner = set_admin_banner(db_session, title=title, content=content or None)
+    if not title:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Title must include non-whitespace characters",
+        )
+
+    content: str | None
+    if request.content is None:
+        content = None
+    else:
+        stripped_content = request.content.strip()
+        content = stripped_content or None
+
+    banner = set_admin_banner(db_session, title=title, content=content)
     if banner is None:
         # No eligible users in tenant — banner can't be persisted.
         return AdminBannerResponse(title=title, content=content, created_at=None)
