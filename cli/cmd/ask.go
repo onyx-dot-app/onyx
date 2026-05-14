@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultMaxOutputBytes = 4096
+const defaultMaxOutputBytes = 50000
 
 func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (

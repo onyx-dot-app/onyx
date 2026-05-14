@@ -59,14 +59,14 @@ Exit code 0 on success. Non-zero with a descriptive error on failure (see exit c
 onyx-cli search "What is our deployment process?"
 ```
 
-Returns ranked, cited documents from the Onyx knowledge base as JSON. The default output is the LLM-facing format — `{"results": [...]}` with citation IDs, titles, content, and source types. Use `--raw` for the full API response including document IDs, scores, links, and citation mapping.
+Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id`).
 
 ```bash
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
 
 # Recent results only
-onyx-cli search --days 30 --limit 5 "recent production incidents"
+onyx-cli search --days 30 "recent production incidents"
 
 # Use a specific agent for scoped search
 onyx-cli search --agent-id 5 "engineering roadmap"
@@ -82,11 +82,10 @@ onyx-cli search --no-query-expansion "exact error message text"
 | ----------------------- | ------ | ---------------------------------------------------------------- |
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
 | `--days`                | int    | Only return results from the last N days                         |
-| `--limit`               | int    | Maximum number of results (default: server decides)              |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
-| `--raw`                 | bool   | Output full API response (results with scores, links, document IDs, citation mapping) |
+| `--raw`                 | bool   | Output full API response (adds per-result citation_id) |
 | `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
-| `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY, ignored with --raw) |
+| `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY, ignored with --raw) |
 
 ### Ask a question
 
@@ -94,7 +93,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 onyx-cli ask "What is our company's PTO policy?"
 ```
 
-Streams an LLM-generated answer as plain text to stdout. Use `search` instead when you need the source documents rather than a synthesized answer. When stdout is not a TTY, output is truncated to 4096 bytes and the full response is saved to a temp file (path printed at the end). Use `--max-output 0` to disable truncation.
+Streams an LLM-generated answer as plain text to stdout. Use `search` instead when you need the source documents rather than a synthesized answer. When stdout is not a TTY, output is truncated to 50000 bytes and the full response is saved to a temp file (path printed at the end). Use `--max-output 0` to disable truncation.
 
 ```bash
 # Use a specific agent
@@ -113,7 +112,7 @@ onyx-cli ask --json "List all active API integrations"
 | `--json`       | bool | Output NDJSON stream events instead of plain text (bypasses truncation) |
 | `--quiet`      | bool | Buffer output and print once at end (no streaming)           |
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
-| `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 4096 for non-TTY) |
+| `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY) |
 
 ### List available agents
 
@@ -137,7 +136,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 - **stdout**: Results only (answer text, agent list, status)
 - **stderr**: Progress indicators, warnings, errors
 - **Non-TTY**: No ANSI escape codes, no interactive prompts
-- **Truncation**: When stdout is not a TTY, `search` and `ask` output is truncated to 4096 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
+- **Truncation**: When stdout is not a TTY, `search` and `ask` output is truncated to 50000 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
 
 ## Exit Codes
 

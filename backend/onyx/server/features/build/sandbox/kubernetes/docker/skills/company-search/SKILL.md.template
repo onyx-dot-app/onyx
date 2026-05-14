@@ -23,11 +23,11 @@ assume it exists.
 |------|-------------|---------|
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
-| `--limit` | Maximum number of results | `--limit 5` |
 
 ## Output
 
-Stdout is JSON with a top-level `results` array. Each result has a `document`
-field (the citation ID), plus `title`, `content`, `source_type`, and other
-metadata. Cite results by their `document` number when referencing them in your
-response.
+Stdout is JSON with a top-level `results` array. Each result has `title`,
+`url`, `source_type`, `content`, and `updated_at`. Results contain only
+documents the LLM judged relevant, ordered by relevance; `content` is the
+full chunk text of each. Cite results by title and URL when referencing
+them in your response.
