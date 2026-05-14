@@ -536,9 +536,8 @@ export default function HooksPage() {
   }
 
   function handleHookDeleted(id: number) {
-    mutate(
-      (prev: HookResponse[] | undefined) =>
-        prev?.filter((h: HookResponse) => h.id !== id)
+    mutate((prev: HookResponse[] | undefined) =>
+      prev?.filter((h: HookResponse) => h.id !== id)
     );
   }
 

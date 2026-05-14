@@ -4,8 +4,7 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 
-export interface BigButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface BigButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   // Subvariants
   primary?: boolean;
   secondary?: boolean;

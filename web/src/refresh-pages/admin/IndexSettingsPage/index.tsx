@@ -976,7 +976,7 @@ export default function IndexSettingsPage() {
                       provider={CUSTOM_PROVIDER}
                       existingModel={
                         currentProviderName === EmbeddingProviderName.CUSTOM
-                          ? currentEmbeddingModelSpec ?? undefined
+                          ? (currentEmbeddingModelSpec ?? undefined)
                           : undefined
                       }
                       onSubmit={(customModel) => {
@@ -1166,8 +1166,8 @@ export default function IndexSettingsPage() {
                                               existingModel={
                                                 currentEmbeddingModel?.provider_type ===
                                                 provider.providerName
-                                                  ? currentEmbeddingModelSpec ??
-                                                    undefined
+                                                  ? (currentEmbeddingModelSpec ??
+                                                    undefined)
                                                   : undefined
                                               }
                                               onSelectModel={(name) => {

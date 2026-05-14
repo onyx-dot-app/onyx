@@ -174,7 +174,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
     >
       <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03>
-          {isExpanded ? durationText : imageText ?? durationText}
+          {isExpanded ? durationText : (imageText ?? durationText)}
         </Text>
         {memoryOperation && !isExpanded && (
           <MemoryTagWithTooltip

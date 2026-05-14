@@ -356,11 +356,10 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
 /**
  * Tabs List Props
  */
-interface TabsListProps
-  extends Omit<
-    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
-    "style"
-  > {
+interface TabsListProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
+  "style"
+> {
   /**
    * Visual variant of the tabs list.
    *
@@ -557,13 +556,9 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 /**
  * Tabs Trigger Props
  */
-interface TabsTriggerProps
-  extends WithoutStyles<
-    Omit<
-      React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>,
-      "children"
-    >
-  > {
+interface TabsTriggerProps extends WithoutStyles<
+  Omit<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>, "children">
+> {
   /**
    * Visual variant of the tab trigger.
    * Automatically inherited from the parent `Tabs.List` variant via context.

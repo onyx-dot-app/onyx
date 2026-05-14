@@ -1305,10 +1305,8 @@ def slack_retrieval(
         for chunk in chunks:
             match_highlight = chunk.content
             for highlight in sorted_highlighted_texts:  # faster than re sub
-                match_highlight = (
-                    match_highlight.replace(  # ty: ignore[no-matching-overload]
-                        highlight, f"<hi>{highlight}</hi>"
-                    )
+                match_highlight = match_highlight.replace(  # ty: ignore[no-matching-overload]
+                    highlight, f"<hi>{highlight}</hi>"
                 )
 
             # if nothing got replaced, the chunk is irrelevant

@@ -86,6 +86,6 @@ class TestDropSchemaValidation:
         """drop_schema should reject invalid tenant IDs before any SQL runs."""
         with pytest.raises(ValueError, match="Invalid tenant_id format") as exc_info:
             drop_schema(dangerous_input)
-        assert dangerous_input in str(
-            exc_info.value
-        ), f"Error should include input ({description})"
+        assert dangerous_input in str(exc_info.value), (
+            f"Error should include input ({description})"
+        )

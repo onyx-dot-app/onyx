@@ -587,7 +587,7 @@ export default function useChatController({
       // (and its files), so merging here would send duplicates.
       const effectiveFileDescriptors = [
         ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(!regenerationRequest ? messageToResend?.files ?? [] : []),
+        ...(!regenerationRequest ? (messageToResend?.files ?? []) : []),
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
@@ -713,7 +713,7 @@ export default function useChatController({
       // Track which models have errored so the bottom-of-loop upsert skips them
       const erroredModelIndices = new Set<number>();
       let modelDisplayNames: string[] = isMultiModel
-        ? selectedModels?.map((m) => m.displayName) ?? []
+        ? (selectedModels?.map((m) => m.displayName) ?? [])
         : [];
 
       // rAF-batched flush state. One Zustand write per frame instead of
@@ -889,7 +889,7 @@ export default function useChatController({
         // 1. If forceSearch is true, use the search tool's numeric ID
         // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
         const effectiveForcedToolId = forceSearch
-          ? searchToolNumericId ?? null
+          ? (searchToolNumericId ?? null)
           : forcedToolIds.length > 0
             ? forcedToolIds[0]
             : null;

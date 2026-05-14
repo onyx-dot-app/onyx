@@ -64,10 +64,7 @@ def emit_process_memory(
         metadata_str = f" {metadata_str}" if metadata_str else ""
 
         memory_logger.info(
-            "PROCESS_MEMORY process_name=%s pid=%s "
-            "rss_mb=%s "
-            "vms_mb=%s "
-            "cpu=%s%s",
+            "PROCESS_MEMORY process_name=%s pid=%s rss_mb=%s vms_mb=%s cpu=%s%s",
             process_name,
             pid,
             format(memory_info.rss / (1024 * 1024), ".2f"),

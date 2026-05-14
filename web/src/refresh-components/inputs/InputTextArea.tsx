@@ -48,8 +48,10 @@ import {
  * <InputTextArea variant="internal" value={value} onChange={handleChange} />
  * ```
  */
-export interface InputTextAreaProps
-  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled"> {
+export interface InputTextAreaProps extends Omit<
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "disabled"
+> {
   variant?: Variants;
   autoResize?: boolean;
   maxRows?: number;

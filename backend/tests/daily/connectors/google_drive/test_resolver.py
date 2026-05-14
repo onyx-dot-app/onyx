@@ -143,12 +143,12 @@ def test_resolve_hierarchy_nodes_are_valid(
 
     # File 25 is in folder_1 which is inside shared_drive_1.
     # The parent walk must yield at least these two ancestors.
-    assert (
-        FOLDER_1_ID in node_ids
-    ), f"Expected folder_1 ({FOLDER_1_ID}) in hierarchy nodes, got: {node_ids}"
-    assert (
-        SHARED_DRIVE_1_ID in node_ids
-    ), f"Expected shared_drive_1 ({SHARED_DRIVE_1_ID}) in hierarchy nodes, got: {node_ids}"
+    assert FOLDER_1_ID in node_ids, (
+        f"Expected folder_1 ({FOLDER_1_ID}) in hierarchy nodes, got: {node_ids}"
+    )
+    assert SHARED_DRIVE_1_ID in node_ids, (
+        f"Expected shared_drive_1 ({SHARED_DRIVE_1_ID}) in hierarchy nodes, got: {node_ids}"
+    )
 
     for node in hierarchy_nodes:
         if node.raw_node_id not in ALL_EXPECTED_HIERARCHY_NODES:

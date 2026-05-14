@@ -426,9 +426,7 @@ def run_deep_research_llm_loop(
             reasoning_cycles = 0
             most_recent_reasoning: str | None = None
             citation_mapping: CitationMapping = {}
-            final_turn_index: int = (
-                orchestrator_start_turn_index  # Track the final turn_index for stop packet
-            )
+            final_turn_index: int = orchestrator_start_turn_index  # Track the final turn_index for stop packet
             for cycle in range(max_orchestrator_cycles):
                 # Check if we've exceeded the time limit or reached the last cycle
                 # - if so, skip LLM and generate final report
@@ -569,9 +567,7 @@ def run_deep_research_llm_loop(
                 special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
                 if special_tool_calls.generate_report_tool_call:
-                    report_turn_index = (
-                        special_tool_calls.generate_report_tool_call.placement.turn_index
-                    )
+                    report_turn_index = special_tool_calls.generate_report_tool_call.placement.turn_index
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
                         research_plan=research_plan,

@@ -36,8 +36,7 @@ const SCROLL_THROTTLE_MS = 16;
  *  - Placing this inside a parent with overflow-y: auto (e.g. Modal.Body),
  *    which becomes the scroll container instead of this component's inner div.
  */
-export interface ScrollIndicatorDivProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface ScrollIndicatorDivProps extends React.HTMLAttributes<HTMLDivElement> {
   // Mask/Shadow options
   disableIndicators?: boolean;
   disableTopIndicator?: boolean;

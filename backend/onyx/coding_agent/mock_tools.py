@@ -27,8 +27,7 @@ CODING_AGENT_TOOL_DESCRIPTION = {
                 CODING_AGENT_QUERY_KEY: {
                     "type": "string",
                     "description": (
-                        "The user's question or task to perform against the "
-                        "repository."
+                        "The user's question or task to perform against the repository."
                     ),
                 },
                 CODING_AGENT_REPO_KEY: {

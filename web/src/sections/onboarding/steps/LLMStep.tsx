@@ -123,7 +123,7 @@ const LLMStep = memo(
     ) {
       const providerName = selectedProvider?.isCustomProvider
         ? "custom"
-        : selectedProvider?.llmDescriptor?.name ?? "custom";
+        : (selectedProvider?.llmDescriptor?.name ?? "custom");
 
       const { Modal: ModalComponent } = getProvider(providerName);
 

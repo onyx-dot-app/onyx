@@ -4,10 +4,9 @@ import React, { useState } from "react";
 import { cn } from "@opal/utils";
 import type { WithoutStyles } from "@opal/types";
 
-export interface SwitchProps
-  extends WithoutStyles<
-    Omit<React.ComponentPropsWithoutRef<"button">, "onChange">
-  > {
+export interface SwitchProps extends WithoutStyles<
+  Omit<React.ComponentPropsWithoutRef<"button">, "onChange">
+> {
   // Switch variants
   disabled?: boolean;
 

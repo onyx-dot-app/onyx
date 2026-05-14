@@ -120,7 +120,9 @@ if LOG_POSTGRES_CONN_COUNTS:
 
     @event.listens_for(Engine, "checkout")
     def log_checkout(
-        dbapi_connection, connection_record, connection_proxy  # noqa: ARG001
+        dbapi_connection,  # noqa: ARG001
+        connection_record,  # noqa: ARG001
+        connection_proxy,
     ):
         global checkout_count
         checkout_count += 1
@@ -422,9 +424,9 @@ def get_session() -> Generator[Session, None, None]:
 
 
 @contextmanager
-def get_db_readonly_user_session_with_current_tenant() -> (
-    Generator[Session, None, None]
-):
+def get_db_readonly_user_session_with_current_tenant() -> Generator[
+    Session, None, None
+]:
     """
     Generate a database session using a custom database user for the current tenant.
     The custom user credentials are obtained from environment variables.

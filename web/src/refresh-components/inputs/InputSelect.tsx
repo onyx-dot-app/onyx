@@ -87,10 +87,9 @@ const useInputSelectContext = () => {
  * </InputSelect>
  * ```
  */
-interface InputSelectRootProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
-  > {
+interface InputSelectRootProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
+> {
   /** Whether to show error styling */
   error?: boolean;
   /** Whether the select is disabled */
@@ -188,8 +187,9 @@ function InputSelectRoot({
  * <InputSelect.Trigger placeholder="Select..." rightSection={<Badge>New</Badge>} />
  * ```
  */
-interface InputSelectTriggerProps
-  extends WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Trigger>> {
+interface InputSelectTriggerProps extends WithoutStyles<
+  React.ComponentProps<typeof SelectPrimitive.Trigger>
+> {
   /** Placeholder when no value selected */
   placeholder?: React.ReactNode;
   /** Content to render on the right side of the trigger */
@@ -332,8 +332,9 @@ function InputSelectContent({
  * </InputSelect.Item>
  * ```
  */
-interface InputSelectItemProps
-  extends WithoutStyles<Omit<LineItemProps, "heavyForced" | "ref">> {
+interface InputSelectItemProps extends WithoutStyles<
+  Omit<LineItemProps, "heavyForced" | "ref">
+> {
   /** Unique value for this option */
   value: string;
   /** Optional callback when item is selected */

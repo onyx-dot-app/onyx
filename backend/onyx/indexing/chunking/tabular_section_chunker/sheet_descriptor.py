@@ -54,8 +54,7 @@ def build_sheet_descriptor_chunks(
 
 def _overview_line(a: SheetAnalysis) -> str:
     return (
-        "Sheet overview.\n"
-        f"This sheet has {a.row_count} rows and {a.num_cols} columns."
+        f"Sheet overview.\nThis sheet has {a.row_count} rows and {a.num_cols} columns."
     )
 
 

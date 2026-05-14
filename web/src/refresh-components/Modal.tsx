@@ -116,10 +116,9 @@ const heightClasses = {
  * </Modal.Content>
  * ```
  */
-export interface ModalContentProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
-  > {
+export interface ModalContentProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+> {
   width?: keyof typeof widthClasses;
   height?: keyof typeof heightClasses;
   /** Vertical placement of the modal. `"center"` (default) centers in the

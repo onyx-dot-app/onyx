@@ -1087,10 +1087,8 @@ class SlackConnector(
                 channel_message_ts is None
                 and len(message_batch) > SlackConnector.BOT_CHANNEL_MIN_BATCH_SIZE
             ):
-                if (
-                    num_filtered
-                    > SlackConnector.BOT_CHANNEL_PERCENTAGE_THRESHOLD
-                    * len(message_batch)
+                if num_filtered > SlackConnector.BOT_CHANNEL_PERCENTAGE_THRESHOLD * len(
+                    message_batch
                 ):
                     logger.warning(
                         "Bypassing this channel since it appears to be mostly bot messages"

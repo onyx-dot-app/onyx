@@ -22,12 +22,12 @@ def test_model_is_reasoning_model() -> None:
 
     # Test reasoning models
     for model_name, provider in reasoning_models:
-        assert (
-            model_is_reasoning_model(model_name, provider) is True
-        ), f"Expected {provider}/{model_name} to be identified as a reasoning model"
+        assert model_is_reasoning_model(model_name, provider) is True, (
+            f"Expected {provider}/{model_name} to be identified as a reasoning model"
+        )
 
     # Test non-reasoning models
     for model_name, provider in non_reasoning_models:
-        assert (
-            model_is_reasoning_model(model_name, provider) is False
-        ), f"Expected {provider}/{model_name} to NOT be identified as a reasoning model"
+        assert model_is_reasoning_model(model_name, provider) is False, (
+            f"Expected {provider}/{model_name} to NOT be identified as a reasoning model"
+        )

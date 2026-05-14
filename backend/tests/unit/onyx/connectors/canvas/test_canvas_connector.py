@@ -288,7 +288,7 @@ class TestGet:
 
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_success_returns_json_and_next_url(self, mock_requests: MagicMock) -> None:
-        next_link = f"<{FAKE_BASE_URL}/api/v1/courses?page=2>; " 'rel="next"'
+        next_link = f'<{FAKE_BASE_URL}/api/v1/courses?page=2>; rel="next"'
         mock_requests.get.return_value = _mock_response(
             json_data=[{"id": 1}], link_header=next_link
         )

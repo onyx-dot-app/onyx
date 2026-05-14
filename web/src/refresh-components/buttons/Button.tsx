@@ -7,8 +7,7 @@ import type { Route } from "next";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button variants:
   main?: boolean;
   action?: boolean;

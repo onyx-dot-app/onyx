@@ -154,7 +154,6 @@ def _get_azuread_group_guid_by_name(
 
 
 def _extract_guid_from_claims_token(claims_token: str) -> str | None:
-
     try:
         # Pattern to match GUID in claims token
         # Claims tokens often have format: c:0o.c|provider|GUID_suffix
@@ -239,7 +238,6 @@ def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list
 
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
-
     try:
         # First try to get the list item directly from the drive item
         if hasattr(drive_item, "listItem"):
@@ -320,7 +318,6 @@ def _get_group_name_with_suffix(
 def _get_sharepoint_groups(
     client_context: ClientContext, group_name: str, graph_client: GraphClient
 ) -> tuple[set[SharepointGroup], set[str]]:
-
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
 
@@ -373,7 +370,6 @@ def _get_sharepoint_groups(
 def _get_azuread_groups(
     graph_client: GraphClient, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
-
     group_id = _get_group_guid_from_identifier(graph_client, group_name)
     if not group_id:
         logger.error("Failed to get Azure AD group GUID for name %s", group_name)
@@ -742,7 +738,6 @@ def get_sharepoint_external_groups(
     get_access_token: Callable[[], str] | None = None,
     enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
-
     groups: set[SharepointGroup] = set()
 
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:

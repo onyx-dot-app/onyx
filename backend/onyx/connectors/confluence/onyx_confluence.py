@@ -694,12 +694,10 @@ class OnyxConfluence:
                     if not self._is_cloud:
                         initial_start = get_start_param_from_url(url_suffix)
                         # this will just yield the successful items from the batch
-                        new_url_suffix = (
-                            yield from self._try_one_by_one_for_paginated_url(
-                                url_suffix,
-                                initial_start=initial_start,
-                                limit=current_limit,
-                            )
+                        new_url_suffix = yield from self._try_one_by_one_for_paginated_url(
+                            url_suffix,
+                            initial_start=initial_start,
+                            limit=current_limit,
                         )
                         # this means we ran into an empty page
                         if new_url_suffix is None:

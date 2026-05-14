@@ -888,9 +888,9 @@ class GoogleDriveConnector(
                 ):
                     if isinstance(file_or_token, str):
                         logger.debug("Done with max num pages for user %s", user_email)
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
 
@@ -930,9 +930,9 @@ class GoogleDriveConnector(
                     resume_start = curr_stage.completed_until
                     for file_or_token in _yield_from_drive(drive_id, resume_start):
                         if isinstance(file_or_token, str):
-                            checkpoint.completion_map[user_email].next_page_token = (
-                                file_or_token
-                            )
+                            checkpoint.completion_map[
+                                user_email
+                            ].next_page_token = file_or_token
                             return  # done with the max num pages, return checkpoint
                         yield file_or_token
 
@@ -948,9 +948,9 @@ class GoogleDriveConnector(
                 curr_stage.current_folder_or_drive_id = drive_id
                 for file_or_token in _yield_from_drive(drive_id, start):
                     if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
                 curr_stage.current_folder_or_drive_id = None
@@ -1429,7 +1429,8 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].completed_until
             yield from _yield_from_folder_crawl(
-                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                resume_start,
             )
 
         # the times stored in the completion_map aren't used due to the crawling behavior

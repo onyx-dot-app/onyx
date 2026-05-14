@@ -48,6 +48,5 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
         f"Response: {response.text}"
     )
     assert "Authentication failed" in response.text, (
-        f"Expected error message about invalid credentials, but got: "
-        f"{response.text}"
+        f"Expected error message about invalid credentials, but got: {response.text}"
     )
