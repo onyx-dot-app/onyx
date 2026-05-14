@@ -59,7 +59,7 @@ Exit code 0 on success. Non-zero with a descriptive error on failure (see exit c
 onyx-cli search "What is our deployment process?"
 ```
 
-Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id` and `document_id`).
+Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id`).
 
 ```bash
 # Filter by source
@@ -83,7 +83,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
-| `--raw`                 | bool   | Output full API response (adds per-result citation_id and document_id) |
+| `--raw`                 | bool   | Output full API response (adds per-result citation_id) |
 | `--no-query-expansion`  | bool   | Skip LLM query expansion (faster, less comprehensive)           |
 | `--max-output`          | int    | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY, ignored with --raw) |
 

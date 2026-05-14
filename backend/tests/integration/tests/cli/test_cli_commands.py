@@ -408,7 +408,7 @@ def test_search_raw(
     """--raw outputs the full SearchResponse as JSON."""
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     phrase = "cli-search-raw-unique-phrase"
-    doc = DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
+    DocumentManager.seed_doc_with_content(cc_pair, phrase, api_key)
 
     result = run_cli(
         cli_binary, ["search", "--raw", phrase], pat=pat_token, timeout=120
@@ -416,12 +416,12 @@ def test_search_raw(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
+    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
+    # so the API must return exactly one result that contains it.
     data = json.loads(result.stdout)
-    assert isinstance(data["results"], list)
-    assert len(data["results"]) > 0
-
-    result_doc_ids = {r["document_id"] for r in data["results"]}
-    assert doc.id in result_doc_ids
+    assert len(data["results"]) == 1
+    assert phrase in data["results"][0]["content"]
+    assert data["results"][0]["citation_id"] is not None
 
 
 def test_search_truncation(
@@ -518,16 +518,12 @@ def test_search_agent_id(
     cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     shared_phrase = "cli-search-agent-scope-unique"
-    doc_in = DocumentManager.seed_doc_with_content(
-        cc_pair_in,
-        f"{shared_phrase} in scope",
-        api_key,
-    )
-    doc_out = DocumentManager.seed_doc_with_content(
-        cc_pair_out,
-        f"{shared_phrase} out of scope",
-        api_key,
-    )
+    # Suffixes ("in scope" / "out of scope") must not be substrings of each
+    # other so the negative assertion below stays meaningful.
+    included_content = f"{shared_phrase} in scope"
+    excluded_content = f"{shared_phrase} out of scope"
+    DocumentManager.seed_doc_with_content(cc_pair_in, included_content, api_key)
+    DocumentManager.seed_doc_with_content(cc_pair_out, excluded_content, api_key)
 
     doc_set = DocumentSetManager.create(
         cc_pair_ids=[cc_pair_in.id],
@@ -552,6 +548,6 @@ def test_search_agent_id(
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
     data = json.loads(result.stdout)
-    result_doc_ids = {r["document_id"] for r in data["results"]}
-    assert doc_in.id in result_doc_ids
-    assert doc_out.id not in result_doc_ids
+    contents = [r["content"] for r in data["results"]]
+    assert any(included_content in c for c in contents)
+    assert not any(excluded_content in c for c in contents)

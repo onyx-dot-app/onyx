@@ -116,12 +116,11 @@ type SearchRequest struct {
 
 // SearchResult is a single document result from the search API.
 //
-// Content is the full chunk text from the LLM-selected document. The server
-// picks: LLM-relevant docs get the full chunk, with a blurb fallback for
-// defensive cases. Consumers never need to fall back themselves.
+// Content is the full chunk text the LLM saw for this section. Multiple
+// results may share a CitationID when the LLM selected multiple
+// non-overlapping sections of the same document.
 type SearchResult struct {
 	CitationID *int    `json:"citation_id"`
-	DocumentID string  `json:"document_id"`
 	Title      string  `json:"title"`
 	Content    string  `json:"content"`
 	Link       *string `json:"link"`
