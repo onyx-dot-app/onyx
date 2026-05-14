@@ -78,3 +78,36 @@ def set_admin_banner(
         len(content) if content else 0,
     )
     return get_active_admin_banner(db_session)
+
+
+def ensure_admin_banner_for_user(db_session: Session, user: User) -> None:
+    if not user.is_active:
+        return
+    if user.account_type in (AccountType.BOT, AccountType.EXT_PERM_USER):
+        return
+    if user.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN):
+        return
+
+    banner = get_active_admin_banner(db_session)
+    if banner is None:
+        return
+
+    existing_id = db_session.scalar(
+        select(Notification.id)
+        .where(
+            Notification.user_id == user.id,
+            Notification.notif_type == NotificationType.ADMIN_BANNER,
+        )
+        .limit(1)
+    )
+    if existing_id is not None:
+        return
+
+    batch_create_notifications(
+        [user.id],
+        NotificationType.ADMIN_BANNER,
+        db_session,
+        title=banner.title,
+        description=banner.description,
+        additional_data={},
+    )

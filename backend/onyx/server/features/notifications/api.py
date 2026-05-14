@@ -4,6 +4,7 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.admin_banner import ensure_admin_banner_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -55,6 +56,11 @@ def _check_for_notifications_to_create(
         ensure_release_notes_fresh_and_notify(db_session)
     except Exception:
         logger.exception("Failed to check for release notes in notifications endpoint")
+
+    try:
+        ensure_admin_banner_for_user(db_session, user)
+    except Exception:
+        logger.exception("Failed to ensure admin banner notification")
 
 
 @router.get("")
