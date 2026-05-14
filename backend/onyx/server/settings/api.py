@@ -39,21 +39,13 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
+from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
-
-
-def get_effective_tier() -> Tier:
-    """MIT version: always COMMUNITY.
-
-    EE deployments override this to return the resolved per-tenant tier
-    via `ee.onyx.utils.tier.get_tier`.
-    """
-    return Tier.COMMUNITY
 
 
 @admin_router.put("")
@@ -71,12 +63,12 @@ def admin_put_settings(
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
 
-    get_tier_fn = fetch_versioned_implementation_with_fallback(
-        "onyx.server.settings.api",
-        "get_effective_tier",
-        get_effective_tier,
-    )
-    current_tier = get_tier_fn()
+    if global_version.is_ee_version():
+        from ee.onyx.utils.tier import get_tier
+
+        current_tier = get_tier()
+    else:
+        current_tier = Tier.COMMUNITY
     existing = load_settings()
     # Search Mode is Business+; Chat Retention is Enterprise-only.
     # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate

@@ -19,16 +19,6 @@ from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-
-def get_effective_tier() -> Tier:
-    """EE override of `onyx.server.settings.api.get_effective_tier`.
-
-    Returns the resolved per-tenant tier so callers can gate writes
-    (e.g. chat retention, search-mode toggle) consistently with the
-    `tier_gate` middleware.
-    """
-    return get_tier()
-
 logger = setup_logger()
 
 # Only GATED_ACCESS actually blocks access - other statuses are for notifications
