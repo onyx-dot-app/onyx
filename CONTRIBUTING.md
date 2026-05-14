@@ -195,7 +195,9 @@ Before starting, make sure the Docker Daemon is running.
 
 **Features:**
 
-- Hot reload is enabled for the web server and API servers
+- Hot reload is enabled for the web server, API server, and celery workers
+  (celery is wrapped in `backend/scripts/dev_celery_reload.py` so breakpoints
+  survive reloads — debugpy follows the watchfiles fork via `subProcess: true`)
 - Python debugging is configured with debugpy
 - Environment variables are loaded from `.vscode/.env`
 - Console output is organized in the integrated terminal with labeled tabs

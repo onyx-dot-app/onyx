@@ -1,13 +1,11 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "compounds": [
     {
-      // Dummy entry used to label the group
       "name": "--- Compound ---",
-      "configurations": ["--- Individual ---"],
+      "configurations": [
+        "--- Individual ---"
+      ],
       "presentation": {
         "group": "1"
       }
@@ -35,7 +33,11 @@
     },
     {
       "name": "Web / Model / API",
-      "configurations": ["Web Server", "Model Server", "API Server"],
+      "configurations": [
+        "Web Server",
+        "Model Server",
+        "API Server"
+      ],
       "presentation": {
         "group": "1"
       }
@@ -61,7 +63,6 @@
   ],
   "configurations": [
     {
-      // Dummy entry used to label the group
       "name": "--- Individual ---",
       "type": "node",
       "request": "launch",
@@ -77,7 +78,10 @@
       "cwd": "${workspaceRoot}/web",
       "runtimeExecutable": "npm",
       "envFile": "${workspaceFolder}/.vscode/.env.web",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "presentation": {
         "group": "2"
       },
@@ -96,7 +100,12 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "args": [
+        "model_server.main:app",
+        "--reload",
+        "--port",
+        "9000"
+      ],
       "presentation": {
         "group": "2"
       },
@@ -114,7 +123,12 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": [
+        "onyx.main:app",
+        "--reload",
+        "--port",
+        "8080"
+      ],
       "presentation": {
         "group": "2"
       },
@@ -189,7 +203,8 @@
       "name": "Celery primary",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -210,7 +225,8 @@
         "celery"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery primary Console"
     },
@@ -218,7 +234,8 @@
       "name": "Celery light",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -239,7 +256,8 @@
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery light Console"
     },
@@ -247,7 +265,8 @@
       "name": "Celery heavy",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -268,7 +287,8 @@
         "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery heavy Console",
       "justMyCode": false
@@ -277,7 +297,8 @@
       "name": "Celery monitoring",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -298,7 +319,8 @@
         "monitoring"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery monitoring Console"
     },
@@ -306,7 +328,8 @@
       "name": "Celery user_file_processing",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -327,7 +350,8 @@
         "user_file_processing,user_file_project_sync,user_file_delete"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery user_file_processing Console",
       "justMyCode": false
@@ -336,7 +360,8 @@
       "name": "Celery scheduled_tasks",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -357,7 +382,8 @@
         "scheduled_tasks"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery scheduled_tasks Console",
       "justMyCode": false
@@ -366,7 +392,8 @@
       "name": "Celery docfetching",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -386,7 +413,8 @@
         "connector_doc_fetching"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery docfetching Console",
       "justMyCode": false
@@ -395,7 +423,8 @@
       "name": "Celery docprocessing",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -416,7 +445,8 @@
         "docprocessing"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery docprocessing Console",
       "justMyCode": false
@@ -425,7 +455,8 @@
       "name": "Celery beat",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -440,7 +471,8 @@
         "--loglevel=INFO"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery beat Console"
     },
@@ -459,8 +491,6 @@
       },
       "args": [
         "-v"
-        // Specify a specific module/test to run or provide nothing to run all tests
-        // "tests/unit/onyx/llm/answering/test_prune_and_merge.py"
       ],
       "presentation": {
         "group": "2"
@@ -468,7 +498,6 @@
       "consoleTitle": "Pytest Console"
     },
     {
-      // Dummy entry used to label the group
       "name": "--- Tasks ---",
       "type": "node",
       "request": "launch",
@@ -482,7 +511,11 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "docker",
-      "runtimeArgs": ["compose", "up", "-d"],
+      "runtimeArgs": [
+        "compose",
+        "up",
+        "-d"
+      ],
       "cwd": "${workspaceFolder}/profiling",
       "console": "integratedTerminal",
       "presentation": {
@@ -520,12 +553,12 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
-      "args": ["--verbose"],
+      "args": [
+        "--verbose"
+      ],
       "consoleTitle": "Eval CLI Console"
     },
     {
-      // Celery jobs launched through a single background script (legacy)
-      // Recommend using the "Celery (all)" compound launch instead.
       "name": "Background Jobs",
       "consoleName": "Background Jobs",
       "type": "debugpy",
@@ -571,7 +604,6 @@
       "consoleTitle": "Build Sandbox Templates"
     },
     {
-      // Dummy entry used to label the group
       "name": "--- Database ---",
       "type": "node",
       "request": "launch",
@@ -685,7 +717,6 @@
       }
     },
     {
-      // script to generate the openapi schema
       "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
       "request": "launch",
@@ -696,10 +727,13 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "backend"
       },
-      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
+      "args": [
+        "--filename",
+        "backend/generated/openapi.json",
+        "--generate-python-client"
+      ]
     },
     {
-      // script to debug multi tenant db issues
       "name": "Onyx DB Manager (Top Chunks)",
       "type": "debugpy",
       "request": "launch",
