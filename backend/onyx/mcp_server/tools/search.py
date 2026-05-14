@@ -74,17 +74,9 @@ def _extract_error_detail(response: httpx.Response) -> str:
     return f"Request failed with status {response.status_code}"
 
 
-def _error_payload(error: str, *, has_results: bool = True) -> dict[str, Any]:
-    """Build the standard MCP error response envelope.
-
-    Keeps the error shape consistent across search_indexed_documents,
-    search_web, and open_urls. ``has_results`` toggles between the
-    ``results``-bearing tools and ``open_urls`` (which returns no results).
-    """
-    payload: dict[str, Any] = {"error": error}
-    if has_results:
-        payload["results"] = []
-    return payload
+def _error_payload(error: str) -> dict[str, Any]:
+    """Build the standard MCP error response envelope used by every tool."""
+    return {"error": error, "results": []}
 
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
