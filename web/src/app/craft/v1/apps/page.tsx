@@ -5,18 +5,17 @@ import useSWR from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
-import Text from "@/refresh-components/texts/Text";
 import { SvgPlug, SvgCheckCircle } from "@opal/icons";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
-
-interface OAuthStartResponse {
-  authorize_url: string;
-}
+import {
+  disconnectUserFromApp,
+  startExternalAppOAuth,
+} from "@/app/craft/services/externalAppsService";
 
 export default function ExternalAppsUserPage() {
   // keepPreviousData so revalidations don't blank the cards.
@@ -36,11 +35,11 @@ export default function ExternalAppsUserPage() {
       <SettingsLayouts.Body>
         {data === undefined ? (
           <Card variant="tertiary">
-            <Text mainContentBody>Loading…</Text>
+            <Text font="main-content-body">Loading…</Text>
           </Card>
         ) : data.length === 0 ? (
           <Card variant="tertiary">
-            <Text mainContentBody text03>
+            <Text font="main-content-body" color="text-03">
               No external apps are enabled for your org yet. Ask an admin to
               enable one.
             </Text>
@@ -72,16 +71,10 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
   async function connect() {
     setIsStarting(true);
     try {
-      const res = await fetch(`/api/build/apps/${userApp.id}/oauth/start`, {
-        method: "GET",
-      });
-      if (!res.ok) {
-        console.error("Failed to start OAuth:", await res.text());
-        return;
-      }
-      const data: OAuthStartResponse = await res.json();
-      window.location.href = data.authorize_url;
-    } finally {
+      const { authorize_url } = await startExternalAppOAuth(userApp.id);
+      window.location.href = authorize_url;
+    } catch (e) {
+      console.error("Failed to start OAuth:", e);
       setIsStarting(false);
     }
   }
@@ -91,17 +84,12 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
   async function disconnect() {
     setIsStarting(true);
     try {
-      const res = await fetch(`/api/build/apps/${userApp.id}/credentials`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_credentials: {} }),
-      });
-      if (!res.ok) {
-        console.error("Failed to disconnect:", await res.text());
-      }
-      onChange();
+      await disconnectUserFromApp(userApp.id);
+    } catch (e) {
+      console.error("Failed to disconnect:", e);
     } finally {
       setIsStarting(false);
+      onChange();
     }
   }
 
@@ -112,12 +100,12 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
         <Logo className="w-8 h-8" />
         <div className="flex-1 flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <Text mainUiAction>{userApp.name}</Text>
+            <Text font="main-ui-action">{userApp.name}</Text>
             {userApp.authenticated && (
               <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
             )}
           </div>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {userApp.authenticated ? "Connected" : userApp.description}
           </Text>
         </div>

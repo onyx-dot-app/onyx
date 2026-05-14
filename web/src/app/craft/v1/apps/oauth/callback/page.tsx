@@ -6,11 +6,11 @@ import type { Route } from "next";
 import { mutate as globalMutate } from "swr";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Card from "@/refresh-components/cards/Card";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 
 type Status = "exchanging" | "success" | "error";
 
@@ -44,19 +44,7 @@ export default function ExternalAppsOAuthCallbackPage() {
 
     async function exchange() {
       try {
-        const res = await fetch("/api/build/apps/oauth/callback", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, state }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setStatus("error");
-          setErrorMessage(
-            data.detail ?? `OAuth exchange failed (HTTP ${res.status}).`
-          );
-          return;
-        }
+        await completeExternalAppOAuthCallback(code!, state!);
         setStatus("success");
         await globalMutate(SWR_KEYS.buildExternalApps);
         setTimeout(() => router.push(CRAFT_APPS_PATH as Route), 800);
@@ -80,18 +68,20 @@ export default function ExternalAppsOAuthCallbackPage() {
         <Card>
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
-              <Text mainContentBody>Exchanging authorization code…</Text>
+              <Text font="main-content-body">
+                Exchanging authorization code…
+              </Text>
             )}
             {status === "success" && (
-              <Text mainContentBody>
+              <Text font="main-content-body">
                 Connected. Redirecting back to your apps…
               </Text>
             )}
             {status === "error" && (
               <>
-                <Text mainContentBody>Connection failed.</Text>
+                <Text font="main-content-body">Connection failed.</Text>
                 {errorMessage && (
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     {errorMessage}
                   </Text>
                 )}
