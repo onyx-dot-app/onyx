@@ -39,12 +39,10 @@ class SearchRequest(BaseModel):
 
 class SearchResult(BaseModel):
     citation_id: int | None
-    document_id: str
     title: str
-    # Full chunk text from the LLM-selected document. The API only returns
-    # docs the LLM judged relevant, so in practice this is the full chunk;
-    # a blurb fallback exists for defensive cases (e.g. a selected doc whose
-    # chunk failed to round-trip through the LLM-facing JSON producer).
+    # Full chunk text the LLM saw for this section. Multiple results may
+    # share a citation_id when the LLM selected multiple non-overlapping
+    # sections of the same document.
     content: str
     link: str | None
     source_type: str
