@@ -86,9 +86,6 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
 
 
 def _self_hosted_tier() -> Tier:
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        # Legacy mode: no per-tier resolution; preserve binary.
-        return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
 
     try:
         metadata = get_cached_license_metadata()
