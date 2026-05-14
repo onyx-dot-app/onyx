@@ -337,10 +337,8 @@ class TestEEGetChannelAccessGrid:
             ) as mock_expert,
         ):
             mock_paginate.return_value = iter([{"members": ["U1", "U2"]}])
-            mock_expert.side_effect = (
-                lambda user_id, client, user_cache: (  # noqa: ARG005
-                    MagicMock(email=f"{user_id.lower()}@x.com") if user_id else None
-                )
+            mock_expert.side_effect = lambda user_id, client, user_cache: (  # noqa: ARG005
+                MagicMock(email=f"{user_id.lower()}@x.com") if user_id else None
             )
             access = ee_get_channel_access(
                 client,
