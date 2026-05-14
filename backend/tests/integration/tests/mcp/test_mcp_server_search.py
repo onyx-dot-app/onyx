@@ -7,8 +7,6 @@ import json
 import os
 from collections.abc import Awaitable
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 import pytest
@@ -28,8 +26,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 
 # Constants
@@ -100,26 +96,6 @@ def _auth_headers(user: DATestUser, name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {pat.token}"}
 
 
-def _seed_document_and_wait_for_indexing(
-    cc_pair: DATestCCPair,
-    content: str,
-    api_key: DATestAPIKey,
-    user_performing_action: DATestUser,
-) -> None:
-    """Seed a document and wait for indexing to complete."""
-    before = datetime.now(timezone.utc)
-    DocumentManager.seed_doc_with_content(
-        cc_pair=cc_pair,
-        content=content,
-        api_key=api_key,
-    )
-    CCPairManager.wait_for_indexing_completion(
-        cc_pair=cc_pair,
-        after=before,
-        user_performing_action=user_performing_action,
-    )
-
-
 def test_mcp_document_search_flow(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
@@ -132,12 +108,7 @@ def test_mcp_document_search_flow(
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     doc_text = "MCP happy path search document"
-    _seed_document_and_wait_for_indexing(
-        cc_pair=cc_pair,
-        content=doc_text,
-        api_key=api_key,
-        user_performing_action=admin_user,
-    )
+    DocumentManager.seed_doc_with_content(cc_pair, doc_text, api_key)
 
     headers = _auth_headers(admin_user, name="mcp-search-flow")
 
@@ -215,17 +186,11 @@ def test_mcp_search_respects_acl_filters(
     )
 
     restricted_doc_content = "MCP restricted knowledge base document"
-    _seed_document_and_wait_for_indexing(
-        cc_pair=restricted_cc_pair,
-        content=restricted_doc_content,
-        api_key=api_key,
-        user_performing_action=admin_user,
+    DocumentManager.seed_doc_with_content(
+        restricted_cc_pair, restricted_doc_content, api_key
     )
-    _seed_document_and_wait_for_indexing(
-        cc_pair=public_cc_pair,
-        content="MCP unrelated public document",
-        api_key=api_key,
-        user_performing_action=admin_user,
+    DocumentManager.seed_doc_with_content(
+        public_cc_pair, "MCP unrelated public document", api_key
     )
 
     privileged_headers = _auth_headers(privileged_user, "mcp-acl-allowed")
@@ -267,17 +232,9 @@ def test_mcp_search_filters_by_document_set(
     in_set_content = f"{shared_phrase} inside curated set"
     out_of_set_content = f"{shared_phrase} outside curated set"
 
-    _seed_document_and_wait_for_indexing(
-        cc_pair=cc_pair_in_set,
-        content=in_set_content,
-        api_key=api_key,
-        user_performing_action=admin_user,
-    )
-    _seed_document_and_wait_for_indexing(
-        cc_pair=cc_pair_out_of_set,
-        content=out_of_set_content,
-        api_key=api_key,
-        user_performing_action=admin_user,
+    DocumentManager.seed_doc_with_content(cc_pair_in_set, in_set_content, api_key)
+    DocumentManager.seed_doc_with_content(
+        cc_pair_out_of_set, out_of_set_content, api_key
     )
 
     doc_set = DocumentSetManager.create(
