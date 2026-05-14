@@ -187,6 +187,23 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
+    # Loopback (127.0.0.0/8, ::1) and unspecified (0.0.0.0, ::) IP literals
+    # are *always* blocked, even when allow_private_network=True. Opting into
+    # private networks means RFC1918 / link-local services in the operator's
+    # VPC — never the application host's own loopback, which would expose
+    # admin APIs, sidecars, etc. running on the same machine.
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+        if ip_obj.is_loopback or ip_obj.is_unspecified:
+            raise SSRFException(
+                f"Access to loopback/unspecified IP '{parsed.hostname}' "
+                f"is not allowed."
+            )
+    except ValueError:
+        # Not an IP literal — DNS resolution handles loopback/private cases
+        # when allow_private_network=False.
+        pass
+
     if not allow_private_network:
         _validate_and_resolve_url(normalized_url)
 

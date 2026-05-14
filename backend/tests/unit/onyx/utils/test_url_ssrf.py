@@ -367,17 +367,73 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         with pytest.raises(SSRFException, match="Invalid URL scheme"):
             ssrf_safe_get("file:///etc/passwd", allow_private_network=True)
 
+    def test_still_blocks_loopback_ip_when_enabled(self) -> None:
+        """Even with the private-network opt-out, the LLM tool must not be
+        able to reach the application host's own loopback (admin APIs,
+        sidecars)."""
+        with pytest.raises(SSRFException, match="loopback/unspecified"):
+            ssrf_safe_get("http://127.0.0.1:8080/", allow_private_network=True)
+
+    def test_follows_redirect_to_private_ip_when_enabled(self) -> None:
+        """A 302 to another private-network URL should be followed when
+        opted in — validation re-runs on each hop and accepts private IPs."""
+        redirect_response = MagicMock()
+        redirect_response.is_redirect = True
+        redirect_response.headers = {"Location": "http://10.0.0.2/final"}
+
+        final_response = MagicMock()
+        final_response.is_redirect = False
+
+        with patch("onyx.utils.url.requests.get") as mock_get:
+            mock_get.side_effect = [redirect_response, final_response]
+
+            response = ssrf_safe_get(
+                "http://10.0.0.1/start", allow_private_network=True
+            )
+
+            assert response == final_response
+            assert mock_get.call_count == 2
+            assert mock_get.call_args_list[1][0][0] == "http://10.0.0.2/final"
+
+    def test_redirect_to_blocked_hostname_is_rejected_when_enabled(self) -> None:
+        """A redirect to a blocked hostname (e.g. cloud metadata) must still
+        raise, even if the initial hop succeeded under the opt-out."""
+        redirect_response = MagicMock()
+        redirect_response.is_redirect = True
+        redirect_response.headers = {
+            "Location": "http://metadata.google.internal/latest"
+        }
+
+        with patch("onyx.utils.url.requests.get") as mock_get:
+            mock_get.return_value = redirect_response
+
+            with pytest.raises(SSRFException, match="not allowed"):
+                ssrf_safe_get("http://10.0.0.1/start", allow_private_network=True)
+
+    def test_redirect_to_loopback_is_rejected_when_enabled(self) -> None:
+        """A redirect to a loopback IP literal must also be rejected — same
+        reasoning as the direct-hit case."""
+        redirect_response = MagicMock()
+        redirect_response.is_redirect = True
+        redirect_response.headers = {"Location": "http://127.0.0.1:8080/admin"}
+
+        with patch("onyx.utils.url.requests.get") as mock_get:
+            mock_get.return_value = redirect_response
+
+            with pytest.raises(SSRFException, match="loopback/unspecified"):
+                ssrf_safe_get("http://10.0.0.1/start", allow_private_network=True)
+
 
 class TestValidateOutboundHttpUrl:
     def test_rejects_private_ip_by_default(self) -> None:
         with pytest.raises(SSRFException, match="internal/private IP"):
-            validate_outbound_http_url("http://127.0.0.1:8000")
+            validate_outbound_http_url("http://10.0.0.1:8000")
 
-    def test_allows_private_ip_when_explicitly_enabled(self) -> None:
+    def test_allows_rfc1918_ip_when_explicitly_enabled(self) -> None:
         validated_url = validate_outbound_http_url(
-            "http://127.0.0.1:8000", allow_private_network=True
+            "http://10.0.0.1:8000", allow_private_network=True
         )
-        assert validated_url == "http://127.0.0.1:8000"
+        assert validated_url == "http://10.0.0.1:8000"
 
     def test_blocks_metadata_hostname_when_private_is_enabled(self) -> None:
         with pytest.raises(SSRFException, match="not allowed"):
@@ -385,3 +441,24 @@ class TestValidateOutboundHttpUrl:
                 "http://metadata.google.internal/latest",
                 allow_private_network=True,
             )
+
+    def test_blocks_loopback_ipv4_when_private_is_enabled(self) -> None:
+        """Loopback is always blocked, even when private-network is allowed —
+        opting into RFC1918 shouldn't expose the application host's loopback."""
+        with pytest.raises(SSRFException, match="loopback/unspecified"):
+            validate_outbound_http_url(
+                "http://127.0.0.1:8080/", allow_private_network=True
+            )
+
+    def test_blocks_loopback_range_when_private_is_enabled(self) -> None:
+        """Any address in 127.0.0.0/8 must be blocked, not just 127.0.0.1."""
+        with pytest.raises(SSRFException, match="loopback/unspecified"):
+            validate_outbound_http_url("http://127.1.2.3/", allow_private_network=True)
+
+    def test_blocks_loopback_ipv6_when_private_is_enabled(self) -> None:
+        with pytest.raises(SSRFException, match="loopback/unspecified"):
+            validate_outbound_http_url("http://[::1]:8080/", allow_private_network=True)
+
+    def test_blocks_unspecified_ipv4_when_private_is_enabled(self) -> None:
+        with pytest.raises(SSRFException, match="loopback/unspecified"):
+            validate_outbound_http_url("http://0.0.0.0/", allow_private_network=True)
