@@ -374,9 +374,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     from onyx.server.features.build.skills.builtins_registration import (
         register_craft_builtins,
     )
+    from onyx.skills.backends import bootstrap_builtins_to_backend
+    from onyx.skills.backends import get_skills_backend
     from onyx.skills.registry import BuiltinSkillRegistry
 
     register_craft_builtins(BuiltinSkillRegistry.instance())
+    # Mirror built-ins to the active skills backend (S3 Files in K8s
+    # deployments, no-op when SKILLS_S3_BUCKET is unset). Boot is
+    # best-effort — a failure here shouldn't keep api_server down; sandbox
+    # sessions degrade to "no /skills/ mount available" until next restart.
+    try:
+        bootstrap_builtins_to_backend(
+            registry=BuiltinSkillRegistry.instance(),
+            backend=get_skills_backend(),
+        )
+    except Exception as e:
+        logger.error("Failed to bootstrap skills backend: %s", e, exc_info=True)
 
     if not MULTI_TENANT:
         # don't emit a metric for every pod rollover/restart
