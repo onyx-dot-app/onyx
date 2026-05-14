@@ -90,7 +90,14 @@ def _self_hosted_tier() -> Tier:
         # Legacy mode: no per-tier resolution; preserve binary.
         return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
 
-    metadata = get_cached_license_metadata()
+    try:
+        metadata = get_cached_license_metadata()
+    except RedisError as e:
+        # Treat cache failure as a miss so the existing DB-fallback path
+        # below still has a chance to resolve the correct tier.
+        logger.warning("Self-hosted tier: license cache read failed: %s", e)
+        metadata = None
+
     if metadata is None:
         try:
             with get_session_with_current_tenant() as db_session:
