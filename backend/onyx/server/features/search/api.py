@@ -56,61 +56,34 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-def _extract_content_by_citation(llm_facing_text: str) -> dict[int, str]:
-    """Build a citation_id → full chunk content map from llm_facing_text.
-
-    ``llm_facing_text`` is the JSON-encoded payload ``SearchTool`` builds via
-    ``convert_inference_sections_to_llm_string`` — we parse it once at the API
-    boundary so consumers get full chunks on each ``SearchResult`` without
-    duplicating the join logic. No defensive try/except: the producer is
-    in-process and always emits valid JSON; if that ever breaks, an unhandled
-    exception is the right signal.
-    """
-    if not llm_facing_text:
-        return {}
-    parsed = json.loads(llm_facing_text)
-    content_by_citation: dict[int, str] = {}
-    for entry in parsed.get("results", []):
-        citation_id = entry.get("document")
-        content = entry.get("content")
-        if isinstance(citation_id, int) and isinstance(content, str) and content:
-            content_by_citation[citation_id] = content
-    return content_by_citation
-
-
 def _build_results(
-    search_docs_response: SearchDocsResponse,
+    citation_mapping: dict[int, str],
     llm_facing_text: str,
 ) -> list[SearchResult]:
-    # Only LLM-selected docs are returned. If the LLM judged nothing relevant
-    # we return an empty list rather than dumping the raw retrieval pool —
-    # callers get a clean "nothing matched" signal instead of blurb-only noise.
-    docs = search_docs_response.displayed_docs or []
-    citation_mapping = search_docs_response.citation_mapping
-
-    doc_id_to_citation: dict[str, int] = {
-        doc_id: citation_id for citation_id, doc_id in citation_mapping.items()
-    }
-    content_by_citation = _extract_content_by_citation(llm_facing_text)
+    """Build SearchResults from the LLM-facing JSON, one per merged section."""
+    if not llm_facing_text:
+        return []
+    parsed = json.loads(llm_facing_text)
 
     results: list[SearchResult] = []
-    for doc in docs:
-        citation_id = doc_id_to_citation.get(doc.document_id)
-        full_content = (
-            content_by_citation.get(citation_id) if citation_id is not None else None
-        )
+    for entry in parsed.get("results", []):
+        citation_id = entry.get("document")
+        if not isinstance(citation_id, int):
+            continue
+        document_id = citation_mapping.get(citation_id)
+        if document_id is None:
+            continue
         results.append(
             SearchResult(
                 citation_id=citation_id,
-                document_id=doc.document_id,
-                title=doc.semantic_identifier,
-                content=full_content or doc.blurb,
-                link=doc.link,
-                source_type=doc.source_type.value,
-                updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
+                document_id=document_id,
+                title=entry["title"],
+                content=entry["content"],
+                link=entry.get("url"),
+                source_type=entry["source_type"],
+                updated_at=entry.get("updated_at"),
             )
         )
-
     return results
 
 
@@ -235,6 +208,7 @@ def search(
             starting_citation_num=1,
             original_query=request.query,
             skip_query_expansion=request.skip_query_expansion,
+            include_link=True,
             message_history=request.message_history
             or [
                 ChatMinimalTextMessage(
@@ -250,5 +224,8 @@ def search(
     search_docs_response = cast(SearchDocsResponse, tool_response.rich_response)
 
     return SearchResponse(
-        results=_build_results(search_docs_response, tool_response.llm_facing_response),
+        results=_build_results(
+            search_docs_response.citation_mapping,
+            tool_response.llm_facing_response,
+        ),
     )
