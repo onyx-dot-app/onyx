@@ -308,6 +308,66 @@ class TestSsrfSafeGet:
                 assert call_args[1]["timeout"] == (5, 15)
 
 
+class TestSsrfSafeGetAllowPrivateNetwork:
+    """Tests for the allow_private_network opt-out on ssrf_safe_get."""
+
+    def test_allows_private_ip_when_enabled(self) -> None:
+        mock_response = MagicMock()
+        mock_response.is_redirect = False
+
+        with patch("onyx.utils.url.requests.get") as mock_get:
+            mock_get.return_value = mock_response
+
+            response = ssrf_safe_get("http://192.168.1.1/", allow_private_network=True)
+
+            # Request goes out to the original URL, not pinned to an IP
+            mock_get.assert_called_once()
+            assert mock_get.call_args[0][0] == "http://192.168.1.1/"
+            assert response == mock_response
+
+    def test_allows_hostname_resolving_to_private_ip_when_enabled(self) -> None:
+        """Split-horizon DNS (e.g. js.jpl.nasa.gov inside JPL's VPC) should
+        succeed when the operator has opted out of the private-IP guard."""
+        mock_response = MagicMock()
+        mock_response.is_redirect = False
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            # validate_outbound_http_url with allow_private_network=True
+            # short-circuits before resolving, so DNS shouldn't be hit, but
+            # set up a private-IP answer to confirm the bypass still works
+            # even when resolution would otherwise flag the URL.
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 443))]
+
+            with patch("onyx.utils.url.requests.get") as mock_get:
+                mock_get.return_value = mock_response
+
+                ssrf_safe_get(
+                    "https://js.jpl.nasa.gov/docs",
+                    allow_private_network=True,
+                )
+
+                mock_get.assert_called_once()
+                assert mock_get.call_args[0][0] == "https://js.jpl.nasa.gov/docs"
+
+    def test_still_blocks_metadata_hostname_when_enabled(self) -> None:
+        """The blocked-hostname list (e.g. metadata.google.internal) must
+        keep working even when the private-IP guard is off — opting into
+        private networks shouldn't open up cloud metadata access."""
+        with pytest.raises(SSRFException, match="not allowed"):
+            ssrf_safe_get(
+                "http://metadata.google.internal/latest",
+                allow_private_network=True,
+            )
+
+    def test_still_blocks_credentials_when_enabled(self) -> None:
+        with pytest.raises(SSRFException, match="embedded credentials"):
+            ssrf_safe_get("http://user:pass@10.0.0.1/", allow_private_network=True)
+
+    def test_still_blocks_invalid_scheme_when_enabled(self) -> None:
+        with pytest.raises(SSRFException, match="Invalid URL scheme"):
+            ssrf_safe_get("file:///etc/passwd", allow_private_network=True)
+
+
 class TestValidateOutboundHttpUrl:
     def test_rejects_private_ip_by_default(self) -> None:
         with pytest.raises(SSRFException, match="internal/private IP"):

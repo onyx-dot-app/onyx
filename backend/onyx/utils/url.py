@@ -200,13 +200,29 @@ def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
+    allow_private_network: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
     Make a single GET request with SSRF protection (no redirect following).
 
     Returns the response which may be a redirect (3xx status).
+
+    When ``allow_private_network`` is True, the private-IP guard is skipped
+    so operators on trusted networks can fetch URLs that resolve to RFC1918
+    addresses (e.g. internal docs sites behind split-horizon DNS). Scheme,
+    credential, and blocked-hostname checks still apply.
     """
+    if allow_private_network:
+        validate_outbound_http_url(url, allow_private_network=True)
+        return requests.get(
+            url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
 
@@ -259,6 +275,7 @@ def ssrf_safe_get(
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
     follow_redirects: bool = True,
+    allow_private_network: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -273,6 +290,10 @@ def ssrf_safe_get(
         headers: Optional headers to include in the request
         timeout: Request timeout in seconds
         follow_redirects: Whether to follow redirects (each redirect URL is validated)
+        allow_private_network: If True, allow URLs that resolve to private/internal
+            IPs. Use only when the operator has explicitly opted in (e.g. trusted
+            self-hosted deployment fetching internal docs). Scheme, credential, and
+            blocked-hostname checks still apply on each hop.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -283,7 +304,13 @@ def ssrf_safe_get(
         ValueError: If the URL is malformed
         requests.RequestException: If the request fails
     """
-    response = _make_ssrf_safe_request(url, headers, timeout, **kwargs)
+    response = _make_ssrf_safe_request(
+        url,
+        headers,
+        timeout,
+        allow_private_network=allow_private_network,
+        **kwargs,
+    )
 
     if not follow_redirects:
         return response
@@ -314,7 +341,13 @@ def ssrf_safe_get(
 
         # Validate and follow the redirect (this will raise SSRFException if invalid)
         current_url = redirect_url
-        response = _make_ssrf_safe_request(redirect_url, headers, timeout, **kwargs)
+        response = _make_ssrf_safe_request(
+            redirect_url,
+            headers,
+            timeout,
+            allow_private_network=allow_private_network,
+            **kwargs,
+        )
 
     if response.is_redirect and redirect_count >= MAX_REDIRECTS:
         raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")
