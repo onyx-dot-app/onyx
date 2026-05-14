@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.db.admin_banner import ensure_admin_banner_for_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -58,6 +59,11 @@ def get_notifications_api(
         logger.exception(
             "Failed to create permissions_migration_v1 announcement in notifications endpoint"
         )
+
+    try:
+        ensure_admin_banner_for_user(db_session, user)
+    except Exception:
+        logger.exception("Failed to ensure admin banner notification")
 
     notifications = [
         NotificationModel.from_model(notif)
