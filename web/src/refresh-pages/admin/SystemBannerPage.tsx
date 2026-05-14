@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 
 import { Button, Card, Text } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { InputVertical, Section } from "@opal/layouts";
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -82,7 +82,10 @@ export default function SystemBannerPage() {
       setTitle(trimmedTitle);
       setContent(trimmedContent);
       setHasTouched(false);
-      await mutate(SWR_KEYS.adminBanner);
+      await Promise.all([
+        mutate(SWR_KEYS.adminBanner),
+        mutate(SWR_KEYS.notifications),
+      ]);
       toast.success("Banner published to all users");
     } catch (error) {
       const message =
@@ -103,7 +106,10 @@ export default function SystemBannerPage() {
       setTitle("");
       setContent("");
       setHasTouched(false);
-      await mutate(SWR_KEYS.adminBanner);
+      await Promise.all([
+        mutate(SWR_KEYS.adminBanner),
+        mutate(SWR_KEYS.notifications),
+      ]);
       toast.success("Banner cleared");
     } catch (error) {
       const message =
@@ -125,51 +131,42 @@ export default function SystemBannerPage() {
 
       <SettingsLayouts.Body>
         <Card border="solid" rounding="lg">
-          <div className="flex flex-col gap-spacing-paragraph p-spacing-paragraph">
-            <Content
-              sizePreset="main-ui"
-              variant="section"
+          <Section gap={1}>
+            <InputVertical
               title="Title"
-              description={`Shown in bold at the top of the banner. Max ${MAX_TITLE_LEN} characters.`}
-            />
-            <InputTypeIn
-              value={title}
-              onChange={(e) => {
-                setHasTouched(true);
-                setTitle(e.target.value.slice(0, MAX_TITLE_LEN));
-              }}
-              placeholder="e.g. Bedrock degraded - responses may be slow"
-              variant={isLoading ? "disabled" : "primary"}
-            />
+              subDescription={`Shown in bold at the top of the banner. Max ${MAX_TITLE_LEN} characters.`}
+              withLabel
+            >
+              <InputTypeIn
+                value={title}
+                onChange={(e) => {
+                  setHasTouched(true);
+                  setTitle(e.target.value.slice(0, MAX_TITLE_LEN));
+                }}
+                placeholder="e.g. Bedrock degraded - responses may be slow"
+                variant={isLoading ? "disabled" : "primary"}
+              />
+            </InputVertical>
 
-            <Content
-              sizePreset="main-ui"
-              variant="section"
-              title="Details (optional)"
-              description={`Additional context shown next to the title. Max ${MAX_CONTENT_LEN} characters.`}
-            />
-            <InputTextArea
-              value={content}
-              onChange={(e) => {
-                setHasTouched(true);
-                setContent(e.target.value.slice(0, MAX_CONTENT_LEN));
-              }}
-              placeholder="We're aware and tracking with AWS. No action needed."
-              rows={4}
-              variant={isLoading ? "disabled" : "primary"}
-            />
+            <InputVertical
+              title="Details"
+              suffix="optional"
+              subDescription={`Additional context shown next to the title. Max ${MAX_CONTENT_LEN} characters.`}
+              withLabel
+            >
+              <InputTextArea
+                value={content}
+                onChange={(e) => {
+                  setHasTouched(true);
+                  setContent(e.target.value.slice(0, MAX_CONTENT_LEN));
+                }}
+                placeholder="We're aware and tracking with AWS. No action needed."
+                rows={4}
+                variant={isLoading ? "disabled" : "primary"}
+              />
+            </InputVertical>
 
-            <div className="flex flex-row gap-spacing-paragraph">
-              <Button
-                variant="action"
-                prominence="primary"
-                disabled={
-                  saving || clearing || isLoading || !trimmedTitle || !isDirty
-                }
-                onClick={handleSave}
-              >
-                {isActive ? "Update banner" : "Publish banner"}
-              </Button>
+            <Section flexDirection="row" justifyContent="end" gap={0.5}>
               {isActive ? (
                 <Button
                   variant="danger"
@@ -180,7 +177,16 @@ export default function SystemBannerPage() {
                   Clear banner
                 </Button>
               ) : null}
-            </div>
+              <Button
+                prominence="primary"
+                disabled={
+                  saving || clearing || isLoading || !trimmedTitle || !isDirty
+                }
+                onClick={handleSave}
+              >
+                {isActive ? "Update banner" : "Publish banner"}
+              </Button>
+            </Section>
 
             {isActive && data?.created_at ? (
               <Text font="secondary-body" color="text-03">
@@ -189,7 +195,7 @@ export default function SystemBannerPage() {
                 ).toLocaleString()}.`}
               </Text>
             ) : null}
-          </div>
+          </Section>
         </Card>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
