@@ -121,13 +121,7 @@ export default function AgentRowActions({
       onMutate();
       shareModal.toggle(false);
     },
-    [
-      agent.id,
-      businessTier,
-      canUpdateFeaturedStatus,
-      refreshAgent,
-      onMutate,
-    ]
+    [agent.id, businessTier, canUpdateFeaturedStatus, refreshAgent, onMutate]
   );
 
   return (

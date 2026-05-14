@@ -319,9 +319,7 @@ export function CCPairIndexingStatusTable({
             <TableRow className="border-none">
               <TableCell
                 colSpan={
-                  businessTier
-                    ? NUMBER_OF_COLUMNS
-                    : NUMBER_OF_COLUMNS - 1
+                  businessTier ? NUMBER_OF_COLUMNS : NUMBER_OF_COLUMNS - 1
                 }
                 className="h-4 p-0"
               />
@@ -421,9 +419,7 @@ export function CCPairIndexingStatusTable({
                                 <TableCell className="h-[56px]"></TableCell>
                                 <TableCell></TableCell>
                                 <TableCell></TableCell>
-                                {businessTier && (
-                                  <TableCell></TableCell>
-                                )}
+                                {businessTier && <TableCell></TableCell>}
                                 <TableCell></TableCell>
                                 <TableCell></TableCell>
                               </>
@@ -437,9 +433,7 @@ export function CCPairIndexingStatusTable({
                   <TableRow className="border-l border-r border-b border-border dark:border-neutral-700">
                     <TableCell
                       colSpan={
-                        businessTier
-                          ? NUMBER_OF_COLUMNS
-                          : NUMBER_OF_COLUMNS - 1
+                        businessTier ? NUMBER_OF_COLUMNS : NUMBER_OF_COLUMNS - 1
                       }
                     >
                       <div className="flex justify-center">

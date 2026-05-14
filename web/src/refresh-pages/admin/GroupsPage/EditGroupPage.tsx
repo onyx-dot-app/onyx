@@ -52,7 +52,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const settings = useSettingsContext();
-  const isEnterpriseTier = tierAtLeast(settings?.settings.tier, Tier.ENTERPRISE);
+  const isEnterpriseTier = tierAtLeast(
+    settings?.settings.tier,
+    Tier.ENTERPRISE
+  );
   const tokenLimitsDisabledTooltip = markdown(
     "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
   );

@@ -103,12 +103,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
       refreshAgent();
       shareAgentModal.toggle(false);
     },
-    [
-      agent.id,
-      canUpdateFeaturedStatus,
-      businessTier,
-      refreshAgent,
-    ]
+    [agent.id, canUpdateFeaturedStatus, businessTier, refreshAgent]
   );
 
   return (

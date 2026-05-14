@@ -205,9 +205,7 @@ function Main() {
         isOpen={modalIsOpen}
         setIsOpen={() => setModalIsOpen(false)}
         onSubmit={handleSubmit}
-        forSpecificScope={
-          enterpriseTier ? undefined : Scope.GLOBAL
-        }
+        forSpecificScope={enterpriseTier ? undefined : Scope.GLOBAL}
       />
     </Section>
   );

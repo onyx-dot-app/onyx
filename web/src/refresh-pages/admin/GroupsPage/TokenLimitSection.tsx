@@ -82,7 +82,9 @@ function TokenLimitSection({
       <SimpleCollapsible.Header
         title="Token Rate Limit"
         description="Limit number of tokens this group can use within a given time period."
-        tag={disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined }
+        tag={
+          disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
+        }
       />
       <SimpleCollapsible.Content>
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
