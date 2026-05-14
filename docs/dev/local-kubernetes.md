@@ -142,14 +142,27 @@ sandbox pods, k8s Secret injection, service-account-scoped behavior.
 
 ### 3. Run your local processes
 
-Open the vscode debug panel and run **"Web / Model / API (k8s)"** (or
-**"Run All Onyx Services"** if you also need celery — celery configs read from
-`.vscode/.env`, which is fine since they don't need to be intercepted in most
-flows).
+Open the vscode debug panel and run one of:
 
-The `API Server (k8s)` profile sources `.vscode/.env.k8s` (the file
-telepresence wrote) and sets `SANDBOX_BACKEND=kubernetes`. Everything else is
-identical to the standard `API Server` profile.
+- **"Web / API (k8s)"** — quickest, just web + api. Model server runs in the cluster, so no need for a local one. Fine for most Craft work.
+- **"Run All Onyx Services (k8s)"** — full local stack: web + api + every celery worker + beat. Pick this if you need celery in the loop. Breakpoints in celery code work, but worker code changes require restarting the worker manually.
+- **"Run All Onyx Services (k8s, watch)"** — same as above, but celery workers auto-restart on `*.py` file changes via `watchdog`'s `watchmedo auto-restart`. Trade-off: **breakpoints inside celery do not hit** in watch mode — the debugger attaches to `watchmedo`, not to the celery subprocess it spawns. Use the non-watch variant when you need to step through worker code.
+
+Watch mode requires the `watchdog` package:
+
+```bash
+uv pip install watchdog
+```
+
+Every `(k8s)` profile sources `.vscode/.env.k8s` (written by `telepresence
+intercept`) and sets `SANDBOX_BACKEND=kubernetes`. They're identical to the
+non-k8s profiles otherwise — same celery args, same uvicorn flags, etc.
+
+Note: celery workers don't get intercepted (they pull from redis, no inbound
+HTTP). They just connect to in-cluster redis via `telepresence connect`'s DNS
+bridging and pull tasks. The chart scales all cluster celery to 0 so your
+local workers are the only consumers — breakpoints actually hit (in non-watch
+mode).
 
 Visit `http://localhost:3000` in a browser. The web server runs locally and
 talks to the locally-running api_server (intercepted from the cluster).

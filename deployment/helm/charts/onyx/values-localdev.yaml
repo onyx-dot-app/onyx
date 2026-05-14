@@ -213,10 +213,3 @@ redis:
         cpu: 250m
         memory: 256Mi
 
-# REDIS_HOST override: the chart's configmap template hardcodes
-# `<release>-master` (line 22 of templates/configmap.yaml), which assumes a
-# RedisReplication topology. The chart actually provisions standalone Redis,
-# whose service is named `<release>` (no -master suffix). The default value
-# resolves to a non-existent host and api_server crashes with DNS errors.
-configMap:
-  REDIS_HOST: onyx
