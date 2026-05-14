@@ -222,7 +222,6 @@ func TestToSearchOutput(t *testing.T) {
 		Results: []models.SearchResult{
 			{
 				CitationID: intPtr(1),
-				DocumentID: "doc-a",
 				Title:      "Onboarding guide",
 				Content:    "Full chunk text for doc A — multiple paragraphs.",
 				Link:       strPtr("https://docs.example.com/a"),
@@ -235,7 +234,6 @@ func TestToSearchOutput(t *testing.T) {
 				// nullable fields (CitationID, Link, UpdatedAt) cleanly when
 				// they happen to be nil.
 				CitationID: nil,
-				DocumentID: "doc-b",
 				Title:      "Stale draft",
 				Content:    "Blurb for doc B",
 				Link:       nil,
