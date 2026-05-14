@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import model_validator
@@ -7,13 +9,15 @@ from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
 
 
-class SearchAPIRequest(BaseModel):
+class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2048)
 
     sources: list[DocumentSource] | None = None
     document_sets: list[str] | None = None
     tags: list[Tag] | None = None
-    time_cutoff_days: int | None = Field(None, ge=1)
+    # ISO 8601 timestamp. Only documents updated on or after this moment are
+    # returned. Naive (timezone-less) values are treated as UTC server-side.
+    time_cutoff: datetime | None = None
 
     persona_id: int | None = None
 
@@ -25,7 +29,7 @@ class SearchAPIRequest(BaseModel):
     message_history: list[ChatMinimalTextMessage] | None = None
 
     @model_validator(mode="after")
-    def validate_provider_model_pair(self) -> "SearchAPIRequest":
+    def validate_provider_model_pair(self) -> "SearchRequest":
         if self.model and not self.provider:
             raise ValueError("provider is required when model is specified")
         if self.provider and not self.model:
@@ -33,19 +37,19 @@ class SearchAPIRequest(BaseModel):
         return self
 
 
-class SearchAPIResult(BaseModel):
+class SearchResult(BaseModel):
     citation_id: int | None
     document_id: str
-    chunk_ind: int
     title: str
-    blurb: str
+    # Full chunk text from the LLM-selected document. The API only returns
+    # docs the LLM judged relevant, so in practice this is the full chunk;
+    # a blurb fallback exists for defensive cases (e.g. a selected doc whose
+    # chunk failed to round-trip through the LLM-facing JSON producer).
+    content: str
     link: str | None
     source_type: str
-    score: float | None
     updated_at: str | None
 
 
-class SearchAPIResponse(BaseModel):
-    results: list[SearchAPIResult]
-    llm_facing_text: str
-    citation_mapping: dict[int, str]
+class SearchResponse(BaseModel):
+    results: list[SearchResult]

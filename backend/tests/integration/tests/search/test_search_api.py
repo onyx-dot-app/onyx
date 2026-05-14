@@ -49,15 +49,12 @@ def test_basic_search_returns_results(
 
     data = resp.json()
     assert len(data["results"]) > 0
-    assert isinstance(data["llm_facing_text"], str)
-    assert len(data["llm_facing_text"]) > 0
-    assert isinstance(data["citation_mapping"], dict)
 
     result = data["results"][0]
     assert result["document_id"] == doc.id
     assert result["citation_id"] is not None
     assert result["source_type"] is not None
-    assert result["blurb"] is not None
+    assert result["content"]
 
 
 def test_document_set_filtering(

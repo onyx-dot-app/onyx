@@ -1,18 +1,16 @@
 """Search API endpoint (POST /api/search).
 
 Runs the full SearchTool.run() pipeline — the same multi-stage search that
-powers chat mode.  Returns ranked results without generating
-an LLM answer.
+powers chat mode. Returns ranked results without generating an LLM answer.
 
 Intended for programmatic consumers (onyx-cli, Craft sandbox, integrations).
 
 Not the same as the Onyx Search UI backend at /api/search/send-search-message
 (ee/onyx/server/query_and_chat/search_backend.py), which calls search_pipeline()
-directly — a lighter-weight flow with optional query expansion and streaming.
+directly — a lighter-weight flow with optional query expansion.
 """
 
-from datetime import datetime
-from datetime import timedelta
+import json
 from datetime import timezone
 from typing import cast
 
@@ -42,9 +40,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import llm_from_provider
-from onyx.server.features.search.models import SearchAPIRequest
-from onyx.server.features.search.models import SearchAPIResponse
-from onyx.server.features.search.models import SearchAPIResult
+from onyx.server.features.search.models import SearchRequest
+from onyx.server.features.search.models import SearchResponse
+from onyx.server.features.search.models import SearchResult
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -58,29 +56,57 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
+def _extract_content_by_citation(llm_facing_text: str) -> dict[int, str]:
+    """Build a citation_id → full chunk content map from llm_facing_text.
+
+    ``llm_facing_text`` is the JSON-encoded payload ``SearchTool`` builds via
+    ``convert_inference_sections_to_llm_string`` — we parse it once at the API
+    boundary so consumers get full chunks on each ``SearchResult`` without
+    duplicating the join logic. No defensive try/except: the producer is
+    in-process and always emits valid JSON; if that ever breaks, an unhandled
+    exception is the right signal.
+    """
+    if not llm_facing_text:
+        return {}
+    parsed = json.loads(llm_facing_text)
+    content_by_citation: dict[int, str] = {}
+    for entry in parsed.get("results", []):
+        citation_id = entry.get("document")
+        content = entry.get("content")
+        if isinstance(citation_id, int) and isinstance(content, str) and content:
+            content_by_citation[citation_id] = content
+    return content_by_citation
+
+
 def _build_results(
     search_docs_response: SearchDocsResponse,
-) -> list[SearchAPIResult]:
-    docs = search_docs_response.displayed_docs or search_docs_response.search_docs
+    llm_facing_text: str,
+) -> list[SearchResult]:
+    # Only LLM-selected docs are returned. If the LLM judged nothing relevant
+    # we return an empty list rather than dumping the raw retrieval pool —
+    # callers get a clean "nothing matched" signal instead of blurb-only noise.
+    docs = search_docs_response.displayed_docs or []
     citation_mapping = search_docs_response.citation_mapping
 
     doc_id_to_citation: dict[str, int] = {
         doc_id: citation_id for citation_id, doc_id in citation_mapping.items()
     }
+    content_by_citation = _extract_content_by_citation(llm_facing_text)
 
-    results: list[SearchAPIResult] = []
+    results: list[SearchResult] = []
     for doc in docs:
         citation_id = doc_id_to_citation.get(doc.document_id)
+        full_content = (
+            content_by_citation.get(citation_id) if citation_id is not None else None
+        )
         results.append(
-            SearchAPIResult(
+            SearchResult(
                 citation_id=citation_id,
                 document_id=doc.document_id,
-                chunk_ind=doc.chunk_ind,
                 title=doc.semantic_identifier,
-                blurb=doc.blurb,
+                content=full_content or doc.blurb,
                 link=doc.link,
                 source_type=doc.source_type.value,
-                score=doc.score,
                 updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
             )
         )
@@ -90,10 +116,10 @@ def _build_results(
 
 @router.post("", dependencies=[Depends(require_vector_db)])
 def search(
-    request: SearchAPIRequest,
+    request: SearchRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> SearchAPIResponse:
+) -> SearchResponse:
     # 1. Load persona
     persona = None
     if request.persona_id is not None:
@@ -156,12 +182,12 @@ def search(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    # 3. Build filters
-    time_cutoff = None
-    if request.time_cutoff_days is not None:
-        time_cutoff = datetime.now(timezone.utc) - timedelta(
-            days=request.time_cutoff_days
-        )
+    # 3. Build filters. See SearchRequest.time_cutoff for the naive-→-UTC
+    # contract; we apply it here so downstream comparison against tz-aware
+    # document timestamps works.
+    time_cutoff = request.time_cutoff
+    if time_cutoff is not None and time_cutoff.tzinfo is None:
+        time_cutoff = time_cutoff.replace(tzinfo=timezone.utc)
 
     base_filters = BaseFilters(
         source_type=request.sources,
@@ -223,8 +249,6 @@ def search(
     # 8. Map output
     search_docs_response = cast(SearchDocsResponse, tool_response.rich_response)
 
-    return SearchAPIResponse(
-        results=_build_results(search_docs_response),
-        llm_facing_text=tool_response.llm_facing_response,
-        citation_mapping=search_docs_response.citation_mapping,
+    return SearchResponse(
+        results=_build_results(search_docs_response, tool_response.llm_facing_response),
     )
