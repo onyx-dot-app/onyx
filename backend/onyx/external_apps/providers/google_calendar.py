@@ -5,6 +5,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuth
+from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import StandardFlatRefresh
 
 
@@ -22,6 +23,38 @@ class GoogleCalendarOAuth(OAuth, StandardFlatRefresh):
         "access_type": "offline",
         "prompt": "consent",
     }
+
+    description = (
+        "Read and create events on your Google Calendar from inside Onyx Craft."
+    )
+    upstream_url_patterns = ["https://www\\.googleapis\\.com/calendar/.*"]
+    auth_template = {"Authorization": "Bearer {access_token}"}
+    required_org_credential_fields = [
+        OrgCredentialField(
+            key="client_id",
+            label="Client ID",
+            description=(
+                "Found in Google Cloud Console → APIs & Services → "
+                "Credentials → OAuth 2.0 Client IDs."
+            ),
+        ),
+        OrgCredentialField(
+            key="client_secret",
+            label="Client Secret",
+            description=("Found alongside the Client ID. Treat this like a password."),
+            secret=True,
+        ),
+    ]
+    setup_instructions = (
+        "In Google Cloud Console: create a project (or pick one), enable the "
+        "Google Calendar API under APIs & Services → Library, configure the "
+        "OAuth consent screen (External for personal Google accounts, "
+        "Internal for Workspace), then under APIs & Services → Credentials "
+        "create an OAuth 2.0 Client ID of type Web application. Add this "
+        "Onyx instance's callback URL (/craft/v1/apps/oauth/callback) to "
+        "Authorized redirect URIs. Then paste the Client ID and Client "
+        "Secret below."
+    )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
         access_token = response_data.get("access_token")

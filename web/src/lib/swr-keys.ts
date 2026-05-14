@@ -131,6 +131,7 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
+  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
 
   // ── OpenSearch Migration ──────────────────────────────────────────────────
   opensearchMigrationStatus: "/api/admin/opensearch-migration/status",

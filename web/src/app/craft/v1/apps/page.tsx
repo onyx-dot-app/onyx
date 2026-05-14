@@ -10,10 +10,8 @@ import Card from "@/refresh-components/cards/Card";
 import Text from "@/refresh-components/texts/Text";
 import { SvgPlug, SvgCheckCircle } from "@opal/icons";
 import {
-  BUILT_IN_PROVIDER_REGISTRY,
-  BuiltInProviderKey,
   ExternalAppUserResponse,
-  findUserAppForProvider,
+  getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
 
 interface OAuthStartResponse {
@@ -21,8 +19,7 @@ interface OAuthStartResponse {
 }
 
 export default function ExternalAppsUserPage() {
-  // keepPreviousData so revalidations don't blank the cards while
-  // the refetch is in flight.
+  // keepPreviousData so revalidations don't blank the cards.
   const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,
     errorHandlingFetcher,
@@ -50,21 +47,13 @@ export default function ExternalAppsUserPage() {
           </Card>
         ) : (
           <div className="flex flex-col gap-2">
-            {(Object.keys(BUILT_IN_PROVIDER_REGISTRY) as BuiltInProviderKey[])
-              .map((key) => ({
-                key,
-                preset: BUILT_IN_PROVIDER_REGISTRY[key],
-                userApp: findUserAppForProvider(data, key),
-              }))
-              .filter(({ userApp }) => userApp !== null)
-              .map(({ key, preset, userApp }) => (
-                <ProviderConnectRow
-                  key={key}
-                  preset={preset}
-                  userApp={userApp!}
-                  onChange={() => mutate()}
-                />
-              ))}
+            {data.map((userApp) => (
+              <ProviderConnectRow
+                key={userApp.id}
+                userApp={userApp}
+                onChange={() => mutate()}
+              />
+            ))}
           </div>
         )}
       </SettingsLayouts.Body>
@@ -73,16 +62,11 @@ export default function ExternalAppsUserPage() {
 }
 
 interface ProviderConnectRowProps {
-  preset: (typeof BUILT_IN_PROVIDER_REGISTRY)[BuiltInProviderKey];
   userApp: ExternalAppUserResponse;
   onChange: () => void;
 }
 
-function ProviderConnectRow({
-  preset,
-  userApp,
-  onChange,
-}: ProviderConnectRowProps) {
+function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
   const [isStarting, setIsStarting] = useState(false);
 
   async function connect() {
@@ -121,20 +105,20 @@ function ProviderConnectRow({
     }
   }
 
-  const Logo = preset.logo;
+  const Logo = getAppTypeLogo(userApp.app_type);
   return (
     <Card>
       <div className="flex items-center gap-3 w-full">
         <Logo className="w-8 h-8" />
         <div className="flex-1 flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <Text mainUiAction>{preset.name}</Text>
+            <Text mainUiAction>{userApp.name}</Text>
             {userApp.authenticated && (
               <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
             )}
           </div>
           <Text secondaryBody text03>
-            {userApp.authenticated ? "Connected" : preset.description}
+            {userApp.authenticated ? "Connected" : userApp.description}
           </Text>
         </div>
         {userApp.authenticated ? (
