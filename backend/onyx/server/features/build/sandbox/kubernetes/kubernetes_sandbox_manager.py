@@ -66,6 +66,7 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.configs import SKILLS_S3_FILES_FILE_SYSTEM_ID
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPEvent,
@@ -96,6 +97,8 @@ from onyx.server.features.build.sandbox.util.persona_mapping import (
 )
 from onyx.skills import SkillManifestEntry
 from onyx.skills import SkillsManifest
+from onyx.skills.backends import get_skills_backend
+from onyx.skills.backends import S3FilesSkillsBackend
 from onyx.skills.registry import BuiltinSkillRegistry
 from onyx.utils.logger import setup_logger
 
@@ -270,6 +273,59 @@ class KubernetesSandboxManager(SandboxManager):
             include_org_info=include_org_info,
         )
 
+    def _build_skills_csi_volume(
+        self, tenant_id: str
+    ) -> tuple[client.V1VolumeMount | None, client.V1Volume | None]:
+        """Return (mount, volume) for the per-tenant S3 Files CSI volume.
+
+        Returns ``(None, None)`` when the active skills backend isn't S3
+        Files or the file system ID isn't configured. The materializer
+        running in the pod will emit symlinks pointing at
+        ``/skills/_builtins/<slug>`` regardless — they'll just dangle on
+        deployments without the CSI mount, which is fine: the integration
+        is opt-in per cluster.
+
+        The access point ID is resolved via ``ensure_access_point``,
+        which does a tag-based DescribeAccessPoints (creating the AP on
+        first call). AWS is the authority for that mapping — caching it
+        in Postgres would just be one more place to keep in sync.
+        """
+        if not SKILLS_S3_FILES_FILE_SYSTEM_ID:
+            return None, None
+
+        backend = get_skills_backend()
+        if not isinstance(backend, S3FilesSkillsBackend):
+            return None, None
+
+        try:
+            access_point_id = backend.ensure_access_point(tenant_id)
+        except Exception:
+            logger.exception(
+                "Failed to resolve skills access point for tenant %s; "
+                "skipping CSI mount for this pod create",
+                tenant_id,
+            )
+            return None, None
+
+        mount = client.V1VolumeMount(
+            name="skills",
+            mount_path="/skills",
+            read_only=True,
+        )
+        volume = client.V1Volume(
+            name="skills",
+            csi=client.V1CSIVolumeSource(
+                driver="efs.csi.aws.com",
+                read_only=True,
+                volume_attributes={
+                    "fileSystemId": SKILLS_S3_FILES_FILE_SYSTEM_ID,
+                    "accessPointId": access_point_id,
+                    "path": "/",
+                },
+            ),
+        )
+        return mount, volume
+
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
@@ -306,17 +362,21 @@ class KubernetesSandboxManager(SandboxManager):
             client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
         ]
 
+        skills_mount, skills_volume = self._build_skills_csi_volume(tenant_id)
+
+        sandbox_volume_mounts = [
+            client.V1VolumeMount(name="workspace", mount_path="/workspace/sessions"),
+        ]
+        if skills_mount is not None:
+            sandbox_volume_mounts.append(skills_mount)
+
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
             ports=container_ports,
             env=sandbox_env_vars,
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-            ],
+            volume_mounts=sandbox_volume_mounts,
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "1000m", "memory": "2Gi"},
                 limits={"cpu": "2000m", "memory": "10Gi"},
@@ -346,6 +406,8 @@ class KubernetesSandboxManager(SandboxManager):
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
             ),
         ]
+        if skills_volume is not None:
+            volumes.append(skills_volume)
 
         # Pod spec
         pod_spec = client.V1PodSpec(
@@ -1094,9 +1156,12 @@ fi
 
         # Build skills materialization fragment for the in-pod setup script.
         # We mirror what onyx.skills.materialize.materialize_skills does:
-        # symlink each available built-in slug to /workspace/skills/<slug> and
-        # write a .skills_manifest.json describing the materialized set.
-        # Templated built-ins are skipped in this PR (render pipeline TBD).
+        # symlink each available built-in slug to /skills/_builtins/<slug>
+        # and write a .skills_manifest.json describing the materialized set.
+        # /skills/ is the S3 Files CSI mount (read-only NFSv4) injected by
+        # _build_skills_csi_volume; deployments without the mount get
+        # dangling links, which is acceptable while Phase A infra rolls
+        # out cluster-by-cluster. Templated built-ins are skipped (P1.052).
         with get_session_with_current_tenant() as db_session:
             available_skills = BuiltinSkillRegistry.instance().list_available(
                 db_session
@@ -1118,12 +1183,11 @@ fi
             indent=2
         ).replace("'", "'\\''")
         skill_link_cmds = "\n".join(
-            f"ln -sfn /workspace/skills/{s.slug} "
-            f"{session_path}/.agents/skills/{s.slug}"
+            f"ln -sfn /skills/_builtins/{s.slug} {session_path}/.agents/skills/{s.slug}"
             for s in non_template_builtins
         )
         skills_setup = f"""
-# Materialize skills (symlinks to baked-in /workspace/skills/<slug> + manifest)
+# Materialize skills (symlinks to /skills/_builtins/<slug> via S3 Files CSI mount + manifest)
 mkdir -p {session_path}/.agents/skills
 {skill_link_cmds}
 printf '%s' '{skills_manifest_json_escaped}' > {session_path}/.agents/skills/.skills_manifest.json

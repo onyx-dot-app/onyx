@@ -104,6 +104,31 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 
 # ============================================================================
+# Skills delivery — S3 Files backend (Kubernetes only)
+#
+# When SKILLS_S3_BUCKET is set, api_server mirrors built-in skills to the
+# bucket at startup and sandbox pods mount the bucket as NFSv4 via the
+# aws-efs-csi-driver. Leave the bucket empty for local/dev or docker-compose
+# — the materializer reads from SKILLS_TEMPLATE_PATH directly in those modes.
+#
+# See docs/craft/features/skills/skills_plan.md §"Three-backend architecture".
+# ============================================================================
+
+# Bucket holding skill files. Versioning must be enabled (S3 Files requirement).
+# Naming convention: onyx-skills-{cluster}.
+SKILLS_S3_BUCKET = os.environ.get("SKILLS_S3_BUCKET", "")
+
+# Optional key prefix inside the bucket. Used by shared dev buckets to
+# isolate per-developer scratch space, e.g. "dev/alice/". Production
+# leaves this empty so writes land under tenants/<id>/ at the bucket root.
+SKILLS_S3_PREFIX = os.environ.get("SKILLS_S3_PREFIX", "")
+
+# File system ID (fs-XXXX) used by sandbox pods to mount /skills via
+# efs.csi.aws.com. Empty disables CSI injection — api_server still mirrors
+# bytes to S3, but pods won't get a /skills/ mount.
+SKILLS_S3_FILES_FILE_SYSTEM_ID = os.environ.get("SKILLS_S3_FILES_FILE_SYSTEM_ID", "")
+
+# ============================================================================
 # SSE Streaming Configuration
 # ============================================================================
 
