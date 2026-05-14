@@ -352,8 +352,6 @@ class UpsertExternalAppRequest(BaseModel):
 
 
 class ExternalAppAdminResponse(BaseModel):
-    """Admin-facing view of an external app (includes org credentials)."""
-
     id: int
     name: str
     description: str
@@ -365,8 +363,6 @@ class ExternalAppAdminResponse(BaseModel):
 
 
 class UpsertUserCredentialsRequest(BaseModel):
-    """User-supplied credentials for a specific external app."""
-
     user_credentials: dict[str, Any]
 
 
@@ -396,24 +392,14 @@ class ExternalAppUserResponse(BaseModel):
 
 
 class OAuthStartResponse(BaseModel):
-    """Returned by `GET /apps/{id}/oauth/start`. The frontend redirects
-    the browser to `authorize_url` to begin the consent flow."""
-
     authorize_url: str
 
 
 class OAuthCallbackRequest(BaseModel):
-    """POSTed to `/apps/oauth/callback` by the frontend callback page
-    after the provider redirects back with `code` + `state` in the URL.
-    """
-
     code: str
     state: str
 
 
 class OAuthCallbackResponse(BaseModel):
-    """Returned by `/apps/oauth/callback` after a successful
-    code-for-tokens exchange and credential persistence."""
-
     success: bool
     external_app_id: int

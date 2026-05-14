@@ -41,15 +41,9 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
 def _to_user_response(
     app: ExternalApp, user_cred: ExternalAppUserCredential | None
 ) -> ExternalAppUserResponse:
-    """Compute the user-facing view of an app.
-
-    `credential_keys` = `{placeholder}` names referenced by the
-    auth_template's values that the org has not pre-filled. Stale keys
-    the user previously stored for an older template shape are filtered
-    out of `credential_values` so the frontend never renders a field
-    that's no longer relevant. `authenticated` is true iff every
-    required key has a value stored by the user.
-    """
+    """Strip admin-only fields (auth_template, org_credentials) from
+    the row and filter stored creds to keys the current template
+    still requires, so stale entries from prior templates don't show."""
     required_keys = required_user_credential_keys(
         app.auth_template, app.organization_credentials
     )
@@ -108,10 +102,7 @@ def upsert_external_app(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Create a new external app, or update an existing one if `id` is set.
-
-    If `id` is provided but no app with that id exists, returns 404.
-    """
+    """Create or update if `request.id` is set. 404 if id doesn't exist."""
     if request.id is not None:
         app = update_external_app(
             db_session=db_session,
@@ -155,7 +146,6 @@ def list_external_apps_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppAdminResponse]:
-    """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
     return [_to_admin_response(app) for app in apps]
 
@@ -173,9 +163,7 @@ def delete_external_app_admin(
     delete_external_app(db_session=db_session, external_app_id=external_app_id)
 
 
-# =============================================================================
-# User Endpoints
-# =============================================================================
+# ── User endpoints ─────────────────────────────────────────────────
 
 
 @router.post("/apps/{external_app_id}/credentials")
@@ -202,13 +190,6 @@ def list_external_apps(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppUserResponse]:
-    """List enabled external apps with the calling user's credential state.
-
-    For each app, returns the credential keys the user must supply (auth
-    template keys not pre-filled by the org), the values the user has
-    already stored for those keys, and an `authenticated` flag. Org-level
-    credentials and the raw auth template are never exposed here.
-    """
     apps = get_external_apps(db_session=db_session)
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id

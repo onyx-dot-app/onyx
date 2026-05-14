@@ -94,20 +94,15 @@ function ProviderConnectRow({
         return;
       }
       const data: OAuthStartResponse = await res.json();
-      // Full-page navigation so the OAuth provider can redirect back to
-      // the callback page. A popup approach is also valid but adds
-      // postMessage plumbing — full-page is simpler for v1.
       window.location.href = data.authorize_url;
     } finally {
       setIsStarting(false);
     }
   }
 
+  // Overwrite stored creds with `{}` — flips `authenticated` to false
+  // on the next list call. Avoids a dedicated DELETE endpoint.
   async function disconnect() {
-    // "Disconnect" = overwrite stored creds with an empty dict, which
-    // flips `authenticated` back to false on the next list call. A
-    // dedicated DELETE endpoint would be cleaner; reusing the upsert
-    // route keeps the API surface tight for v1.
     setIsStarting(true);
     try {
       const res = await fetch(`/api/build/apps/${userApp.id}/credentials`, {

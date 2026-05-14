@@ -1,16 +1,6 @@
-"""External-dependency tests for db.external_app.get_external_app_credentials.
-
-Runs against a real Postgres. The function is exercised end-to-end via
-the live SQL engine — no mocks — so behaviors that depend on Postgres
-specifics (ARRAY of regex strings, JSONB equality, FK to user) are
-covered for real.
-
-Test isolation: setup writes are flushed but never committed, and the
-`rollback_session` fixture rolls them back at teardown so each test
-sees a clean catalog. Users created via `create_test_user` are
-committed and persist (they use unique emails to avoid collisions),
-which is fine — the function under test only reads `user_id`.
-"""
+"""End-to-end tests for `get_external_app_credentials` against a real
+Postgres. Setup writes flush but never commit; `rollback_session`
+discards them at teardown so each test sees a clean catalog."""
 
 import uuid
 from collections.abc import Generator
@@ -47,9 +37,6 @@ _DEFAULT_MATCHING_URL = "https://api.example.com/users/me"
 
 @pytest.fixture
 def rollback_session(db_session: Session) -> Generator[Session, None, None]:
-    """Roll back the session at teardown so per-test app/credential rows
-    don't bleed into sibling tests' catalog walks. Wrapped in try/finally
-    so a failing assertion still cleans up."""
     try:
         yield db_session
     finally:
@@ -104,17 +91,12 @@ def _store_user_creds(
     )
 
 
-# =============================================================================
-# Happy paths
-# =============================================================================
+# ── Happy paths ───────────────────────────────────────────────────
 
 
 def test_returns_resolved_template_on_match_and_full_creds(
     rollback_session: Session,
 ) -> None:
-    """The canonical case: matching URL + user has every required key →
-    auth_template is returned with every `{placeholder}` substituted
-    from the union of org and user credentials."""
     user = create_test_user(rollback_session, "ea_happy")
     app = _create_app(rollback_session)
     _store_user_creds(rollback_session, app.id, user.id, _DEFAULT_USER_CREDS)
@@ -134,9 +116,6 @@ def test_returns_resolved_template_on_match_and_full_creds(
 def test_returns_resolved_template_when_no_user_keys_required(
     rollback_session: Session,
 ) -> None:
-    """When every template key is already covered by org credentials,
-    the user is "authenticated" without configuring anything — useful
-    for shared org-level API integrations."""
     user = create_test_user(rollback_session, "ea_org_only")
     org_only_creds = {
         "client_id": "ORG_CLIENT_ID",
@@ -161,9 +140,6 @@ def test_returns_resolved_template_when_no_user_keys_required(
 def test_matches_any_pattern_in_upstream_url_patterns_list(
     rollback_session: Session,
 ) -> None:
-    """An app with multiple regex patterns matches if *any* of them
-    matches the URL. A common shape: one pattern per service of the
-    same provider (api host + auth host)."""
     user = create_test_user(rollback_session, "ea_multi_pattern")
     app = _create_app(
         rollback_session,
@@ -174,14 +150,12 @@ def test_matches_any_pattern_in_upstream_url_patterns_list(
     )
     _store_user_creds(rollback_session, app.id, user.id, _DEFAULT_USER_CREDS)
 
-    # First pattern matches.
     assert (
         get_external_app_credentials(
             rollback_session, user.id, "https://api.example.com/v1/me"
         )
         is not None
     )
-    # Second pattern matches.
     assert (
         get_external_app_credentials(
             rollback_session, user.id, "https://auth.example.com/oauth/token"
@@ -190,15 +164,10 @@ def test_matches_any_pattern_in_upstream_url_patterns_list(
     )
 
 
-# =============================================================================
-# None paths
-# =============================================================================
+# ── None paths ────────────────────────────────────────────────────
 
 
 def test_returns_none_when_no_app_matches_url(rollback_session: Session) -> None:
-    """A URL that no app's patterns cover should resolve to None — the
-    proxy will let the request through unauthenticated rather than
-    inject something arbitrary."""
     user = create_test_user(rollback_session, "ea_no_match")
     app = _create_app(rollback_session)
     _store_user_creds(rollback_session, app.id, user.id, _DEFAULT_USER_CREDS)
@@ -211,9 +180,6 @@ def test_returns_none_when_no_app_matches_url(rollback_session: Session) -> None
 
 
 def test_disabled_app_is_skipped(rollback_session: Session) -> None:
-    """A disabled app must not produce credentials even when URL + user
-    creds are otherwise a perfect match. The `enabled` flag is the
-    admin's kill switch — bypassing it would defeat the safety guarantee."""
     user = create_test_user(rollback_session, "ea_disabled")
     app = _create_app(rollback_session, enabled=False)
     _store_user_creds(rollback_session, app.id, user.id, _DEFAULT_USER_CREDS)
@@ -228,8 +194,6 @@ def test_disabled_app_is_skipped(rollback_session: Session) -> None:
 def test_returns_none_when_user_has_no_credentials(
     rollback_session: Session,
 ) -> None:
-    """The URL matches an enabled app but the user has never configured
-    it — they aren't authenticated for this integration yet."""
     user = create_test_user(rollback_session, "ea_no_creds")
     _create_app(rollback_session)
 
@@ -243,15 +207,13 @@ def test_returns_none_when_user_has_no_credentials(
 def test_returns_none_when_user_credentials_are_partial(
     rollback_session: Session,
 ) -> None:
-    """User has stored *some* of the required keys but is missing at
-    least one. The proxy must not inject a half-formed auth header."""
     user = create_test_user(rollback_session, "ea_partial")
     app = _create_app(rollback_session)
     _store_user_creds(
         rollback_session,
         app.id,
         user.id,
-        {"access_token": "USER_ACCESS_TOKEN"},  # missing refresh_token
+        {"access_token": "USER_ACCESS_TOKEN"},
     )
 
     result = get_external_app_credentials(
@@ -264,13 +226,11 @@ def test_returns_none_when_user_credentials_are_partial(
 def test_returns_none_when_template_placeholder_has_no_source(
     rollback_session: Session,
 ) -> None:
-    """Admin set up a malformed template that references a placeholder
-    nothing supplies. The format_map step raises KeyError and the
-    function fails closed rather than injecting a partially-templated
-    header."""
+    """Fail closed when the template references a placeholder no
+    credential supplies. Constructed to pass the required-user-keys
+    check first (key1 covered by org, key2 covered as a literal),
+    then trip format_map on `{missing_source}` inside key2's value."""
     user = create_test_user(rollback_session, "ea_malformed")
-    # `key1` is fully covered by the org; `key2`'s value references
-    # `{missing_source}` which is neither in org nor expected from user.
     _create_app(
         rollback_session,
         auth_template={
@@ -328,10 +288,9 @@ def test_returns_none_when_template_string_is_malformed(
 
 
 def test_fullmatch_rejects_partial_url_overlap(rollback_session: Session) -> None:
-    """`re.fullmatch` semantics: a pattern like `https://api\\.example\\.com/.*`
-    must NOT match `https://api.example.com.evil.com/foo`. If the
-    function used `re.search`/`re.match` instead, this lookalike host
-    would resolve to real credentials and exfiltrate them."""
+    """`re.fullmatch` (not `search`/`match`) prevents
+    `https://api.example.com.evil.com/foo` from matching the pattern
+    `https://api\\.example\\.com/.*` and exfiltrating credentials."""
     user = create_test_user(rollback_session, "ea_lookalike")
     app = _create_app(rollback_session)
     _store_user_creds(rollback_session, app.id, user.id, _DEFAULT_USER_CREDS)
@@ -348,10 +307,7 @@ def test_fullmatch_rejects_partial_url_overlap(rollback_session: Session) -> Non
 def test_first_app_by_id_wins_when_multiple_apps_match(
     rollback_session: Session,
 ) -> None:
-    """If two apps' patterns happen to cover the same URL, resolution
-    must be deterministic — the lower-id (earlier created) app wins.
-    This is what prevents "creating a new overlapping app silently
-    redirects auth"."""
+    """Deterministic resolution under multi-row overlap: lowest id wins."""
     user = create_test_user(rollback_session, "ea_overlap")
 
     first_app = _create_app(
@@ -384,7 +340,7 @@ def test_first_app_by_id_wins_when_multiple_apps_match(
         {"access_token": "SECOND_USER_TOKEN", "refresh_token": "SECOND_USER_REFRESH"},
     )
 
-    assert second_app.id > first_app.id  # sanity — Postgres assigned in order
+    assert second_app.id > first_app.id
 
     result = get_external_app_credentials(
         rollback_session, user.id, _DEFAULT_MATCHING_URL
@@ -398,15 +354,11 @@ def test_first_app_by_id_wins_when_multiple_apps_match(
 def test_one_users_credentials_do_not_leak_to_another_user(
     rollback_session: Session,
 ) -> None:
-    """Two users on the same app: only the calling user's stored
-    credentials are used. A second user who hasn't configured the app
-    must get None even though the first user has it fully set up."""
     user_a = create_test_user(rollback_session, "ea_user_a")
     user_b = create_test_user(rollback_session, "ea_user_b")
 
     app = _create_app(rollback_session)
     _store_user_creds(rollback_session, app.id, user_a.id, _DEFAULT_USER_CREDS)
-    # user_b deliberately has no credentials row.
 
     result_a = get_external_app_credentials(
         rollback_session, user_a.id, _DEFAULT_MATCHING_URL
