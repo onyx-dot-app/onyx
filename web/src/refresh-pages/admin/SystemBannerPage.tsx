@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 
 import { Button, Card, Text } from "@opal/components";
@@ -34,20 +34,30 @@ export default function SystemBannerPage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const hydrated = useRef(false);
+  const [hasTouched, setHasTouched] = useState(false);
 
   useEffect(() => {
-    if (!hydrated.current && data) {
+    if (data === undefined) {
+      return;
+    }
+    if (data === null) {
+      if (!hasTouched) {
+        setTitle("");
+        setContent("");
+      }
+      return;
+    }
+    if (!hasTouched) {
       setTitle(data.title);
       setContent(data.content ?? "");
-      hydrated.current = true;
     }
-  }, [data]);
+  }, [data, hasTouched]);
 
   const trimmedTitle = title.trim();
+  const trimmedContent = content.trim();
   const isActive = data !== null && data !== undefined;
   const isDirty = isActive
-    ? trimmedTitle !== data.title || (content.trim() || null) !== data.content
+    ? trimmedTitle !== data.title || (trimmedContent || null) !== data.content
     : trimmedTitle.length > 0;
 
   async function handleSave() {
@@ -62,13 +72,16 @@ export default function SystemBannerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: trimmedTitle,
-          content: content.trim() || null,
+          content: trimmedContent || null,
         }),
       });
       if (!response.ok) {
         const detail = (await response.json().catch(() => ({}))).detail;
         throw new Error(detail || "Failed to save banner");
       }
+      setTitle(trimmedTitle);
+      setContent(trimmedContent);
+      setHasTouched(false);
       await mutate(SWR_KEYS.adminBanner);
       toast.success("Banner published to all users");
     } catch (error) {
@@ -84,11 +97,12 @@ export default function SystemBannerPage() {
     setClearing(true);
     try {
       const response = await fetch("/api/admin/banner", { method: "DELETE" });
-      if (!response.ok && response.status !== 204) {
+      if (!response.ok) {
         throw new Error("Failed to clear banner");
       }
       setTitle("");
       setContent("");
+      setHasTouched(false);
       await mutate(SWR_KEYS.adminBanner);
       toast.success("Banner cleared");
     } catch (error) {
@@ -120,7 +134,10 @@ export default function SystemBannerPage() {
             />
             <InputTypeIn
               value={title}
-              onChange={(e) => setTitle(e.target.value.slice(0, MAX_TITLE_LEN))}
+              onChange={(e) => {
+                setHasTouched(true);
+                setTitle(e.target.value.slice(0, MAX_TITLE_LEN));
+              }}
               placeholder="e.g. Bedrock degraded - responses may be slow"
               variant={isLoading ? "disabled" : "primary"}
             />
@@ -133,9 +150,10 @@ export default function SystemBannerPage() {
             />
             <InputTextArea
               value={content}
-              onChange={(e) =>
-                setContent(e.target.value.slice(0, MAX_CONTENT_LEN))
-              }
+              onChange={(e) => {
+                setHasTouched(true);
+                setContent(e.target.value.slice(0, MAX_CONTENT_LEN));
+              }}
               placeholder="We're aware and tracking with AWS. No action needed."
               rows={4}
               variant={isLoading ? "disabled" : "primary"}
