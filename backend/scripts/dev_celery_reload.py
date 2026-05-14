@@ -32,5 +32,8 @@ def _run(argv: list[str]) -> None:
 
 
 if __name__ == "__main__":
-    celery_argv: list[str] = ["celery", *sys.argv[1:]]
-    run_process("./onyx", target=_run, args=(celery_argv,))
+    celery_argv = ["celery", *sys.argv[1:]]
+    import os
+
+    watch_paths = [p for p in ("./onyx", "./ee") if os.path.isdir(p)]
+    run_process(*watch_paths, target=_run, args=(celery_argv,))
