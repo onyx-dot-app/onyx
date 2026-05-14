@@ -344,7 +344,7 @@ export default function FilesTab({
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border-01">
           <button
             onClick={() => setPreviewingFile(null)}
-            className="p-1 rounded hover:bg-background-tint-02 transition-colors"
+            className="p-1 rounded-sm hover:bg-background-tint-02 transition-colors"
           >
             <SvgArrowLeft size={16} className="stroke-text-03" />
           </button>
@@ -376,7 +376,7 @@ export default function FilesTab({
         className="flex-1 overflow-auto px-2 pb-2 relative"
       >
         {/* Background to prevent content showing through sticky gap */}
-        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-[101]" />
+        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
         {rootListing.entries.length === 0 ? (
           <Section
             height="full"
@@ -465,7 +465,7 @@ function FileTreeNode({
                 }
               }}
               className={cn(
-                "w-full flex items-center py-1.5 hover:bg-background-tint-02 rounded transition-colors relative",
+                "w-full flex items-center py-1.5 hover:bg-background-tint-02 rounded-sm transition-colors relative",
                 !entry.is_directory && onFileClick && "cursor-pointer",
                 !entry.is_directory && !onFileClick && "cursor-default",
                 // Make expanded folders sticky
@@ -486,7 +486,7 @@ function FileTreeNode({
               {parentIsLast.map((isParentLast, i) => (
                 <span
                   key={i}
-                  className="inline-flex w-5 justify-center flex-shrink-0 self-stretch relative"
+                  className="inline-flex w-5 justify-center shrink-0 self-stretch relative"
                 >
                   {!isParentLast && (
                     <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 -bottom-1.5 w-px bg-border-02" />
@@ -496,7 +496,7 @@ function FileTreeNode({
 
               {/* Branch connector */}
               {depth > 0 && (
-                <span className="inline-flex w-5 flex-shrink-0 self-stretch relative">
+                <span className="inline-flex w-5 shrink-0 self-stretch relative">
                   {/* Vertical line */}
                   <span
                     className={cn(
@@ -511,7 +511,7 @@ function FileTreeNode({
 
               {/* Expand/collapse chevron for directories */}
               {entry.is_directory ? (
-                <span className="inline-flex w-4 h-4 items-center justify-center flex-shrink-0">
+                <span className="inline-flex w-4 h-4 items-center justify-center shrink-0">
                   <SvgChevronRight
                     size={12}
                     className={cn(
@@ -521,7 +521,7 @@ function FileTreeNode({
                   />
                 </span>
               ) : (
-                <span className="w-4 flex-shrink-0" />
+                <span className="w-4 shrink-0" />
               )}
 
               {/* Icon */}
@@ -529,19 +529,16 @@ function FileTreeNode({
                 isExpanded ? (
                   <SvgFolderOpen
                     size={16}
-                    className="stroke-text-03 flex-shrink-0 mx-1"
+                    className="stroke-text-03 shrink-0 mx-1"
                   />
                 ) : (
                   <SvgFolder
                     size={16}
-                    className="stroke-text-03 flex-shrink-0 mx-1"
+                    className="stroke-text-03 shrink-0 mx-1"
                   />
                 )
               ) : (
-                <FileIcon
-                  size={16}
-                  className="stroke-text-03 flex-shrink-0 mx-1"
-                />
+                <FileIcon size={16} className="stroke-text-03 shrink-0 mx-1" />
               )}
 
               {/* Name */}
@@ -555,7 +552,7 @@ function FileTreeNode({
 
               {/* File size */}
               {!entry.is_directory && entry.size !== null && (
-                <Text text02 className="ml-2 mr-2 flex-shrink-0">
+                <Text text02 className="ml-2 mr-2 shrink-0">
                   {formatFileSize(entry.size)}
                 </Text>
               )}

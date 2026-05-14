@@ -16,12 +16,12 @@ const SHAPE_CLASSES: Record<ImageShape, { container: string; image: string }> =
       image: "max-w-96 max-h-96",
     },
     landscape: {
-      container: "max-w-[28rem] max-h-72",
-      image: "max-w-[28rem] max-h-72",
+      container: "max-w-112 max-h-72",
+      image: "max-w-112 max-h-72",
     },
     portrait: {
-      container: "max-w-72 max-h-[28rem]",
-      image: "max-w-72 max-h-[28rem]",
+      container: "max-w-72 max-h-112",
+      image: "max-w-72 max-h-112",
     },
   };
 

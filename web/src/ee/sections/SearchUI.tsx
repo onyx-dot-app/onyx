@@ -204,11 +204,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col gap-3">
       {/* ── Top row: Filters + Result count ── */}
-      <div className="flex-shrink-0 flex flex-row gap-x-4">
+      <div className="shrink-0 flex flex-row gap-x-4">
         <div
           className={cn(
             "flex flex-col justify-end gap-3",
-            showEmpty ? "flex-1" : "flex-[3]"
+            showEmpty ? "flex-1" : "flex-3"
           )}
         >
           <div className="flex flex-row gap-2">
@@ -330,7 +330,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         <div
           className={cn(
             "min-h-0 overflow-y-scroll flex flex-col gap-2",
-            showEmpty ? "flex-1 justify-center" : "flex-[3]"
+            showEmpty ? "flex-1 justify-center" : "flex-3"
           )}
         >
           {error ? (
@@ -344,7 +344,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               {paginatedResults.map((doc) => (
                 <div
                   key={`${doc.document_id}-${doc.chunk_ind}`}
-                  className="flex-shrink-0"
+                  className="shrink-0"
                 >
                   <SearchCard
                     document={doc}

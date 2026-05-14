@@ -142,8 +142,8 @@ export function useOnboardingModal(): OnboardingModalController {
   }, [refetchLlmProviders]);
 
   // Actions
-  const openPersonaEditor = useCallback(() => {
-    setMode({ type: "edit-persona" });
+  const openUserInfoEditor = useCallback(() => {
+    setMode({ type: "edit-user-info" });
   }, []);
 
   const openLlmSetup = useCallback((provider?: string) => {
@@ -159,7 +159,7 @@ export function useOnboardingModal(): OnboardingModalController {
   return {
     mode,
     isOpen,
-    openPersonaEditor,
+    openUserInfoEditor,
     openLlmSetup,
     close,
     llmProviders,

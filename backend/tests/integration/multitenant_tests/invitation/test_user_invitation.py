@@ -25,9 +25,9 @@ def test_admin_can_invite_users(reset_multitenant: None) -> None:  # noqa: ARG00
 
     # Verify users are in the invited users list
     invited_users = UserManager.get_invited_users(admin_user)
-    assert invited_user.email in [
-        user.email for user in invited_users
-    ], f"User {invited_user.email} not found in invited users list"
+    assert invited_user.email in [user.email for user in invited_users], (
+        f"User {invited_user.email} not found in invited users list"
+    )
 
 
 def test_non_registered_user_gets_basic_role(
@@ -93,9 +93,9 @@ def test_user_can_accept_invitation(
     updated_user_info = UserManager.get_user_info(authenticated_user)
 
     # Verify the user has BASIC role in the organization
-    assert (
-        updated_user_info.role == UserRole.BASIC
-    ), f"Expected user to have BASIC role, but got {updated_user_info.role}"
+    assert updated_user_info.role == UserRole.BASIC, (
+        f"Expected user to have BASIC role, but got {updated_user_info.role}"
+    )
 
     # Verify user is in the organization
     user_page = UserManager.get_user_page(
@@ -110,6 +110,6 @@ def test_user_can_accept_invitation(
     )
 
     invited_users = UserManager.get_invited_users(admin_user)
-    assert invited_user.email not in [
-        user.email for user in invited_users
-    ], f"User {invited_user.email} should not be found in invited users list after accepting invitation"
+    assert invited_user.email not in [user.email for user in invited_users], (
+        f"User {invited_user.email} should not be found in invited users list after accepting invitation"
+    )

@@ -1638,7 +1638,10 @@ def get_bifrost_available_models(
     for model in models:
         try:
             model_id = model.get("id", "")
-            model_name = model.get("name", model_id)
+            # Prefer Bifrost's `normalized_name` (e.g. "Claude Sonnet 4.5"),
+            # which is only populated for models in its pricing catalog;
+            # fall back to the OpenAI-compatible `name`, then the raw id.
+            model_name = model.get("normalized_name") or model.get("name") or model_id
 
             if not model_id:
                 continue

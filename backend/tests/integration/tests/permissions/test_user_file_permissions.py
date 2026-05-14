@@ -131,9 +131,9 @@ def test_public_assistant_with_user_files(
     )
 
     # Verify the message was processed without errors
-    assert (
-        response.error is None
-    ), f"Expected no error when user2 uses public assistant with user1's files, but got error: {response.error}"
+    assert response.error is None, (
+        f"Expected no error when user2 uses public assistant with user1's files, but got error: {response.error}"
+    )
     assert len(response.full_message) > 0, "Expected a response from the assistant"
 
     # Verify chat history is accessible
@@ -141,9 +141,9 @@ def test_public_assistant_with_user_files(
         chat_session=chat_session,
         user_performing_action=user_file_setup.user2_non_owner,
     )
-    assert (
-        len(chat_history) >= 2
-    ), "Expected at least 2 messages (user message and assistant response)"
+    assert len(chat_history) >= 2, (
+        "Expected at least 2 messages (user message and assistant response)"
+    )
 
 
 def test_public_assistant_attached_file_downloadable_by_non_owner(

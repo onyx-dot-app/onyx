@@ -608,6 +608,14 @@ CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
+# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
+# run one headless agent fire at a time, so this caps simultaneous in-flight
+# scheduled runs per pod. Default is intentionally modest because each fire
+# can be long-running (LLM + tool calls in a sandbox).
+CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
+)
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 8192
 
@@ -1103,18 +1111,10 @@ ENTERPRISE_EDITION_ENABLED = (
 # To configure image generation, please visit the Image Generation page in the Admin Panel.
 #####
 # Azure Image Configurations
-AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
-    "AZURE_DALLE_API_VERSION"
-)
-AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
-    "AZURE_DALLE_API_KEY"
-)
-AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
-    "AZURE_DALLE_API_BASE"
-)
-AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
-    "AZURE_IMAGE_DEPLOYMENT_NAME"
-) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION")
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY")
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
@@ -1171,15 +1171,6 @@ _API_KEY_HASH_ROUNDS_RAW = os.environ.get("API_KEY_HASH_ROUNDS")
 API_KEY_HASH_ROUNDS = (
     int(_API_KEY_HASH_ROUNDS_RAW) if _API_KEY_HASH_ROUNDS_RAW else None
 )
-
-#####
-# Agent Wiki Configs
-#####
-AGENT_WIKI_ENABLED = os.environ.get("AGENT_WIKI_ENABLED", "").lower() == "true"
-AGENT_WIKI_BASE_URL = os.environ.get("AGENT_WIKI_BASE_URL", "").rstrip("/")
-AGENT_WIKI_API_KEY = os.environ.get("AGENT_WIKI_API_KEY", "")
-# Documents whose concatenated text exceeds this limit are skipped, not truncated.
-AGENT_WIKI_MAX_DOC_CHARS = int(os.environ.get("AGENT_WIKI_MAX_DOC_CHARS", 100_000))
 
 #####
 # MCP Server Configs
@@ -1349,7 +1340,9 @@ AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
 INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
-    else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
+    else "cloud"
+    if AUTH_TYPE == AuthType.CLOUD
+    else "self_hosted"
 )
 
 

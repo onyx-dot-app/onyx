@@ -655,11 +655,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     retrievalEnabled && !settings.isMobile ? (
       <div
         className={cn(
-          "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-[25rem]" : "w-[0rem]"
+          "shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+          documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
-        <div className="h-full w-[25rem]">
+        <div className="h-full w-100">
           <DocumentsSidebar
             setPresentingDocument={setPresentingDocument}
             modal={false}
@@ -771,7 +771,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none relative"
+              className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Main content grid — 3 rows, animated */}
@@ -879,7 +879,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="end"
-                      className="max-w-[var(--app-page-main-content-width)]"
+                      className="max-w-(--app-page-main-content-width)"
                     >
                       <WelcomeMessage
                         agent={liveAgent}
@@ -911,10 +911,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     sessionFetchError && "hidden"
                   )}
                 >
-                  <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
+                  <div className="relative w-full max-w-(--app-page-main-content-width) flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
-                      <div className="absolute top-[-3.5rem] self-center">
+                      <div className="absolute -top-14 self-center">
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
@@ -1037,7 +1037,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                   {/* ProjectChatSessionList */}
                   {appFocus.isProject() && (
-                    <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">
+                    <div className="w-full max-w-(--app-page-main-content-width) h-full overflow-y-auto overscroll-y-none mx-auto">
                       <ProjectChatSessionList />
                     </div>
                   )}
@@ -1048,7 +1048,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
                       hasAgentStarterMessages
                     }
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)]"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
                     <Suggestions onSubmit={onSubmit} />
@@ -1057,7 +1057,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SearchUI */}
                   <Fade
                     show={isSearch}
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1 flex flex-col"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width) px-1 flex flex-col"
                   >
                     <Spacer rem={0.75} />
                     <SearchUI onDocumentClick={handleSearchDocumentClick} />

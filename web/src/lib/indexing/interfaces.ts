@@ -149,8 +149,7 @@ export interface AdvancedSearchConfiguration {
 }
 
 export interface SavedSearchSettings
-  extends RerankingDetails,
-    AdvancedSearchConfiguration {
+  extends RerankingDetails, AdvancedSearchConfiguration {
   model_name: string;
   model_dim: number;
   normalize: boolean;

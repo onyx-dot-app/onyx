@@ -118,12 +118,12 @@ def test_tenant1_can_access_own_documents(reset_multitenant: None) -> None:
     )
 
     response_doc_ids = {doc.document_id for doc in response1.used_tools[0].documents}
-    assert test_data["tenant1_doc_ids"].issubset(
-        response_doc_ids
-    ), "Not all Tenant 1 document IDs are in the response"
-    assert not response_doc_ids.intersection(
-        test_data["tenant2_doc_ids"]
-    ), "Tenant 2 document IDs should not be in the response"
+    assert test_data["tenant1_doc_ids"].issubset(response_doc_ids), (
+        "Not all Tenant 1 document IDs are in the response"
+    )
+    assert not response_doc_ids.intersection(test_data["tenant2_doc_ids"]), (
+        "Tenant 2 document IDs should not be in the response"
+    )
 
     # Assert that the contents are correct
     assert any(
@@ -152,12 +152,12 @@ def test_tenant2_can_access_own_documents(reset_multitenant: None) -> None:
 
     # Assert that the tool_result contains Tenant 2's documents
     response_doc_ids = {doc.document_id for doc in response2.used_tools[0].documents}
-    assert test_data["tenant2_doc_ids"].issubset(
-        response_doc_ids
-    ), "Not all Tenant 2 document IDs are in the response"
-    assert not response_doc_ids.intersection(
-        test_data["tenant1_doc_ids"]
-    ), "Tenant 1 document IDs should not be in the response"
+    assert test_data["tenant2_doc_ids"].issubset(response_doc_ids), (
+        "Not all Tenant 2 document IDs are in the response"
+    )
+    assert not response_doc_ids.intersection(test_data["tenant1_doc_ids"]), (
+        "Tenant 1 document IDs should not be in the response"
+    )
 
     # Assert that the contents are correct
     assert any(

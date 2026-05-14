@@ -42,9 +42,9 @@ def test_send_message_with_image_attachment(admin_user: DATestUser) -> None:
 
     # Verify that the message was processed successfully
     assert response.error is None, "Chat response should not have an error"
-    assert (
-        "blue" in response.full_message.lower()
-    ), "Chat response should contain the color of the image"
+    assert "blue" in response.full_message.lower(), (
+        "Chat response should contain the color of the image"
+    )
 
 
 def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
@@ -82,9 +82,9 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
 
     # Verify that the message was processed successfully
     assert response.error is None, "Chat response should not have an error"
-    assert (
-        "third line" in response.full_message.lower()
-    ), "Chat response should contain the contents of the file"
+    assert "third line" in response.full_message.lower(), (
+        "Chat response should contain the contents of the file"
+    )
 
 
 def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
@@ -128,12 +128,12 @@ def test_csv_over_token_threshold_uploaded_not_indexed(
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
-        assert (
-            result["user_files"][0]["status"] == "SKIPPED"
-        ), "CSV over threshold should be SKIPPED (uploaded but not indexed)"
-        assert (
-            result["user_files"][0]["chunk_count"] is None
-        ), "Skipped file should have no chunks"
+        assert result["user_files"][0]["status"] == "SKIPPED", (
+            "CSV over threshold should be SKIPPED (uploaded but not indexed)"
+        )
+        assert result["user_files"][0]["chunk_count"] is None, (
+            "Skipped file should have no chunks"
+        )
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
 
@@ -149,9 +149,9 @@ def test_csv_under_token_threshold_uploaded_and_indexed(
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
-        assert (
-            result["user_files"][0]["status"] == "PROCESSING"
-        ), "CSV under threshold should be PROCESSING (queued for indexing)"
+        assert result["user_files"][0]["status"] == "PROCESSING", (
+            "CSV under threshold should be PROCESSING (queued for indexing)"
+        )
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
 

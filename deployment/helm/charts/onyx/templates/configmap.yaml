@@ -39,3 +39,6 @@ data:
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
   {{- end }}
+  {{- if and (toString (index .Values.configMap "ENABLE_CRAFT" | default "") | eq "true") (not (index .Values.configMap "SANDBOX_API_SERVER_URL")) }}
+  {{- fail "configMap.SANDBOX_API_SERVER_URL must be set when configMap.ENABLE_CRAFT is enabled" }}
+  {{- end }}

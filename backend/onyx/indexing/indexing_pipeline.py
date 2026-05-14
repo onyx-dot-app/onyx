@@ -11,9 +11,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.agent_wiki.tasks import push_to_agent_wiki
-from onyx.configs.app_configs import AGENT_WIKI_ENABLED
-from onyx.configs.app_configs import AGENT_WIKI_MAX_DOC_CHARS
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
@@ -64,6 +61,8 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
 from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
 from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
+from onyx.hooks.points.document_push import DocumentPushPayload
+from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
@@ -93,7 +92,6 @@ from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 
@@ -1096,14 +1094,17 @@ def _apply_document_ingestion_hook(
     return result
 
 
-def _maybe_push_to_agent_wiki(
+def _maybe_push_documents(
     adapter: IndexingBatchAdapter,
     filtered_documents: list[Document],
     insertion_records: list[DocumentInsertionRecord],
 ) -> None:
-    # Agent-wiki is single-tenant; pushing from a multi-tenant deployment would
-    # mix documents from different organizations into a shared instance.
-    if not AGENT_WIKI_ENABLED or MULTI_TENANT:
+    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+
+    Single-tenant only — multi-tenant deployments would mix documents from
+    different organizations into a shared external destination.
+    """
+    if MULTI_TENANT:
         return
 
     if adapter.connector_id is None or adapter.credential_id is None:
@@ -1118,39 +1119,43 @@ def _maybe_push_to_agent_wiki(
             db_session, adapter.connector_id, adapter.credential_id
         )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
-            # TODO: support permissioned (non-public) connectors in a future version
             return
 
-    doc_map = {doc.id: doc for doc in filtered_documents}
-    for doc_id in successfully_indexed:
-        doc = doc_map.get(doc_id)
-        if doc is None:
-            continue
-        content = " ".join(
-            s.text for s in doc.sections if isinstance(s, TextSection) and s.text
-        )
-        if len(content) > AGENT_WIKI_MAX_DOC_CHARS:
-            logger.debug(
-                "Skipping agent-wiki push for doc_id=%s: content length %d exceeds limit %d",
-                doc_id,
-                len(content),
-                AGENT_WIKI_MAX_DOC_CHARS,
+        doc_map = {doc.id: doc for doc in filtered_documents}
+        for doc_id in successfully_indexed:
+            doc = doc_map.get(doc_id)
+            if doc is None:
+                continue
+            content = " ".join(
+                s.text for s in doc.sections if isinstance(s, TextSection) and s.text
             )
-            continue
-        run_in_background(
-            push_to_agent_wiki,
-            doc_id=doc_id,
-            source=str(doc.source.value) if doc.source else "unknown",
-            title=doc.title or doc.semantic_identifier,
-            content=content,
-            url=next(
-                (s.link for s in doc.sections if isinstance(s, TextSection) and s.link),
-                None,
-            ),
-            doc_updated_at=(
-                doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
-            ),
-        )
+            payload = DocumentPushPayload(
+                document_id=doc_id,
+                title=doc.title or doc.semantic_identifier,
+                content=content,
+                source=str(doc.source.value) if doc.source else "unknown",
+                url=next(
+                    (
+                        s.link
+                        for s in doc.sections
+                        if isinstance(s, TextSection) and s.link
+                    ),
+                    None,
+                ),
+                doc_updated_at=(
+                    doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+                ),
+                metadata={
+                    k: v if isinstance(v, list) else [v]
+                    for k, v in (doc.metadata or {}).items()
+                },
+            )
+            execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.DOCUMENT_PUSH,
+                payload=payload.model_dump(),
+                response_type=DocumentPushResponse,
+            )
 
 
 @log_function_time(debug_only=True)
@@ -1365,7 +1370,7 @@ def index_doc_batch(
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
 
-    _maybe_push_to_agent_wiki(
+    _maybe_push_documents(
         adapter=adapter,
         filtered_documents=filtered_documents,
         insertion_records=primary_doc_idx_insertion_records,

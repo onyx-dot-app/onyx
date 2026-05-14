@@ -231,7 +231,7 @@ export default function DiffView({
           <div
             key={idx}
             className={cn(
-              "px-3 py-0.5 whitespace-pre-wrap break-words",
+              "px-3 py-0.5 whitespace-pre-wrap wrap-break-word",
               line.type === "added" &&
                 "bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-300",
               line.type === "removed" &&

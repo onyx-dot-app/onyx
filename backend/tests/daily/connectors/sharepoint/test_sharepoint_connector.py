@@ -130,9 +130,9 @@ def find_document(documents: list[Document], semantic_identifier: str) -> Docume
     matching_docs = [
         d for d in documents if d.semantic_identifier == semantic_identifier
     ]
-    assert (
-        len(matching_docs) == 1
-    ), f"Expected exactly one document with identifier {semantic_identifier}"
+    assert len(matching_docs) == 1, (
+        f"Expected exactly one document with identifier {semantic_identifier}"
+    )
     return matching_docs[0]
 
 
@@ -244,9 +244,9 @@ def test_sharepoint_connector_specific_folder(
             for doc in EXPECTED_DOCUMENTS
             if doc.folder_path and doc.folder_path.startswith("test")
         ]
-        assert len(found_documents) == len(
-            test_folder_docs
-        ), "Should only find documents in test folder"
+        assert len(found_documents) == len(test_folder_docs), (
+            "Should only find documents in test folder"
+        )
 
         # Verify each expected document
         for expected in test_folder_docs:
@@ -280,9 +280,9 @@ def test_sharepoint_connector_root_folder__docs_only(
             end=time.time(),
         ).documents
 
-        assert len(found_documents) == len(
-            EXPECTED_DOCUMENTS
-        ), "Should find all documents in main library"
+        assert len(found_documents) == len(EXPECTED_DOCUMENTS), (
+            "Should find all documents in main library"
+        )
 
         # Verify each expected document
         for expected in EXPECTED_DOCUMENTS:
@@ -322,9 +322,9 @@ def test_sharepoint_connector_other_library(
         ]
 
         # Should find all documents in `Other Library`
-        assert len(found_documents) == len(
-            expected_documents
-        ), "Should find all documents in `Other Library`"
+        assert len(found_documents) == len(expected_documents), (
+            "Should find all documents in `Other Library`"
+        )
 
         # Verify each expected document
         for expected in expected_documents:
@@ -361,9 +361,9 @@ def test_sharepoint_connector_poll(
         ).documents
 
         # Should only find test1.docx
-        assert (
-            len(found_documents) == 1
-        ), "Should only find one document in the time window"
+        assert len(found_documents) == 1, (
+            "Should only find one document in the time window"
+        )
         doc = found_documents[0]
         assert doc.semantic_identifier == "test1.docx"
         verify_document_content(
@@ -397,9 +397,9 @@ def test_sharepoint_connector_pages(
             end=time.time(),
         ).documents
 
-        assert len(found_documents) == len(
-            EXPECTED_PAGES
-        ), "Should find all pages in test site"
+        assert len(found_documents) == len(EXPECTED_PAGES), (
+            "Should find all pages in test site"
+        )
 
         for expected in EXPECTED_PAGES:
             doc = find_document(found_documents, expected.semantic_identifier)
@@ -429,14 +429,14 @@ def verify_hierarchy_nodes(
 
     # Verify expected site is in hierarchy
     site_node_ids = {n.raw_node_id for n in site_nodes}
-    assert (
-        expected_site_url in site_node_ids
-    ), f"Expected site {expected_site_url} not found in hierarchy nodes. Found sites: {site_node_ids}"
+    assert expected_site_url in site_node_ids, (
+        f"Expected site {expected_site_url} not found in hierarchy nodes. Found sites: {site_node_ids}"
+    )
 
     # Verify no duplicate raw_node_ids
-    assert len(all_node_ids) == len(
-        hierarchy_nodes
-    ), "Should not have duplicate hierarchy nodes"
+    assert len(all_node_ids) == len(hierarchy_nodes), (
+        "Should not have duplicate hierarchy nodes"
+    )
 
     # Verify all hierarchy nodes have required fields
     for node in hierarchy_nodes:
@@ -457,22 +457,22 @@ def verify_hierarchy_nodes(
         elif node.node_type == HierarchyNodeType.DRIVE:
             # Drives should have a site as parent
             assert node.raw_parent_id is not None, "DRIVE nodes should have a parent"
-            assert (
-                node.raw_parent_id in site_node_ids
-            ), f"DRIVE parent {node.raw_parent_id} should be a SITE node"
+            assert node.raw_parent_id in site_node_ids, (
+                f"DRIVE parent {node.raw_parent_id} should be a SITE node"
+            )
         elif node.node_type == HierarchyNodeType.FOLDER:
             # Folders should have either a drive or another folder as parent
             assert node.raw_parent_id is not None, "FOLDER nodes should have a parent"
-            assert (
-                node.raw_parent_id in all_node_ids
-            ), f"FOLDER parent {node.raw_parent_id} should exist in hierarchy"
+            assert node.raw_parent_id in all_node_ids, (
+                f"FOLDER parent {node.raw_parent_id} should exist in hierarchy"
+            )
 
     # Verify documents have parent_hierarchy_raw_node_id set
     for doc in documents:
         if doc.parent_hierarchy_raw_node_id:
-            assert (
-                doc.parent_hierarchy_raw_node_id in all_node_ids
-            ), f"Document {doc.semantic_identifier} parent {doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
+            assert doc.parent_hierarchy_raw_node_id in all_node_ids, (
+                f"Document {doc.semantic_identifier} parent {doc.parent_hierarchy_raw_node_id} should exist in hierarchy"
+            )
 
 
 def test_sharepoint_connector_hierarchy_nodes(
@@ -521,15 +521,15 @@ def test_sharepoint_connector_hierarchy_nodes(
         # Should have folder nodes if documents are in folders
         docs_in_folders = [d for d in EXPECTED_DOCUMENTS if d.folder_path]
         if docs_in_folders:
-            assert (
-                HierarchyNodeType.FOLDER in node_types
-            ), "Should have FOLDER nodes since documents are in folders"
+            assert HierarchyNodeType.FOLDER in node_types, (
+                "Should have FOLDER nodes since documents are in folders"
+            )
 
         # Verify all documents have parent_hierarchy_raw_node_id set
         for doc in found_documents:
-            assert (
-                doc.parent_hierarchy_raw_node_id is not None
-            ), f"Document {doc.semantic_identifier} should have parent_hierarchy_raw_node_id set"
+            assert doc.parent_hierarchy_raw_node_id is not None, (
+                f"Document {doc.semantic_identifier} should have parent_hierarchy_raw_node_id set"
+            )
 
 
 @pytest.fixture

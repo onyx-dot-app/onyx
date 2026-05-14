@@ -121,9 +121,7 @@ def get_opensearch_doc_chunk_id(
             document_id.encode("utf-8"), digest_size=digest_size
         ).hexdigest()
 
-    opensearch_doc_chunk_id: str = (
-        f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
-    )
+    opensearch_doc_chunk_id: str = f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
 
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)

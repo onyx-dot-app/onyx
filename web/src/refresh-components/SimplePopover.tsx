@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import { Popover } from "@opal/components";
 
-export interface SimplePopoverProps
-  extends React.ComponentPropsWithoutRef<typeof Popover.Content> {
+export interface SimplePopoverProps extends React.ComponentPropsWithoutRef<
+  typeof Popover.Content
+> {
   onOpenChange?: (open: boolean) => void;
   trigger: React.ReactNode | ((open: boolean) => React.ReactNode);
 }

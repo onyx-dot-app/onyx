@@ -1,0 +1,41 @@
+{{- if and .Values.vectorDB.enabled (.Values.celery_worker_scheduled_tasks.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  minReplicaCount: {{ .Values.celery_worker_scheduled_tasks.autoscaling.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.celery_worker_scheduled_tasks.autoscaling.maxReplicas | default 10 }}
+  pollingInterval: {{ .Values.celery_worker_scheduled_tasks.autoscaling.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.celery_worker_scheduled_tasks.autoscaling.cooldownPeriod | default 300 }}
+  {{- if hasKey .Values.celery_worker_scheduled_tasks.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.celery_worker_scheduled_tasks.autoscaling.idleReplicaCount }}
+  {{- end }}
+  {{- if .Values.celery_worker_scheduled_tasks.autoscaling.customTriggers }}
+  fallback:
+    failureThreshold: {{ .Values.celery_worker_scheduled_tasks.autoscaling.failureThreshold | default 3 }}
+    replicas: {{ .Values.celery_worker_scheduled_tasks.autoscaling.fallbackReplicas | default 1 }}
+  {{- end }}
+  triggers:
+    {{- if .Values.celery_worker_scheduled_tasks.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_scheduled_tasks.autoscaling.targetCPUUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_scheduled_tasks.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_scheduled_tasks.autoscaling.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_scheduled_tasks.autoscaling.customTriggers }}
+    {{- toYaml .Values.celery_worker_scheduled_tasks.autoscaling.customTriggers | nindent 4 }}
+    {{- end }}
+{{- end }}

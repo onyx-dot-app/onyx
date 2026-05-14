@@ -45,9 +45,9 @@ def test_admin_user_allowed(
         cookies=permission_admin_user.cookies,
         timeout=30,
     )
-    assert (
-        resp.status_code < 400
-    ), f"Admin should access {method} {path}, got {resp.status_code}"
+    assert resp.status_code < 400, (
+        f"Admin should access {method} {path}, got {resp.status_code}"
+    )
 
 
 # ------------------------------------------------------------------
@@ -69,9 +69,9 @@ def test_basic_user_denied(
         cookies=permission_basic_user.cookies,
         timeout=30,
     )
-    assert (
-        resp.status_code == 403
-    ), f"Basic user should be denied on {method} {path}, got {resp.status_code}"
+    assert resp.status_code == 403, (
+        f"Basic user should be denied on {method} {path}, got {resp.status_code}"
+    )
 
 
 @pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
@@ -106,9 +106,9 @@ def test_bot_user_denied(
         headers=bot_user_headers,
         timeout=30,
     )
-    assert (
-        resp.status_code == 403
-    ), f"Bot user should be denied on {method} {path}, got {resp.status_code}"
+    assert resp.status_code == 403, (
+        f"Bot user should be denied on {method} {path}, got {resp.status_code}"
+    )
 
 
 @pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)
@@ -124,9 +124,9 @@ def test_ext_perm_user_denied(
         headers=ext_perm_user_headers,
         timeout=30,
     )
-    assert (
-        resp.status_code == 403
-    ), f"Ext perm user should be denied on {method} {path}, got {resp.status_code}"
+    assert resp.status_code == 403, (
+        f"Ext perm user should be denied on {method} {path}, got {resp.status_code}"
+    )
 
 
 @pytest.mark.parametrize("method,path", ADMIN_ACCESS_ENDPOINTS)

@@ -138,7 +138,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           height="full"
           className="radial-00 hover:shadow-00"
         >
-          <div className="flex self-stretch h-[6rem]">
+          <div className="flex self-stretch h-24">
             <CardItemLayout
               icon={(props) => <AgentAvatar agent={agent} {...props} />}
               title={agent.name}

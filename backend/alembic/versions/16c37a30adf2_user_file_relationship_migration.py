@@ -233,7 +233,8 @@ def downgrade() -> None:
     ):
         user_file_columns = [col["name"] for col in inspector.get_columns("user_file")]
         if "folder_id" in user_file_columns:
-            result = bind.execute(text("""
+            result = bind.execute(
+                text("""
                 DELETE FROM persona__user_file puf
                 WHERE EXISTS (
                     SELECT 1
@@ -243,7 +244,8 @@ def downgrade() -> None:
                     WHERE puf.persona_id = puf2.persona_id
                     AND puf.user_file_id = uf.id
                 )
-            """))
+            """)
+            )
             logger.info(
                 "Removed %s migrated persona__user_file relationships", result.rowcount
             )

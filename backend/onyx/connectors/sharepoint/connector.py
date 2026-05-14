@@ -639,7 +639,6 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
-
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -2396,7 +2395,6 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 

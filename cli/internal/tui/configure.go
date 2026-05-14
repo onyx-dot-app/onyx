@@ -13,6 +13,13 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 )
 
+type startMode int
+
+const (
+	startNormal   startMode = iota
+	startFirstRun
+)
+
 const configTestTimeout = 10 * time.Second
 
 type configStep int
@@ -133,14 +140,19 @@ func (m Model) handleConfigTestResult(msg ConfigTestResultMsg) (Model, tea.Cmd) 
 
 	m.config.ServerURL = m.configState.serverURL
 	m.config.APIKey = m.configState.apiKey
+
 	if err := config.Save(m.config); err != nil {
 		m.viewport.addError("Could not save config: " + err.Error())
-		return m.exitConfigureMode(), nil
+		m.configState.step = configStepURL
+		m.configState.cancelTest = nil
+		m.input.setForConfigure(configURLPrompt(), m.configState.serverURL, textinput.EchoNormal)
+		return m, nil
 	}
 
 	m.client = api.NewClient(m.config)
 	m.viewport.addInfo("Connected to " + m.config.ServerURL + ". Configuration saved.")
 	m.status.setServer(m.config.ServerURL)
+	m.startMode = startNormal
 
 	m = m.exitConfigureMode()
 	return m, loadAgentsCmd(m.client)
@@ -157,6 +169,9 @@ func (m Model) handleConfigureSpinnerTick(msg spinner.TickMsg) (Model, tea.Cmd) 
 }
 
 func (m Model) cancelConfigure() (Model, tea.Cmd) {
+	if m.startMode == startFirstRun {
+		return m.exitConfigureMode(), tea.Quit
+	}
 	m.viewport.addInfo("Configuration cancelled.")
 	return m.exitConfigureMode(), nil
 }

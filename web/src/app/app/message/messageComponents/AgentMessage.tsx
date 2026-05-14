@@ -296,7 +296,7 @@ const AgentMessage = React.memo(function AgentMessage({
       {/* Row 2: Display content + MessageToolbar */}
       <div
         ref={markdownRef}
-        className="overflow-x-visible focus:outline-none select-text cursor-text px-3"
+        className="overflow-x-visible focus:outline-hidden select-text cursor-text px-3"
         onCopy={(e) => {
           if (markdownRef.current) {
             handleCopy(e, markdownRef as RefObject<HTMLDivElement>);

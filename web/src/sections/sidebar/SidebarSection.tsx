@@ -24,7 +24,7 @@ export default function SidebarSection({
           from overlapping with scrollbars on Safari.
       */}
       <Disabled disabled={disabled}>
-        <div className="pl-2 mr-1.5 py-1 sticky top-0 bg-background-tint-02 z-10 flex flex-row items-center justify-between min-h-[2rem]">
+        <div className="pl-2 mr-1.5 py-1 sticky top-0 bg-background-tint-02 z-10 flex flex-row items-center justify-between min-h-8">
           <div className="p-0.5 w-full flex flex-col justify-center">
             <Text secondaryBody text02>
               {title}
