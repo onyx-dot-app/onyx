@@ -936,7 +936,6 @@ def cache_and_upsert_hierarchy_nodes(
     is_connector_public: bool,
     hierarchy_node_batch: list[HierarchyNode],
 ) -> int:
-
     hierarchy_node_batch_cleaned = sanitize_hierarchy_nodes_for_postgres(
         hierarchy_node_batch
     )

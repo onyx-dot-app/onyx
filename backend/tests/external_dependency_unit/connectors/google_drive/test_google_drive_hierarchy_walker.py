@@ -137,7 +137,8 @@ class _PrecomputedHierarchyConnector(CheckpointedConnector[GoogleDriveCheckpoint
         self._nodes = nodes
 
     def load_credentials(
-        self, credentials: dict[str, Any]  # noqa: ARG002
+        self,
+        credentials: dict[str, Any],  # noqa: ARG002
     ) -> dict[str, Any] | None:
         return None
 
@@ -151,7 +152,8 @@ class _PrecomputedHierarchyConnector(CheckpointedConnector[GoogleDriveCheckpoint
         )
 
     def validate_checkpoint_json(
-        self, checkpoint_json: str  # noqa: ARG002
+        self,
+        checkpoint_json: str,  # noqa: ARG002
     ) -> GoogleDriveCheckpoint:
         raise NotImplementedError
 
@@ -364,9 +366,9 @@ def test_off_by_one_batch_split_misparents_child(db_session: Session) -> None:
                 add_prefix=False,
             )
 
-        assert (
-            len(new_nodes) == chain_len + 1
-        ), f"Walker should emit one node per ancestor; got {len(new_nodes)}"
+        assert len(new_nodes) == chain_len + 1, (
+            f"Walker should emit one node per ancestor; got {len(new_nodes)}"
+        )
 
         batch_count = _run_through_runner_and_persist(
             db_connector, db_credential, new_nodes
@@ -391,9 +393,9 @@ def test_off_by_one_batch_split_misparents_child(db_session: Session) -> None:
 
         root_node = stored[root_id]
         assert root_node is not None
-        assert (
-            root_node.parent_id == source_node_id
-        ), "Shared drive roots should always be parented to SOURCE"
+        assert root_node.parent_id == source_node_id, (
+            "Shared drive roots should always be parented to SOURCE"
+        )
 
         misparented: list[tuple[str, str | None, int | None, int | None]] = []
         for i, raw_id in enumerate(p_ids):
@@ -511,9 +513,9 @@ def test_cross_yield_walk_does_not_heal_misparented_child(
                 "yield 1 (its parent A is inaccessible). Got "
                 f"parent_id={b_after_yield_1.parent_id}, SOURCE id={source_node_id}."
             )
-            assert (
-                get_hierarchy_node_by_raw_id(db_session, a_id, SOURCE) is None
-            ), "Setup invariant: A should not exist in the DB after yield 1."
+            assert get_hierarchy_node_by_raw_id(db_session, a_id, SOURCE) is None, (
+                "Setup invariant: A should not exist in the DB after yield 1."
+            )
 
             with patch.object(
                 connector,
@@ -539,9 +541,9 @@ def test_cross_yield_walk_does_not_heal_misparented_child(
         assert root_node is not None, "ROOT should be persisted by yield 2"
         assert b_node is not None
 
-        assert (
-            a_node.parent_id == root_node.id
-        ), "Sanity check: A should be parented to ROOT after yield 2."
+        assert a_node.parent_id == root_node.id, (
+            "Sanity check: A should be parented to ROOT after yield 2."
+        )
 
         assert b_node.parent_id == a_node.id, (
             "Cross-yield healing failed: B's parent_id was not updated to A "
