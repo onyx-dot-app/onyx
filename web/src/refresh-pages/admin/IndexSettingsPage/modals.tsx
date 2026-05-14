@@ -97,12 +97,14 @@ async function testAndSaveProviderCredentials({
   provider,
   apiKey,
   apiUrl = "",
+  modelName = "",
   apiVersion = null,
   deploymentName = null,
 }: {
   provider: EmbeddingProvider;
   apiKey: string | null;
   apiUrl?: string;
+  modelName?: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
 }): Promise<boolean> {
@@ -111,6 +113,7 @@ async function testAndSaveProviderCredentials({
       providerType: provider.providerName,
       apiKey,
       apiUrl,
+      modelName,
       apiVersion,
       deploymentName,
     });
@@ -389,6 +392,7 @@ function LiteLLMProviderModal({
             provider,
             apiKey,
             apiUrl: values.apiUrl,
+            modelName: values.modelName.trim(),
           })
         ) {
           onSubmit({
