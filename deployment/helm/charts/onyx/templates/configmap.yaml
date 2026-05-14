@@ -6,7 +6,17 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
-  {{- if .Values.postgresql.enabled }}
+  {{- if and .Values.externalPostgresql.enabled .Values.postgresql.enabled }}
+  {{- fail "Cannot enable both externalPostgresql and postgresql. Set postgresql.enabled=false when using an external database." }}
+  {{- end }}
+  {{- if .Values.externalPostgresql.enabled }}
+  {{- if not .Values.externalPostgresql.host }}
+  {{- fail "externalPostgresql.host must be set when externalPostgresql.enabled is true" }}
+  {{- end }}
+  POSTGRES_HOST: {{ .Values.externalPostgresql.host | quote }}
+  POSTGRES_PORT: {{ .Values.externalPostgresql.port | default "5432" | quote }}
+  POSTGRES_DB: {{ .Values.externalPostgresql.database | default "postgres" | quote }}
+  {{- else if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}-rw
   {{- end }}
   {{- if .Values.vespa.enabled }}
