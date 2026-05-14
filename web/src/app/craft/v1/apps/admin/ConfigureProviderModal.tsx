@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import {
-  BuiltInProviderPreset,
+  BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
 
@@ -15,7 +15,7 @@ interface ConfigureProviderModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-  preset: BuiltInProviderPreset;
+  descriptor: BuiltInExternalAppDescriptor;
   /** Null → create; non-null → update (form pre-fills). */
   existingApp: ExternalAppAdminResponse | null;
 }
@@ -24,7 +24,7 @@ export default function ConfigureProviderModal({
   open,
   onClose,
   onSaved,
-  preset,
+  descriptor,
   existingApp,
 }: ConfigureProviderModalProps) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -36,15 +36,15 @@ export default function ConfigureProviderModal({
   useEffect(() => {
     if (!open) return;
     const initial: Record<string, string> = {};
-    for (const field of preset.required_org_credential_fields) {
+    for (const field of descriptor.required_org_credential_fields) {
       initial[field.key] =
         existingApp?.organization_credentials[field.key] ?? "";
     }
     setValues(initial);
     setError(null);
-  }, [open, preset, existingApp]);
+  }, [open, descriptor, existingApp]);
 
-  const allFilled = preset.required_org_credential_fields.every(
+  const allFilled = descriptor.required_org_credential_fields.every(
     (f) => (values[f.key] ?? "").trim().length > 0
   );
 
@@ -62,11 +62,11 @@ export default function ConfigureProviderModal({
       // action on the admin page.
       const body = {
         id: existingApp?.id ?? null,
-        name: preset.name,
-        description: preset.description,
-        app_type: preset.app_type,
-        upstream_url_patterns: preset.upstream_url_patterns,
-        auth_template: preset.auth_template,
+        name: descriptor.name,
+        description: descriptor.description,
+        app_type: descriptor.app_type,
+        upstream_url_patterns: descriptor.upstream_url_patterns,
+        auth_template: descriptor.auth_template,
         organization_credentials: merged,
         enabled: true,
       };
@@ -93,12 +93,12 @@ export default function ConfigureProviderModal({
     <Modal open={open} onOpenChange={(o) => !o && onClose()}>
       <Modal.Content>
         <Modal.Header
-          title={`Configure ${preset.name}`}
-          description={preset.setup_instructions}
+          title={`Configure ${descriptor.name}`}
+          description={descriptor.setup_instructions}
         />
         <Modal.Body>
           <div className="flex flex-col gap-3">
-            {preset.required_org_credential_fields.map((field) => {
+            {descriptor.required_org_credential_fields.map((field) => {
               const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
               return (
                 <div key={field.key} className="flex flex-col gap-1">

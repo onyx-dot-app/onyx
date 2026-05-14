@@ -11,19 +11,23 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgPlug } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import {
-  BUILT_IN_PROVIDER_REGISTRY,
-  BuiltInProviderKey,
-  BuiltInProviderPreset,
+  BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
-  findAppForProvider,
+  findAppForType,
+  getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
 import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderModal";
 
 export default function ExternalAppsAdminPage() {
   const { isAdmin } = useUser();
-  // keepPreviousData so revalidations don't blank the cards while
-  // the refetch is in flight.
-  const { data, mutate } = useSWR<ExternalAppAdminResponse[]>(
+
+  // keepPreviousData so revalidations don't blank the cards.
+  const { data: descriptors } = useSWR<BuiltInExternalAppDescriptor[]>(
+    SWR_KEYS.buildExternalAppsBuiltInOptions,
+    errorHandlingFetcher,
+    { keepPreviousData: true }
+  );
+  const { data: apps, mutate: mutateApps } = useSWR<ExternalAppAdminResponse[]>(
     SWR_KEYS.buildExternalAppsAdmin,
     errorHandlingFetcher,
     { keepPreviousData: true }
@@ -41,6 +45,8 @@ export default function ExternalAppsAdminPage() {
     );
   }
 
+  const isReady = descriptors !== undefined && apps !== undefined;
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -49,22 +55,18 @@ export default function ExternalAppsAdminPage() {
         description="Enable third-party integrations that users in your org can connect their personal accounts to."
       />
       <SettingsLayouts.Body>
-        {data === undefined ? (
+        {!isReady ? (
           <Card variant="tertiary">
             <Text mainContentBody>Loading…</Text>
           </Card>
         ) : (
           <div className="flex flex-col gap-2">
-            {Object.entries(BUILT_IN_PROVIDER_REGISTRY).map(([key, preset]) => (
+            {descriptors.map((descriptor) => (
               <ProviderRow
-                key={key}
-                providerKey={key as BuiltInProviderKey}
-                preset={preset}
-                existingApp={findAppForProvider(
-                  data,
-                  key as BuiltInProviderKey
-                )}
-                onChange={() => mutate()}
+                key={descriptor.app_type}
+                descriptor={descriptor}
+                existingApp={findAppForType(apps, descriptor.app_type)}
+                onChange={() => mutateApps()}
               />
             ))}
           </div>
@@ -75,19 +77,18 @@ export default function ExternalAppsAdminPage() {
 }
 
 interface ProviderRowProps {
-  providerKey: BuiltInProviderKey;
-  preset: BuiltInProviderPreset;
+  descriptor: BuiltInExternalAppDescriptor;
   existingApp: ExternalAppAdminResponse | null;
   onChange: () => void;
 }
 
-function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
+function ProviderRow({ descriptor, existingApp, onChange }: ProviderRowProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [isMutating, setIsMutating] = useState(false);
 
   const hasCredentials =
     existingApp !== null &&
-    preset.required_org_credential_fields.every(
+    descriptor.required_org_credential_fields.every(
       (f) => (existingApp.organization_credentials[f.key] ?? "").length > 0
     );
   const enabled = existingApp?.enabled ?? false;
@@ -122,12 +123,12 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
     }
   }
 
-  const Logo = preset.logo;
+  const Logo = getAppTypeLogo(descriptor.app_type);
 
   let statusLine: string;
   let rightSide: React.ReactNode;
   if (!hasCredentials) {
-    statusLine = preset.description;
+    statusLine = descriptor.description;
     rightSide = (
       <Button onClick={() => setModalOpen(true)} disabled={isMutating}>
         Configure
@@ -177,7 +178,7 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
         <div className="flex items-center gap-3 w-full">
           <Logo className="w-8 h-8" />
           <div className="flex-1 flex flex-col gap-0.5">
-            <Text mainUiAction>{preset.name}</Text>
+            <Text mainUiAction>{descriptor.name}</Text>
             <Text secondaryBody text03>
               {statusLine}
             </Text>
@@ -189,7 +190,7 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSaved={onChange}
-        preset={preset}
+        descriptor={descriptor}
         existingApp={existingApp}
       />
     </>

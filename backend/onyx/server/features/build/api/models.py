@@ -360,11 +360,14 @@ class UpsertUserCredentialsRequest(BaseModel):
 
 class ExternalAppUserResponse(BaseModel):
     """User-facing view — strips admin-only fields (auth_template,
-    organization_credentials)."""
+    organization_credentials). `app_type` is exposed so the frontend
+    can render the right logo per app without hitting an admin-only
+    endpoint."""
 
     id: int
     name: str
     description: str
+    app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
@@ -382,3 +385,27 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
+
+
+class OrgCredentialFieldDescriptor(BaseModel):
+    """One credential field the admin must fill in to configure a
+    built-in provider."""
+
+    key: str
+    label: str
+    description: str
+    secret: bool
+
+
+class BuiltInExternalAppDescriptor(BaseModel):
+    """Backend-defined preset for a built-in OAuth provider. The admin
+    UI fetches these and uses them to render the Configure modal +
+    POST body, so adding a new provider is a backend-only change."""
+
+    app_type: ExternalAppType
+    name: str
+    description: str
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, str]
+    required_org_credential_fields: list[OrgCredentialFieldDescriptor]
+    setup_instructions: str
