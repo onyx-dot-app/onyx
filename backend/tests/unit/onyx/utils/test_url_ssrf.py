@@ -443,81 +443,108 @@ class TestValidateOutboundHttpUrl:
                 allow_private_network=True,
             )
 
-    def test_blocks_loopback_ipv4_when_private_is_enabled(self) -> None:
-        """Loopback is always blocked, even when private-network is allowed —
-        opting into RFC1918 shouldn't expose the application host's loopback."""
+    def test_allows_loopback_when_private_enabled_without_floor(self) -> None:
+        """Admin-configured callers (voice API for local Azure speech
+        containers, etc.) explicitly want to reach 127.0.0.1. The
+        block_loopback_and_link_local flag stays False by default so
+        validate_outbound_http_url(allow_private_network=True) preserves
+        that behavior — the stricter floor is opt-in for LLM-controlled
+        paths like open_url."""
+        validated = validate_outbound_http_url(
+            "http://127.0.0.1:5000", allow_private_network=True
+        )
+        assert validated == "http://127.0.0.1:5000"
+
+    def test_blocks_loopback_ipv4_with_floor(self) -> None:
+        """When block_loopback_and_link_local=True (open_url path), loopback
+        is rejected even though private networks are otherwise allowed."""
         with pytest.raises(SSRFException, match="loopback/unspecified"):
             validate_outbound_http_url(
-                "http://127.0.0.1:8080/", allow_private_network=True
+                "http://127.0.0.1:8080/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
             )
 
-    def test_blocks_loopback_range_when_private_is_enabled(self) -> None:
+    def test_blocks_loopback_range_with_floor(self) -> None:
         """Any address in 127.0.0.0/8 must be blocked, not just 127.0.0.1."""
         with pytest.raises(SSRFException, match="loopback/unspecified"):
-            validate_outbound_http_url("http://127.1.2.3/", allow_private_network=True)
+            validate_outbound_http_url(
+                "http://127.1.2.3/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
+            )
 
-    def test_blocks_loopback_ipv6_when_private_is_enabled(self) -> None:
+    def test_blocks_loopback_ipv6_with_floor(self) -> None:
         with pytest.raises(SSRFException, match="loopback/unspecified"):
-            validate_outbound_http_url("http://[::1]:8080/", allow_private_network=True)
+            validate_outbound_http_url(
+                "http://[::1]:8080/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
+            )
 
-    def test_blocks_unspecified_ipv4_when_private_is_enabled(self) -> None:
+    def test_blocks_unspecified_ipv4_with_floor(self) -> None:
         with pytest.raises(SSRFException, match="loopback/unspecified"):
-            validate_outbound_http_url("http://0.0.0.0/", allow_private_network=True)
+            validate_outbound_http_url(
+                "http://0.0.0.0/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
+            )
 
-    def test_blocks_link_local_ipv4_literal_when_private_is_enabled(self) -> None:
-        """Link-local IPv4 (169.254.0.0/16) is always blocked — covers the
-        cloud-metadata range. 169.254.169.254 itself is also in
+    def test_blocks_link_local_ipv4_literal_with_floor(self) -> None:
+        """Link-local IPv4 (169.254.0.0/16) is in the always-blocked tier —
+        covers the cloud-metadata range. 169.254.169.254 itself is also in
         BLOCKED_HOSTNAMES, but other link-local literals (e.g. 169.254.0.1)
         are not, so the IP-class check is what stops them."""
         with pytest.raises(SSRFException, match="loopback/unspecified/link-local"):
             validate_outbound_http_url(
-                "http://169.254.0.1/", allow_private_network=True
+                "http://169.254.0.1/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
             )
 
-    def test_blocks_link_local_ipv6_literal_when_private_is_enabled(self) -> None:
-        """Link-local IPv6 (fe80::/10) is always blocked."""
+    def test_blocks_link_local_ipv6_literal_with_floor(self) -> None:
+        """Link-local IPv6 (fe80::/10) is in the always-blocked tier."""
         with pytest.raises(SSRFException, match="loopback/unspecified/link-local"):
-            validate_outbound_http_url("http://[fe80::1]/", allow_private_network=True)
+            validate_outbound_http_url(
+                "http://[fe80::1]/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
+            )
 
-    def test_blocks_dns_name_resolving_to_loopback_when_private_is_enabled(
-        self,
-    ) -> None:
-        """A DNS name that resolves to 127.0.0.1 must be blocked even on the
-        opt-out path — e.g. an attacker-controlled `loopback.attacker.com`
-        record could otherwise reach the app host's loopback."""
+    def test_blocks_dns_name_resolving_to_loopback_with_floor(self) -> None:
+        """A DNS name that resolves to 127.0.0.1 must be blocked on the
+        floor path — e.g. an attacker-controlled `loopback.attacker.com`
+        record could otherwise reach the app host's loopback via open_url."""
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("127.0.0.1", 80))]
             with pytest.raises(SSRFException, match="resolves to loopback"):
                 validate_outbound_http_url(
                     "http://loopback.attacker.com/",
                     allow_private_network=True,
+                    block_loopback_and_link_local=True,
                 )
 
-    def test_blocks_dns_name_resolving_to_ipv6_loopback_when_private_is_enabled(
-        self,
-    ) -> None:
+    def test_blocks_dns_name_resolving_to_ipv6_loopback_with_floor(self) -> None:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(30, 1, 6, "", ("::1", 80, 0, 0))]
             with pytest.raises(SSRFException, match="resolves to loopback"):
                 validate_outbound_http_url(
                     "http://loopback6.attacker.com/",
                     allow_private_network=True,
+                    block_loopback_and_link_local=True,
                 )
 
-    def test_blocks_dns_name_resolving_to_unspecified_when_private_is_enabled(
-        self,
-    ) -> None:
+    def test_blocks_dns_name_resolving_to_unspecified_with_floor(self) -> None:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("0.0.0.0", 80))]
             with pytest.raises(SSRFException, match="resolves to loopback"):
                 validate_outbound_http_url(
                     "http://unspecified.attacker.com/",
                     allow_private_network=True,
+                    block_loopback_and_link_local=True,
                 )
 
-    def test_blocks_dns_name_resolving_to_aws_metadata_when_private_is_enabled(
-        self,
-    ) -> None:
+    def test_blocks_dns_name_resolving_to_aws_metadata_with_floor(self) -> None:
         """The canonical SSRF attack: an attacker-controlled DNS record
         pointing at 169.254.169.254 must not let the LLM tool exfiltrate
         IAM credentials from a cloud-hosted Onyx deployment, even when the
@@ -528,11 +555,10 @@ class TestValidateOutboundHttpUrl:
                 validate_outbound_http_url(
                     "http://imds.attacker.com/latest/meta-data/iam/",
                     allow_private_network=True,
+                    block_loopback_and_link_local=True,
                 )
 
-    def test_blocks_dns_name_resolving_to_link_local_when_private_is_enabled(
-        self,
-    ) -> None:
+    def test_blocks_dns_name_resolving_to_link_local_with_floor(self) -> None:
         """Any link-local IPv4 (169.254.0.0/16), not just the metadata IP."""
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("169.254.42.42", 80))]
@@ -540,25 +566,26 @@ class TestValidateOutboundHttpUrl:
                 validate_outbound_http_url(
                     "http://link-local.attacker.com/",
                     allow_private_network=True,
+                    block_loopback_and_link_local=True,
                 )
 
-    def test_allows_dns_name_resolving_to_rfc1918_when_private_is_enabled(
-        self,
-    ) -> None:
+    def test_allows_dns_name_resolving_to_rfc1918_with_floor(self) -> None:
         """The whole point of the opt-out: a DNS name resolving to RFC1918
-        should still succeed."""
+        should succeed even with the floor on."""
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.5", 443))]
             validated = validate_outbound_http_url(
-                "https://js.jpl.nasa.gov/", allow_private_network=True
+                "https://js.jpl.nasa.gov/",
+                allow_private_network=True,
+                block_loopback_and_link_local=True,
             )
             assert validated == "https://js.jpl.nasa.gov/"
 
-    def test_dns_failure_does_not_raise_when_private_is_enabled(self) -> None:
-        """If DNS resolution fails during the loopback pre-check, don't
+    def test_dns_failure_does_not_raise_with_floor(self) -> None:
+        """If DNS resolution fails during the floor pre-check, don't
         reject — internal-only names that aren't resolvable from the
         validation context should still be allowed (the actual request will
-        fail on its own if the name is truly broken). The loopback guard is
+        fail on its own if the name is truly broken). The floor is
         defense-in-depth, not the primary gatekeeper on this path."""
         import socket as socket_module
 
@@ -569,5 +596,6 @@ class TestValidateOutboundHttpUrl:
             validated = validate_outbound_http_url(
                 "https://internal-only.company.com/",
                 allow_private_network=True,
+                block_loopback_and_link_local=True,
             )
             assert validated == "https://internal-only.company.com/"

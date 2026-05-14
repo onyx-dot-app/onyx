@@ -193,6 +193,7 @@ def validate_outbound_http_url(
     *,
     allow_private_network: bool = False,
     https_only: bool = False,
+    block_loopback_and_link_local: bool = False,
 ) -> str:
     """
     Validate a URL that will be used by backend outbound HTTP calls.
@@ -201,6 +202,18 @@ def validate_outbound_http_url(
         url: The URL to validate.
         allow_private_network: If True, skip private/reserved IP checks.
         https_only: If True, reject http:// URLs (only https:// is allowed).
+        block_loopback_and_link_local: When ``allow_private_network=True``,
+            additionally reject URLs whose host (or DNS resolution) is in the
+            always-dangerous IP classes — loopback (127.0.0.0/8, ::1),
+            unspecified (0.0.0.0, ::), and link-local (169.254.0.0/16,
+            fe80::/10, which contains cloud-metadata endpoints). Default
+            False to preserve behavior for admin-configured callers (voice
+            API, sharepoint, hooks) where the operator typed the URL
+            themselves and reaching a local container at 127.0.0.1 is a
+            feature. Pass True for LLM-controlled paths like ``open_url``
+            where prompt-supplied URLs need a stricter floor regardless of
+            the network opt-out. No-op when ``allow_private_network=False``,
+            since the standard private-IP guard already covers these.
 
     Returns:
         A normalized URL string with surrounding whitespace removed.
@@ -235,21 +248,14 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
-    # Loopback (127.0.0.0/8, ::1), unspecified (0.0.0.0, ::), and link-local
-    # (169.254.0.0/16, fe80::/10) addresses are *always* blocked, even when
-    # allow_private_network=True. Opting into private networks means RFC1918
-    # services in the operator's VPC — never the application host's own
-    # loopback (admin APIs, sidecars) or the cloud-metadata endpoints
-    # (IAM credential exfiltration on AWS/GCP/Azure GovCloud, etc.).
-    try:
-        ip_obj = ipaddress.ip_address(hostname)
-    except ValueError:
-        # Hostname is a DNS name. On the opt-out path, _validate_and_resolve_url
-        # would otherwise be skipped — but the always-blocked floor still
-        # needs to apply, or names like `loopback.attacker.com` → 127.0.0.1
-        # or `imds.attacker.com` → 169.254.169.254 would slip through. RFC1918
-        # results stay allowed since opting in is the whole point of the flag.
-        if allow_private_network:
+    if allow_private_network and block_loopback_and_link_local:
+        # Loopback / unspecified / link-local addresses are always rejected
+        # on this path even when private networks are otherwise allowed.
+        # Applies to both IP literals and DNS names — closes the cloud-
+        # metadata SSRF surface and the "DNS rebinding to loopback" surface.
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+        except ValueError:
             blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
             if blocked_ip is not None:
                 raise SSRFException(
@@ -257,12 +263,12 @@ def validate_outbound_http_url(
                     f"unspecified/link-local IP '{blocked_ip}'. Access is "
                     f"not allowed."
                 )
-    else:
-        if _is_always_blocked_ip(ip_obj):
-            raise SSRFException(
-                f"Access to loopback/unspecified/link-local IP "
-                f"'{parsed.hostname}' is not allowed."
-            )
+        else:
+            if _is_always_blocked_ip(ip_obj):
+                raise SSRFException(
+                    f"Access to loopback/unspecified/link-local IP "
+                    f"'{parsed.hostname}' is not allowed."
+                )
 
     if not allow_private_network:
         _validate_and_resolve_url(normalized_url)
@@ -288,10 +294,17 @@ def _make_ssrf_safe_request(
     When ``allow_private_network`` is True, the private-IP guard is skipped
     so operators on trusted networks can fetch URLs that resolve to RFC1918
     addresses (e.g. internal docs sites behind split-horizon DNS). Scheme,
-    credential, and blocked-hostname checks still apply.
+    credential, and blocked-hostname checks still apply, and the always-
+    dangerous IP classes (loopback / unspecified / link-local, which contains
+    cloud-metadata endpoints) remain blocked on this path since callers are
+    LLM-controlled and need a stricter floor than admin-configured paths.
     """
     if allow_private_network:
-        validate_outbound_http_url(url, allow_private_network=True)
+        validate_outbound_http_url(
+            url,
+            allow_private_network=True,
+            block_loopback_and_link_local=True,
+        )
         return requests.get(
             url,
             headers=headers,

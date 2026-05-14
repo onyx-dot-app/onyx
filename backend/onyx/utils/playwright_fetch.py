@@ -263,7 +263,11 @@ def fetch_rendered_html(
     # small TOCTOU window between validation and the actual navigation, the
     # same window that ssrf_safe_get accepts for HTTPS URLs.
     try:
-        validate_outbound_http_url(url, allow_private_network=allow_private_network)
+        validate_outbound_http_url(
+            url,
+            allow_private_network=allow_private_network,
+            block_loopback_and_link_local=True,
+        )
     except (SSRFException, ValueError) as exc:
         logger.warning(
             "Refusing Playwright fallback for %s (%s)", url, exc.__class__.__name__
