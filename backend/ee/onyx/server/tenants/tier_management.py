@@ -1,7 +1,7 @@
 """Per-tenant tier cache (cloud).
 
 Value at TENANT_TIER_KEY is a JSON blob:
-    {"customer_tier": "business", "trial_end": "2026-06-01T12:00:00+00:00" | null}
+    {"customer_tier": "BUSINESS", "trial_end": "2026-06-01T12:00:00+00:00" | null}
 """
 
 import json
