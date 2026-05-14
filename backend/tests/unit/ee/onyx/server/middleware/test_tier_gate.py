@@ -153,5 +153,5 @@ async def test_402_payload_includes_required_tier(
     # Body is set on JSONResponse via `content`, accessible as `.body`.
     import json
 
-    payload = json.loads(response.body)
+    payload = json.loads(bytes(response.body))
     assert payload["required_tier"] == "enterprise"

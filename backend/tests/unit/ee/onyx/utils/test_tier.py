@@ -27,14 +27,11 @@ def _metadata(
 
 
 @patch("ee.onyx.utils.tier.MULTI_TENANT", False)
-@patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
 class TestSelfHostedTierCacheFailure:
     """`_self_hosted_tier` must not leak RedisError to callers."""
 
     @patch("ee.onyx.utils.tier.get_cached_license_metadata")
-    def test_cache_hit_returns_cached_tier(
-        self, mock_get_cached: MagicMock
-    ) -> None:
+    def test_cache_hit_returns_cached_tier(self, mock_get_cached: MagicMock) -> None:
         from ee.onyx.utils.tier import get_tier
 
         mock_get_cached.return_value = _metadata(CustomerTier.ENTERPRISE)
@@ -76,9 +73,7 @@ class TestSelfHostedTierCacheFailure:
         assert get_tier() == Tier.COMMUNITY
 
     @patch("ee.onyx.utils.tier.get_cached_license_metadata")
-    def test_non_redis_exception_propagates(
-        self, mock_get_cached: MagicMock
-    ) -> None:
+    def test_non_redis_exception_propagates(self, mock_get_cached: MagicMock) -> None:
         """Except clause stays narrow — unrelated errors still bubble up."""
         from ee.onyx.utils.tier import get_tier
 

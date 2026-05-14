@@ -592,7 +592,9 @@ export default function ChatPreferencesPage() {
                   withLabel
                 >
                   <Switch
-                    checked={businessTier ? s.search_ui_enabled ?? true : false}
+                    checked={
+                      businessTier ? (s.search_ui_enabled ?? true) : false
+                    }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
                     }}

@@ -57,15 +57,12 @@ export function AccessTypeForm({
       ? "private"
       : "public";
 
-  useEffect(
-    () => {
-      if (!access_type.value) access_type_helpers.setValue(defaultAccess);
-    },
-    [
-      // Only run this effect once when the component mounts
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    ]
-  );
+  useEffect(() => {
+    if (!access_type.value) access_type_helpers.setValue(defaultAccess);
+  }, [
+    // Only run this effect once when the component mounts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]);
 
   // Build options in display order: Private, Public, Auto Sync.
   const options: {
