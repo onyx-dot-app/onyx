@@ -19,6 +19,7 @@ permissions:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       python: ${{ steps.filter.outputs.python || 'true' }}
     steps:
