@@ -57,14 +57,31 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
-def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
-    """Resolve ``hostname`` via DNS and return the first address that is
-    loopback or unspecified, or None if none of them are.
+def _is_always_blocked_ip(
+    ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """True if ``ip_obj`` falls into a class that must be blocked even when
+    private networks are otherwise allowed.
 
-    Used on the ``allow_private_network=True`` path to maintain the loopback
-    floor for DNS names — a hostname like ``loopback.attacker.com`` that
-    resolves to ``127.0.0.1`` must not be reachable just because private
-    networks are otherwise allowed. RFC1918 / link-local results are
+    - Loopback (127.0.0.0/8, ::1): the application host's own loopback.
+      Reaching it exposes admin APIs, sidecars, etc.
+    - Unspecified (0.0.0.0, ::): commonly aliased to loopback by the kernel.
+    - Link-local (169.254.0.0/16, fe80::/10): cloud-metadata endpoints
+      (169.254.169.254 on AWS/GCP/Azure) live here. Opting into RFC1918
+      should NEVER open up IMDS — that's a credential exfiltration path.
+    """
+    return ip_obj.is_loopback or ip_obj.is_unspecified or ip_obj.is_link_local
+
+
+def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
+    """Resolve ``hostname`` via DNS and return the first address in an
+    always-blocked class (loopback / unspecified / link-local), or None.
+
+    Used on the ``allow_private_network=True`` path to maintain the
+    always-blocked floor for DNS names — e.g. an attacker-controlled
+    record like ``loopback.attacker.com`` → 127.0.0.1, or
+    ``imds.attacker.com`` → 169.254.169.254, must not be reachable just
+    because private networks are otherwise allowed. RFC1918 results are
     *not* flagged here; opting into those is the whole point of the flag.
 
     Returns None on DNS failure — the actual request will fail naturally
@@ -83,7 +100,7 @@ def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
             ip_obj = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if ip_obj.is_loopback or ip_obj.is_unspecified:
+        if _is_always_blocked_ip(ip_obj):
             return ip_str
     return None
 
@@ -218,31 +235,33 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
-    # Loopback (127.0.0.0/8, ::1) and unspecified (0.0.0.0, ::) addresses
-    # are *always* blocked, even when allow_private_network=True. Opting into
-    # private networks means RFC1918 / link-local services in the operator's
-    # VPC — never the application host's own loopback, which would expose
-    # admin APIs, sidecars, etc. running on the same machine.
+    # Loopback (127.0.0.0/8, ::1), unspecified (0.0.0.0, ::), and link-local
+    # (169.254.0.0/16, fe80::/10) addresses are *always* blocked, even when
+    # allow_private_network=True. Opting into private networks means RFC1918
+    # services in the operator's VPC — never the application host's own
+    # loopback (admin APIs, sidecars) or the cloud-metadata endpoints
+    # (IAM credential exfiltration on AWS/GCP/Azure GovCloud, etc.).
     try:
         ip_obj = ipaddress.ip_address(hostname)
     except ValueError:
         # Hostname is a DNS name. On the opt-out path, _validate_and_resolve_url
-        # would otherwise be skipped — but the always-blocked floor still needs
-        # to apply, or a name like `loopback.attacker.com` resolving to
-        # 127.0.0.1 would slip through. RFC1918/link-local results stay
-        # allowed since opting in is the whole point of the flag.
+        # would otherwise be skipped — but the always-blocked floor still
+        # needs to apply, or names like `loopback.attacker.com` → 127.0.0.1
+        # or `imds.attacker.com` → 169.254.169.254 would slip through. RFC1918
+        # results stay allowed since opting in is the whole point of the flag.
         if allow_private_network:
             blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
             if blocked_ip is not None:
                 raise SSRFException(
                     f"Hostname '{parsed.hostname}' resolves to loopback/"
-                    f"unspecified IP '{blocked_ip}'. Access is not allowed."
+                    f"unspecified/link-local IP '{blocked_ip}'. Access is "
+                    f"not allowed."
                 )
     else:
-        if ip_obj.is_loopback or ip_obj.is_unspecified:
+        if _is_always_blocked_ip(ip_obj):
             raise SSRFException(
-                f"Access to loopback/unspecified IP '{parsed.hostname}' "
-                f"is not allowed."
+                f"Access to loopback/unspecified/link-local IP "
+                f"'{parsed.hostname}' is not allowed."
             )
 
     if not allow_private_network:

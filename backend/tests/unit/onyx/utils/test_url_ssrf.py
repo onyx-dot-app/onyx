@@ -327,15 +327,16 @@ class TestSsrfSafeGetAllowPrivateNetwork:
 
     def test_allows_hostname_resolving_to_private_ip_when_enabled(self) -> None:
         """Split-horizon DNS (e.g. js.jpl.nasa.gov inside JPL's VPC) should
-        succeed when the operator has opted out of the private-IP guard."""
+        succeed when the operator has opted out of the private-IP guard.
+
+        DNS is still resolved on the opt-out path — _hostname_resolves_to_
+        always_blocked_ip checks for the loopback/unspecified/link-local
+        floor — but RFC1918 results pass through cleanly.
+        """
         mock_response = MagicMock()
         mock_response.is_redirect = False
 
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
-            # validate_outbound_http_url with allow_private_network=True
-            # short-circuits before resolving, so DNS shouldn't be hit, but
-            # set up a private-IP answer to confirm the bypass still works
-            # even when resolution would otherwise flag the URL.
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 443))]
 
             with patch("onyx.utils.url.requests.get") as mock_get:
@@ -463,6 +464,21 @@ class TestValidateOutboundHttpUrl:
         with pytest.raises(SSRFException, match="loopback/unspecified"):
             validate_outbound_http_url("http://0.0.0.0/", allow_private_network=True)
 
+    def test_blocks_link_local_ipv4_literal_when_private_is_enabled(self) -> None:
+        """Link-local IPv4 (169.254.0.0/16) is always blocked — covers the
+        cloud-metadata range. 169.254.169.254 itself is also in
+        BLOCKED_HOSTNAMES, but other link-local literals (e.g. 169.254.0.1)
+        are not, so the IP-class check is what stops them."""
+        with pytest.raises(SSRFException, match="loopback/unspecified/link-local"):
+            validate_outbound_http_url(
+                "http://169.254.0.1/", allow_private_network=True
+            )
+
+    def test_blocks_link_local_ipv6_literal_when_private_is_enabled(self) -> None:
+        """Link-local IPv6 (fe80::/10) is always blocked."""
+        with pytest.raises(SSRFException, match="loopback/unspecified/link-local"):
+            validate_outbound_http_url("http://[fe80::1]/", allow_private_network=True)
+
     def test_blocks_dns_name_resolving_to_loopback_when_private_is_enabled(
         self,
     ) -> None:
@@ -496,6 +512,33 @@ class TestValidateOutboundHttpUrl:
             with pytest.raises(SSRFException, match="resolves to loopback"):
                 validate_outbound_http_url(
                     "http://unspecified.attacker.com/",
+                    allow_private_network=True,
+                )
+
+    def test_blocks_dns_name_resolving_to_aws_metadata_when_private_is_enabled(
+        self,
+    ) -> None:
+        """The canonical SSRF attack: an attacker-controlled DNS record
+        pointing at 169.254.169.254 must not let the LLM tool exfiltrate
+        IAM credentials from a cloud-hosted Onyx deployment, even when the
+        operator has opted into private networks for their internal docs."""
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("169.254.169.254", 80))]
+            with pytest.raises(SSRFException, match="link-local"):
+                validate_outbound_http_url(
+                    "http://imds.attacker.com/latest/meta-data/iam/",
+                    allow_private_network=True,
+                )
+
+    def test_blocks_dns_name_resolving_to_link_local_when_private_is_enabled(
+        self,
+    ) -> None:
+        """Any link-local IPv4 (169.254.0.0/16), not just the metadata IP."""
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("169.254.42.42", 80))]
+            with pytest.raises(SSRFException, match="link-local"):
+                validate_outbound_http_url(
+                    "http://link-local.attacker.com/",
                     allow_private_network=True,
                 )
 
