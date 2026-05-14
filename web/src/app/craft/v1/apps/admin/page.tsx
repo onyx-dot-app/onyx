@@ -90,11 +90,8 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
     );
   const enabled = existingApp?.enabled ?? false;
 
-  /**
-   * Toggle `enabled` on an existing row without touching credentials.
-   * Used by the Enable/Disable buttons; the Configure modal handles
-   * credential edits separately.
-   */
+  // Enable/Disable toggle preserves credentials — separate from the
+  // Configure modal which edits creds.
   async function setEnabled(nextEnabled: boolean) {
     if (!existingApp) return;
     setIsMutating(true);
@@ -124,13 +121,6 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
 
   const Logo = preset.logo;
 
-  // Three rendering states, in order of "needs admin attention":
-  //  1. Not configured at all → only the Configure button.
-  //  2. Configured but disabled → Edit credentials + Enable.
-  //  3. Configured and enabled → Edit credentials + Disable.
-  // Splitting Configure (creds) from Enable/Disable (toggle) means
-  // admins can pause a provider without losing the client_id/secret
-  // they typed in.
   let statusLine: string;
   let rightSide: React.ReactNode;
   if (!hasCredentials) {

@@ -24,16 +24,11 @@ export default function ExternalAppsOAuthCallbackPage() {
   const [status, setStatus] = useState<Status>("exchanging");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // OAuth `code` is single-use: Slack invalidates it on first
-  // redemption, so a second POST gets `invalid_code`. React Strict
-  // Mode (and any retry / remount) would otherwise fire the exchange
-  // twice. A ref survives effect re-runs within the same component
-  // mount and gates the network call to exactly one.
+  // OAuth `code` is single-use — gate against React Strict Mode and
+  // remount-induced double exchanges, which would 400 on the second.
   const hasExchanged = useRef(false);
 
   useEffect(() => {
-    // Slack appends ?error=access_denied (or similar) when a user
-    // cancels consent. Surface that instead of trying the exchange.
     if (slackError) {
       setStatus("error");
       setErrorMessage(`OAuth was cancelled or denied: ${slackError}`);
@@ -63,10 +58,7 @@ export default function ExternalAppsOAuthCallbackPage() {
           return;
         }
         setStatus("success");
-        // Invalidate the user-apps SWR cache so /craft/v1/apps refetches
-        // and shows "Connected" instead of "Connect" when we land there.
         await globalMutate(SWR_KEYS.buildExternalApps);
-        // Brief pause so the user sees the success state before redirect.
         setTimeout(() => router.push(CRAFT_APPS_PATH as Route), 800);
       } catch (e) {
         setStatus("error");

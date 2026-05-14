@@ -330,13 +330,8 @@ class PptxPreviewResponse(BaseModel):
 
 # ===== External App Models =====
 class UpsertExternalAppRequest(BaseModel):
-    """Create or update an external app.
-
-    If `id` is provided, the row with that id is updated; otherwise a new
-    row is inserted. `upstream_url_patterns` is a list of regex patterns
-    matched by the egress proxy against outbound request URLs. `enabled`
-    is the kill switch the proxy checks before injecting credentials.
-    """
+    """Create (no id) or update (id set). `upstream_url_patterns` are
+    regex patterns the egress proxy matches against outbound URLs."""
 
     id: int | None = None
     name: str
@@ -349,8 +344,6 @@ class UpsertExternalAppRequest(BaseModel):
 
 
 class ExternalAppAdminResponse(BaseModel):
-    """Admin-facing view of an external app (includes org credentials)."""
-
     id: int
     name: str
     description: str
@@ -362,24 +355,12 @@ class ExternalAppAdminResponse(BaseModel):
 
 
 class UpsertUserCredentialsRequest(BaseModel):
-    """User-supplied credentials for a specific external app."""
-
     user_credentials: dict[str, Any]
 
 
 class ExternalAppUserResponse(BaseModel):
-    """User-facing view of an external app.
-
-    `credential_keys` are the parameter names the calling user must supply —
-    derived from the app's `auth_template` minus whatever the organization
-    has already filled in. `credential_values` are the values the user has
-    previously stored for those keys (intersection — stale keys from
-    deleted/migrated templates are filtered out). `authenticated` is true
-    iff `credential_values` covers every key in `credential_keys`.
-
-    Organization credentials and the raw auth template are intentionally
-    omitted — those are admin-only.
-    """
+    """User-facing view — strips admin-only fields (auth_template,
+    organization_credentials)."""
 
     id: int
     name: str
@@ -390,24 +371,14 @@ class ExternalAppUserResponse(BaseModel):
 
 
 class OAuthStartResponse(BaseModel):
-    """Returned by `GET /apps/{id}/oauth/start`. The frontend redirects
-    the browser to `authorize_url` to begin the consent flow."""
-
     authorize_url: str
 
 
 class OAuthCallbackRequest(BaseModel):
-    """POSTed to `/apps/oauth/callback` by the frontend callback page
-    after the provider redirects back with `code` + `state` in the URL.
-    """
-
     code: str
     state: str
 
 
 class OAuthCallbackResponse(BaseModel):
-    """Returned by `/apps/oauth/callback` after a successful
-    code-for-tokens exchange and credential persistence."""
-
     success: bool
     external_app_id: int
