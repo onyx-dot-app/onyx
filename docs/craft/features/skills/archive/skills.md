@@ -1,3 +1,5 @@
+> **Archived.** Superseded by `../skills-requirements.md`. The "what is a skill / built-in vs custom / V1 scope" content here is restated cleanly there. Kept for historical context only — do not use as an implementation reference.
+
 # Skills System
 
 ## Objective

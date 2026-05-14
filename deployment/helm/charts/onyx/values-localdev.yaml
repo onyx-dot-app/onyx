@@ -1,0 +1,222 @@
+# =============================================================================
+# ONYX LOCAL DEV — laptop-friendly overlay for kind / minikube / k3d clusters
+# =============================================================================
+# Use this overlay when you are *developing Onyx itself* against a local
+# Kubernetes cluster (kind/minikube/k3d). Pairs with telepresence intercept so
+# you can run api_server / celery / web from your vscode debugger while the
+# rest of the stack (postgres, redis, opensearch, vespa, minio, sandbox pods)
+# runs in the cluster.
+#
+# What this overlay turns off vs. values.yaml:
+#   - Ingress / nginx LoadBalancer — port-forward instead.
+#   - Letsencrypt — pointless without a real domain.
+#   - Monitoring (grafana dashboards, ServiceMonitor) — adds CRD requirements
+#     and you don't need it on a laptop.
+#   - Code interpreter — separate service, opt in only if you're working on it.
+#   - Shrunk resource requests and PVC sizes across the board so the stack
+#     fits on a reasonable laptop (target: <16 GB RAM, <8 CPU, <30 GB disk).
+#
+# Data persistence:
+#   Persistence stays ENABLED for postgres, opensearch, vespa, minio. With
+#   kind, PVCs are backed by host-paths inside the kind node container — they
+#   survive `helm upgrade`, `kubectl rollout restart`, and `docker restart`,
+#   so your dev data (user accounts, indexed docs, file store) is preserved
+#   across normal iteration. Data is destroyed only by `kind delete cluster`
+#   (i.e. the full teardown path of k8s-down.sh).
+#
+# What this overlay does NOT do:
+#   - It does not set any secrets. You must still supply
+#     auth.opensearch.values.opensearch_admin_password on first install.
+#   - It does not point images at locally-built tags. Use --set api.image.tag=
+#     etc. if you're iterating on backend / sandbox images via `kind load`.
+#
+# Usage:
+#   helm install onyx ./deployment/helm/charts/onyx \
+#     -n onyx \
+#     -f ./deployment/helm/charts/onyx/values-localdev.yaml \
+#     --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
+#
+# See docs/dev/local-kubernetes.md for the full workflow.
+# =============================================================================
+
+# ---- Persistence: enabled, but shrunk to laptop-friendly sizes ----
+
+postgresql:
+  cluster:
+    storage:
+      size: 2Gi   # CNPG always uses a PVC; 2 Gi is plenty for dev
+
+vespa:
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+opensearch:
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  opensearchJavaOpts: "-Xmx1g -Xms1g"
+
+minio:
+  persistence:
+    enabled: true
+    size: 5Gi
+  # The minio chart defaults to a 16 GiB memory request, which alone blows the
+  # laptop budget. Cap it to something reasonable for dev.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# ---- Networking: skip ingress, port-forward instead ----
+
+ingress:
+  enabled: false
+
+letsencrypt:
+  enabled: false
+
+nginx:
+  controller:
+    service:
+      # ClusterIP avoids spinning up a LoadBalancer (kind has no LB provider
+      # by default; port-forward to nginx for browser access).
+      type: ClusterIP
+
+# ---- Monitoring: off ----
+
+monitoring:
+  grafana:
+    dashboards:
+      enabled: false
+  serviceMonitors:
+    enabled: false
+
+# ---- Code interpreter: opt-in only ----
+
+codeInterpreter:
+  enabled: false
+
+# ---- Application pods: scaled down ----
+#
+# In the local-dev workflow, you run api_server / celery / web / mcp in your
+# vscode debugger on the host (via `telepresence intercept`). The chart's own
+# Deployments are scaled to 0 so they don't consume resources, crash-loop, or
+# confuse the cluster state — EXCEPT api_server, which stays at 1 because
+# `telepresence intercept onyx-api-server` needs a Deployment with a running
+# pod template to inject the traffic-agent sidecar into. The api-server pod
+# itself can CrashLoopBackOff — that's fine, intercept doesn't care about the
+# main container's health.
+
+api:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+webserver:
+  replicaCount: 0
+
+celery_beat:
+  replicaCount: 0
+
+celery_worker_primary:
+  replicaCount: 0
+
+celery_worker_light:
+  replicaCount: 0
+
+celery_worker_heavy:
+  replicaCount: 0
+
+celery_worker_docfetching:
+  replicaCount: 0
+
+celery_worker_docprocessing:
+  replicaCount: 0
+
+celery_worker_user_file_processing:
+  replicaCount: 0
+
+celery_worker_scheduled_tasks:
+  replicaCount: 0
+
+celery_worker_monitoring:
+  replicaCount: 0
+
+# slackbot / discordbot / mcpServer use .enabled gates (not replicaCount) —
+# setting replicaCount=0 doesn't suppress them.
+slackbot:
+  enabled: false
+
+discordbot:
+  enabled: false
+
+mcpServer:
+  enabled: false
+
+inferenceCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+indexCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+redis:
+  redisStandalone:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+# REDIS_HOST override: the chart's configmap template hardcodes
+# `<release>-master` (line 22 of templates/configmap.yaml), which assumes a
+# RedisReplication topology. The chart actually provisions standalone Redis,
+# whose service is named `<release>` (no -master suffix). The default value
+# resolves to a non-existent host and api_server crashes with DNS errors.
+configMap:
+  REDIS_HOST: onyx

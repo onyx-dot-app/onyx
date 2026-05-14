@@ -41,6 +41,13 @@
       }
     },
     {
+      "name": "Web / Model / API (k8s)",
+      "configurations": ["Web Server", "Model Server", "API Server (k8s)"],
+      "presentation": {
+        "group": "1"
+      }
+    },
+    {
       "name": "Celery",
       "configurations": [
         "Celery primary",
@@ -119,6 +126,26 @@
         "group": "2"
       },
       "consoleTitle": "API Server Console",
+      "justMyCode": false
+    },
+    {
+      "name": "API Server (k8s)",
+      "consoleName": "API Server (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "API Server (k8s) Console",
       "justMyCode": false
     },
     {

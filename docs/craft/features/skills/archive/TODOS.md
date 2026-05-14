@@ -1,3 +1,5 @@
+> **Archived.** This task board references `skills_plan.md` (also archived) and tracks tasks against the old per-session-materialization / push-pipeline design. The forward-looking plan now lives in `../skills-api-plan.md`; the requirements baseline is `../skills-requirements.md`; the implemented DB layer is documented in `../skills-db-layer-status.md`. The single decisions-log entry at the bottom of this file ("2026-05-13: Phase 1 work is being split across multiple stacked PRs branching off `skills-phase-1`") is preserved here for traceability. Kept for historical context only — do not use as an implementation reference.
+
 # Skills V1 — Live Task Board
 
 **Source of truth for execution status.** The design lives in [`skills_plan.md`](./skills_plan.md). The current state of work lives here.

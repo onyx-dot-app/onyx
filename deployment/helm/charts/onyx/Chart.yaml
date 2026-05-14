@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.4.50
+version: 0.4.51
 appVersion: latest
 annotations:
   category: Productivity
@@ -36,6 +36,13 @@ dependencies:
     repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
     alias: nginx
+  # redis-operator installs the Redis CRD that the 'redis' chart's Custom
+  # Resource binds to. Without this, a fresh cluster fails with "no matches
+  # for kind Redis" because the CRD is missing.
+  - name: redis-operator
+    version: 0.24.0
+    repository: https://ot-container-kit.github.io/helm-charts
+    condition: redis.enabled
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts

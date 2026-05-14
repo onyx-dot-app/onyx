@@ -1,3 +1,5 @@
+> **Archived.** Superseded by `../skills-requirements.md` (what V1 must do) and `../skills-api-plan.md` (how the API layer ships). The sandbox-delivery design here (per-session materialization + event-driven push pipeline) has been replaced by the S3-mounted-bucket model described in `../skills-requirements.md` §5. Kept for historical context only — do not use as an implementation reference.
+
 # Skills V1 — PRD & Implementation Spec
 
 **Status**: design · **Source plan**: `docs/craft/features/skills.md` · **Owner**: Roshan
