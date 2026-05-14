@@ -146,6 +146,7 @@ function buildItems(
   // 7. Organization (admin only)
   if (!isCurator) {
     addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SYSTEM_BANNER);
     add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);

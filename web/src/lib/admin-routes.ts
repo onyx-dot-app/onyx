@@ -6,6 +6,7 @@ import {
   SvgShareWebhook,
   SvgBarChart,
   SvgBookOpen,
+  SvgBullhorn,
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
@@ -208,6 +209,12 @@ export const ADMIN_ROUTES = {
     icon: SvgPaintBrush,
     title: "Appearance & Theming",
     sidebarLabel: "Appearance & Theming",
+  },
+  SYSTEM_BANNER: {
+    path: "/admin/configuration/banner",
+    icon: SvgBullhorn,
+    title: "System Banner",
+    sidebarLabel: "System Banner",
   },
   BILLING: {
     path: "/admin/billing",
