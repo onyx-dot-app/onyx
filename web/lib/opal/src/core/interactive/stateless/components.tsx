@@ -21,8 +21,9 @@ type InteractiveStatelessInteraction = "rest" | "hover" | "active";
 /**
  * Props for {@link InteractiveStateless}.
  */
-interface InteractiveStatelessProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
+interface InteractiveStatelessProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLElement>
+> {
   ref?: React.Ref<HTMLElement>;
 
   /**

@@ -7,11 +7,10 @@ import { guardPortalClick } from "@opal/core/interactive/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-interface InteractiveSimpleProps
-  extends Omit<
-    React.HTMLAttributes<HTMLElement>,
-    "className" | "style" | "color"
-  > {
+interface InteractiveSimpleProps extends Omit<
+  React.HTMLAttributes<HTMLElement>,
+  "className" | "style" | "color"
+> {
   ref?: React.Ref<HTMLElement>;
 
   /**

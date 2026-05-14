@@ -107,7 +107,7 @@ export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
   const providerLabel =
     category === "search"
       ? getSearchProviderDisplayLabel(providerType, provider?.name)
-      : CONTENT_PROVIDER_DETAILS[providerType]?.label ?? providerType;
+      : (CONTENT_PROVIDER_DETAILS[providerType]?.label ?? providerType);
 
   const icon =
     category === "search"
@@ -124,7 +124,7 @@ export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
       : undefined;
 
   const initialApiKey =
-    provider && provider.id > 0 ? provider.masked_api_key ?? "" : "";
+    provider && provider.id > 0 ? (provider.masked_api_key ?? "") : "";
 
   const initialConfig = configField
     ? (category === "search"

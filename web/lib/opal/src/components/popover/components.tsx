@@ -117,10 +117,9 @@ const widthClasses: Record<PopoverWidths, string> = {
   "2xl": "w-100",
   trigger: "w-(--radix-popover-trigger-width)",
 };
-interface PopoverContentProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
-  > {
+interface PopoverContentProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+> {
   width?: PopoverWidths;
   /** Portal container. Set to a DOM element to render inside it (e.g. inside a modal). */
   container?: HTMLElement | null;

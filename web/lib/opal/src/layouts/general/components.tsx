@@ -36,8 +36,9 @@ const heightClassmap: Record<Exclude<Length, number>, string> = {
   full: "h-full min-h-0",
 };
 
-interface SectionProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface SectionProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   className?: string;
   flexDirection?: FlexDirection;
   justifyContent?: JustifyContent;

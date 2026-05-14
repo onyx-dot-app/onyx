@@ -11,8 +11,9 @@ import { SvgHandle } from "@opal/icons";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface TableRowProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLTableRowElement>> {
+export interface TableRowProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLTableRowElement>
+> {
   ref?: React.Ref<HTMLTableRowElement>;
   selected?: boolean;
   /** Disables interaction and applies disabled styling */

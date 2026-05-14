@@ -4,8 +4,9 @@ import React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import { cn } from "@opal/utils";
 
-interface SeparatorProps
-  extends React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root> {
+interface SeparatorProps extends React.ComponentPropsWithoutRef<
+  typeof SeparatorPrimitive.Root
+> {
   noPadding?: boolean;
   /** Custom horizontal padding in rem. Overrides the default padding. */
   paddingXRem?: number;

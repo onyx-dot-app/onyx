@@ -26,8 +26,10 @@ type PaginationSize = "lg" | "md" | "sm";
 /**
  * Compact `currentPage / totalPages` display with prev/next arrows.
  */
-interface SimplePaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface SimplePaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant: "simple";
   /** The 1-based current page number. */
   currentPage: number;
@@ -47,8 +49,10 @@ interface SimplePaginationProps
  * Item-count display (`X~Y of Z`) with prev/next arrows.
  * Designed for table footers.
  */
-interface CountPaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface CountPaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant: "count";
   /** The 1-based current page number. */
   currentPage: number;
@@ -72,8 +76,10 @@ interface CountPaginationProps
  * Numbered page buttons with ellipsis truncation for large page counts.
  * This is the default variant.
  */
-interface ListPaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface ListPaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant?: "list";
   /** The 1-based current page number. */
   currentPage: number;
