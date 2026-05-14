@@ -280,6 +280,10 @@ Now, visit http://localhost:3000 in your browser. You should see the Onyx onboar
 
 You've successfully set up a local Onyx instance!
 
+### Running on a Local Kubernetes Cluster
+
+For Onyx Craft development with `SANDBOX_BACKEND=kubernetes`, see [Local Kubernetes Development](/docs/dev/local-kubernetes.md).
+
 ### Running in Docker
 
 You can run the full Onyx application stack from pre-built images including all external software dependencies.
