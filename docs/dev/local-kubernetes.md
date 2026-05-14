@@ -5,23 +5,18 @@ attached to api_server / celery / web.
 
 ## When you need this
 
-Most Onyx development does **not** need this. The default path in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) — docker-compose deps + vscode
-debugger + `SANDBOX_BACKEND=local` — is faster and covers ~90% of the codebase.
-
-Today the only feature that requires this setup is **Onyx Craft (build mode)**
-with `SANDBOX_BACKEND=kubernetes`: sandboxes are real pods (services, PVCs,
-in-pod daemons, cluster-internal DNS), so any work touching the pod spec, the
-sandbox image, or the cluster-side push / auth paths must be exercised on a
-real cluster.
-
-If you're not working on Craft, stop here.
+The default path in [CONTRIBUTING.md](/CONTRIBUTING.md) (docker-compose deps +
+vscode debugger + `SANDBOX_BACKEND=local`) is faster and covers ~90% of the
+codebase. Use it unless you're working on **Onyx Craft (build mode)** with
+`SANDBOX_BACKEND=kubernetes`: sandboxes are real pods, so anything touching
+the pod spec, the sandbox image, or the cluster-side push / auth paths must
+be exercised on a real cluster.
 
 ## Prerequisites
 
-Assumes you already have the CONTRIBUTING.md prereqs (Python 3.11, uv,
-Node.js 22, the venv, `.vscode/.env`). Docker Desktop must be running with
-at least 8 CPU / 16 GB allocated.
+Builds on the CONTRIBUTING.md prereqs (Python 3.11, uv, Node.js 22, the venv,
+`.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
+allocated.
 
 ```bash
 brew install kind helm kubectl
@@ -31,11 +26,10 @@ curl -fLo /opt/homebrew/bin/telepresence \
 chmod +x /opt/homebrew/bin/telepresence
 ```
 
-The telepresence network daemon needs sudo to set up DNS resolvers and a VPN
-interface. vscode's preLaunchTask can't answer an interactive sudo prompt, so
-pick one:
+The telepresence network daemon needs sudo for DNS + VPN setup. vscode's
+preLaunchTask can't answer an interactive prompt, so pick one:
 
-**A. Passwordless sudo (set once, never prompted)**
+**A. Passwordless sudo (set once)**
 
 ```bash
 echo "$USER ALL=(ALL) NOPASSWD: /opt/homebrew/bin/telepresence" \
@@ -45,9 +39,7 @@ sudo chmod 0440 /etc/sudoers.d/telepresence
 
 **B. Manual `connect` once per dev session**
 
-Run this in a terminal at the start of each session (after reboot or
-`telepresence quit`). You'll get one sudo prompt; the daemon stays alive
-afterward and subsequent preLaunchTask runs need no further sudo:
+One sudo prompt at session start; the daemon stays alive afterward:
 
 ```bash
 telepresence connect -n onyx
@@ -55,35 +47,37 @@ telepresence connect -n onyx
 
 ## One-time setup
 
-### 1. Bring up the cluster
+Bring up the cluster:
 
 ```bash
 deployment/helm/dev/k8s-up.sh
 ```
 
 Or run the **`k8s: cluster up`** vscode task. The script is idempotent and
-refuses to run unless your kubectl context is exactly `kind-onyx-dev` (guards
-against pointing at prod EKS, since the `onyx` namespace exists there too).
+refuses to run unless your kubectl context is exactly `kind-onyx-dev` (the
+`onyx` namespace also exists in prod EKS).
 
-Watch pods:
+Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
 
 ```bash
 kubectl -n onyx get pods -w
 ```
 
-Vespa and CNPG-postgres take a minute or two on first boot.
-
-Install the in-cluster traffic-manager once per cluster:
+Install the in-cluster telepresence traffic-manager (once per cluster):
 
 ```bash
 telepresence helm install
 ```
 
-#### Known issue: CNPG operator on Docker Desktop k8s
+The chart pins images to the `:edge` tag in
+[`values-localdev.yaml`](/deployment/helm/charts/onyx/values-localdev.yaml)
+with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
+rather than the released `:latest`.
 
-CloudNativePG fails with `unable to setup PKI infrastructure: no operator
-deployment found` against Docker Desktop's bundled kubernetes. Use kind (the
-default in `k8s-up.sh`) or a deployed dev cluster (`st-dev`).
+**Known issue: CNPG operator on Docker Desktop k8s.** CloudNativePG fails
+with `unable to setup PKI infrastructure: no operator deployment found`
+against Docker Desktop's bundled kubernetes. Use kind (the default in
+`k8s-up.sh`) or a deployed dev cluster (`st-dev`).
 
 ## Daily workflow
 
@@ -92,12 +86,11 @@ default in `k8s-up.sh`) or a deployed dev cluster (`st-dev`).
 All cluster + telepresence commands are exposed as tasks (Cmd+Shift+P → Tasks:
 Run Task):
 
-- `k8s: cluster up`
-- `k8s: cluster down (full teardown)`
-- `k8s: helm uninstall (keep cluster + data)`
-- `k8s: telepresence connect`
-- `k8s: telepresence intercept api_server`
-- `k8s: telepresence quit`
+- `k8s: cluster up` — bring up or reconcile the cluster.
+- `k8s: pause cluster (data preserved)` — stop the kind node container at end of day.
+- `k8s: resume cluster` — start it back up; kubelet reconciles pods.
+- `k8s: cluster down (full teardown)` — delete the kind cluster and all PVC data.
+- `k8s: telepresence connect`, `... intercept api_server`, `... quit`.
 
 ### Run your local processes
 
@@ -113,17 +106,17 @@ The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
 pod-selector auth work transparently.
 
-Celery workers don't get intercepted (they pull from redis, no inbound HTTP).
-They reach in-cluster redis via telepresence's DNS bridge. The chart scales
-in-cluster celery to 0 so your local workers are the only consumers.
+Celery workers aren't intercepted (no inbound HTTP); they reach in-cluster
+redis via telepresence's DNS bridge. The chart scales in-cluster celery to 0
+so your local workers are the only consumers.
 
-Both api and celery get hot reload via `watchfiles.run_process`
-(`backend/scripts/dev_celery_reload.py`) and breakpoints work in both —
-debugpy follows the reloader's fork via `subProcess: true`.
+Both api and celery hot-reload — api via uvicorn's `--reload`, celery via
+`watchfiles.run_process` (`backend/scripts/dev_celery_reload.py`); breakpoints
+work in both because debugpy follows the reloader's fork (`subProcess: true`).
 
-The individual `Celery <name> (k8s)` configs are hidden from the picker
-(`presentation.hidden: true`). Surface them by flipping `hidden` to `false`
-in `.vscode/launch.json` if you need a single worker.
+Individual `Celery <name> (k8s)` configs are hidden from the picker
+(`presentation.hidden: true`); flip `hidden` to `false` in
+`.vscode/launch.json` to run a single worker.
 
 Every `(k8s)` profile sources `.vscode/.env.k8s` (written by
 `telepresence intercept --env-file`) and sets `SANDBOX_BACKEND=kubernetes`.
@@ -162,8 +155,20 @@ kubectl -n onyx rollout restart deployment/onyx-api-server
 ### Avoid this loop when you can
 
 For logic that doesn't depend on cluster-only behavior (safe-extract, push
-wire format, tarball round-trips), drive it from unit / external-dependency-unit
-tests against a temp dir. See `backend/tests/README.md`.
+wire format, tarball round-trips), drive it from unit /
+external-dependency-unit tests against a temp dir. See
+[`backend/tests/README.md`](/backend/tests/README.md).
+
+### End of day
+
+Run **`k8s: pause cluster`** (or `docker stop onyx-dev-control-plane`) to stop
+the kind node container. PVC data lives inside that container, so postgres,
+redis, opensearch, vespa, and minio state all survive. Resume with
+**`k8s: resume cluster`** — the kubelet reconciles pods automatically.
+
+Reach for **`k8s: cluster down (full teardown)`** only when you want a clean
+slate: it runs `kind delete cluster`, destroying the node container and all
+PVC data.
 
 ## Data persistence
 
@@ -175,8 +180,8 @@ are host-paths inside the kind node container.
 | `helm upgrade` | yes |
 | `kubectl rollout restart` | yes |
 | Docker Desktop restart / laptop reboot | yes |
-| `k8s-down.sh --keep-cluster` | yes |
-| `k8s-down.sh` (full teardown) | no |
+| `k8s: pause cluster` / `docker stop` of the node container | yes |
+| `k8s: cluster down` / `k8s-down.sh` (full teardown) | no |
 
 Clean slate without nuking the cluster:
 
@@ -185,23 +190,15 @@ kubectl -n onyx delete pvc --all
 deployment/helm/dev/k8s-up.sh
 ```
 
-## Tear-down
-
-```bash
-deployment/helm/dev/k8s-down.sh                 # wipe everything
-deployment/helm/dev/k8s-down.sh --keep-cluster  # uninstall Onyx, keep data
-telepresence quit                                # stop the host-side daemon
-```
-
 ## `.env.k8s.local`
 
 `.env.k8s` is regenerated each preLaunchTask run by `telepresence intercept
 --env-file`; `.env.k8s.local` is then appended (last-wins). Neither is
 checked in.
 
-Start `.env.k8s.local` from your existing `.vscode/.env`, then **remove** any
-keys that should come from the cluster — overriding these breaks DNS or auth
-into cluster services:
+Start `.env.k8s.local` from your `.vscode/.env`, then **remove** any keys
+that should come from the cluster — overriding these breaks DNS or auth into
+cluster services:
 
 - `POSTGRES_*`, `REDIS_*`, `OPENSEARCH_*`, `VESPA_HOST`
 - `S3_*` (MinIO endpoint + creds)
@@ -217,8 +214,8 @@ password-rule relaxations, feature flags, OAuth client IDs.
 
 ## References
 
-- [CONTRIBUTING.md — Development Setup](../../CONTRIBUTING.md#development-setup)
-- [deployment/helm/README.md](../../deployment/helm/README.md)
-- [backend/onyx/server/features/build/sandbox/README.md](../../backend/onyx/server/features/build/sandbox/README.md)
+- [CONTRIBUTING.md — Development Setup](/CONTRIBUTING.md#development-setup)
+- [deployment/helm/README.md](/deployment/helm/README.md)
+- [backend/onyx/server/features/build/sandbox/README.md](/backend/onyx/server/features/build/sandbox/README.md)
 - [Telepresence docs](https://www.telepresence.io/docs/)
 - [kind docs](https://kind.sigs.k8s.io/)

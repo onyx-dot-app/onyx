@@ -1,6 +1,11 @@
 # Default values for onyx.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+#
+# Companion overlays in this directory:
+#   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
+#   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
+#                           /docs/dev/local-kubernetes.md for the full workflow.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)

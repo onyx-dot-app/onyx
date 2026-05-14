@@ -135,14 +135,24 @@
       "problemMatcher": []
     },
     {
-      "label": "k8s: helm uninstall (keep cluster + data)",
-      "detail": "Helm-uninstall Onyx but keep the kind cluster running. PVCs preserved.",
+      "label": "k8s: pause cluster (data preserved)",
+      "detail": "Stop the kind node container. All cluster state and PVC data survive; resume with 'k8s: resume cluster'.",
       "type": "shell",
-      "command": "${workspaceFolder}/deployment/helm/dev/k8s-down.sh",
-      "args": ["--keep-cluster"],
-      "options": {
-        "cwd": "${workspaceFolder}"
+      "command": "docker",
+      "args": ["stop", "onyx-dev-control-plane"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
       },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: resume cluster",
+      "detail": "Start the kind node container previously paused with 'k8s: pause cluster'. Kubelet reconciles pods automatically.",
+      "type": "shell",
+      "command": "docker",
+      "args": ["start", "onyx-dev-control-plane"],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",

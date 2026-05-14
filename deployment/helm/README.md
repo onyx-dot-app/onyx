@@ -1,3 +1,18 @@
+# Recent chart changes (0.4.52)
+
+If you are upgrading from an earlier 0.4.x release, note:
+
+* **Redis** — the chart now bundles the `redis-operator` subchart alongside the
+  `redis` subchart. The operator installs the CRD that the Redis CR binds to,
+  so `helm install` works on a clean cluster without a separate CRD step.
+* **PostgreSQL** — the CloudNativePG `Cluster` CR is now rendered from
+  `templates/postgres-cluster.yaml` and configured via `postgresql.cluster.*`
+  in values, rather than being applied out-of-band.
+* **REDIS_HOST** — the configmap no longer appends `-master` to the redis
+  service name. If you previously overrode `REDIS_HOST` or had clients that
+  hard-coded the `-master` suffix, update them to point at the
+  redis-operator standalone service.
+
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
 * cd charts/onyx
@@ -5,7 +20,7 @@
 
 # Local testing
 
-> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](../../docs/dev/local-kubernetes.md).
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
 ## One time setup
 * brew install kind

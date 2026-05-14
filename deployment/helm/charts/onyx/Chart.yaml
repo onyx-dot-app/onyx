@@ -17,6 +17,17 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
     - name: vespa
       image: vespaengine/vespa:8.609.39
+  artifacthub.io/changes: |
+    - kind: added
+      description: Bundle ot-container-kit redis-operator subchart so the Redis CR
+        installs cleanly on a fresh cluster (no manual CRD step).
+    - kind: added
+      description: Render the CloudNativePG Cluster CR from the chart instead of
+        relying on an out-of-band manifest; controlled by postgresql.cluster.*.
+    - kind: fixed
+      description: REDIS_HOST in the configmap no longer appends "-master"; it now
+        points at the redis-operator standalone service name directly. Override
+        REDIS_HOST in values if you depended on the old suffix.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
