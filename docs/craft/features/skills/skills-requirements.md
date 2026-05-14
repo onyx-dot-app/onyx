@@ -65,7 +65,7 @@ Already implemented; see `skills-db-layer-status.md` for column-level detail.
 
 Skills delivery uses `SandboxManager`'s push API documented in `../sandbox-file-push.md`. Skills builds bytes and calls; the push methods own the wire protocol, NetworkPolicy, shared secret, fan-out, and atomic swap.
 
-- **Admin mutations** (custom upload, bundle replace, grant change, `is_public` flip, builtin availability flip): the skills feature builds a per-user file dict and calls `get_sandbox_manager().push_to_users(tenant_id=..., mount_path="/workspace/managed/skills", user_files=...)`. A single-user grant change is a one-entry dict; an org-wide change (e.g. `is_public=True`) spans every affected user in the tenant.
+- **Admin mutations** (custom upload, bundle replace, grant change, `is_public` flip, builtin availability flip): the skills feature builds a per-user file dict and calls `get_sandbox_manager().push_to_users(mount_path="/workspace/managed/skills", user_files=...)`. Tenant comes from `CURRENT_TENANT_ID_CONTEXTVAR`, which admin routes are already inside. A single-user grant change is a one-entry dict; an org-wide change (e.g. `is_public=True`) spans every affected user in the tenant.
 - **Session start / wakeup**: the existing sandbox setup code calls `skills.push_to_pod(sandbox_id, user, db_session)`, which materializes the user's accessible skill set and pushes via `get_sandbox_manager().push_to_sandbox(...)`.
 - **Mount path** inside the sandbox is `/workspace/managed/skills/<slug>/`. The agent reads from there.
 - **Per-user templating**: built-in `SKILL.md.template` files are rendered against the target user's `SkillRenderContext` at materialization time, which fits naturally into the per-user push model.
@@ -91,7 +91,7 @@ No per-session "pin a skill" endpoints. No in-browser skill editor. No skill exe
 
 - Custom skills, slug uniqueness, and grants are tenant-scoped (existing schema/middleware semantics).
 - Built-in skills are shared across tenants; `is_available()` may inspect tenant config but the registration is global.
-- Cross-tenant isolation at push time is enforced by `SandboxManager.find_sandboxes_for_users` (label selector `onyx.app/tenant-id` on the k8s backend); the skills feature passes `tenant_id` explicitly per call.
+- Cross-tenant isolation at push time is enforced by `SandboxManager.find_sandboxes_for_users` (label selector `onyx.app/tenant-id` on the k8s backend), which receives the tenant id `push_to_users` resolves from `CURRENT_TENANT_ID_CONTEXTVAR`.
 
 ## 8. Non-Requirements (V1)
 

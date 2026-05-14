@@ -215,7 +215,6 @@ def create_custom_skill(...) -> CustomSkillSnapshot:
 
     affected = affected_users_for_skill(skill, db_session)
     get_sandbox_manager().push_to_users(
-        tenant_id=user.tenant_id,
         mount_path="/workspace/managed/skills",
         user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
     )
@@ -236,7 +235,6 @@ def patch_custom_skill(...) -> CustomSkillSnapshot:
         after_affected = affected_users_for_skill(updated, db_session)
         users = before_affected | after_affected
         get_sandbox_manager().push_to_users(
-            tenant_id=user.tenant_id,
             mount_path="/workspace/managed/skills",
             user_files={u.id: build_skills_files_for_user(u, db_session) for u in users},
         )
@@ -260,7 +258,6 @@ def replace_custom_skill_bundle(...) -> CustomSkillSnapshot:
 
     affected = affected_users_for_skill(updated, db_session)
     get_sandbox_manager().push_to_users(
-        tenant_id=user.tenant_id,
         mount_path="/workspace/managed/skills",
         user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
     )
@@ -281,7 +278,6 @@ def replace_custom_skill_grants(...) -> CustomSkillSnapshot:
     after_affected = affected_users_for_skill(updated, db_session)
     users = before_affected | after_affected   # gainers get the skill, losers get it removed
     get_sandbox_manager().push_to_users(
-        tenant_id=user.tenant_id,
         mount_path="/workspace/managed/skills",
         user_files={u.id: build_skills_files_for_user(u, db_session) for u in users},
     )
@@ -302,7 +298,6 @@ def delete_custom_skill(...) -> None:
 
     # Push each previously-affected user their new (skill-free) file dict.
     get_sandbox_manager().push_to_users(
-        tenant_id=user.tenant_id,
         mount_path="/workspace/managed/skills",
         user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
     )

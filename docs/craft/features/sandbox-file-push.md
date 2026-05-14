@@ -8,13 +8,12 @@ One callable for any feature to land files in running sandboxes — exposed as a
 
 ```python
 get_sandbox_manager().push_to_users(
-    tenant_id=...,
     mount_path="/workspace/managed/skills",
     user_files={user_id: {"pptx/SKILL.md": b"...", ...}, ...},
 )
 ```
 
-The feature owns *what* and *when*. `SandboxManager` handles target resolution, parallel fan-out, atomic swap, retry, and (on k8s) auth.
+The feature owns *what* and *when*. `SandboxManager` handles tenant resolution (via `CURRENT_TENANT_ID_CONTEXTVAR`), target lookup, parallel fan-out, atomic swap, retry, and (on k8s) auth.
 
 ## 2. Non-goals
 
@@ -132,13 +131,16 @@ class SandboxManager(ABC):
     # ---- Concrete defaults; shared across backends ----
     def push_to_users(
         self, *,
-        tenant_id: str,
         mount_path: str,
         user_files: dict[UUID, dict[str, bytes]],
         timeout_s: float = 30.0,
     ) -> PushResult:
-        """Resolve targets, fan out parallel writes, retry transient errors,
-        aggregate result."""
+        """Resolve tenant from CURRENT_TENANT_ID_CONTEXTVAR, look up targets,
+        fan out parallel writes, retry transient errors, aggregate result.
+
+        Raises if the contextvar is unset — the push API never targets
+        sandboxes with an inferred-empty tenant.
+        """
 
     def push_to_sandbox(
         self, *,
@@ -147,7 +149,8 @@ class SandboxManager(ABC):
         files: dict[str, bytes],
         timeout_s: float = 30.0,
     ) -> PushResult:
-        """Single-target wrapper around the same retry loop."""
+        """Single-target wrapper around the same retry loop. `sandbox_id`
+        already identifies a single tenant's pod."""
 
     # ---- Backend-specific; one new abstract method per concern ----
     @abstractmethod
@@ -166,6 +169,7 @@ class SandboxManager(ABC):
 Semantics:
 
 - **`SandboxManager` owns parallelism and retry.** Callers never loop over targets.
+- **Tenant**: `push_to_users` reads `CURRENT_TENANT_ID_CONTEXTVAR` (from `backend/shared_configs/contextvars.py`), which the request middleware and Celery task middleware already set. Callers don't pass tenant. It raises if the contextvar is unset rather than guessing.
 - `push_to_users` calls `find_sandboxes_for_users(tenant_id, user_ids)` once, then `ThreadPoolExecutor`-maps `write_files_to_sandbox` across the resolved targets, each getting *that user's* files. One entry in `user_files` = single user update; many entries = org-wide fan-out.
   - Users without an active sandbox are silently skipped — not an error.
   - Users with multiple active sandboxes get a write to each.
@@ -358,19 +362,18 @@ The specific threat per-pod JWTs defend against is lateral movement — a compro
 
 ## 10. Multi-tenancy
 
-1. Features pass `tenant_id` explicitly to `SandboxManager.push_to_users`. Onyx's tenant-id contextvar (`backend/shared_configs/contextvars.py`) is available in request handlers, but the push API doesn't read it implicitly — callers pass it.
-2. `find_sandboxes_for_users` filters by `tenant_id` (k8s: label selector; local: in-memory or DB filter). The push API cannot target sandboxes outside the tenant the caller named.
-3. **Trust boundary**: the k8s daemon trusts any api_server-authenticated caller's `tenant_id`. Cross-tenant misrouting is prevented by code review of `find_sandboxes_for_users` and the calling features, not by daemon-side validation.
+1. `push_to_users` resolves `tenant_id` from `CURRENT_TENANT_ID_CONTEXTVAR` (`backend/shared_configs/contextvars.py`), which is already set by the request middleware for HTTP handlers and by the Celery task middleware for background tasks. Callers never pass tenant. If the contextvar is unset, the call raises rather than targeting an empty/wrong tenant — when a future caller needs to push from outside a tenant context, the kwarg can be added then.
+2. `find_sandboxes_for_users` filters by the resolved `tenant_id` (k8s: label selector; local: in-memory or DB filter). The push API cannot target sandboxes outside that tenant.
+3. **Trust boundary**: the k8s daemon trusts any api_server-authenticated caller's tenant resolution. Cross-tenant misrouting is prevented by the contextvar middleware and code review of `find_sandboxes_for_users` and the calling features, not by daemon-side validation.
 
 ## 11. Feature integration
 
 ### Skills
 
-Single-user grant change (`push_to_users` with a one-entry dict):
+Single-user grant change (`push_to_users` with a one-entry dict). Called from an admin route, so `tenant_id` is read from the contextvar:
 
 ```python
 get_sandbox_manager().push_to_users(
-    tenant_id=user.tenant_id,
     mount_path="/workspace/managed/skills",
     user_files={user.id: build_skills_files_for_user(user, db_session)},
 )
@@ -381,10 +384,9 @@ Org-wide change (`is_public=True` upload, public-skill edit, builtin availabilit
 ```python
 user_files = {
     user.id: build_skills_files_for_user(user, db_session)
-    for user in users_in_tenant_with_active_sandbox(tenant_id, db_session)
+    for user in users_in_tenant_with_active_sandbox(db_session)
 }
 get_sandbox_manager().push_to_users(
-    tenant_id=tenant_id,
     mount_path="/workspace/managed/skills",
     user_files=user_files,
 )
