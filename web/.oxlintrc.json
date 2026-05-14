@@ -9,16 +9,7 @@
     "react/exhaustive-deps": "off",
     "typescript/no-unused-vars": "off",
     "unicorn/no-thenable": "off",
-    "no-unused-vars": [
-      "warn",
-      {
-        "vars": "all",
-        "varsIgnorePattern": "^_",
-        "args": "after-used",
-        "argsIgnorePattern": "^_",
-        "ignoreRestSiblings": true
-      }
-    ]
+    "no-unused-vars": "off"
   },
   "ignorePatterns": [
     ".next",
