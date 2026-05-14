@@ -2,21 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import {
   BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
+import { upsertExternalApp } from "@/app/craft/services/externalAppsService";
 
 interface ConfigureProviderModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   descriptor: BuiltInExternalAppDescriptor;
-  /** Null → create; non-null → update (form pre-fills). */
+  /** Null → create new instance; non-null → edit existing row. */
   existingApp: ExternalAppAdminResponse | null;
 }
 
@@ -27,7 +27,10 @@ export default function ConfigureProviderModal({
   descriptor,
   existingApp,
 }: ConfigureProviderModalProps) {
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [name, setName] = useState("");
+  const [credentialValues, setCredentialValues] = useState<
+    Record<string, string>
+  >({});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,18 +38,21 @@ export default function ConfigureProviderModal({
   // field without re-entering the rest.
   useEffect(() => {
     if (!open) return;
+    setName(existingApp?.name ?? descriptor.name);
     const initial: Record<string, string> = {};
     for (const field of descriptor.required_org_credential_fields) {
       initial[field.key] =
         existingApp?.organization_credentials[field.key] ?? "";
     }
-    setValues(initial);
+    setCredentialValues(initial);
     setError(null);
   }, [open, descriptor, existingApp]);
 
-  const allFilled = descriptor.required_org_credential_fields.every(
-    (f) => (values[f.key] ?? "").trim().length > 0
+  const nameFilled = name.trim().length > 0;
+  const credsFilled = descriptor.required_org_credential_fields.every(
+    (f) => (credentialValues[f.key] ?? "").trim().length > 0
   );
+  const canSave = nameFilled && credsFilled && !isSaving;
 
   async function save() {
     setIsSaving(true);
@@ -56,30 +62,20 @@ export default function ConfigureProviderModal({
       // instance URL, …) survives a credential edit.
       const merged = {
         ...(existingApp?.organization_credentials ?? {}),
-        ...values,
+        ...credentialValues,
       };
-      // Saving credentials implies enable; disable is a separate
-      // action on the admin page.
-      const body = {
+      await upsertExternalApp({
         id: existingApp?.id ?? null,
-        name: descriptor.name,
+        name: name.trim(),
         description: descriptor.description,
         app_type: descriptor.app_type,
         upstream_url_patterns: descriptor.upstream_url_patterns,
         auth_template: descriptor.auth_template,
         organization_credentials: merged,
+        // Saving credentials implies enable; disable is a separate
+        // action on the admin page.
         enabled: true,
-      };
-      const res = await fetch("/api/build/admin/apps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail ?? `Save failed (HTTP ${res.status}).`);
-        return;
-      }
       onSaved();
       onClose();
     } catch (e) {
@@ -89,38 +85,54 @@ export default function ConfigureProviderModal({
     }
   }
 
+  const headerTitle = existingApp
+    ? `Edit ${existingApp.name}`
+    : `Add ${descriptor.name}`;
+
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()}>
-      <Modal.Content>
+      <Modal.Content width="lg" height="lg">
         <Modal.Header
-          title={`Configure ${descriptor.name}`}
+          title={headerTitle}
           description={descriptor.setup_instructions}
         />
         <Modal.Body>
           <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <Text font="main-ui-action">Name</Text>
+              <InputTypeIn
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={descriptor.name}
+              />
+              <Text font="secondary-body" color="text-03">
+                {`A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. "${descriptor.name} — Engineering").`}
+              </Text>
+            </div>
+
             {descriptor.required_org_credential_fields.map((field) => {
               const Input = field.secret ? PasswordInputTypeIn : InputTypeIn;
               return (
                 <div key={field.key} className="flex flex-col gap-1">
-                  <Text mainUiAction>{field.label}</Text>
+                  <Text font="main-ui-action">{field.label}</Text>
                   <Input
-                    value={values[field.key] ?? ""}
+                    value={credentialValues[field.key] ?? ""}
                     onChange={(e) =>
-                      setValues((prev) => ({
+                      setCredentialValues((prev) => ({
                         ...prev,
                         [field.key]: e.target.value,
                       }))
                     }
                     placeholder={field.label}
                   />
-                  <Text secondaryBody text03>
+                  <Text font="secondary-body" color="text-03">
                     {field.description}
                   </Text>
                 </div>
               );
             })}
             {error && (
-              <Text secondaryBody className="text-status-error-02">
+              <Text font="secondary-body" color="text-03">
                 {error}
               </Text>
             )}
@@ -135,8 +147,8 @@ export default function ConfigureProviderModal({
             >
               Cancel
             </Button>
-            <Button onClick={save} disabled={!allFilled || isSaving}>
-              {isSaving ? "Saving…" : existingApp ? "Save" : "Save & Enable"}
+            <Button onClick={save} disabled={!canSave}>
+              {isSaving ? "Saving…" : existingApp ? "Save" : "Add"}
             </Button>
           </div>
         </Modal.Footer>
