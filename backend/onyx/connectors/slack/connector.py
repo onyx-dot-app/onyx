@@ -810,6 +810,18 @@ class SlackConnector(
         # self.delay_lock: str | None = None  # the redis key for the shared lock
         # self.delay_key: str | None = None  # the redis key for the shared delay
 
+    @property
+    def grid_team_ids(self) -> list[str] | None:
+        return self._team_ids if self._is_grid else None
+
+    @property
+    def grid_team_id_to_url(self) -> dict[str, str] | None:
+        return self._team_id_to_url if self._is_grid else None
+
+    @property
+    def grid_team_id_to_user_emails(self) -> dict[str, set[str]] | None:
+        return self._team_id_to_user_emails if self._is_grid else None
+
     @classmethod
     @override
     def normalize_url(cls, url: str) -> NormalizationResult:
@@ -1033,11 +1045,9 @@ class SlackConnector(
             workspace_url=self._workspace_url,
             start=start,
             end=end,
-            team_ids=self._team_ids if self._is_grid else None,
-            team_id_to_url=self._team_id_to_url if self._is_grid else None,
-            team_id_to_user_emails=(
-                self._team_id_to_user_emails if self._is_grid else None
-            ),
+            team_ids=self.grid_team_ids,
+            team_id_to_url=self.grid_team_id_to_url,
+            team_id_to_user_emails=(self.grid_team_id_to_user_emails),
         )
 
     def _load_from_checkpoint(
@@ -1097,9 +1107,7 @@ class SlackConnector(
                     client=self.client,
                     channel=checkpoint.current_channel,
                     user_cache=self.user_cache,
-                    team_id_to_user_emails=(
-                        self._team_id_to_user_emails if self._is_grid else None
-                    ),
+                    team_id_to_user_emails=(self.grid_team_id_to_user_emails),
                 )
                 checkpoint.current_channel_access = channel_access
             checkpoint.has_more = True
@@ -1146,7 +1154,7 @@ class SlackConnector(
                     channel,
                     checkpoint.current_channel_access,
                     self._workspace_url,
-                    team_id_to_url=self._team_id_to_url if self._is_grid else None,
+                    team_id_to_url=self.grid_team_id_to_url,
                 )
 
             logger.debug(
@@ -1195,9 +1203,7 @@ class SlackConnector(
                             seen_thread_ts=seen_thread_ts,
                             channel_access=checkpoint.current_channel_access,
                             msg_filter_func=self.msg_filter_func,
-                            team_id_to_url=(
-                                self._team_id_to_url if self._is_grid else None
-                            ),
+                            team_id_to_url=(self.grid_team_id_to_url),
                         )
                     )
 
@@ -1300,9 +1306,7 @@ class SlackConnector(
                             client=self.client,
                             channel=new_channel,
                             user_cache=self.user_cache,
-                            team_id_to_user_emails=(
-                                self._team_id_to_user_emails if self._is_grid else None
-                            ),
+                            team_id_to_user_emails=(self.grid_team_id_to_user_emails),
                         )
                         checkpoint.current_channel_access = channel_access
                 else:

@@ -18,6 +18,7 @@ from onyx.connectors.slack.connector import channel_team_ids
 from onyx.connectors.slack.connector import fetch_team_url
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
+from onyx.connectors.slack.connector import SlackConnector
 from onyx.connectors.slack.models import ChannelType
 from onyx.connectors.slack.models import MessageType
 from onyx.connectors.slack.utils import get_message_link
@@ -285,3 +286,41 @@ def test_dedupe_preserves_first_occurrence_order(
         team_ids = [tid for tid, _ in channel_id_set]
         result = get_channels_across_teams(MagicMock(), team_ids)
         assert [c["id"] for c in result] == expected_order
+
+
+class TestSlackConnectorGridProperties:
+    def _connector(
+        self,
+        is_grid: bool,
+        team_ids: list[str],
+        team_id_to_url: dict[str, str],
+        team_id_to_user_emails: dict[str, set[str]],
+    ) -> SlackConnector:
+        c = SlackConnector(channels=None, use_redis=False)
+        c._is_grid = is_grid
+        c._team_ids = team_ids
+        c._team_id_to_url = team_id_to_url
+        c._team_id_to_user_emails = team_id_to_user_emails
+        return c
+
+    def test_grid_properties_return_underlying_fields_on_grid(self) -> None:
+        c = self._connector(
+            is_grid=True,
+            team_ids=["T1"],
+            team_id_to_url={"T1": "https://x.slack.com"},
+            team_id_to_user_emails={"T1": {"a@x.com"}},
+        )
+        assert c.grid_team_ids == ["T1"]
+        assert c.grid_team_id_to_url == {"T1": "https://x.slack.com"}
+        assert c.grid_team_id_to_user_emails == {"T1": {"a@x.com"}}
+
+    def test_grid_properties_return_none_when_not_grid(self) -> None:
+        c = self._connector(
+            is_grid=False,
+            team_ids=["T1"],
+            team_id_to_url={"T1": "https://x.slack.com"},
+            team_id_to_user_emails={"T1": {"a@x.com"}},
+        )
+        assert c.grid_team_ids is None
+        assert c.grid_team_id_to_url is None
+        assert c.grid_team_id_to_user_emails is None

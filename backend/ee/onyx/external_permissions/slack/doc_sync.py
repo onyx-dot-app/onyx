@@ -4,6 +4,7 @@ from slack_sdk import WebClient
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.slack.channel_access import get_channel_access
 from ee.onyx.external_permissions.slack.utils import fetch_team_user_emails
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
@@ -11,7 +12,6 @@ from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.slack.connector import channel_team_ids
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
@@ -78,21 +78,12 @@ def _fetch_channel_permissions(
         if not channel_id:
             continue
         if team_id_to_user_emails:
-            # Grid: union users across the workspaces this channel is shared into
-            emails: set[str] = set()
-            for tid in channel_team_ids(channel):
-                emails |= team_id_to_user_emails.get(tid, set())
-            if 0 < len(emails) <= ExternalAccess.MAX_NUM_ENTRIES:
-                channel_permissions[channel_id] = ExternalAccess(
-                    external_user_emails=emails,
-                    external_user_group_ids=set(),
-                    is_public=False,
-                )
-            else:
-                # Empty union (unknown teams, e.g. workspace added post-init
-                # or Slack Connect share) or union past the perm-sync size
-                # guard. Fall back to is_public so the doc stays accessible.
-                channel_permissions[channel_id] = ExternalAccess.public()
+            channel_permissions[channel_id] = get_channel_access(
+                client=slack_client,
+                channel=channel,
+                user_cache={},
+                team_id_to_user_emails=team_id_to_user_emails,
+            )
         # Non-Grid public channels keep their ingest-time is_public=True; no
         # override entry so `_get_slack_document_access` falls back to the slim
         # doc's original access.
