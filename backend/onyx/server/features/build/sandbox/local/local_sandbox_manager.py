@@ -9,7 +9,6 @@ All database operations should be handled by the caller (SessionManager, Celery 
 
 import mimetypes
 import re
-import shutil
 import subprocess
 import threading
 from collections.abc import Generator
@@ -18,6 +17,7 @@ from uuid import UUID
 
 import httpx
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
@@ -37,6 +37,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.skills import materialize_skills
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
@@ -81,7 +82,6 @@ class LocalSandboxManager(SandboxManager):
             base_path=Path(SANDBOX_BASE_PATH),
             outputs_template_path=Path(OUTPUTS_TEMPLATE_PATH),
             venv_template_path=Path(VENV_TEMPLATE_PATH),
-            skills_path=Path(SKILLS_TEMPLATE_PATH),
             agent_instructions_template_path=agent_instructions_template_path,
         )
         self._process_manager = ProcessManager()
@@ -206,14 +206,6 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug("Sandbox directory created at %s", sandbox_path)
 
-        # Copy skills to sandbox root so write_sandbox_file + session symlinks work
-        sandbox_skills = sandbox_path / "skills"
-        if (
-            self._directory_manager.skills_source_path.exists()
-            and not sandbox_skills.exists()
-        ):
-            shutil.copytree(self._directory_manager.skills_source_path, sandbox_skills)
-
         logger.info(
             "Provisioned sandbox %s at %s (no sessions yet)", sandbox_id, sandbox_path
         )
@@ -307,7 +299,7 @@ class LocalSandboxManager(SandboxManager):
         2. outputs/ (from snapshot or template)
         3. .venv/ (from template)
         4. AGENTS.md
-        5. .agent/skills/
+        5. .agents/skills/ (materialized symlink farm + manifest)
         6. opencode.json
         7. org_info/ (if user_work_area provided)
         8. attachments/
@@ -361,11 +353,15 @@ class LocalSandboxManager(SandboxManager):
             self._directory_manager.setup_outputs_directory(session_path)
             logger.debug("Outputs directory ready")
 
-            logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(
-                session_path, skills_target=sandbox_path / "skills"
-            )
-            logger.debug("Skills ready")
+            logger.debug("Materializing skills")
+            with get_session_with_current_tenant() as db_session:
+                materialize_skills(
+                    session_dir=session_path,
+                    user=None,
+                    db=db_session,
+                    runtime_builtins_path=Path(SKILLS_TEMPLATE_PATH),
+                )
+            logger.debug("Skills materialized")
 
             # Setup attachments directory
             logger.debug("Setting up attachments directory")

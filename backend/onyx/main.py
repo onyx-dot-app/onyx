@@ -371,6 +371,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     else:
         setup_multitenant_onyx()
 
+    from onyx.server.features.build.skills.builtins_registration import (
+        register_craft_builtins,
+    )
+    from onyx.skills.registry import BuiltinSkillRegistry
+
+    register_craft_builtins(BuiltinSkillRegistry.instance())
+
     if not MULTI_TENANT:
         # don't emit a metric for every pod rollover/restart
         optional_telemetry(

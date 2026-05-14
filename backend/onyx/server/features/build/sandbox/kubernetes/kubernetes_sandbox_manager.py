@@ -55,6 +55,7 @@ from kubernetes import config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
@@ -93,6 +94,9 @@ from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGE
 from onyx.server.features.build.sandbox.util.persona_mapping import (
     ORGANIZATION_STRUCTURE,
 )
+from onyx.skills import SkillManifestEntry
+from onyx.skills import SkillsManifest
+from onyx.skills.registry import BuiltinSkillRegistry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -216,7 +220,6 @@ class KubernetesSandboxManager(SandboxManager):
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
-        self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
             "KubernetesSandboxManager initialized: namespace=%s, image=%s",
@@ -1089,6 +1092,44 @@ fi
             else ""
         )
 
+        # Build skills materialization fragment for the in-pod setup script.
+        # We mirror what onyx.skills.materialize.materialize_skills does:
+        # symlink each available built-in slug to /workspace/skills/<slug> and
+        # write a .skills_manifest.json describing the materialized set.
+        # Templated built-ins are skipped in this PR (render pipeline TBD).
+        with get_session_with_current_tenant() as db_session:
+            available_skills = BuiltinSkillRegistry.instance().list_available(
+                db_session
+            )
+        non_template_builtins = [s for s in available_skills if not s.has_template]
+        skills_manifest = SkillsManifest(
+            builtin=[
+                SkillManifestEntry(
+                    slug=s.slug,
+                    name=s.name,
+                    description=s.description,
+                    source="builtin",
+                )
+                for s in non_template_builtins
+            ],
+            custom=[],
+        )
+        skills_manifest_json_escaped = skills_manifest.model_dump_json(
+            indent=2
+        ).replace("'", "'\\''")
+        skill_link_cmds = "\n".join(
+            f"ln -sfn /workspace/skills/{s.slug} "
+            f"{session_path}/.agents/skills/{s.slug}"
+            for s in non_template_builtins
+        )
+        skills_setup = f"""
+# Materialize skills (symlinks to baked-in /workspace/skills/<slug> + manifest)
+mkdir -p {session_path}/.agents/skills
+{skill_link_cmds}
+printf '%s' '{skills_manifest_json_escaped}' > {session_path}/.agents/skills/.skills_manifest.json
+echo "Materialized {len(non_template_builtins)} skill(s) into .agents/skills"
+"""
+
         setup_script = f"""
 set -e
 
@@ -1100,12 +1141,8 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
-# Symlink skills (baked into image at /workspace/skills/)
-if [ -d /workspace/skills ]; then
-    mkdir -p {session_path}/.opencode
-    ln -sf /workspace/skills {session_path}/.opencode/skills
-    echo "Linked skills to /workspace/skills"
-fi
+# Setup skills
+{skills_setup}
 
 # Write agent instructions
 echo "Writing AGENTS.md"

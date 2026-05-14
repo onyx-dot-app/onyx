@@ -34,7 +34,7 @@ class DirectoryManager:
     Responsible for:
     - Creating sandbox directory structure (user-level)
     - Creating session workspace directories (session-level)
-    - Copying templates (outputs, venv, skills, AGENTS.md)
+    - Copying templates (outputs, venv, AGENTS.md)
     - Cleaning up sandbox/session directories on termination
 
     Directory Structure:
@@ -44,7 +44,7 @@ class DirectoryManager:
             │   ├── outputs/           # Agent output (from template or snapshot)
             │   │   └── web/           # Next.js app
             │   ├── .venv/             # Python virtual environment
-            │   ├── .agent/skills/     # Opencode skills
+            │   ├── .agents/skills/    # Materialized skills (symlink farm)
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -57,7 +57,6 @@ class DirectoryManager:
         base_path: Path,
         outputs_template_path: Path,
         venv_template_path: Path,
-        skills_path: Path,
         agent_instructions_template_path: Path,
     ) -> None:
         """Initialize DirectoryManager with template paths.
@@ -66,25 +65,18 @@ class DirectoryManager:
             base_path: Root directory for all sandboxes
             outputs_template_path: Path to outputs template directory
             venv_template_path: Path to Python virtual environment template
-            skills_path: Path to agent skills directory
             agent_instructions_template_path: Path to AGENTS.md template file
         """
         self._base_path = base_path
         self._outputs_template_path = outputs_template_path
         self._venv_template_path = venv_template_path
-        self._skills_path = skills_path
         self._agent_instructions_template_path = agent_instructions_template_path
-
-    @property
-    def skills_source_path(self) -> Path:
-        return self._skills_path
 
     def create_sandbox_directory(self, sandbox_id: str) -> Path:
         """Create sandbox directory structure (user-level).
 
         Creates the base directory for a user's sandbox:
         {base_path}/{sandbox_id}/
-        ├── skills/                     # Copied from source, shared across sessions
         └── sessions/                   # Container for per-session workspaces
 
         NOTE: This only creates the sandbox-level structure.
@@ -116,8 +108,8 @@ class DirectoryManager:
         ├── AGENTS.md                   # Agent instructions
         ├── opencode.json               # LLM config (set up separately)
         ├── attachments/                # User-uploaded files
-        └── .opencode/
-            └── skills/                 # Agent skills
+        └── .agents/
+            └── skills/                 # Materialized skills (symlink farm)
 
         NOTE: This creates the directory structure but doesn't copy templates.
         Call setup_outputs_directory(), setup_venv(), etc. to set up contents.
@@ -294,23 +286,6 @@ class DirectoryManager:
         # Write the generated content
         agent_md_path.write_text(content)
         logger.debug("Generated AGENTS.md at %s", agent_md_path)
-
-    def setup_skills(self, session_path: Path, skills_target: Path) -> None:
-        """Symlink session's .opencode/skills to the given skills directory."""
-        skills_dest = session_path / ".opencode" / "skills"
-
-        if not skills_target.exists():
-            logger.warning("Skills path %s does not exist", skills_target)
-            return
-
-        if skills_dest.is_symlink() or skills_dest.exists():
-            if skills_dest.is_symlink():
-                skills_dest.unlink()
-            else:
-                shutil.rmtree(skills_dest)
-
-        skills_dest.parent.mkdir(parents=True, exist_ok=True)
-        skills_dest.symlink_to(skills_target)
 
     def setup_opencode_config(
         self,
