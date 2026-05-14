@@ -15,7 +15,7 @@ import { Tier } from "@/interfaces/settings";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 
 function EditSlackChannelConfigContent({ id }: { id: string }) {
-  const canUseStandardAnswers = useTierAtLeast(Tier.ENTERPRISE);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
     data: slackChannelConfigs,
@@ -45,7 +45,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
     isChannelsLoading ||
     isDocSetsLoading ||
     isAgentsLoading ||
-    (canUseStandardAnswers && isStdAnswerLoading);
+    (enterpriseTier && isStdAnswerLoading);
 
   const slackChannelConfig = slackChannelConfigs?.find(
     (config) => config.id === Number(id)
@@ -98,7 +98,7 @@ function EditSlackChannelConfigContent({ id }: { id: string }) {
             documentSets={documentSets}
             personas={agents}
             standardAnswerCategoryResponse={
-              canUseStandardAnswers
+              enterpriseTier
                 ? {
                     paidEnterpriseFeaturesEnabled: true,
                     categories: standardAnswerCategories ?? [],

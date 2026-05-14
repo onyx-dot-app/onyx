@@ -5,7 +5,7 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
-import { planTagProps } from "@opal/utils";
+import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputNumber from "@/refresh-components/inputs/InputNumber";

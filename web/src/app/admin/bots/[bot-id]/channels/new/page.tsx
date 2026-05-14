@@ -15,7 +15,7 @@ import type { StandardAnswerCategoryResponse } from "@/components/standardAnswer
 import { useRouter } from "next/navigation";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
-  const canUseStandardAnswers = useTierAtLeast(Tier.ENTERPRISE);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
     data: documentSets,
@@ -38,7 +38,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   if (
     isDocSetsLoading ||
     isAgentsLoading ||
-    (canUseStandardAnswers && isStdAnswerLoading)
+    (enterpriseTier && isStdAnswerLoading)
   ) {
     return <SimpleLoader />;
   }
@@ -66,7 +66,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   }
 
   const standardAnswerCategoryResponse: StandardAnswerCategoryResponse =
-    canUseStandardAnswers
+    enterpriseTier
       ? {
           paidEnterpriseFeaturesEnabled: true,
           categories: standardAnswerCategories ?? [],

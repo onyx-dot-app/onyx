@@ -65,7 +65,7 @@ function Main() {
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
 
-  const canScopePerUserOrGroup = useTierAtLeast(Tier.ENTERPRISE);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const updateTable = (target_scope: Scope) => {
     if (target_scope === Scope.GLOBAL) {
@@ -116,7 +116,7 @@ function Main() {
             spend.
           </Text>
         </li>
-        {canScopePerUserOrGroup && (
+        {enterpriseTier && (
           <>
             <li>
               <Text as="p">
@@ -145,7 +145,7 @@ function Main() {
         Create a Token Rate Limit
       </Button>
 
-      {canScopePerUserOrGroup ? (
+      {enterpriseTier ? (
         <SimpleTabs
           tabs={{
             "0": {
@@ -206,7 +206,7 @@ function Main() {
         setIsOpen={() => setModalIsOpen(false)}
         onSubmit={handleSubmit}
         forSpecificScope={
-          canScopePerUserOrGroup ? undefined : Scope.GLOBAL
+          enterpriseTier ? undefined : Scope.GLOBAL
         }
       />
     </Section>

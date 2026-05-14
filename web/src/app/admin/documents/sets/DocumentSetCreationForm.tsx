@@ -42,7 +42,7 @@ export const DocumentSetCreationForm = ({
   onClose,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
-  const canRestrictToGroups = useTierAtLeast(Tier.BUSINESS);
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
   const { user } = useUser();
@@ -189,7 +189,7 @@ export const DocumentSetCreationForm = ({
                   optional={true}
                 />
 
-                {canRestrictToGroups && (
+                {businessTier && (
                   <IsPublicGroupSelector
                     formikProps={props}
                     objectName="document set"
