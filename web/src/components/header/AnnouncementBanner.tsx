@@ -59,7 +59,11 @@ export function AnnouncementBanner() {
   return (
     <>
       {localNotifications
-        .filter((notification) => !notification.dismissed)
+        .filter(
+          (notification) =>
+            !notification.dismissed &&
+            notification.notif_type !== "admin_banner"
+        )
         .map((notification) => {
           return (
             <div
@@ -87,13 +91,6 @@ export function AnnouncementBanner() {
                   >
                     Update here
                   </Link>
-                </p>
-              ) : notification.notif_type == "admin_banner" ? (
-                <p className="text-center">
-                  <span className="font-semibold">{notification.title}</span>
-                  {notification.description ? (
-                    <span className="ml-2">{notification.description}</span>
-                  ) : null}
                 </p>
               ) : null}
               <button
