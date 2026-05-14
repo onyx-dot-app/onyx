@@ -113,7 +113,9 @@ def update_tier(
 ) -> TierUpdateResponse:
     try:
         update_tenant_tier(
-            tier_update_request.tenant_id, tier_update_request.customer_tier
+            tier_update_request.tenant_id,
+            tier_update_request.customer_tier,
+            tier_update_request.trial_end,
         )
         return TierUpdateResponse(updated=True, error=None)
     except Exception as e:

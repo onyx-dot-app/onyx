@@ -6,7 +6,8 @@ import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
@@ -149,7 +150,7 @@ export function ModelAccessField() {
   const { agents } = useAgents();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { data: usersData } = useUsers({ includeApiKeys: false });
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   const adminCount =
     usersData?.accepted.filter((u) => u.role === UserRole.ADMIN).length ?? 0;
@@ -160,7 +161,7 @@ export function ModelAccessField() {
 
   // Build a flat list of combobox options from groups + agents
   const groupOptions =
-    isPaidEnterpriseFeaturesEnabled && !userGroupsIsLoading && userGroups
+    businessTier && !userGroupsIsLoading && userGroups
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
           label: g.name,

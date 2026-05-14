@@ -35,7 +35,8 @@ import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,
 } from "@/lib/agents/svc";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useUser } from "@/providers/UserProvider";
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ export default function AgentRowActions({
 }: AgentRowActionsProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const shareModal = useCreateModal();
@@ -95,7 +96,7 @@ export default function AgentRowActions({
         userIds,
         groupIds,
         isPublic,
-        isPaidEnterpriseFeaturesEnabled,
+        businessTier,
         labelIds
       );
 
@@ -120,13 +121,7 @@ export default function AgentRowActions({
       onMutate();
       shareModal.toggle(false);
     },
-    [
-      agent.id,
-      isPaidEnterpriseFeaturesEnabled,
-      canUpdateFeaturedStatus,
-      refreshAgent,
-      onMutate,
-    ]
+    [agent.id, businessTier, canUpdateFeaturedStatus, refreshAgent, onMutate]
   );
 
   return (
@@ -240,7 +235,7 @@ export default function AgentRowActions({
                 >
                   Share
                 </LineItem>,
-                isPaidEnterpriseFeaturesEnabled ? (
+                businessTier ? (
                   <LineItem
                     key="stats"
                     icon={SvgBarChart}

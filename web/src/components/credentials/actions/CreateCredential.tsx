@@ -13,7 +13,8 @@ import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import { ActionType, dictionaryType } from "../types";
 import { createValidationSchema } from "../lib";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
   IsPublicGroupSelectorFormType,
@@ -88,7 +89,7 @@ export default function CreateCredential({
 }) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [authMethod, setAuthMethod] = useState<string>();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   const { isAdmin } = useUser();
 
@@ -190,7 +191,7 @@ export default function CreateCredential({
       initialValues={
         {
           name: "",
-          is_public: isAdmin || !isPaidEnterpriseFeaturesEnabled,
+          is_public: isAdmin || !businessTier,
           groups: [],
           ...(initialAuthMethod && {
             authentication_method: initialAuthMethod,
@@ -228,7 +229,7 @@ export default function CreateCredential({
               {!swapConnector && (
                 <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
                   <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
-                    {isPaidEnterpriseFeaturesEnabled && (
+                    {businessTier && (
                       <div className="flex flex-col items-start">
                         {isAdmin && (
                           <AdvancedOptionsToggle

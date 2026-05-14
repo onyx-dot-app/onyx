@@ -77,18 +77,26 @@ def admin_put_settings(
         get_effective_tier,
     )
     current_tier = get_tier_fn()
-    if not tier_at_least(current_tier, Tier.ENTERPRISE):
-        existing = load_settings()
-        if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Chat history retention is an Enterprise Plan feature.",
-            )
-        if settings.search_ui_enabled != existing.search_ui_enabled:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Search Mode is an Enterprise Plan feature.",
-            )
+    existing = load_settings()
+    # Search Mode is Business+; Chat Retention is Enterprise-only.
+    # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
+    # middleware uses, so the FE has one shape to handle for tier-rejected
+    # writes.
+    if settings.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
+        current_tier, Tier.BUSINESS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Search Mode requires the Business or Enterprise plan.",
+        )
+    if (
+        settings.maximum_chat_retention_days != existing.maximum_chat_retention_days
+        and not tier_at_least(current_tier, Tier.ENTERPRISE)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Chat history retention requires the Enterprise plan.",
+        )
 
     store_settings(settings)
 

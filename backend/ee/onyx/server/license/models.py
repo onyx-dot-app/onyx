@@ -20,8 +20,8 @@ class LicenseSource(str, Enum):
 class CustomerTier(str, Enum):
     """Paid-tier wire format from the control plane (no COMMUNITY)."""
 
-    BUSINESS = "business"
-    ENTERPRISE = "enterprise"
+    BUSINESS = "BUSINESS"
+    ENTERPRISE = "ENTERPRISE"
 
 
 class LicensePayload(BaseModel):
