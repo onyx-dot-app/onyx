@@ -5827,25 +5827,17 @@ class ExternalApp(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(String, nullable=False)
-    # Discriminator for the OAuth-provider dispatch layer.
-    # Decoupled from `name` (a human-editable display string) so
-    # renaming an app doesn't silently break OAuth.
-    #
-    # `CUSTOM` covers admin-defined apps that don't go through any
-    # built-in OAuth flow. Built-in values match entries in
-    # `external_apps.providers.PROVIDERS`.
-    #
-    # NOT unique — providers like self-hosted GitLab/Jira can have
-    # multiple distinct instances within one Onyx (each with its own
-    # client_id + base URL) and would all share the same app_type.
-    # Duplicate detection for the typical "one Slack" case happens
-    # at the UI layer.
+    # Discriminator for OAuth-provider dispatch — decoupled from
+    # `name` so renaming an app doesn't break OAuth. Not unique:
+    # multi-instance providers (self-hosted GitLab/Jira) share an
+    # `app_type` across rows.
     app_type: Mapped[ExternalAppType] = mapped_column(
         Enum(ExternalAppType, native_enum=False),
         nullable=False,
         default=ExternalAppType.CUSTOM,
         server_default=ExternalAppType.CUSTOM.value,
     )
+    # Regex patterns matched via `re.fullmatch`, not literal URLs.
     upstream_url_patterns: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
     )

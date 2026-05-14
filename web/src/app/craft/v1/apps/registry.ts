@@ -1,15 +1,8 @@
 /**
- * Built-in external-app provider registry.
- *
- * Each entry is the canonical "preset" the admin POSTs to the backend
- * when enabling a built-in provider. The frontend owns this rather
- * than the backend so the admin doesn't have to type out auth template
- * details that a typical user couldn't be expected to know.
- *
- * Adding a new provider: add an entry here, give it a unique key, fill
- * in the OAuth handler on the backend (currently Slack-specific in
- * `external_apps_oauth_api.py`), and the admin/user pages pick it up
- * automatically.
+ * Built-in external-app provider registry. Each entry is the preset
+ * the admin POSTs to the backend when enabling a built-in provider —
+ * frontend-owned so admins don't have to type out auth_template
+ * details a typical user can't be expected to know.
  */
 
 import { SvgSlack, SvgLinear } from "@opal/logos";
@@ -18,42 +11,24 @@ import { IconFunctionComponent } from "@opal/types";
 
 export type BuiltInProviderKey = "slack" | "googleCalendar" | "linear";
 
-/** A credential field the admin must fill in when configuring a provider. */
 export interface OrgCredentialField {
-  /** Key inside `organization_credentials` JSONB. */
   key: string;
-  /** Label rendered in the admin form. */
   label: string;
-  /** Short helper text under the input. */
   description: string;
-  /** If true, render as a password input. */
+  /** Renders as a password input when true. */
   secret: boolean;
 }
 
 export interface BuiltInProviderPreset {
-  /**
-   * Display name. Doubles as the backend marker that the OAuth
-   * dispatch route looks at, so it must match a `_PROVIDERS` key in
-   * `external_apps_oauth_api.py`.
-   */
+  /** Must match the backend `OAuth.app_name` so dispatch lines up. */
   name: string;
   description: string;
   upstream_urls: string[];
   auth_template: Record<string, string>;
-  /**
-   * Credential fields the admin must enter when configuring this
-   * provider (e.g. OAuth client_id and client_secret). Their values
-   * become entries in `organization_credentials` on the
-   * external_app row.
-   */
   required_org_credential_fields: OrgCredentialField[];
-  /** Short instructions shown above the credential form. */
   setup_instructions: string;
   logo: IconFunctionComponent;
-  /**
-   * True if this provider's credentials are acquired via OAuth (so the
-   * user-facing page shows a "Connect" button) vs filled in directly.
-   */
+  /** True if connection is via OAuth (vs static-token entry). */
   oauth: boolean;
 }
 
@@ -163,7 +138,8 @@ export const BUILT_IN_PROVIDER_REGISTRY: Record<
   },
 };
 
-// ── API response shapes (kept in sync with backend Pydantic models) ──
+// Keep in sync with backend Pydantic models in
+// `server/features/build/api/models.py`.
 
 export interface ExternalAppAdminResponse {
   id: number;
@@ -183,8 +159,6 @@ export interface ExternalAppUserResponse {
   credential_values: Record<string, string>;
   authenticated: boolean;
 }
-
-// ── Helpers ──
 
 export function findAppForProvider(
   apps: ExternalAppAdminResponse[],

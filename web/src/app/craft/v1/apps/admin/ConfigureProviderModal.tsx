@@ -16,10 +16,7 @@ interface ConfigureProviderModalProps {
   onClose: () => void;
   onSaved: () => void;
   preset: BuiltInProviderPreset;
-  /**
-   * The existing row for this provider, if any. When provided the form
-   * is pre-filled and the call upserts; when null a new row is created.
-   */
+  /** Null → create; non-null → update (form pre-fills). */
   existingApp: ExternalAppAdminResponse | null;
 }
 
@@ -34,9 +31,8 @@ export default function ConfigureProviderModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Seed the form whenever the modal opens or the underlying app changes.
-  // We pre-fill from `existingApp.organization_credentials` so admins can
-  // tweak one field without re-entering the others.
+  // Re-seed every time the modal opens so admins can tweak one
+  // field without re-entering the rest.
   useEffect(() => {
     if (!open) return;
     const initial: Record<string, string> = {};
@@ -56,14 +52,14 @@ export default function ConfigureProviderModal({
     setIsSaving(true);
     setError(null);
     try {
-      // Merge new credential values into any other org_credentials the
-      // existing row might carry. For built-in providers there are none
-      // today, but future providers may store non-credential metadata
-      // (region, instance URL, …) and we don't want to clobber it.
+      // Merge so future non-credential metadata on the row (region,
+      // instance URL, …) survives a credential edit.
       const merged = {
         ...(existingApp?.organization_credentials ?? {}),
         ...values,
       };
+      // Saving credentials implies enable; disable is a separate
+      // action on the admin page.
       const body = {
         id: existingApp?.id ?? null,
         name: preset.name,
@@ -71,7 +67,7 @@ export default function ConfigureProviderModal({
         upstream_urls: preset.upstream_urls,
         auth_template: preset.auth_template,
         organization_credentials: merged,
-        enabled: true, // Saving creds implies "enable" — disable is a separate action.
+        enabled: true,
       };
       const res = await fetch("/api/build/admin/apps", {
         method: "POST",

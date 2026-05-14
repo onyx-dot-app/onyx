@@ -1,35 +1,34 @@
-"""Pure HTTP refresh-token exchange.
-
-No DB, no transaction handling, no decision about *whether* to
-refresh — just the network call to the provider's token endpoint and
-the response parse. Callers (the db-side `refresh_credentials`
-helper) are responsible for locking, the decision, and persistence.
-"""
+"""HTTP refresh-token exchange. No DB, no decision logic — callers
+own locking and persistence."""
 
 from typing import Any
 
 import requests
 
-from onyx.external_apps.providers import OAuthProvider
+from onyx.external_apps.providers import OAuth
+from onyx.external_apps.providers import Refresh
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 def refresh_oauth_tokens(
-    provider: OAuthProvider,
+    provider: OAuth,
     client_id: str,
     client_secret: str,
     refresh_token: str,
 ) -> dict[str, Any] | None:
-    """POST `grant_type=refresh_token` to the provider's token URL.
-
-    Returns the parsed dict of fields to merge into the user's stored
-    credentials (e.g. `{access_token, expires_in, refresh_token?}`),
-    or None if the provider rejected the refresh — revoked refresh
-    token, network error, malformed response, etc. The caller treats
-    None as "user must re-authenticate."
+    """Returns the fields to merge into stored credentials, or None
+    if the provider doesn't support refresh or the upstream rejected
+    it. Caller treats None as "user must re-authenticate."
     """
+    if not isinstance(provider, Refresh):
+        logger.warning(
+            "%s does not implement Refresh; cannot refresh tokens",
+            provider.app_name,
+        )
+        return None
+
     try:
         response = requests.post(
             provider.token_url,
@@ -60,9 +59,8 @@ def refresh_oauth_tokens(
         )
         return None
 
-    # Cross-provider error detection. Slack returns 200 with
-    # `{"ok": false, "error": "..."}` on failure; everyone else
-    # (Google, Linear, OAuth-spec-compliant providers) uses non-2xx.
+    # Slack returns 200 + `{"ok": false}` on failure; everyone else
+    # uses non-2xx.
     if response.status_code >= 400 or body.get("ok") is False:
         error = body.get("error_description") or body.get("error") or "unknown"
         logger.warning("%s refresh failed: %s", provider.app_name, error)
