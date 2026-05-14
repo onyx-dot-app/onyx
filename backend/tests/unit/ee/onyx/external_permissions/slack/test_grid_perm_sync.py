@@ -222,7 +222,13 @@ class TestFetchChannelPermissionsGrid:
             assert result["C_BIG"].is_public is True
             assert result["C_BIG"].external_user_emails == set()
 
-    def test_non_grid_falls_back_to_workspace_permissions(self) -> None:
+    def test_non_grid_public_channel_not_overridden(self) -> None:
+        """Non-Grid public channels stay with their ingest-time is_public=True.
+
+        The override path in ``_get_slack_document_access`` only fires when
+        the channel id is in ``channel_permissions``; non-Grid public
+        channels are intentionally absent so the ingest value wins.
+        """
         client = MagicMock()
         ch = _channel("C1")  # no team field, non-Grid
         with patch(
@@ -239,7 +245,7 @@ class TestFetchChannelPermissionsGrid:
                 team_ids=None,
                 team_id_to_user_emails=None,
             )
-            assert result["C1"].external_user_emails == {"a@x.com", "b@x.com"}
+            assert "C1" not in result
 
 
 class TestEEGetChannelAccessGrid:

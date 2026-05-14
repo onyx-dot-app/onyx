@@ -43,7 +43,7 @@ def _fetch_workspace_permissions(
 
 def _fetch_channel_permissions(
     slack_client: WebClient,
-    workspace_permissions: ExternalAccess,
+    workspace_permissions: ExternalAccess,  # noqa: ARG001
     user_id_to_email_map: dict[str, str],
     team_ids: list[str] | None = None,
     team_id_to_user_emails: dict[str, set[str]] | None = None,
@@ -93,8 +93,9 @@ def _fetch_channel_permissions(
                 # or Slack Connect share) or union past the perm-sync size
                 # guard. Fall back to is_public so the doc stays accessible.
                 channel_permissions[channel_id] = ExternalAccess.public()
-        else:
-            channel_permissions[channel_id] = workspace_permissions
+        # Non-Grid public channels keep their ingest-time is_public=True; no
+        # override entry so `_get_slack_document_access` falls back to the slim
+        # doc's original access.
 
     private_channel_ids = [
         channel["id"] for channel in private_channels if "id" in channel
@@ -218,7 +219,13 @@ def slack_doc_sync(
 
     team_id_to_user_emails: dict[str, set[str]] | None = None
     if grid_team_ids:
-        team_id_to_user_emails = fetch_team_user_emails(slack_client, grid_team_ids)
+        try:
+            team_id_to_user_emails = fetch_team_user_emails(slack_client, grid_team_ids)
+        except Exception as e:
+            # Without per-team users, Grid public-channel scoping degrades to
+            # is_public via the empty-union fallback. Keep perm-sync running.
+            logger.warning("fetch_team_user_emails failed on Grid org: %s", e)
+            team_id_to_user_emails = None
         user_id_to_email_map = fetch_user_id_to_email_map(
             slack_client, team_ids=grid_team_ids
         )
