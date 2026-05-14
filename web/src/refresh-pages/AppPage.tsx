@@ -49,6 +49,7 @@ import {
   useCurrentChatState,
   useIsReady,
   useDocumentSidebarVisible,
+  useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
@@ -391,8 +392,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const anchorNodeId = anchorMessage?.nodeId;
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
-  // Auto-scroll preference from user settings
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  // Auto-scroll preference from user settings. Pause while the
+  // typewriter is running its post-finish adaptive drain — the user is
+  // reading at that point and a scroll yank as the typewriter speeds up
+  // is jarring.
+  const autoScrollPreference = user?.preferences?.auto_scroll !== false;
+  const isStreamDraining = useCurrentIsStreamDraining();
+  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);

@@ -104,6 +104,9 @@ export const MessageTextRenderer: MessageRenderer<
   const setLatestMessageRenderComplete = useChatSessionStore(
     (state) => state.setLatestMessageRenderComplete
   );
+  const setIsStreamDraining = useChatSessionStore(
+    (state) => state.setIsStreamDraining
+  );
 
   const lastStableSyncedContentRef = useRef("");
   const lastVisibleContentRef = useRef("");
@@ -261,7 +264,7 @@ export const MessageTextRenderer: MessageRenderer<
 
   const isStreamFinished = isFinalAnswerComplete(packets);
 
-  const displayedContent = useTypewriter(
+  const { displayed: displayedContent, isDraining } = useTypewriter(
     content,
     isStreamingAnimationEnabled,
     isStreamFinished
@@ -304,6 +307,15 @@ export const MessageTextRenderer: MessageRenderer<
       }
     }
   }, [streamFullyDisplayed, onComplete, setLatestMessageRenderComplete]);
+
+  // Mirror the typewriter's drain state into the chat-session store so
+  // ChatScrollContainer can pause auto-scroll while the drain runs. Only
+  // the actively-animating renderer writes — historical mounts never
+  // enter the drain branch in useTypewriter.
+  useEffect(() => {
+    if (!wasEverAnimatingRef.current || !sessionIdAtMountRef.current) return;
+    setIsStreamDraining(sessionIdAtMountRef.current, isDraining);
+  }, [isDraining, setIsStreamDraining]);
 
   const processedContent = useMemo(
     () => processContent(displayedContent),

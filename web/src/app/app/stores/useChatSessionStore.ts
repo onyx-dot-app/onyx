@@ -53,6 +53,12 @@ interface ChatSessionData {
   // Gates queued-message dispatch so a follow-up isn't sent while the
   // previous answer is still drawing on screen.
   latestMessageRenderComplete: boolean;
+
+  // True while the smooth-streaming typewriter is running its post-finish
+  // adaptive drain. Auto-scroll pauses during this window so the page
+  // doesn't yank as the typewriter speeds up — the user is reading at
+  // this point, not watching new content arrive.
+  isStreamDraining: boolean;
 }
 
 interface ChatSessionStore {
@@ -154,6 +160,7 @@ interface ChatSessionStore {
     sessionId: string,
     complete: boolean
   ) => void;
+  setIsStreamDraining: (sessionId: string, draining: boolean) => void;
 
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -196,6 +203,7 @@ const createInitialSessionData = (
   isLoaded: false,
   queuedMessages: [],
   latestMessageRenderComplete: true,
+  isStreamDraining: false,
   ...initialData,
 });
 
@@ -563,6 +571,12 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     });
   },
 
+  setIsStreamDraining: (sessionId: string, draining: boolean) => {
+    const session = get().sessions.get(sessionId);
+    if (!session || session.isStreamDraining === draining) return;
+    get().updateSessionData(sessionId, { isStreamDraining: draining });
+  },
+
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
     get().updateSessionData(sessionId, { abortController: controller });
@@ -746,4 +760,13 @@ export const useCurrentLatestMessageRenderComplete = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.latestMessageRenderComplete ?? true;
+  });
+
+export const useCurrentIsStreamDraining = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isStreamDraining ?? false;
   });

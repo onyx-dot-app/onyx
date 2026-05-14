@@ -9,6 +9,15 @@ const CHARS_PER_FRAME = 3;
 // the user is still reading along.
 const CATCHUP_FRAMES = 30;
 
+export interface UseTypewriterResult {
+  displayed: string;
+  /** True while post-finish adaptive drain is running. Callers can use
+   *  this to pause auto-scroll so the page doesn't yank when the
+   *  typewriter speeds up — the user is reading at this point, not
+   *  watching new content arrive. */
+  isDraining: boolean;
+}
+
 /**
  * Reveals `target` one character at a time on each animation frame.
  * When `enabled` is false (historical messages), snaps to full on mount.
@@ -22,7 +31,7 @@ export function useTypewriter(
   target: string,
   enabled: boolean,
   streamFinished: boolean = false
-): string {
+): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
   targetRef.current = target;
@@ -43,6 +52,10 @@ export function useTypewriter(
   // Dividing the *current* backlog each tick produces geometric decay
   // and overshoots CATCHUP_FRAMES significantly for long tails.
   const drainStepRef = useRef<number | null>(null);
+
+  // Exposed so callers can suppress auto-scroll while the drain runs.
+  const [isDraining, setIsDraining] = useState(false);
+  const isDrainingRef = useRef(false);
 
   // `enabled` controls initial state: animate from 0 vs snap to full for
   // history/voice. Transitions mid-stream are handled via enabledRef in
@@ -84,6 +97,10 @@ export function useTypewriter(
         // restart it when `target` grows.
         runningRef.current = false;
         rafIdRef.current = null;
+        if (isDrainingRef.current) {
+          isDrainingRef.current = false;
+          setIsDraining(false);
+        }
         return;
       }
       let charsThisFrame: number;
@@ -94,6 +111,10 @@ export function useTypewriter(
             CHARS_PER_FRAME,
             Math.ceil(initialBacklog / CATCHUP_FRAMES)
           );
+          if (!isDrainingRef.current) {
+            isDrainingRef.current = true;
+            setIsDraining(true);
+          }
         }
         charsThisFrame = drainStepRef.current;
       } else {
@@ -163,8 +184,10 @@ export function useTypewriter(
       document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  return useMemo(
+  const displayed = useMemo(
     () => target.slice(0, Math.min(displayedLength, target.length)),
     [target, displayedLength]
   );
+
+  return { displayed, isDraining };
 }
