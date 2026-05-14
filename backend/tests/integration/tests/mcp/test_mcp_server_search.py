@@ -36,7 +36,6 @@ from tests.integration.common_utils.test_models import DATestUser
 MCP_SEARCH_TOOL = "search_indexed_documents"
 INDEXED_SOURCES_RESOURCE_URI = "resource://indexed_sources"
 DOCUMENT_SETS_RESOURCE_URI = "resource://document_sets"
-DEFAULT_SEARCH_LIMIT = 5
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 
@@ -77,17 +76,13 @@ def _extract_tool_payload(result: CallToolResult) -> dict[str, Any]:
 def _call_search_tool(
     headers: dict[str, str],
     query: str,
-    limit: int = DEFAULT_SEARCH_LIMIT,
     document_set_names: list[str] | None = None,
 ) -> CallToolResult:
     """Call the search_indexed_documents tool via MCP."""
 
     async def _action(session: ClientSession) -> CallToolResult:
         await session.initialize()
-        arguments: dict[str, Any] = {
-            "query": query,
-            "limit": limit,
-        }
+        arguments: dict[str, Any] = {"query": query}
         if document_set_names is not None:
             arguments["document_set_names"] = document_set_names
         return await session.call_tool(MCP_SEARCH_TOOL, arguments)
@@ -152,10 +147,7 @@ def test_mcp_document_search_flow(
         tools = await session.list_tools()
         search_result = await session.call_tool(
             MCP_SEARCH_TOOL,
-            {
-                "query": doc_text,
-                "limit": DEFAULT_SEARCH_LIMIT,
-            },
+            {"query": doc_text},
         )
         return resources, tools, search_result
 
@@ -173,18 +165,16 @@ def test_mcp_document_search_flow(
 
     # Verify search results
     payload = _extract_tool_payload(search_result)
-    assert payload["query"] == doc_text
-    assert payload["total_results"] >= 1
-    assert isinstance(payload["documents"], list)
-    assert len(payload["documents"]) > 0
-    assert any(doc_text in (doc.get("content") or "") for doc in payload["documents"])
+    assert isinstance(payload["results"], list)
+    assert len(payload["results"]) > 0
+    assert any(doc_text in (doc.get("content") or "") for doc in payload["results"])
 
     # Verify document structure
-    for doc in payload["documents"]:
+    for doc in payload["results"]:
         assert isinstance(doc, dict)
         # Verify expected fields exist (may be None)
         assert "content" in doc
-        assert "semantic_identifier" in doc
+        assert "title" in doc
         assert "source_type" in doc
 
 
@@ -208,6 +198,12 @@ def test_mcp_search_respects_acl_filters(
         access_type=AccessType.PRIVATE,
         user_performing_action=admin_user,
     )
+    # A second, public source so the blocked user has *some* visible source —
+    # otherwise the MCP tool hits the "no indexed sources" early-exit and the
+    # assertion below would pass for the wrong reason.
+    public_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+    )
 
     user_group = UserGroupManager.create(
         user_ids=[privileged_user.id],
@@ -225,6 +221,12 @@ def test_mcp_search_respects_acl_filters(
         api_key=api_key,
         user_performing_action=admin_user,
     )
+    _seed_document_and_wait_for_indexing(
+        cc_pair=public_cc_pair,
+        content="MCP unrelated public document",
+        api_key=api_key,
+        user_performing_action=admin_user,
+    )
 
     privileged_headers = _auth_headers(privileged_user, "mcp-acl-allowed")
     restricted_headers = _auth_headers(user_without_access, "mcp-acl-blocked")
@@ -232,17 +234,18 @@ def test_mcp_search_respects_acl_filters(
     # Privileged user should find the document
     allowed_result = _call_search_tool(privileged_headers, restricted_doc_content)
     allowed_payload = _extract_tool_payload(allowed_result)
-    assert allowed_payload["total_results"] >= 1
+    assert len(allowed_payload["results"]) >= 1
     assert any(
         restricted_doc_content in (doc.get("content") or "")
-        for doc in allowed_payload["documents"]
+        for doc in allowed_payload["results"]
     )
 
-    # User without access should not find the document
+    # User without access should not find the document. Guard against the
+    # no-sources early-exit by also asserting search actually ran (no error).
     blocked_result = _call_search_tool(restricted_headers, restricted_doc_content)
     blocked_payload = _extract_tool_payload(blocked_result)
-    assert blocked_payload["total_results"] == 0
-    assert blocked_payload["documents"] == []
+    assert "error" not in blocked_payload, blocked_payload
+    assert blocked_payload["results"] == []
 
 
 def test_mcp_search_filters_by_document_set(
@@ -307,10 +310,10 @@ def test_mcp_search_filters_by_document_set(
 
     # Without the filter both documents are visible.
     unfiltered_payload = _extract_tool_payload(
-        _call_search_tool(headers, shared_phrase, limit=10)
+        _call_search_tool(headers, shared_phrase)
     )
     unfiltered_contents = [
-        doc.get("content") or "" for doc in unfiltered_payload["documents"]
+        doc.get("content") or "" for doc in unfiltered_payload["results"]
     ]
     assert any(in_set_content in content for content in unfiltered_contents)
     assert any(out_of_set_content in content for content in unfiltered_contents)
@@ -320,14 +323,13 @@ def test_mcp_search_filters_by_document_set(
         _call_search_tool(
             headers,
             shared_phrase,
-            limit=10,
             document_set_names=[doc_set.name],
         )
     )
     filtered_contents = [
-        doc.get("content") or "" for doc in filtered_payload["documents"]
+        doc.get("content") or "" for doc in filtered_payload["results"]
     ]
-    assert filtered_payload["total_results"] >= 1
+    assert len(filtered_payload["results"]) >= 1
     assert any(in_set_content in content for content in filtered_contents)
     assert all(out_of_set_content not in content for content in filtered_contents)
 
@@ -337,12 +339,11 @@ def test_mcp_search_filters_by_document_set(
         _call_search_tool(
             headers,
             shared_phrase,
-            limit=10,
             document_set_names=[],
         )
     )
     empty_list_contents = [
-        doc.get("content") or "" for doc in empty_list_payload["documents"]
+        doc.get("content") or "" for doc in empty_list_payload["results"]
     ]
     assert any(in_set_content in content for content in empty_list_contents)
     assert any(out_of_set_content in content for content in empty_list_contents)
