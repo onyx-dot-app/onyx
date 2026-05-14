@@ -491,10 +491,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       files: File[],
       projectId?: number | null
     ): Promise<CategorizedFiles> => {
-      const uploaded: CategorizedFiles = await svcUploadFiles(
-        files,
-        projectId
-      );
+      const uploaded: CategorizedFiles = await svcUploadFiles(files, projectId);
       const uploadedFiles = uploaded.user_files || [];
       // Track these uploaded file IDs for targeted polling
       if (uploadedFiles.length > 0) {

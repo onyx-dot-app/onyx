@@ -1170,7 +1170,7 @@ export default function useChatController({
                       document_id: string;
                     };
                     citationsPerModel[modelIndex] = {
-                      ...citationsPerModel[modelIndex],
+                      ...(citationsPerModel[modelIndex] || {}),
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
                   } else if (packetObj.type === "message_start") {
@@ -1200,7 +1200,7 @@ export default function useChatController({
                     document_id: string;
                   };
                   citations = {
-                    ...citations,
+                    ...(citations || {}),
                     [citationInfo.citation_number]: citationInfo.document_id,
                   };
                 } else if (packetObj.type === "message_start") {

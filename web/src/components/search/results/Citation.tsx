@@ -110,12 +110,12 @@ export function Citation({
               updatePresentingDocument={document_info.updatePresentingDocument}
               document={document_info.document}
             />
-          ) : (
+          ) : question_info?.question ? (
             <CompactQuestionCard
-              question={question_info!.question}
-              openQuestion={question_info!.openQuestion}
+              question={question_info.question}
+              openQuestion={question_info.openQuestion}
             />
-          )}
+          ) : null}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
