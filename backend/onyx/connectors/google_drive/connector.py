@@ -516,12 +516,21 @@ class GoogleDriveConnector(
         new ancestors.
 
         The function tracks two separate sets:
-        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (to avoid duplicates)
+        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (used to dedupe
+          emissions from walks that did NOT reach a verified terminal).
         - fully_walked_hierarchy_node_raw_ids: Nodes where we've successfully walked
           to a terminal root. Only skip walking from a node if it's in this set.
 
         This separation ensures that if User A can access folder C but not its parent B,
         a later User B who has access to both can still complete the walk to the root.
+
+        Cross-yield healing: when a walk *does* reach a verified terminal, every node
+        encountered along that walk is re-emitted (regardless of `seen`). The downstream
+        upsert is idempotent and keys on `raw_node_id`, so any node that was previously
+        emitted with an unresolvable parent (and therefore parented to SOURCE) gets its
+        `parent_id` corrected once the full chain becomes known. Walks that *don't*
+        reach a terminal keep the seen-based dedup so we don't churn upserts for
+        chains we still can't fully resolve.
 
         Args:
             files: List of retrieved drive files to get ancestors for
@@ -558,8 +567,12 @@ class GoogleDriveConnector(
             if parent_id in fully_walked_hierarchy_node_raw_ids:
                 continue
 
-            # Walk up the parent chain
+            # Walk up the parent chain.
+            # `walk_nodes` collects every node we build during this walk (no dedup).
+            # `ancestors_to_add` collects only nodes that are new to the seen-set.
+            # Which one we ultimately emit depends on whether we reach a terminal.
             ancestors_to_add: list[HierarchyNode] = []
+            walk_nodes: list[HierarchyNode] = []
             node_ids_in_walk: list[str] = []
             current_id: str | None = parent_id
             reached_terminal = False
@@ -622,6 +635,10 @@ class GoogleDriveConnector(
                     external_access=external_access,
                 )
 
+                # Always remember the node we built; if this walk reaches a verified
+                # terminal we re-emit it below to heal any prior incomplete walk.
+                walk_nodes.append(node)
+
                 # Now atomically check and add - only append if we're the first thread
                 # to successfully create this node
                 already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
@@ -660,11 +677,17 @@ class GoogleDriveConnector(
                 current_id = folder_parent_id
 
             # If we successfully reached a terminal node (or a fully-walked node),
-            # mark all nodes in this walk as fully walked
+            # mark all nodes in this walk as fully walked AND re-emit every node
+            # we touched. The downstream upsert is idempotent, so any node
+            # previously emitted with an unresolvable parent (parented to SOURCE)
+            # gets corrected once the chain can be fully resolved.
+            # Otherwise fall back to the seen-deduped subset to avoid churning
+            # upserts for chains we still can't fully resolve.
             if reached_terminal:
                 fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
-
-            new_nodes += ancestors_to_add
+                new_nodes += walk_nodes[::-1]  # locally parent-first
+            else:
+                new_nodes += ancestors_to_add[::-1]  # locally parent-first
 
         return new_nodes
 
