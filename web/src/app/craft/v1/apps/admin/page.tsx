@@ -21,11 +21,13 @@ import ConfigureProviderModal from "@/app/craft/v1/apps/admin/ConfigureProviderM
 
 export default function ExternalAppsAdminPage() {
   const { isAdmin } = useUser();
-  const { data, isLoading, mutate } = useSWR<ExternalAppAdminResponse[]>(
+  // keepPreviousData so revalidations don't blank the cards while
+  // the refetch is in flight.
+  const { data, mutate } = useSWR<ExternalAppAdminResponse[]>(
     SWR_KEYS.buildExternalAppsAdmin,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { keepPreviousData: true }
   );
-  const apps = data ?? [];
 
   if (!isAdmin) {
     return (
@@ -47,7 +49,7 @@ export default function ExternalAppsAdminPage() {
         description="Enable third-party integrations that users in your org can connect their personal accounts to."
       />
       <SettingsLayouts.Body>
-        {isLoading ? (
+        {data === undefined ? (
           <Card variant="tertiary">
             <Text mainContentBody>Loading…</Text>
           </Card>
@@ -59,7 +61,7 @@ export default function ExternalAppsAdminPage() {
                 providerKey={key as BuiltInProviderKey}
                 preset={preset}
                 existingApp={findAppForProvider(
-                  apps,
+                  data,
                   key as BuiltInProviderKey
                 )}
                 onChange={() => mutate()}
@@ -100,7 +102,8 @@ function ProviderRow({ preset, existingApp, onChange }: ProviderRowProps) {
         id: existingApp.id,
         name: existingApp.name,
         description: existingApp.description,
-        upstream_urls: existingApp.upstream_urls,
+        app_type: existingApp.app_type,
+        upstream_url_patterns: existingApp.upstream_url_patterns,
         auth_template: existingApp.auth_template,
         organization_credentials: existingApp.organization_credentials,
         enabled: nextEnabled,

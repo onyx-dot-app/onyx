@@ -21,11 +21,13 @@ interface OAuthStartResponse {
 }
 
 export default function ExternalAppsUserPage() {
-  const { data, isLoading, mutate } = useSWR<ExternalAppUserResponse[]>(
+  // keepPreviousData so revalidations don't blank the cards while
+  // the refetch is in flight.
+  const { data, mutate } = useSWR<ExternalAppUserResponse[]>(
     SWR_KEYS.buildExternalApps,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { keepPreviousData: true }
   );
-  const apps = data ?? [];
 
   return (
     <SettingsLayouts.Root>
@@ -35,11 +37,11 @@ export default function ExternalAppsUserPage() {
         description="Connect your accounts so Onyx Craft can use them as context."
       />
       <SettingsLayouts.Body>
-        {isLoading ? (
+        {data === undefined ? (
           <Card variant="tertiary">
             <Text mainContentBody>Loading…</Text>
           </Card>
-        ) : apps.length === 0 ? (
+        ) : data.length === 0 ? (
           <Card variant="tertiary">
             <Text mainContentBody text03>
               No external apps are enabled for your org yet. Ask an admin to
@@ -52,7 +54,7 @@ export default function ExternalAppsUserPage() {
               .map((key) => ({
                 key,
                 preset: BUILT_IN_PROVIDER_REGISTRY[key],
-                userApp: findUserAppForProvider(apps, key),
+                userApp: findUserAppForProvider(data, key),
               }))
               .filter(({ userApp }) => userApp !== null)
               .map(({ key, preset, userApp }) => (
