@@ -139,8 +139,8 @@ export default function WorkingLine({ toolCall }: WorkingLineProps) {
                   "block",
                   isOpen
                     ? toolCall.kind === "execute"
-                      ? "break-words whitespace-pre-wrap"
-                      : "break-words whitespace-normal"
+                      ? "wrap-break-word whitespace-pre-wrap"
+                      : "wrap-break-word whitespace-normal"
                     : "truncate"
                 )}
               >
@@ -176,7 +176,7 @@ export default function WorkingLine({ toolCall }: WorkingLineProps) {
             <SvgChevronDown
               className={cn(
                 "size-3.5 stroke-text-03 transition-transform duration-150 shrink-0 mt-0.5",
-                !isOpen && "rotate-[-90deg]"
+                !isOpen && "-rotate-90"
               )}
             />
           </button>

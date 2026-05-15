@@ -111,9 +111,9 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
                     slot["arguments"] += tc.function.arguments
 
     indices = sorted(accumulated.keys())
-    assert indices == list(
-        range(len(indices))
-    ), f"Tool call indices should be 0..N-1, got {indices}"
+    assert indices == list(range(len(indices))), (
+        f"Tool call indices should be 0..N-1, got {indices}"
+    )
 
     names = {slot["name"] for slot in accumulated.values()}
     assert names == {
@@ -155,9 +155,9 @@ def test_responses_call_with_invalid_key_raises_authentication_error() -> None:
 
     err = exc_info.value
     err_str = str(err)
-    assert (
-        "NoneType" not in err_str
-    ), f"metadata=None TypeError leaked into the surfaced exception: {err_str!r}"
+    assert "NoneType" not in err_str, (
+        f"metadata=None TypeError leaked into the surfaced exception: {err_str!r}"
+    )
     assert (
         isinstance(err, litellm.exceptions.AuthenticationError)
         or "auth" in err_str.lower()
@@ -223,9 +223,9 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
 
     full_reasoning = "".join(reasoning_parts)
 
-    assert (
-        "\n\n" in full_reasoning
-    ), f"Expected double-newline separator between summary sections: {full_reasoning!r}"
+    assert "\n\n" in full_reasoning, (
+        f"Expected double-newline separator between summary sections: {full_reasoning!r}"
+    )
 
 
 @pytest.mark.secrets(TestSecret.OPENAI_API_KEY)
@@ -259,9 +259,9 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     response = llm.invoke(prompt=prompt)
     reasoning = response.choice.message.reasoning_content or ""
 
-    assert (
-        "\n\n" in reasoning
-    ), f"Expected double-newline separator between summary sections: {reasoning!r}"
+    assert "\n\n" in reasoning, (
+        f"Expected double-newline separator between summary sections: {reasoning!r}"
+    )
 
 
 @pytest.mark.secrets(TestSecret.OPENAI_API_KEY)

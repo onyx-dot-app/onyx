@@ -28,7 +28,7 @@ export default async function GalleryPage(props: {
       <div className="w-full py-8">
         <div className="px-32">
           <InstantSSRAutoRefresh />
-          <div className="max-w-4xl mx-auto !border-none !bg-transparent !ring-none">
+          <div className="max-w-4xl mx-auto border-none! bg-transparent! !ring-none">
             <AgentStats agentId={parseInt(params.id)} />
           </div>
         </div>

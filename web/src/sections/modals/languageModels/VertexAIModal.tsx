@@ -5,6 +5,7 @@ import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -86,15 +87,8 @@ function VertexAIModalInternals({
               title="Authentication Method"
               subDescription="Choose how Onyx should authenticate with Google Vertex AI."
             >
-              <InputSelect
-                value={authMethod || AUTH_METHOD_SERVICE_ACCOUNT}
-                onValueChange={(value) =>
-                  formikProps.setFieldValue(FIELD_VERTEX_AUTH_METHOD, value)
-                }
-              >
-                <InputSelect.Trigger
-                  defaultValue={AUTH_METHOD_SERVICE_ACCOUNT}
-                />
+              <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
+                <InputSelect.Trigger />
                 <InputSelect.Content>
                   <InputSelect.Item
                     value={AUTH_METHOD_SERVICE_ACCOUNT}
@@ -109,7 +103,7 @@ function VertexAIModalInternals({
                     Workload Identity (GKE)
                   </InputSelect.Item>
                 </InputSelect.Content>
-              </InputSelect>
+              </InputSelectField>
             </InputVertical>
           )}
 

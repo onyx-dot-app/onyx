@@ -92,12 +92,12 @@ class SalesforceConnectorContext:
     type_to_queryable_fields: dict[str, set[str]] = {}
     prefix_to_type: dict[str, str] = {}  # infer the object type of an id immediately
 
-    parent_to_child_relationships: dict[str, set[str]] = (
-        {}
-    )  # map from parent to child relationships
-    parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = (
-        {}
-    )  # map from relationship to queryable fields
+    parent_to_child_relationships: dict[
+        str, set[str]
+    ] = {}  # map from parent to child relationships
+    parent_to_relationship_queryable_fields: dict[
+        str, dict[str, set[str]]
+    ] = {}  # map from relationship to queryable fields
 
     parent_child_names_to_relationships: dict[str, str] = {}
 
@@ -898,22 +898,22 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
 
         parent_types = set(parent_object_list)
         child_types: set[str] = set()
-        parent_to_child_types: dict[str, set[str]] = (
-            {}
-        )  # map from parent to child types
-        child_to_parent_types: dict[str, set[str]] = (
-            {}
-        )  # map from child to parent types
+        parent_to_child_types: dict[
+            str, set[str]
+        ] = {}  # map from parent to child types
+        child_to_parent_types: dict[
+            str, set[str]
+        ] = {}  # map from child to parent types
 
-        parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = (
-            {}
-        )  # for a given object, the fields reference parent objects
+        parent_reference_fields_by_type: dict[
+            str, dict[str, list[str]]
+        ] = {}  # for a given object, the fields reference parent objects
         type_to_queryable_fields: dict[str, set[str]] = {}
         prefix_to_type: dict[str, str] = {}
 
-        parent_to_child_relationships: dict[str, set[str]] = (
-            {}
-        )  # map from parent to child relationships
+        parent_to_child_relationships: dict[
+            str, set[str]
+        ] = {}  # map from parent to child relationships
 
         # relationship keys are formatted as "parent__relationship"
         # we have to do this because relationship names are not unique!

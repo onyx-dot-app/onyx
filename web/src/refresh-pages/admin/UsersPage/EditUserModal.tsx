@@ -220,9 +220,7 @@ export default function EditUserModal({
                   ) : (
                     <ShadowDiv
                       shadowHeight="0.75rem"
-                      className={cn(
-                        "flex flex-col gap-1 max-h-[15rem] rounded-08"
-                      )}
+                      className={cn("flex flex-col gap-1 max-h-60 rounded-08")}
                     >
                       {dropdownGroups.map((group) => {
                         const isMember = memberGroupIds.has(group.id);
@@ -247,7 +245,7 @@ export default function EditUserModal({
               </Popover>
 
               <ShadowDiv
-                className={cn(" max-h-[11rem] flex flex-col gap-1 rounded-08")}
+                className={cn(" max-h-44 flex flex-col gap-1 rounded-08")}
                 shadowHeight="0.75rem"
               >
                 {joinedGroups.length === 0 ? (

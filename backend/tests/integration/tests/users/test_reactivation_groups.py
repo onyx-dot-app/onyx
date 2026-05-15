@@ -49,6 +49,6 @@ def test_reactivated_user_retains_default_group(
 
     # Verify user is still in Basic group after reactivation
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
-    assert (
-        basic_user.email in basic_emails
-    ), "Reactivated user should still be in Basic default group"
+    assert basic_user.email in basic_emails, (
+        "Reactivated user should still be in Basic default group"
+    )

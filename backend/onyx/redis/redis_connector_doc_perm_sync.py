@@ -236,7 +236,6 @@ class RedisConnectorPermissionSync:
             # Catch exceptions per-element to avoid breaking the entire sync
             db_start = time.monotonic()
             try:
-
                 element_update_permissions_fn(
                     self.tenant_id,
                     permissions,

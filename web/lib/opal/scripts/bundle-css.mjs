@@ -22,14 +22,29 @@ function findCss(dir) {
   return out;
 }
 
+const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
 const allCss = findCss(srcDir).sort();
-const leafCss = allCss.filter((p) => p !== rootCss);
-const order = [rootCss, ...leafCss];
+const leafCss = allCss.filter((p) => p !== referenceCss && p !== rootCss);
+// _reference.css carries `@import "tailwindcss"` + `@config` and must come
+// first. root.css follows so design tokens are defined before any rule that
+// consumes them. The remaining files are concatenated alphabetically.
+const order = [referenceCss, rootCss, ...leafCss];
+
+// Strip per-file `@reference` directives — they only exist for monorepo dev
+// where each file is processed independently by PostCSS. In the concatenated
+// bundle every rule is already in the same processing context as the leading
+// `_reference.css`, so the directives are redundant and would also fail to
+// resolve relative paths after bundling.
+function stripReferenceDirectives(source) {
+  return source.replace(/^@reference\s+['"][^'"]+['"];\s*\n?/gm, "");
+}
 
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
-  return `/* === ${rel} === */\n${readFileSync(file, "utf8").trimEnd()}\n`;
+  const raw = readFileSync(file, "utf8");
+  const cleaned = file === referenceCss ? raw : stripReferenceDirectives(raw);
+  return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });
 
 const bundled = parts.join("\n");

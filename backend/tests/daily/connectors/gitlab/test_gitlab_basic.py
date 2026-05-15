@@ -129,12 +129,12 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
         #     break
 
     # Assert that we found and validated the specific documents
-    assert (
-        validated_mr
-    ), f"Failed to find and validate the specific MergeRequest ({target_mr_id})."
-    assert (
-        validated_issue
-    ), f"Failed to find and validate the specific Issue ({target_issue_id})."
-    assert (
-        validated_code_file
-    ), f"Failed to find and validate the specific CodeFile ({target_code_file_semantic_id})."
+    assert validated_mr, (
+        f"Failed to find and validate the specific MergeRequest ({target_mr_id})."
+    )
+    assert validated_issue, (
+        f"Failed to find and validate the specific Issue ({target_issue_id})."
+    )
+    assert validated_code_file, (
+        f"Failed to find and validate the specific CodeFile ({target_code_file_semantic_id})."
+    )

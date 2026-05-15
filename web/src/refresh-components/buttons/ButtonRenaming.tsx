@@ -47,7 +47,7 @@ export default function ButtonRenaming({
       onBlur={onClose}
       value={renamingValue}
       className={cn(
-        "bg-transparent outline-none w-full resize-none overflow-x-hidden overflow-y-hidden whitespace-nowrap no-scrollbar font-main-content-body",
+        "bg-transparent outline-hidden w-full resize-none overflow-x-hidden overflow-y-hidden whitespace-nowrap no-scrollbar font-main-content-body",
         className
       )}
       onChange={(event) => setRenamingValue(event.target.value)}

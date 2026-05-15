@@ -362,9 +362,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
                 raise ValueError(
                     "Bug: Secondary index embedding dimension and precision are not set."
                 )
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             self._secondary_real_index.verify_and_create_index_if_necessary(
                 secondary_index_embedding_dim, secondary_index_embedding_precision
             )
@@ -418,9 +418,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         """
         total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
         if self.secondary_index_name:
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             total_chunks_deleted += self._secondary_real_index.delete(
                 doc_id, chunk_count
             )
@@ -476,9 +476,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         try:
             self._real_index.update([update_request])
             if self.secondary_index_name:
-                assert (
-                    self._secondary_real_index is not None
-                ), "Bug: Secondary index is not initialized."
+                assert self._secondary_real_index is not None, (
+                    "Bug: Secondary index is not initialized."
+                )
                 self._secondary_real_index.update([update_request])
         except NotFoundError:
             logger.exception(

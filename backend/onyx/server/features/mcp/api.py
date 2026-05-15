@@ -59,6 +59,7 @@ from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.mcp.models import apply_auto_substitutions
 from onyx.server.features.mcp.models import MCPApiKeyResponse
 from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.server.features.mcp.models import MCPConnectionData
@@ -414,11 +415,10 @@ def _build_headers_from_template(
     template_headers = template_data.headers
 
     for name, value_template in template_headers.items():
-        # Replace placeholders
         value = value_template
         for key, cred_value in credentials.items():
             value = value.replace(f"{{{key}}}", cred_value)
-        value = value.replace("{user_email}", user_email)
+        value = apply_auto_substitutions(value, user_email=user_email)
 
         if name:
             headers[name] = value
@@ -1082,9 +1082,15 @@ def _db_mcp_server_to_api_mcp_server(
                     template_config, apply_mask=False
                 )
                 headers = template_config_dict.get("headers", {})
+                # Prefer the explicitly persisted list; fall back to deriving
+                # from header placeholders for servers created before
+                # `required_fields` was persisted.
+                required_fields = template_config_dict.get(
+                    "required_fields"
+                ) or MCPAuthTemplate.derive_required_fields(headers)
                 auth_template = MCPAuthTemplate(
                     headers=headers,
-                    required_fields=[],  # would need to regex, not worth it
+                    required_fields=required_fields,
                 )
         except Exception as e:
             logger.warning(
@@ -1632,11 +1638,21 @@ def _upsert_mcp_server(
             # Per-user server: create template and save creator's per-user config
             template_data = request.auth_template
 
+            # Trust the explicit list when present, otherwise derive it from
+            # the header placeholders so the user-side modal always knows
+            # which fields to prompt for. Older servers created before this
+            # field was persisted are healed lazily on read.
+            persisted_required_fields = (
+                template_data.required_fields
+                or MCPAuthTemplate.derive_required_fields(template_data.headers)
+            )
+
             # Create template config: faithful representation of what's in the admin panel
             template_config = create_connection_config(
                 config_data=MCPConnectionData(
                     headers=template_data.headers,
                     header_substitutions=request.admin_credentials,
+                    required_fields=persisted_required_fields,
                 ),
                 mcp_server_id=mcp_server.id,
                 user_email="",

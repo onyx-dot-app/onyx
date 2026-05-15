@@ -88,7 +88,6 @@ def build_jira_url(jira_base_url: str, issue_key: str) -> str:
 def build_jira_client(
     credentials: dict[str, Any], jira_base: str, scoped_token: bool = False
 ) -> JIRA:
-
     jira_base = scoped_url(jira_base, "jira") if scoped_token else jira_base
     api_token = credentials["jira_api_token"]
     # if user provide an email we assume it's cloud

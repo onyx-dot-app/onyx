@@ -43,7 +43,7 @@ function Removable({ onRemove, children }: RemovableProps) {
                 "h-4 w-4",
                 "flex items-center justify-center",
                 "rounded-04 border border-border text-[11px]",
-                "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-sm",
+                "bg-background-neutral-inverted-01 text-text-inverted-05 shadow-xs",
                 "pointer-events-auto",
                 "hover:opacity-90"
               )}
@@ -184,7 +184,7 @@ export function FileCard({
         removeFile && doneUploading ? () => removeFile(file.id) : undefined
       }
     >
-      <div className="min-w-0 max-w-[12rem]">
+      <div className="min-w-0 max-w-48">
         <Interactive.Container border size="fit" width="full">
           <AttachmentItemLayout
             icon={isProcessing ? SimpleLoader : SvgFileText}

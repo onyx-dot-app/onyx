@@ -110,9 +110,9 @@ export default function GroupsCell({
   const hasOverflow = !isMeasuring && overflowCount > 0;
 
   const allGroupsTooltip = (
-    <div className="flex flex-wrap gap-1 max-w-[14rem]">
+    <div className="flex flex-wrap gap-1 max-w-56">
       {groups.map((g) => (
-        <div key={g.id} className="max-w-[10rem]">
+        <div key={g.id} className="max-w-40">
           <Tag title={g.name} size="md" />
         </div>
       ))}
@@ -122,12 +122,12 @@ export default function GroupsCell({
   const tagsContent = (
     <>
       {(isMeasuring ? groups : groups.slice(0, effectiveVisible)).map((g) => (
-        <div key={g.id} data-group-tag className="flex-shrink-0">
+        <div key={g.id} data-group-tag className="shrink-0">
           <Tag title={g.name} size="md" />
         </div>
       ))}
       {hasOverflow && (
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <Tag title={`+${overflowCount}`} size="md" />
         </div>
       )}

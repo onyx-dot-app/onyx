@@ -7,7 +7,7 @@ import {
   AdminDateRangeSelector,
   DateRange,
 } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";

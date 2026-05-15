@@ -247,7 +247,7 @@ def _get_server_space_permissions(
         try:
             return _get_server_space_permissions_rest(confluence_client, space_key)
         except ConfluenceRestSpacePermissionsNotAvailableError as e:
-            # serverInfo lied / custom build / plugin disabled; fall back.
+            # server-information lied / custom build / plugin disabled; fall back.
             logger.info(
                 "Confluence reports a version that should support REST "
                 "space-permissions, but the endpoint is unavailable for "

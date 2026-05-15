@@ -35,8 +35,9 @@ interface DraggableProps {
   isEnabled: boolean;
 }
 
-interface TableBodyProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLTableSectionElement>> {
+interface TableBodyProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLTableSectionElement>
+> {
   ref?: React.Ref<HTMLTableSectionElement>;
   /** DnD context props from useDraggableRows — enables drag-and-drop reordering */
   dndSortable?: DraggableProps;

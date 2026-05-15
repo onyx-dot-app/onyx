@@ -477,6 +477,40 @@ class TestTranslateHistoryToLlmFormat:
         assert isinstance(translated[1], ToolMessage)
         assert translated[1].tool_call_id == "51381e0b0"
 
+    def test_sanitizes_tool_call_name_for_bedrock(self) -> None:
+        # Custom OpenAPI Action tools are stored with the user-supplied
+        # Tool.name (e.g. "ServiceNow API"), which gets injected into the
+        # assistant message's toolUse.name on follow-up turns. Bedrock rejects
+        # names that don't match [a-zA-Z0-9_-]+, so we must sanitize.
+        history = [
+            ChatMessageSimple(
+                message="",
+                token_count=5,
+                message_type=MessageType.ASSISTANT,
+                tool_calls=[
+                    ToolCallSimple(
+                        tool_call_id="call-1",
+                        tool_name="ServiceNow API",
+                        tool_arguments={"q": "incident"},
+                    ),
+                ],
+            ),
+            ChatMessageSimple(
+                message="tool result body",
+                token_count=5,
+                message_type=MessageType.TOOL_CALL_RESPONSE,
+                tool_call_id="call-1",
+            ),
+        ]
+        translated = translate_history_to_llm_format(
+            history=history,
+            llm_config=self._llm_config(LlmProviderNames.BEDROCK),
+        )
+        assert isinstance(translated, list)
+        assert isinstance(translated[0], AssistantMessage)
+        assert translated[0].tool_calls is not None
+        assert translated[0].tool_calls[0].function.name == "ServiceNow_API"
+
     def test_flattens_tool_history_for_ollama(self) -> None:
         translated = translate_history_to_llm_format(
             history=self._tool_history(),

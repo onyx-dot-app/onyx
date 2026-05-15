@@ -22,8 +22,9 @@ export interface ImageGenFormBaseProps {
 export type FormValues = Record<string, any>;
 
 // Props for the generic wrapper component
-export interface ImageGenFormWrapperProps<T extends FormValues>
-  extends ImageGenFormBaseProps {
+export interface ImageGenFormWrapperProps<
+  T extends FormValues,
+> extends ImageGenFormBaseProps {
   title: string;
   description: string;
   initialValues: T;

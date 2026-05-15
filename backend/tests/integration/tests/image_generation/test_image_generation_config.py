@@ -43,7 +43,7 @@ def test_create_image_generation_config(
 
     config = ImageGenerationConfigManager.create(
         image_provider_id="test-openai-dalle",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-test-key-12345",
         is_default=False,
@@ -51,7 +51,7 @@ def test_create_image_generation_config(
     )
 
     assert config.image_provider_id == "test-openai-dalle"
-    assert config.model_name == "dall-e-3"
+    assert config.model_name == "gpt-image-1"
     assert config.is_default is False
 
     # Verify it exists in the list
@@ -96,7 +96,7 @@ def test_create_duplicate_config_fails(
     # Create first config
     ImageGenerationConfigManager.create(
         image_provider_id="duplicate-test-id",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-test-key-1",
         user_performing_action=admin_user,
@@ -127,7 +127,7 @@ def test_get_all_configs(
     # Create multiple configs
     config1 = ImageGenerationConfigManager.create(
         image_provider_id="config-1",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-key-1",
         user_performing_action=admin_user,
@@ -160,7 +160,7 @@ def test_get_config_credentials(
     test_api_key = "sk-test-credentials-key-12345"
     config = ImageGenerationConfigManager.create(
         image_provider_id="credentials-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key=test_api_key,
         user_performing_action=admin_user,
@@ -202,26 +202,26 @@ def test_update_config_direct_key_entry(
     # Create initial config
     config = ImageGenerationConfigManager.create(
         image_provider_id="update-direct-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-initial-key",
         user_performing_action=admin_user,
     )
 
-    assert config.model_name == "dall-e-3"
+    assert config.model_name == "gpt-image-1"
 
     # Update with new credentials and model
     new_api_key = "sk-updated-key-12345"
     updated_config = ImageGenerationConfigManager.update(
         image_provider_id=config.image_provider_id,
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key=new_api_key,
         user_performing_action=admin_user,
     )
 
     assert updated_config.image_provider_id == config.image_provider_id
-    assert updated_config.model_name == "dall-e-3"
+    assert updated_config.model_name == "gpt-image-1"
 
     # Verify credentials were updated (masked: first 4 + **** + last 4)
     credentials = ImageGenerationConfigManager.get_credentials(
@@ -240,13 +240,13 @@ def test_update_config_clone_mode(
     # Create initial config with direct credentials
     config = ImageGenerationConfigManager.create(
         image_provider_id="update-clone-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-initial-direct-key",
         user_performing_action=admin_user,
     )
 
-    assert config.model_name == "dall-e-3"
+    assert config.model_name == "gpt-image-1"
 
     # Update by cloning from LLM provider
     updated_config = ImageGenerationConfigManager.update(
@@ -275,7 +275,7 @@ def test_update_config_source_provider_not_found(
     # Create initial config
     config = ImageGenerationConfigManager.create(
         image_provider_id="update-bad-source-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-initial-key",
         user_performing_action=admin_user,
@@ -304,7 +304,7 @@ def test_delete_config(
     # Create a config
     config = ImageGenerationConfigManager.create(
         image_provider_id="delete-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-delete-key",
         user_performing_action=admin_user,
@@ -353,7 +353,7 @@ def test_set_default_config(
     # Create a config that is not default
     config = ImageGenerationConfigManager.create(
         image_provider_id="default-test",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-test-key",
         is_default=False,
@@ -387,7 +387,7 @@ def test_set_default_clears_previous(
     # Create first config as default
     config1 = ImageGenerationConfigManager.create(
         image_provider_id="first-default",
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         provider="openai",
         api_key="sk-key-1",
         is_default=True,
@@ -462,7 +462,7 @@ def test_create_config_missing_credentials(
         f"{API_SERVER_URL}/admin/image-generation/config",
         json={
             "image_provider_id": "no-creds-test",
-            "model_name": "dall-e-3",
+            "model_name": "gpt-image-1",
         },
         headers=admin_user.headers,
     )
@@ -481,7 +481,7 @@ def test_create_config_source_provider_not_found(
         f"{API_SERVER_URL}/admin/image-generation/config",
         json={
             "image_provider_id": "bad-source-test",
-            "model_name": "dall-e-3",
+            "model_name": "gpt-image-1",
             "source_llm_provider_id": 999999,  # Non-existent ID
         },
         headers=admin_user.headers,

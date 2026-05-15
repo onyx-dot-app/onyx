@@ -25,7 +25,6 @@ logger = setup_logger()
 def test_github_private_repo_permission_sync(
     github_test_env_setup: GitHubTestEnvSetupTuple,
 ) -> None:
-
     (
         admin_user,
         test_user_1,
@@ -184,9 +183,9 @@ def test_github_public_repo_permission_sync(
     logger.info(
         "Repository %s/%s visibility: %s", repo_owner, repo_name, current_visibility
     )
-    assert (
-        current_visibility == "public"
-    ), f"Repository should be public, but is {current_visibility}"
+    assert current_visibility == "public", (
+        f"Repository should be public, but is {current_visibility}"
+    )
 
     # Trigger sync to update permissions
     after = datetime.now(timezone.utc)
@@ -296,9 +295,9 @@ def test_github_internal_repo_permission_sync(
     logger.info(
         "Repository %s/%s visibility: %s", repo_owner, repo_name, current_visibility
     )
-    assert (
-        current_visibility == "internal"
-    ), f"Repository should be internal, but is {current_visibility}"
+    assert current_visibility == "internal", (
+        f"Repository should be internal, but is {current_visibility}"
+    )
 
     # Trigger sync to update permissions
     after = datetime.now(timezone.utc)

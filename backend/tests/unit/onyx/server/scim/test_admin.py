@@ -6,7 +6,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
@@ -56,19 +55,19 @@ class TestGetActiveToken:
 
         result = get_active_scim_token(_=admin_user, dal=scim_dal)
 
+        assert result is not None
         assert result.id == 1
         assert result.name == "prod-token"
         assert result.is_active is True
 
-    def test_raises_404_when_no_active_token(
+    def test_returns_none_when_no_active_token(
         self, scim_dal: ScimDAL, admin_user: User
     ) -> None:
         scim_dal._session.scalar.return_value = None  # ty: ignore[unresolved-attribute]
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_active_scim_token(_=admin_user, dal=scim_dal)
+        result = get_active_scim_token(_=admin_user, dal=scim_dal)
 
-        assert exc_info.value.status_code == 404
+        assert result is None
 
 
 class TestCreateToken:

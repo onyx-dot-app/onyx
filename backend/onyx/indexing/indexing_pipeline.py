@@ -31,10 +31,12 @@ from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import HookPoint
 from onyx.db.hierarchy import link_hierarchy_nodes_to_documents
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -59,6 +61,8 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
 from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
 from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
+from onyx.hooks.points.document_push import DocumentPushPayload
+from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
@@ -89,6 +93,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -1089,6 +1094,70 @@ def _apply_document_ingestion_hook(
     return result
 
 
+def _maybe_push_documents(
+    adapter: IndexingBatchAdapter,
+    filtered_documents: list[Document],
+    insertion_records: list[DocumentInsertionRecord],
+) -> None:
+    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+
+    Single-tenant only — multi-tenant deployments would mix documents from
+    different organizations into a shared external destination.
+    """
+    if MULTI_TENANT:
+        return
+
+    if adapter.connector_id is None or adapter.credential_id is None:
+        return
+
+    successfully_indexed = {r.document_id for r in insertion_records}
+    if not successfully_indexed:
+        return
+
+    with get_session_with_current_tenant() as db_session:
+        cc_pair = get_connector_credential_pair(
+            db_session, adapter.connector_id, adapter.credential_id
+        )
+        if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
+            return
+
+        doc_map = {doc.id: doc for doc in filtered_documents}
+        for doc_id in successfully_indexed:
+            doc = doc_map.get(doc_id)
+            if doc is None:
+                continue
+            content = " ".join(
+                s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+            )
+            payload = DocumentPushPayload(
+                document_id=doc_id,
+                title=doc.title or doc.semantic_identifier,
+                content=content,
+                source=str(doc.source.value) if doc.source else "unknown",
+                url=next(
+                    (
+                        s.link
+                        for s in doc.sections
+                        if isinstance(s, TextSection) and s.link
+                    ),
+                    None,
+                ),
+                doc_updated_at=(
+                    doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
+                ),
+                metadata={
+                    k: v if isinstance(v, list) else [v]
+                    for k, v in (doc.metadata or {}).items()
+                },
+            )
+            execute_hook(
+                db_session=db_session,
+                hook_point=HookPoint.DOCUMENT_PUSH,
+                payload=payload.model_dump(),
+                response_type=DocumentPushResponse,
+            )
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -1300,6 +1369,13 @@ def index_doc_batch(
 
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
+
+    _maybe_push_documents(
+        adapter=adapter,
+        filtered_documents=filtered_documents,
+        insertion_records=primary_doc_idx_insertion_records,
+    )
+
     return IndexingPipelineResult(
         new_docs=sum(
             1 for r in primary_doc_idx_insertion_records if not r.already_existed
