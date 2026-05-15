@@ -321,11 +321,13 @@ interface VoiceDisconnectModalProps {
     providerLabel: string;
     providerType: string;
   };
+  hasAlternatives: boolean;
   onSuccess: () => void;
 }
 
 export function VoiceDisconnectModal({
   disconnectTarget,
+  hasAlternatives,
   onSuccess,
 }: VoiceDisconnectModalProps) {
   const onClose = useModalClose();
@@ -376,6 +378,11 @@ export function VoiceDisconnectModal({
             `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
           )}
         </Text>
+        {!hasAlternatives && (
+          <Text color="text-03">
+            Connect another provider to continue using voice features.
+          </Text>
+        )}
       </Section>
     </ConfirmationModalLayout>
   );

@@ -112,6 +112,7 @@ interface ModelCardProps {
   mode: ProviderMode;
   provider: VoiceProviderView | undefined;
   status: "disconnected" | "connected" | "selected";
+  hasAlternatives: boolean;
   onSelect: () => void;
   onDeselect: () => void;
   onMutate: () => void;
@@ -122,6 +123,7 @@ function ModelCard({
   mode,
   provider,
   status,
+  hasAlternatives,
   onSelect,
   onDeselect,
   onMutate,
@@ -153,6 +155,7 @@ function ModelCard({
             providerLabel: getVoiceProviderDetail(model.providerType).label,
             providerType: model.providerType,
           }}
+          hasAlternatives={hasAlternatives}
           onSuccess={() => onMutate()}
         />
       </disconnectModal.Provider>
@@ -255,6 +258,12 @@ export default function VoicePage() {
                   mode="stt"
                   provider={providersByType.get(model.providerType)}
                   status={getModelStatus(model, "stt")}
+                  hasAlternatives={
+                    (providers ?? []).filter(
+                      (p) =>
+                        p.provider_type !== model.providerType && !!p.api_key
+                    ).length > 0
+                  }
                   onSelect={() => {
                     const p = providersByType.get(model.providerType);
                     if (p?.id)
@@ -304,6 +313,13 @@ export default function VoicePage() {
                       mode="tts"
                       provider={providersByType.get(model.providerType)}
                       status={getModelStatus(model, "tts")}
+                      hasAlternatives={
+                        (providers ?? []).filter(
+                          (p) =>
+                            p.provider_type !== model.providerType &&
+                            !!p.api_key
+                        ).length > 0
+                      }
                       onSelect={() => {
                         const p = providersByType.get(model.providerType);
                         if (p?.id)
