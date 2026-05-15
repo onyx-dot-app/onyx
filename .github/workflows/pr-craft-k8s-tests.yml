@@ -188,6 +188,8 @@ jobs:
             -xv \
             --ff \
             -m "not nightly" \
+            --log-cli-level=INFO \
+            --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
             backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
 
       - name: Disk and docker status on failure
