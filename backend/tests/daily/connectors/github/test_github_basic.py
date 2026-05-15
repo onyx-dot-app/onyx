@@ -1,4 +1,3 @@
-import os
 import time
 
 import pytest
@@ -6,10 +5,15 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.connector import GithubConnector
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.ACCESS_TOKEN_GITHUB)
 
 
 @pytest.fixture
-def github_connector() -> GithubConnector:
+def github_connector(
+    test_secrets: dict[TestSecret, str],
+) -> GithubConnector:
     connector = GithubConnector(
         repo_owner="onyx-dot-app",
         repositories="documentation",
@@ -18,7 +22,7 @@ def github_connector() -> GithubConnector:
     )
     connector.load_credentials(
         {
-            "github_access_token": os.environ["ACCESS_TOKEN_GITHUB"],
+            "github_access_token": test_secrets[TestSecret.ACCESS_TOKEN_GITHUB],
         }
     )
     return connector

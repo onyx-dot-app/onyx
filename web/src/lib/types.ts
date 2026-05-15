@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -32,6 +32,8 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Input preferences
+  paste_as_tile?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -179,7 +181,7 @@ export type ValidStatuses =
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
 export type AccessType = "public" | "private" | "sync";
-export type ProcessingMode = "REGULAR" | "FILE_SYSTEM";
+export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
 export interface DocumentBoostStatus {
@@ -489,7 +491,7 @@ export interface SlackChannelConfig {
   id: number;
   slack_bot_id: number;
   persona_id: number | null;
-  persona: Persona | null;
+  persona: Agent | null;
   channel_config: ChannelConfig;
   enable_auto_filters: boolean;
   standard_answer_categories: StandardAnswerCategory[];
@@ -532,7 +534,7 @@ export interface UserGroup {
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
-  personas: Persona[];
+  personas: Agent[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;

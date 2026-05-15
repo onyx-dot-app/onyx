@@ -52,6 +52,6 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
 
         except Exception as e:
             logger.error(
-                f"Error checking feature flag {flag_key} for user {user_id}: {e}"
+                "Error checking feature flag %s for user %s: %s", flag_key, user_id, e
             )
             return False

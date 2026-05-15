@@ -1,4 +1,5 @@
 import re
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
@@ -9,9 +10,29 @@ from typing import TypeVar
 
 import requests
 from hubspot import HubSpot
+from hubspot.crm.companies.models import (
+    BatchReadInputSimplePublicObjectId as CompaniesBatchReadInput,
+)
+from hubspot.crm.companies.models import SimplePublicObjectId as CompanyObjectId
+from hubspot.crm.contacts.models import (
+    BatchReadInputSimplePublicObjectId as ContactsBatchReadInput,
+)
 from hubspot.crm.contacts.models import Filter
 from hubspot.crm.contacts.models import FilterGroup
 from hubspot.crm.contacts.models import PublicObjectSearchRequest
+from hubspot.crm.contacts.models import SimplePublicObjectId as ContactObjectId
+from hubspot.crm.deals.models import (
+    BatchReadInputSimplePublicObjectId as DealsBatchReadInput,
+)
+from hubspot.crm.deals.models import SimplePublicObjectId as DealObjectId
+from hubspot.crm.objects.notes.models import (
+    BatchReadInputSimplePublicObjectId as NotesBatchReadInput,
+)
+from hubspot.crm.objects.notes.models import SimplePublicObjectId as NoteObjectId
+from hubspot.crm.tickets.models import (
+    BatchReadInputSimplePublicObjectId as TicketsBatchReadInput,
+)
+from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -36,6 +57,26 @@ AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
 HUBSPOT_PAGE_SIZE = 100
 # HubSpot Search API rejects cursors beyond this offset.
 HUBSPOT_SEARCH_LIMIT = 10_000
+
+ASSOC_CONTACT_PROPERTIES = ["firstname", "lastname", "email", "company", "jobtitle"]
+ASSOC_COMPANY_PROPERTIES = ["name", "domain", "industry", "city", "state"]
+ASSOC_DEAL_PROPERTIES = ["dealname", "amount", "dealstage", "closedate", "pipeline"]
+ASSOC_TICKET_PROPERTIES = ["subject", "content", "hs_ticket_priority"]
+ASSOC_NOTE_PROPERTIES = [
+    "hs_note_body",
+    "hs_timestamp",
+    "hs_created_by",
+    "hubspot_owner_id",
+]
+
+
+_T = TypeVar("_T")
+
+
+def _chunked(items: list[_T], size: int) -> Generator[list[_T], None, None]:
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
 
 T = TypeVar("T")
 
@@ -94,6 +135,38 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         return self._rate_limiter.call(func, *args, **kwargs)
+
+    def _batch_read(
+        self,
+        batch_fn: Callable[..., Any],
+        batch_input: Any,
+        object_type: str,
+        chunk: list[Any],
+    ) -> list[dict[str, Any]]:
+        """Call batch_fn with one retry; logs dropped IDs if both attempts fail."""
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                resp = self._call_hubspot(batch_fn, batch_input)
+                return [obj.to_dict() for obj in (resp.results or [])]
+            except Exception as e:
+                last_exc = e
+                if attempt == 0:
+                    logger.warning(
+                        "Batch fetch of %s %s failed, retrying: %s",
+                        len(chunk),
+                        object_type,
+                        e,
+                    )
+                    time.sleep(1)
+        logger.warning(
+            "Failed to batch-fetch %s %s %s after retry: %s",
+            len(chunk),
+            object_type,
+            chunk,
+            last_exc,
+        )
+        return []
 
     def _paginated_results(
         self,
@@ -233,9 +306,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 )
             except (ValueError, TypeError):
                 logger.error(
-                    f"HubSpot search limit reached but last modified timestamp "
-                    f"has unrecognized format ({last_ts_ms!r}); records after "
-                    "the 10,000th may be missing."
+                    "HubSpot search limit reached but last modified timestamp has unrecognized format (%r); records after the 10,000th may be missing.",
+                    last_ts_ms,
                 )
                 return
         if next_start <= start:
@@ -365,76 +437,69 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_objects: list[dict[str, Any]] = []
 
             if to_object_type == "contacts":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.contacts.basic_api.get_by_id,
-                            contact_id=obj_id,
-                            properties=[
-                                "firstname",
-                                "lastname",
-                                "email",
-                                "company",
-                                "jobtitle",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.contacts.batch_api.read,
+                            ContactsBatchReadInput(
+                                properties=ASSOC_CONTACT_PROPERTIES,
+                                inputs=[ContactObjectId(id=i) for i in chunk],
+                            ),
+                            "contacts",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch contact {obj_id}: {e}")
+                    )
 
             elif to_object_type == "companies":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.companies.basic_api.get_by_id,
-                            company_id=obj_id,
-                            properties=[
-                                "name",
-                                "domain",
-                                "industry",
-                                "city",
-                                "state",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.companies.batch_api.read,
+                            CompaniesBatchReadInput(
+                                properties=ASSOC_COMPANY_PROPERTIES,
+                                inputs=[CompanyObjectId(id=i) for i in chunk],
+                            ),
+                            "companies",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch company {obj_id}: {e}")
+                    )
 
             elif to_object_type == "deals":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.deals.basic_api.get_by_id,
-                            deal_id=obj_id,
-                            properties=[
-                                "dealname",
-                                "amount",
-                                "dealstage",
-                                "closedate",
-                                "pipeline",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.deals.batch_api.read,
+                            DealsBatchReadInput(
+                                properties=ASSOC_DEAL_PROPERTIES,
+                                inputs=[DealObjectId(id=i) for i in chunk],
+                            ),
+                            "deals",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch deal {obj_id}: {e}")
+                    )
 
             elif to_object_type == "tickets":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.tickets.basic_api.get_by_id,
-                            ticket_id=obj_id,
-                            properties=["subject", "content", "hs_ticket_priority"],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.tickets.batch_api.read,
+                            TicketsBatchReadInput(
+                                properties=ASSOC_TICKET_PROPERTIES,
+                                inputs=[TicketObjectId(id=i) for i in chunk],
+                            ),
+                            "tickets",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch ticket {obj_id}: {e}")
+                    )
 
             return associated_objects
 
         except Exception as e:
             logger.warning(
-                f"Failed to get associations from {from_object_type} to {to_object_type}: {e}"
+                "Failed to get associations from %s to %s: %s",
+                from_object_type,
+                to_object_type,
+                e,
             )
             return []
 
@@ -455,29 +520,27 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             note_ids = [assoc.to_object_id for assoc in associations_iter]
 
-            associated_notes = []
+            associated_notes: list[dict[str, Any]] = []
 
-            for note_id in note_ids:
-                try:
-                    # Notes are engagements in HubSpot, use the engagements API
-                    note = self._call_hubspot(
-                        api_client.crm.objects.notes.basic_api.get_by_id,
-                        note_id=note_id,
-                        properties=[
-                            "hs_note_body",
-                            "hs_timestamp",
-                            "hs_created_by",
-                            "hubspot_owner_id",
-                        ],
+            for chunk in _chunked(note_ids, HUBSPOT_PAGE_SIZE):
+                associated_notes.extend(
+                    self._batch_read(
+                        api_client.crm.objects.notes.batch_api.read,
+                        NotesBatchReadInput(
+                            properties=ASSOC_NOTE_PROPERTIES,
+                            inputs=[NoteObjectId(id=str(nid)) for nid in chunk],
+                        ),
+                        "notes",
+                        chunk,
                     )
-                    associated_notes.append(note.to_dict())
-                except Exception as e:
-                    logger.warning(f"Failed to fetch note {note_id}: {e}")
+                )
 
             return associated_notes
 
         except Exception as e:
-            logger.warning(f"Failed to get notes for {object_type} {object_id}: {e}")
+            logger.warning(
+                "Failed to get notes for %s %s: %s", object_type, object_id, e
+            )
             return []
 
     def _create_object_section(

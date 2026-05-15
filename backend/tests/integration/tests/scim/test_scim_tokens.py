@@ -117,8 +117,8 @@ def test_non_admin_cannot_get_token(
     assert response.status_code == 403
 
 
-def test_no_active_token_returns_404(new_admin_user: DATestUser) -> None:
-    """GET active token returns 404 when no token exists."""
+def test_no_active_token_returns_null(new_admin_user: DATestUser) -> None:
+    """GET active token returns 200 with null body when no token exists."""
     # new_admin_user depends on the reset fixture, ensuring a clean DB
     # with no active SCIM tokens.
     active = ScimTokenManager.get_active(user_performing_action=new_admin_user)
@@ -129,7 +129,8 @@ def test_no_active_token_returns_404(new_admin_user: DATestUser) -> None:
         headers=new_admin_user.headers,
         timeout=60,
     )
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() is None
 
 
 def test_service_discovery_no_auth_required(

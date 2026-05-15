@@ -103,7 +103,9 @@ class GooglePSEClient(WebSearchProvider):
                         )
                     except ValueError:
                         logger.debug(
-                            f"Failed to parse published_date '{published_str}' for link {link}"
+                            "Failed to parse published_date '%s' for link %s",
+                            published_str,
+                            link,
                         )
                         published_date = None
 

@@ -46,25 +46,25 @@ class ProcessManager:
         Raises:
             RuntimeError: If server fails to start within timeout
         """
-        logger.info(f"Starting Next.js server in {web_dir} on port {port}")
+        logger.info("Starting Next.js server in %s on port %s", web_dir, port)
 
         # Clear Next.js cache to avoid stale paths from template
         next_cache = web_dir / ".next"
         if next_cache.exists():
-            logger.debug(f"Clearing Next.js cache at {next_cache}")
+            logger.debug("Clearing Next.js cache at %s", next_cache)
             shutil.rmtree(next_cache)
 
         # Verify web_dir exists and has package.json
         if not web_dir.exists():
-            logger.error(f"Web directory does not exist: {web_dir}")
+            logger.error("Web directory does not exist: %s", web_dir)
             raise RuntimeError(f"Web directory does not exist: {web_dir}")
 
         package_json = web_dir / "package.json"
         if not package_json.exists():
-            logger.error(f"package.json not found in {web_dir}")
+            logger.error("package.json not found in %s", web_dir)
             raise RuntimeError(f"package.json not found in {web_dir}")
 
-        logger.debug(f"Starting npm run dev command in {web_dir}")
+        logger.debug("Starting npm run dev command in %s", web_dir)
         # CRITICAL: Inherit stdout/stderr (None) to prevent pipe buffer overflow.
         # When PIPE is used but never drained, the buffer fills up (64KB on most systems)
         # and the subprocess blocks indefinitely on write, causing the server to freeze.
@@ -77,18 +77,21 @@ class ProcessManager:
             stdout=None,
             stderr=None,
         )
-        logger.info(f"Next.js process started with PID {process.pid}")
+        logger.info("Next.js process started with PID %s", process.pid)
 
         # Wait for server to be ready
         server_url = f"http://localhost:{port}"
-        logger.info(f"Waiting for Next.js server at {server_url} (timeout: {timeout}s)")
+        logger.info(
+            "Waiting for Next.js server at %s (timeout: %ss)", server_url, timeout
+        )
 
         if not self._wait_for_server(server_url, timeout=timeout, process=process):
             # Check if process died
             if process.poll() is not None:
                 logger.error(
-                    f"Next.js server process died with code {process.returncode}. "
-                    f"Check the terminal or logs in {web_dir} for details."
+                    "Next.js server process died with code %s. Check the terminal or logs in %s for details.",
+                    process.returncode,
+                    web_dir,
                 )
                 raise RuntimeError(
                     f"Next.js server process died with code {process.returncode}. Check server logs for details."
@@ -96,14 +99,16 @@ class ProcessManager:
 
             # Process still running but server not responding
             logger.error(
-                f"Next.js server failed to respond within {timeout} seconds (process still running with PID {process.pid})"
+                "Next.js server failed to respond within %s seconds (process still running with PID %s)",
+                timeout,
+                process.pid,
             )
 
             raise RuntimeError(
                 f"Next.js server failed to start within {timeout} seconds"
             )
 
-        logger.info(f"Next.js server is ready at {server_url}")
+        logger.info("Next.js server is ready at %s", server_url)
         return process
 
     def _wait_for_server(
@@ -135,8 +140,10 @@ class ProcessManager:
             # Check if process died early
             if process is not None and process.poll() is not None:
                 logger.warning(
-                    f"Process died during wait (exit code: {process.returncode}) "
-                    f"after {elapsed:.1f}s and {attempt_count} attempts"
+                    "Process died during wait (exit code: %s) after %ss and %s attempts",
+                    process.returncode,
+                    format(elapsed, ".1f"),
+                    attempt_count,
                 )
                 return False
 
@@ -144,28 +151,41 @@ class ProcessManager:
                 with urllib.request.urlopen(url, timeout=2) as response:
                     if response.status == 200:
                         logger.debug(
-                            f"Server ready after {elapsed:.1f}s and {attempt_count} attempts"
+                            "Server ready after %ss and %s attempts",
+                            format(elapsed, ".1f"),
+                            attempt_count,
                         )
                         return True
             except urllib.error.HTTPError as e:
                 # Log HTTP errors (server responding but with error)
                 if time.time() - last_log_time >= 10:
                     logger.debug(
-                        f"HTTP error {e.code} from {url} after {elapsed:.1f}s ({attempt_count} attempts)"
+                        "HTTP error %s from %s after %ss (%s attempts)",
+                        e.code,
+                        url,
+                        format(elapsed, ".1f"),
+                        attempt_count,
                     )
                     last_log_time = time.time()
             except (urllib.error.URLError, TimeoutError) as e:
                 # Log connection errors periodically (every 10 seconds)
                 if time.time() - last_log_time >= 10:
                     logger.debug(
-                        f"Still waiting for {url} after {elapsed:.1f}s ({attempt_count} attempts): {type(e).__name__}"
+                        "Still waiting for %s after %ss (%s attempts): %s",
+                        url,
+                        format(elapsed, ".1f"),
+                        attempt_count,
+                        type(e).__name__,
                     )
                     last_log_time = time.time()
 
             time.sleep(poll_interval)
 
         logger.warning(
-            f"Server at {url} did not become available within {timeout}s ({attempt_count} attempts)"
+            "Server at %s did not become available within %ss (%s attempts)",
+            url,
+            timeout,
+            attempt_count,
         )
         return False
 

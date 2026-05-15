@@ -47,6 +47,18 @@ interface ChatSessionData {
 
   // Queued messages
   queuedMessages: QueuedMessage[];
+
+  // True once the latest assistant message has fully rendered to the
+  // user (backend stream done AND smooth-streaming typewriter caught up).
+  // Gates queued-message dispatch so a follow-up isn't sent while the
+  // previous answer is still drawing on screen.
+  latestMessageRenderComplete: boolean;
+
+  // True while the smooth-streaming typewriter is running its post-finish
+  // adaptive drain. Auto-scroll pauses during this window so the page
+  // doesn't yank as the typewriter speeds up — the user is reading at
+  // this point, not watching new content arrive.
+  isStreamDraining: boolean;
 }
 
 interface ChatSessionStore {
@@ -143,6 +155,13 @@ interface ChatSessionStore {
   enqueueCurrentMessage: (message: string) => void;
   removeCurrentQueuedMessage: (index: number) => void;
 
+  // Actions - Render completion
+  setLatestMessageRenderComplete: (
+    sessionId: string,
+    complete: boolean
+  ) => void;
+  setIsStreamDraining: (sessionId: string, draining: boolean) => void;
+
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
@@ -183,6 +202,8 @@ const createInitialSessionData = (
   lastAccessed: new Date(),
   isLoaded: false,
   queuedMessages: [],
+  latestMessageRenderComplete: true,
+  isStreamDraining: false,
   ...initialData,
 });
 
@@ -542,6 +563,20 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     }
   },
 
+  setLatestMessageRenderComplete: (sessionId: string, complete: boolean) => {
+    const session = get().sessions.get(sessionId);
+    if (!session || session.latestMessageRenderComplete === complete) return;
+    get().updateSessionData(sessionId, {
+      latestMessageRenderComplete: complete,
+    });
+  },
+
+  setIsStreamDraining: (sessionId: string, draining: boolean) => {
+    const session = get().sessions.get(sessionId);
+    if (!session || session.isStreamDraining === draining) return;
+    get().updateSessionData(sessionId, { isStreamDraining: draining });
+  },
+
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
     get().updateSessionData(sessionId, { abortController: controller });
@@ -716,4 +751,22 @@ export const useCurrentQueuedMessages = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+  });
+
+export const useCurrentLatestMessageRenderComplete = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.latestMessageRenderComplete ?? true;
+  });
+
+export const useCurrentIsStreamDraining = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isStreamDraining ?? false;
   });

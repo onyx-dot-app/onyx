@@ -68,7 +68,8 @@ def process_with_prompt_cache(
     # If provider doesn't support caching, combine and return unchanged
     if not provider_adapter.supports_caching():
         logger.debug(
-            f"Provider {llm_config.model_provider} does not support caching, combining messages without caching"
+            "Provider %s does not support caching, combining messages without caching",
+            llm_config.model_provider,
         )
         # Use no-op adapter to combine messages
         from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -105,9 +106,11 @@ def process_with_prompt_cache(
         )
 
         logger.debug(
-            f"Processed prompt with caching: provider={llm_config.model_provider}, "
-            f"model={llm_config.model_name}, cache_key={cache_key_hash[:16]}..., "
-            f"continuation={continuation}"
+            "Processed prompt with caching: provider=%s, model=%s, cache_key=%s..., continuation=%s",
+            llm_config.model_provider,
+            llm_config.model_name,
+            cache_key_hash[:16],
+            continuation,
         )
 
         # Create cache metadata for tracking (even for implicit caching)
@@ -126,8 +129,9 @@ def process_with_prompt_cache(
     except Exception as e:
         # Best-effort: log error and fall back to no-op behavior
         logger.warning(
-            f"Error processing prompt with caching for provider={llm_config.model_provider}: {str(e)}. "
-            "Falling back to non-cached behavior."
+            "Error processing prompt with caching for provider=%s: %s. Falling back to non-cached behavior.",
+            llm_config.model_provider,
+            str(e),
         )
         # Fall back to no-op adapter
         from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider

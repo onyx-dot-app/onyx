@@ -6,8 +6,9 @@ import type { WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-interface FoldableProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface FoldableProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   children: React.ReactNode;
 }
 

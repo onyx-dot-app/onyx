@@ -167,7 +167,7 @@
 
 .line-item-text-strikethrough {
   color: var(--text-02) !important;
-  @apply line-through decoration-2 !important;
+  @apply line-through! decoration-2!;
 }
 
 .line-item-text-danger {

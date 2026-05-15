@@ -130,7 +130,7 @@ export default function NewTeamModal() {
     <Dialog
       open={showNewTeamModal}
       onClose={handleClose}
-      className="relative z-[1000]"
+      className="relative z-1000"
     >
       {/* Modal backdrop */}
       <div className="fixed inset-0 bg-mask-03" aria-hidden="true" />

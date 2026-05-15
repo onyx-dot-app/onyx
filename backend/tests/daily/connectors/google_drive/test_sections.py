@@ -2,12 +2,19 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
+from tests.utils.secret_names import TestSecret
 
 
+@pytest.mark.secrets(
+    TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR,
+    TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR,
+)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,

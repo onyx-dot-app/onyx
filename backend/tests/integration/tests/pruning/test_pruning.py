@@ -99,8 +99,9 @@ def http_server_context(
 
 
 def test_web_pruning(
-    reset: None, vespa_client: vespa_fixture  # noqa: ARG001
-) -> None:  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    vespa_client: vespa_fixture,
+) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 

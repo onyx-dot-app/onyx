@@ -85,13 +85,15 @@ class CacheManager:
             self._kv_store.store(cache_key, metadata_dict, encrypt=False)
 
             logger.debug(
-                f"Stored cache metadata: provider={metadata.provider}, "
-                f"model={metadata.model_name}, cache_key={metadata.cache_key[:16]}..., "
-                f"tenant_id={metadata.tenant_id}"
+                "Stored cache metadata: provider=%s, model=%s, cache_key=%s..., tenant_id=%s",
+                metadata.provider,
+                metadata.model_name,
+                metadata.cache_key[:16],
+                metadata.tenant_id,
             )
         except Exception as e:
             # Best-effort: log and continue
-            logger.warning(f"Failed to store cache metadata: {str(e)}")
+            logger.warning("Failed to store cache metadata: %s", str(e))
 
     def retrieve_cache_metadata(
         self,
@@ -125,14 +127,16 @@ class CacheManager:
             self.store_cache_metadata(metadata)
 
             logger.debug(
-                f"Retrieved cache metadata: provider={provider}, "
-                f"model={model_name}, cache_key={cache_key_hash[:16]}..., "
-                f"tenant_id={tenant_id}"
+                "Retrieved cache metadata: provider=%s, model=%s, cache_key=%s..., tenant_id=%s",
+                provider,
+                model_name,
+                cache_key_hash[:16],
+                tenant_id,
             )
             return metadata
         except Exception as e:
             # Best-effort: log and continue
-            logger.debug(f"Cache metadata not found or error retrieving: {str(e)}")
+            logger.debug("Cache metadata not found or error retrieving: %s", str(e))
             return None
 
     def delete_cache_metadata(
@@ -156,11 +160,14 @@ class CacheManager:
             )
             self._kv_store.delete(cache_key)
             logger.debug(
-                f"Deleted cache metadata for provider={provider}, model={model_name}, cache_key={cache_key_hash[:16]}..."
+                "Deleted cache metadata for provider=%s, model=%s, cache_key=%s...",
+                provider,
+                model_name,
+                cache_key_hash[:16],
             )
         except Exception as e:
             # Best-effort: log and continue
-            logger.warning(f"Failed to delete cache metadata: {str(e)}")
+            logger.warning("Failed to delete cache metadata: %s", str(e))
 
 
 def _make_json_serializable(obj: object) -> object:

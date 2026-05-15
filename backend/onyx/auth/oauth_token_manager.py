@@ -45,7 +45,7 @@ class OAuthTokenManager:
                 try:
                     return self.refresh_token(user_token)
                 except Exception as e:
-                    logger.warning(f"Failed to refresh token: {e}")
+                    logger.warning("Failed to refresh token: %s", e)
                     return None
             else:
                 return None

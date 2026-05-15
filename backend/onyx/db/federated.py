@@ -56,7 +56,7 @@ def validate_federated_connector_credentials(
         get_federated_connector(source, credentials)
         return True
     except Exception as e:
-        logger.error(f"Error validating credentials for source {source}: {e}")
+        logger.error("Error validating credentials for source %s: %s", source, e)
         return False
 
 

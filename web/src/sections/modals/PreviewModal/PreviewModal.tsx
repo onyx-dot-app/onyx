@@ -89,7 +89,7 @@ export default function PreviewModal({
         response.headers.get("Content-Type") || "application/octet-stream";
       const resolvedMime =
         rawContentType === "application/octet-stream"
-          ? mime.getType(originalFileName) ?? rawContentType
+          ? (mime.getType(originalFileName) ?? rawContentType)
           : rawContentType;
       setMimeType(resolvedMime);
 

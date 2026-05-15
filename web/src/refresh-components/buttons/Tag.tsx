@@ -48,7 +48,7 @@ export default function Tag({
         "rounded-08",
         "bg-background-tint-02 hover:bg-background-tint-03",
         "focus-visible:shadow-[0_0_0_2px_var(--background-tint-04)]",
-        "outline-none transition-colors",
+        "outline-hidden transition-colors",
         onClick || variant === "display" ? "cursor-pointer" : undefined,
         className
       )}

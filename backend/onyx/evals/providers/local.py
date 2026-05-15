@@ -172,7 +172,7 @@ class LocalEvalProvider(EvalProvider):
         except Exception as e:
             print(f"  {RED}ERROR:{RESET} {e}")
             failed[0] += 1
-            logger.exception(f"Error running eval for input: {message}")
+            logger.exception("Error running eval for input: %s", message)
 
     def _run_multi_turn_eval(
         self,
@@ -232,4 +232,4 @@ class LocalEvalProvider(EvalProvider):
         except Exception as e:
             print(f"  {RED}ERROR:{RESET} {e}")
             failed[0] += 1
-            logger.exception(f"Error running multi-turn eval: {first_msg}")
+            logger.exception("Error running multi-turn eval: %s", first_msg)

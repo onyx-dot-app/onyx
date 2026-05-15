@@ -17,13 +17,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE "user"
         SET role = 'EXT_PERM_USER'
         WHERE has_web_login = false
-    """
-    )
+    """)
     op.drop_column("user", "has_web_login")
 
 
@@ -33,11 +31,9 @@ def downgrade() -> None:
         sa.Column("has_web_login", sa.Boolean(), nullable=False, server_default="true"),
     )
 
-    op.execute(
-        """
+    op.execute("""
         UPDATE "user"
         SET has_web_login = false,
             role = 'BASIC'
         WHERE role IN ('SLACK_USER', 'EXT_PERM_USER')
-    """
-    )
+    """)

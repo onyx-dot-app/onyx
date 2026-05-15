@@ -21,6 +21,8 @@ export type ApplicationStatus =
   | "expired"
   | "seat_limit_exceeded";
 
+export type ExpiryWarningStage = "none" | "t_30d" | "t_14d" | "t_1d" | "grace";
+
 /**
  * Billing status from Stripe subscription.
  */
@@ -46,6 +48,7 @@ export interface LicenseStatus {
   expires_at: string | null;
   grace_period_end: string | null;
   status: ApplicationStatus | null;
+  expiry_warning_stage: ExpiryWarningStage;
   source: LicenseSource | null;
 }
 
@@ -93,8 +96,17 @@ export interface CreateCheckoutSessionResponse {
   stripe_checkout_url: string;
 }
 
+/**
+ * Stripe billing portal `flow_data.type` values supported by the API.
+ * Mirrors `shared.enums.StripePortalFlowType` on the control plane.
+ */
+export enum StripePortalFlowType {
+  PAYMENT_METHOD_UPDATE = "payment_method_update",
+}
+
 export interface CreateCustomerPortalSessionRequest {
   return_url?: string;
+  flow_type?: StripePortalFlowType;
 }
 
 export interface CreateCustomerPortalSessionResponse {
@@ -114,6 +126,23 @@ export interface SeatUpdateResponse {
   current_seats: number;
   used_seats: number;
   message: string | null;
+}
+
+// ----------------------------------------------------------------------------
+// Trial Management Types
+// ----------------------------------------------------------------------------
+
+export interface EndTrialResponse {
+  success: boolean;
+  stripe_subscription_id: string;
+  status: string;
+}
+
+export class PaymentMethodRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentMethodRequiredError";
+  }
 }
 
 // ----------------------------------------------------------------------------

@@ -1,18 +1,48 @@
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.sharepoint.connector import SharepointConnector
 
 
 def validate_confluence_perm_sync(connector: ConfluenceConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
+
+    For Confluence Data Center 9.1+, the REST space-permissions endpoint
+    returns HTTP 500 (rather than 403) for non-admin callers
+    (CONFSERVER-99908). Probe it once during validation so a missing-admin
+    misconfiguration surfaces at connector creation time -- with an
+    actionable InsufficientPermissionsError -- instead of as a
+    per-space-per-sync HTTP 500 with no clear remediation.
     """
+    connector.probe_rest_space_permissions_admin_access()
 
 
 def validate_drive_perm_sync(connector: GoogleDriveConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
+
+    Group sync calls `admin.directory.users.get` for the configured primary
+    admin. Probe it here so a misconfigured primary admin (403) fails at
+    connector creation instead of every external-group-sync tick.
     """
+    connector.probe_directory_admin_permission()
+
+
+def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
+    """
+    Validate that the connector is configured correctly for permissions syncing.
+
+    Two distinct permission surfaces are needed for SharePoint perm sync,
+    neither of which the non-perm-sync indexing path requires:
+      1. SharePoint REST 'Sites.FullControl.All' to enumerate RoleAssignments.
+      2. Microsoft Graph 'GroupMember.Read.All' (or equivalent) to expand
+         Azure AD groups attached to those RoleAssignments.
+    Probe both here so misconfigured apps fail fast at connector creation
+    instead of mid-index.
+    """
+    connector.probe_role_assignments_permission()
+    connector.probe_group_members_permission()
 
 
 def validate_perm_sync(connector: BaseConnector) -> None:
@@ -26,3 +56,5 @@ def validate_perm_sync(connector: BaseConnector) -> None:
         validate_confluence_perm_sync(connector)
     elif isinstance(connector, GoogleDriveConnector):
         validate_drive_perm_sync(connector)
+    elif isinstance(connector, SharepointConnector):
+        validate_sharepoint_perm_sync(connector)

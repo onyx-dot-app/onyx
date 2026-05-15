@@ -16,7 +16,7 @@ logger = setup_logger()
 
 def posthog_on_error(error: Any, items: Any) -> None:
     """Log any PostHog delivery errors."""
-    logger.error(f"PostHog error: {error}, items: {items}")
+    logger.error("PostHog error: %s, items: %s", error, items)
 
 
 posthog: Posthog | None = None
@@ -65,7 +65,7 @@ def capture_and_sync_with_alternate_posthog(
         marketing_posthog.capture(alternate_distinct_id, event, props)
         marketing_posthog.flush()
     except Exception as e:
-        logger.error(f"Error capturing marketing posthog event: {e}")
+        logger.error("Error capturing marketing posthog event: %s", e)
 
     try:
         if posthog and (cloud_user_id := props.get("onyx_cloud_user_id")):
@@ -77,7 +77,7 @@ def capture_and_sync_with_alternate_posthog(
                 properties=cloud_props,
             )
     except Exception as e:
-        logger.error(f"Error identifying cloud posthog user: {e}")
+        logger.error("Error identifying cloud posthog user: %s", e)
 
 
 def alias_user(distinct_id: str, anonymous_id: str) -> None:
@@ -93,7 +93,7 @@ def alias_user(distinct_id: str, anonymous_id: str) -> None:
         posthog.alias(previous_id=anonymous_id, distinct_id=distinct_id)
         posthog.flush()
     except Exception as e:
-        logger.error(f"Error aliasing PostHog user: {e}")
+        logger.error("Error aliasing PostHog user: %s", e)
 
 
 def get_anon_id_from_request(request: Any) -> str | None:
@@ -137,5 +137,5 @@ def parse_posthog_cookie(cookie_value: str) -> dict[str, Any] | None:
 
         return cookie_data
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
-        logger.warning(f"Failed to parse cookie: {e}")
+        logger.warning("Failed to parse cookie: %s", e)
         return None

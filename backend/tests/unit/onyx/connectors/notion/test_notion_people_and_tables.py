@@ -40,9 +40,9 @@ class TestPeoplePropertyExtraction:
             }
         }
         result = NotionConnector._properties_to_str(properties)
-        assert (
-            "Arturo Martinez" in result
-        ), f"Expected 'Arturo Martinez' in extracted text, got: {result!r}"
+        assert "Arturo Martinez" in result, (
+            f"Expected 'Arturo Martinez' in extracted text, got: {result!r}"
+        )
 
     def test_multiple_people_property(self) -> None:
         """A database cell with multiple @mentions should extract all user names."""
@@ -69,12 +69,12 @@ class TestPeoplePropertyExtraction:
             }
         }
         result = NotionConnector._properties_to_str(properties)
-        assert (
-            "Arturo Martinez" in result
-        ), f"Expected 'Arturo Martinez' in extracted text, got: {result!r}"
-        assert (
-            "Jane Smith" in result
-        ), f"Expected 'Jane Smith' in extracted text, got: {result!r}"
+        assert "Arturo Martinez" in result, (
+            f"Expected 'Arturo Martinez' in extracted text, got: {result!r}"
+        )
+        assert "Jane Smith" in result, (
+            f"Expected 'Jane Smith' in extracted text, got: {result!r}"
+        )
 
     def test_bot_user_property(self) -> None:
         """Bot users (integrations) have 'type': 'bot' — name should still be extracted."""
@@ -94,9 +94,9 @@ class TestPeoplePropertyExtraction:
             }
         }
         result = NotionConnector._properties_to_str(properties)
-        assert (
-            "Onyx Integration" in result
-        ), f"Expected 'Onyx Integration' in extracted text, got: {result!r}"
+        assert "Onyx Integration" in result, (
+            f"Expected 'Onyx Integration' in extracted text, got: {result!r}"
+        )
 
     def test_person_without_person_details(self) -> None:
         """Some user objects may have an empty/null person sub-dict."""
@@ -116,9 +116,9 @@ class TestPeoplePropertyExtraction:
             }
         }
         result = NotionConnector._properties_to_str(properties)
-        assert (
-            "Ghost User" in result
-        ), f"Expected 'Ghost User' in extracted text, got: {result!r}"
+        assert "Ghost User" in result, (
+            f"Expected 'Ghost User' in extracted text, got: {result!r}"
+        )
 
     def test_people_mixed_with_other_properties(self) -> None:
         """People property should work alongside other property types."""

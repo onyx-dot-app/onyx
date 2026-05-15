@@ -666,9 +666,11 @@ def update_user_curator_relationship(
     )
 
     logger.info(
-        f"user_making_change={user_making_change.email if user_making_change else 'None'} is "
-        f"updating the curator relationship for user={target_user.email} "
-        f"in group={user_group_id} to is_curator={set_curator_request.is_curator}"
+        "user_making_change=%s is updating the curator relationship for user=%s in group=%s to is_curator=%s",
+        user_making_change.email if user_making_change else "None",
+        target_user.email,
+        user_group_id,
+        set_curator_request.is_curator,
     )
 
     relationship_to_update = (

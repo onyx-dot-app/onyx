@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { getDemoDataEnabled } from "@/app/craft/v1/constants";
 import {
   getBuildUserPersona,
   getBuildLlmSelection,
@@ -256,8 +255,8 @@ export type {
 /** Pre-provisioning state machine - exactly one of these states at a time */
 export type PreProvisioningState =
   | { status: "idle" }
-  | { status: "provisioning"; demoDataEnabled: boolean }
-  | { status: "ready"; sessionId: string; demoDataEnabled: boolean }
+  | { status: "provisioning" }
+  | { status: "ready"; sessionId: string }
   | { status: "failed"; error: string; retryCount: number; retryAt: number };
 
 // Module-level variable to store the provisioning promise (not in Zustand state for serializability)
@@ -1127,20 +1126,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       refreshSessionHistory,
       nameBuildSession,
     } = get();
-    // Read from cookie - single source of truth
-    const demoDataEnabled = getDemoDataEnabled();
 
-    // Create a temporary session ID for optimistic UI
     const tempId = `temp-${Date.now()}`;
     setCurrentSession(tempId);
     updateSessionData(tempId, { status: "creating" });
 
     try {
-      // Get LLM selection from cookie
       const llmSelection = getBuildLlmSelection();
       const sessionData = await apiCreateSession({
         name: prompt.slice(0, 50),
-        demoDataEnabled,
         llmProviderType: llmSelection?.provider || null,
         llmModelName: llmSelection?.modelName || null,
       });
@@ -1426,67 +1420,41 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   ensurePreProvisionedSession: async () => {
     const { preProvisioning } = get();
-    // Read from cookie - single source of truth
-    const demoDataEnabled = getDemoDataEnabled();
 
-    // Already have a pre-provisioned session ready
     if (preProvisioning.status === "ready") {
-      // If demoDataEnabled matches, return the existing session
-      if (preProvisioning.demoDataEnabled === demoDataEnabled) {
-        return preProvisioning.sessionId;
-      }
-      // demoDataEnabled changed - invalidate and re-provision
-      const sessionIdToDelete = preProvisioning.sessionId;
-      set({ preProvisioning: { status: "idle" } });
-      apiDeleteSession(sessionIdToDelete).catch((err) => {
-        console.error(
-          "[PreProvision] Failed to delete invalidated session:",
-          err
-        );
-      });
-      // Fall through to create a new session with the current setting
+      return preProvisioning.sessionId;
     }
 
-    // Already provisioning - return existing promise
     if (preProvisioning.status === "provisioning") {
       return provisioningPromise;
     }
 
-    // Handle failed state with retry
-    // Capture retryCount BEFORE resetting to idle (so we can increment it on next failure)
     let currentRetryCount = 0;
     if (preProvisioning.status === "failed") {
       currentRetryCount = preProvisioning.retryCount;
       if (Date.now() < preProvisioning.retryAt) {
-        // Not yet time to retry
         return null;
       }
-      // Time to retry - reset to idle and continue
       set({ preProvisioning: { status: "idle" } });
     }
 
-    // Start new provisioning with current demoDataEnabled value
-
     const promise = (async (): Promise<string | null> => {
       try {
-        // Parse user persona and LLM selection from cookies
         const persona = getBuildUserPersona();
         const llmSelection = getBuildLlmSelection();
 
         const sessionData = await apiCreateSession({
-          demoDataEnabled,
           userWorkArea: persona?.workArea || null,
           userLevel: persona?.level || null,
           llmProviderType: llmSelection?.provider || null,
           llmModelName: llmSelection?.modelName || null,
         });
 
-        provisioningPromise = null; // Clear promise on success
+        provisioningPromise = null;
         set({
           preProvisioning: {
             status: "ready",
             sessionId: sessionData.id,
-            demoDataEnabled,
           },
         });
         return sessionData.id;
@@ -1495,14 +1463,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         const errorMessage =
           err instanceof Error ? err.message : "Unknown error";
 
-        // Exponential backoff: 1s, 2s, 4s, 8s, ... max 30s
         const newRetryCount = currentRetryCount + 1;
         const backoffMs = Math.min(
           1000 * Math.pow(2, newRetryCount - 1),
           30000
         );
 
-        provisioningPromise = null; // Clear promise on failure
+        provisioningPromise = null;
         set({
           preProvisioning: {
             status: "failed",
@@ -1517,7 +1484,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
     provisioningPromise = promise;
     set({
-      preProvisioning: { status: "provisioning", demoDataEnabled },
+      preProvisioning: { status: "provisioning" },
     });
     return promise;
   },
@@ -2121,11 +2088,6 @@ export const usePreProvisionedSessionId = () =>
       ? state.preProvisioning.sessionId
       : null
   );
-
-// Demo data selector - reads directly from cookie (single source of truth)
-// Note: This returns the current cookie value but doesn't trigger re-renders on change.
-// Components that need reactive updates should manage their own local state.
-export const useDemoDataEnabled = () => getDemoDataEnabled();
 
 // Controller state selectors (for useBuildSessionController)
 export const useControllerState = () =>

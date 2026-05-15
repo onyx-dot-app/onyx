@@ -11,7 +11,7 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 figureSmallValue className="!my-0 text-center">
+    <Text as="p" text03 figureSmallValue className="my-0! text-center">
       {children}
     </Text>
   ),
@@ -86,17 +86,17 @@ function PreviewLogo({
         height: `${size}px`,
         width: `${size}px`,
       }}
-      className={cn("flex-shrink-0 rounded-full", className)}
+      className={cn("shrink-0 rounded-full", className)}
     />
   ) : (
-    <SvgOnyxLogo size={size} className={cn("flex-shrink-0", className)} />
+    <SvgOnyxLogo size={size} className={cn("shrink-0", className)} />
   );
 }
 
 export function InputPreview() {
   return (
     <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 pl-2.5 pr-1 pt-2.5 rounded-08 w-full h-14">
-      <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-[0.25rem]"></div>
+      <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-sm"></div>
     </div>
   );
 }
@@ -113,7 +113,7 @@ function PreviewStart({
   return (
     <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
       {/* Sidebar */}
-      <div className="flex w-[6rem] h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
+      <div className="flex w-24 h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
         <div className="flex flex-col h-fit w-full justify-start">
           <div
             className={cn(
@@ -155,7 +155,7 @@ function PreviewStart({
               <Text
                 text04
                 headingH3
-                className="max-w-[260px] whitespace-normal break-words text-center"
+                className="max-w-[260px] whitespace-normal wrap-break-word text-center"
               >
                 {greeting_message}
               </Text>
@@ -207,7 +207,7 @@ function PreviewChat({
             <Text
               figureSmallLabel
               text03
-              className="max-w-full whitespace-normal break-words text-center"
+              className="max-w-full whitespace-normal wrap-break-word text-center"
             >
               {chat_header_content}
             </Text>

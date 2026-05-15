@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -12,8 +11,8 @@ import {
   SvgSlack,
 } from "@opal/logos";
 import { SvgChevronRight } from "@opal/icons";
-import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
-import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
+import useCCPairs from "@/hooks/useCCPairs";
+import { useUser } from "@/providers/UserProvider";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -30,57 +29,47 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
-  const router = useRouter();
-  const { hasConnectorEverSucceeded, isLoading } = useBuildConnectors();
+  const { isAdmin, isCurator } = useUser();
+  const canManageConnectors = isAdmin || isCurator;
+  const { ccPairs, isLoading } = useCCPairs(canManageConnectors);
+  const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  const handleClick = () => {
-    router.push(CRAFT_CONFIGURE_PATH);
-  };
-
-  // Only show banner if user hasn't successfully synced any connectors (and not loading)
-  if (isLoading || hasConnectorEverSucceeded) {
+  if (!canManageConnectors || isLoading || hasConnectorEverSucceeded) {
     return null;
   }
+
+  const handleClick = () => {
+    window.location.href = "/admin/indexing/status";
+  };
 
   return (
     <div className="relative">
       <button
         onClick={handleClick}
         className={cn(
-          // Layout
           "flex items-center justify-between gap-2",
           "mx-auto px-4 py-2",
-          // Sizing - thin and full width to match InputBar
           "h-9 w-[50%]",
-          // Appearance - slightly different color, rounded bottom
           "bg-background-neutral-01 hover:bg-background-neutral-02",
           "rounded-b-12 rounded-t-none",
-          // Border for definition
           "border border-t-0 border-border-01",
-          // Transition
           "transition-colors duration-200",
-          // Cursor
           "cursor-pointer",
-          // Group for hover effects
           "group",
           className
         )}
       >
-        {/* Left side: 3 icons */}
         <div className="flex items-center -space-x-2">
-          {/* Outermost - no movement */}
           <div>
             <IconWrapper>
               <SvgSlack size={16} />
             </IconWrapper>
           </div>
-          {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:translate-x-2">
             <IconWrapper>
               <SvgGoogleDrive size={16} />
             </IconWrapper>
           </div>
-          {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:translate-x-4">
             <IconWrapper>
               <SvgConfluence size={16} />
@@ -88,7 +77,6 @@ export default function ConnectDataBanner({
           </div>
         </div>
 
-        {/* Center: Text and Arrow */}
         <div className="flex items-center justify-center gap-1">
           <Text secondaryBody text03>
             Connect your data
@@ -96,21 +84,17 @@ export default function ConnectDataBanner({
           <SvgChevronRight className="h-4 w-4 text-text-03" />
         </div>
 
-        {/* Right side: 3 icons */}
         <div className="flex items-center -space-x-2">
-          {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:-translate-x-4">
             <IconWrapper>
               <SvgGithub size={16} />
             </IconWrapper>
           </div>
-          {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:-translate-x-2">
             <IconWrapper>
               <SvgNotion size={16} />
             </IconWrapper>
           </div>
-          {/* Outermost - no movement */}
           <div>
             <IconWrapper>
               <SvgHubspot size={16} />

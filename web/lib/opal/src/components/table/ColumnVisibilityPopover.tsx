@@ -10,7 +10,7 @@ import {
 import { Button, Divider, LineItemButton, Tag } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components/popover/components";
 
 // ---------------------------------------------------------------------------
 // Popover UI
