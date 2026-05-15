@@ -1,0 +1,17 @@
+{{- if and .Values.sandboxJobs.enabled .Values.sandboxJobs.storage.createStorageClass }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.sandboxJobs.storage.storageClass.name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-storage
+provisioner: {{ .Values.sandboxJobs.storage.storageClass.provisioner }}
+reclaimPolicy: {{ .Values.sandboxJobs.storage.storageClass.reclaimPolicy }}
+volumeBindingMode: {{ .Values.sandboxJobs.storage.storageClass.volumeBindingMode }}
+allowVolumeExpansion: {{ .Values.sandboxJobs.storage.storageClass.allowVolumeExpansion }}
+{{- with .Values.sandboxJobs.storage.storageClass.parameters }}
+parameters:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}

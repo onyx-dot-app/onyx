@@ -1,0 +1,173 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.sandboxJobs.jobTemplate.configMapName }}
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-template
+data:
+  # The backend reads these YAML strings at startup and substitutes ${placeholders}
+  # via Python's string.Template before POSTing the rendered manifests to the K8s API.
+  # Placeholders used: ${job_name}, ${session_id}, ${user_id}, ${tenant_id},
+  # ${workspace_pvc_name}, ${auth_secret_name}, ${service_name}, ${auth_token}.
+
+  job.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: ${job_name}
+      namespace: {{ .Values.sandboxJobs.namespace }}
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/part-of: onyx
+        onyx.app/session-id: "${session_id}"
+        onyx.app/user-id: "${user_id}"
+        onyx.app/tenant-id: "${tenant_id}"
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.sandboxJobs.jobTemplate.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.sandboxJobs.jobTemplate.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: sandbox
+            app.kubernetes.io/part-of: onyx
+            onyx.app/session-id: "${session_id}"
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: {{ .Values.sandboxJobs.jobTemplate.terminationGracePeriodSeconds }}
+          serviceAccountName: {{ .Values.sandboxJobs.runtimeServiceAccount.name }}
+          automountServiceAccountToken: false
+          {{- with .Values.sandboxJobs.jobTemplate.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.sandboxJobs.jobTemplate.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: sandbox
+              image: {{ .Values.sandboxJobs.jobTemplate.sandboxImage | quote }}
+              imagePullPolicy: {{ .Values.sandboxJobs.jobTemplate.imagePullPolicy }}
+              env:
+                - name: SESSION_ID
+                  value: "${session_id}"
+                - name: USER_ID
+                  value: "${user_id}"
+                - name: TENANT_ID
+                  value: "${tenant_id}"
+              resources:
+                {{- toYaml .Values.sandboxJobs.jobTemplate.sandboxContainer | nindent 16 }}
+              volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
+            - name: sidecar
+              image: {{ .Values.sandboxJobs.jobTemplate.sidecarImage | quote }}
+              imagePullPolicy: {{ .Values.sandboxJobs.jobTemplate.imagePullPolicy }}
+              env:
+                - name: SIDECAR_PORT
+                  value: "{{ .Values.sandboxJobs.jobTemplate.sidecarPort }}"
+                - name: SIDECAR_WORKSPACE_ROOT
+                  value: /workspace
+                - name: SIDECAR_AUTH_TOKEN_FILE
+                  value: /etc/sidecar/auth-token
+                - name: SIDECAR_IDLE_TIMEOUT_SECONDS
+                  value: "{{ .Values.sandboxJobs.jobTemplate.idleTimeoutSeconds }}"
+              ports:
+                - name: sidecar-http
+                  containerPort: {{ .Values.sandboxJobs.jobTemplate.sidecarPort }}
+              resources:
+                {{- toYaml .Values.sandboxJobs.jobTemplate.sidecarContainer | nindent 16 }}
+              volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
+                - name: sidecar-auth
+                  mountPath: /etc/sidecar
+                  readOnly: true
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: sidecar-http
+                initialDelaySeconds: 3
+                periodSeconds: 10
+              readinessProbe:
+                httpGet:
+                  path: /readyz
+                  port: sidecar-http
+                initialDelaySeconds: 1
+                periodSeconds: 5
+          volumes:
+            - name: workspace
+              persistentVolumeClaim:
+                claimName: ${workspace_pvc_name}
+            - name: sidecar-auth
+              secret:
+                secretName: ${auth_secret_name}
+                defaultMode: 0400
+
+  service.yaml: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: ${service_name}
+      namespace: {{ .Values.sandboxJobs.namespace }}
+      labels:
+        app.kubernetes.io/component: sandbox
+        app.kubernetes.io/part-of: onyx
+        onyx.app/session-id: "${session_id}"
+    spec:
+      type: ClusterIP
+      selector:
+        onyx.app/session-id: "${session_id}"
+      ports:
+        - name: sidecar
+          port: {{ .Values.sandboxJobs.jobTemplate.sidecarPort }}
+          targetPort: sidecar-http
+          protocol: TCP
+        - name: preview
+          port: {{ .Values.sandboxJobs.jobTemplate.previewPort }}
+          targetPort: {{ .Values.sandboxJobs.jobTemplate.previewPort }}
+          protocol: TCP
+
+  workspace-pvc.yaml: |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${workspace_pvc_name}
+      namespace: {{ .Values.sandboxJobs.namespace }}
+      labels:
+        app.kubernetes.io/component: sandbox-workspace
+        onyx.app/session-id: "${session_id}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.sandboxJobs.storage.workspaceSize }}
+      {{- with .Values.sandboxJobs.storage.storageClassName }}
+      storageClassName: {{ . | quote }}
+      {{- end }}
+
+  auth-secret.yaml: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: ${auth_secret_name}
+      namespace: {{ .Values.sandboxJobs.namespace }}
+      labels:
+        app.kubernetes.io/component: sandbox-auth
+        onyx.app/session-id: "${session_id}"
+    type: Opaque
+    stringData:
+      auth-token: "${auth_token}"
+{{- end }}

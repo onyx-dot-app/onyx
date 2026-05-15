@@ -1,0 +1,11 @@
+{{- if and .Values.sandboxJobs.enabled .Values.sandboxJobs.storage.createVolumeSnapshotClass }}
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: {{ .Values.sandboxJobs.storage.volumeSnapshotClass.name }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-storage
+driver: {{ .Values.sandboxJobs.storage.volumeSnapshotClass.driver }}
+deletionPolicy: {{ .Values.sandboxJobs.storage.volumeSnapshotClass.deletionPolicy }}
+{{- end }}
