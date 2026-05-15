@@ -26,6 +26,8 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
+import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -66,6 +68,8 @@ import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
 import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
+import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
+import { SWR_KEYS } from "@/lib/swr-keys";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -115,12 +119,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const { currentPageData: indexAttemptErrorsPage } =
-    usePaginatedFetch<IndexAttemptError>({
-      itemsPerPage: 10,
-      pagesPerBatch: 1,
-      endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-    });
+  const {
+    currentPageData: indexAttemptErrorsPage,
+    totalPages: indexAttemptErrorsTotalPages,
+    totalItems: indexAttemptErrorsTotalItems,
+    currentPage: indexAttemptErrorsCurrentPage,
+    goToPage: goToIndexAttemptErrorsPage,
+  } = usePaginatedFetch<IndexAttemptError>({
+    itemsPerPage: 10,
+    pagesPerBatch: 1,
+    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    disableUrlSync: true,
+  });
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
@@ -136,10 +146,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   } = useStatusChange(ccPair || null);
 
   const indexAttemptErrors = indexAttemptErrorsPage
-    ? {
-        items: indexAttemptErrorsPage,
-        total_items: indexAttemptErrorsPage.length,
-      }
+    ? { items: indexAttemptErrorsPage }
     : null;
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -408,16 +415,45 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
-      {showIndexAttemptErrors && indexAttemptErrors && (
+      {showIndexAttemptErrors && indexAttemptErrors && ccPair && (
         <IndexAttemptErrorsModal
           errors={indexAttemptErrors}
+          totalPages={indexAttemptErrorsTotalPages}
+          currentPage={indexAttemptErrorsCurrentPage}
+          onPageChange={goToIndexAttemptErrorsPage}
           onClose={() => setShowIndexAttemptErrors(false)}
           onResolveAll={async () => {
             setShowIndexAttemptErrors(false);
+            if (!ccPair.supports_targeted_reindex) {
+              setShowIsResolvingKickoffLoader(true);
+              await triggerReIndex(true);
+              return;
+            }
             setShowIsResolvingKickoffLoader(true);
-            await triggerReIndex(true);
+            try {
+              const result = await resolveAllErrorsForCCPair(ccPairId);
+              if (result.total_error_ids === 0) {
+                toast.success("No unresolved errors to retry.");
+              } else {
+                toast.success(
+                  `Targeted reindex submitted for ${result.total_error_ids} ${
+                    result.total_error_ids === 1 ? "document" : "documents"
+                  }. Errors will clear from the list as documents finish reindexing.`
+                );
+              }
+              mutate(
+                (key) =>
+                  typeof key === "string" &&
+                  key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId))
+              );
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              toast.error(`Targeted reindex failed: ${message}`);
+            } finally {
+              setShowIsResolvingKickoffLoader(false);
+            }
           }}
-          isResolvingErrors={isResolvingErrors}
+          supportsTargetedReindex={ccPair.supports_targeted_reindex}
         />
       )}
 
@@ -553,7 +589,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       )}
 
-      {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
+      {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
         <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
           <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
           <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
@@ -644,7 +680,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 <Text as="p" className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
                     ? timeAgo(ccPair.last_permission_sync_attempt_finished)
-                    : timeAgo(ccPair.last_full_permission_sync) ?? "-"}
+                    : (timeAgo(ccPair.last_full_permission_sync) ?? "-")}
                 </Text>
               </div>
             </>
@@ -726,18 +762,31 @@ function Main({ ccPairId }: { ccPairId: number }) {
               </>
             )}
 
-            <Title size="md" className="mt-6 mb-2">
-              Indexing Attempts
-            </Title>
-            {indexAttempts && (
-              <IndexAttemptsTable
-                ccPair={ccPair}
-                indexAttempts={indexAttempts}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={goToPage}
-              />
-            )}
+            {indexAttempts &&
+              (ccPair.access_type === "sync" ? (
+                <Section height="auto" alignItems="stretch" className="mt-6">
+                  <SyncAttemptsTabs
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    indexCurrentPage={currentPage}
+                    indexTotalPages={totalPages}
+                    onIndexPageChange={goToPage}
+                  />
+                </Section>
+              ) : (
+                <>
+                  <Title size="md" className="mt-6 mb-2">
+                    Indexing Attempts
+                  </Title>
+                  <IndexAttemptsTable
+                    ccPair={ccPair}
+                    indexAttempts={indexAttempts}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={goToPage}
+                  />
+                </>
+              ))}
           </div>
         )}
       </div>

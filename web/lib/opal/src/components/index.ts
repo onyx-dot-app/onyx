@@ -70,12 +70,7 @@ export {
 } from "@opal/components/divider/components";
 
 /* Card */
-export {
-  Card,
-  type CardProps,
-  type BackgroundVariant,
-  type BorderVariant,
-} from "@opal/components/cards/card/components";
+export { Card, type CardProps } from "@opal/components/cards/card/components";
 
 /* SelectCard */
 export {
@@ -112,3 +107,22 @@ export {
 export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+
+/* Separator */
+export {
+  Separator,
+  type SeparatorProps,
+} from "@opal/components/separator/components";
+
+/* ShadowDiv */
+export {
+  ShadowDiv,
+  type ShadowDivProps,
+} from "@opal/components/shadow-div/components";
+
+/* Popover */
+export {
+  Popover,
+  PopoverMenu,
+  type PopoverMenuProps,
+} from "@opal/components/popover/components";

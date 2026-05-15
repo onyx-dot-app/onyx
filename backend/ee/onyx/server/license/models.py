@@ -3,6 +3,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from ee.onyx.utils.license_expiry import ExpiryWarningStage
 from onyx.server.settings.models import ApplicationStatus
 
 
@@ -51,6 +52,7 @@ class LicenseMetadata(BaseModel):
     expires_at: datetime
     grace_period_end: datetime | None = None
     status: ApplicationStatus
+    expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
 
@@ -66,6 +68,7 @@ class LicenseStatusResponse(BaseModel):
     expires_at: datetime | None = None
     grace_period_end: datetime | None = None
     status: ApplicationStatus | None = None
+    expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
 
 

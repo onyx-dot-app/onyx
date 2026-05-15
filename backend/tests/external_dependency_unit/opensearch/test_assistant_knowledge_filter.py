@@ -147,9 +147,9 @@ class TestAssistantKnowledgeFilter:
                     knowledge_filter = clause
                     break
 
-        assert (
-            knowledge_filter is not None
-        ), "Expected persona_id_filter alone to create a knowledge scope filter"
+        assert knowledge_filter is not None, (
+            "Expected persona_id_filter alone to create a knowledge scope filter"
+        )
         persona_found = any(
             clause.get("term", {}).get(PERSONAS_FIELD_NAME, {}).get("value")
             == PERSONA_ID
@@ -197,14 +197,14 @@ class TestAssistantKnowledgeFilter:
                     knowledge_filter = clause
                     break
 
-        assert (
-            knowledge_filter is not None
-        ), "Expected knowledge filter when document_sets is provided"
+        assert knowledge_filter is not None, (
+            "Expected knowledge filter when document_sets is provided"
+        )
 
         filter_str = str(knowledge_filter)
-        assert (
-            "engineering" in filter_str
-        ), "Expected document_set 'engineering' in knowledge filter"
-        assert (
-            str(PERSONA_ID) in filter_str
-        ), f"Expected persona_id_filter {PERSONA_ID} in knowledge filter"
+        assert "engineering" in filter_str, (
+            "Expected document_set 'engineering' in knowledge filter"
+        )
+        assert str(PERSONA_ID) in filter_str, (
+            f"Expected persona_id_filter {PERSONA_ID} in knowledge filter"
+        )

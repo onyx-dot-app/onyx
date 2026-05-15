@@ -400,5 +400,5 @@ def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
         return connector_results
 
     except Exception as e:
-        logger.error(f"Error fetching unprocessed connector IDs: {str(e)}")
+        logger.error("Error fetching unprocessed connector IDs: %s", str(e))
         raise e

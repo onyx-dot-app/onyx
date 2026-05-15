@@ -180,9 +180,9 @@ def test_document_set_filter_allows_authorized_names(
         forced_tool_id=search_tool_id,
     )
 
-    assert not _stream_contains_error(
-        response, "document set"
-    ), "Did not expect an access-denied error for an authorized document set."
+    assert not _stream_contains_error(response, "document set"), (
+        "Did not expect an access-denied error for an authorized document set."
+    )
 
 
 def test_public_document_set_is_accessible_to_any_user(

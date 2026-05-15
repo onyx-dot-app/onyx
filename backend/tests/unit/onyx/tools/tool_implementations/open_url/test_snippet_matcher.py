@@ -135,9 +135,9 @@ def test_snippet_finding(test_data: TestSchema) -> None:
     """
     result = find_snippet_in_content(test_data.content, test_data.snippet)
 
-    assert (
-        result.snippet_located == test_data.expected_result.snippet_located
-    ), f"snippet_located mismatch: expected {test_data.expected_result.snippet_located}, got {result.snippet_located}"
+    assert result.snippet_located == test_data.expected_result.snippet_located, (
+        f"snippet_located mismatch: expected {test_data.expected_result.snippet_located}, got {result.snippet_located}"
+    )
 
     # If buffer is allowed, we let the start and end indices be within 10 characters of where we expect
     BUFFER_SIZE = 10 if test_data.allow_buffer else 0
@@ -146,12 +146,16 @@ def test_snippet_finding(test_data: TestSchema) -> None:
         test_data.expected_result.expected_start_idx - BUFFER_SIZE
         <= result.start_idx
         <= test_data.expected_result.expected_start_idx + BUFFER_SIZE
-    ), f"start_idx mismatch: expected {test_data.expected_result.expected_start_idx}, got {result.start_idx}"
+    ), (
+        f"start_idx mismatch: expected {test_data.expected_result.expected_start_idx}, got {result.start_idx}"
+    )
     assert (
         test_data.expected_result.expected_end_idx - BUFFER_SIZE
         <= result.end_idx
         <= test_data.expected_result.expected_end_idx + BUFFER_SIZE
-    ), f"end_idx mismatch: expected {test_data.expected_result.expected_end_idx}, got {result.end_idx}"
+    ), (
+        f"end_idx mismatch: expected {test_data.expected_result.expected_end_idx}, got {result.end_idx}"
+    )
 
 
 # Characters confirmed to expand from 1 → 2 codepoints under NFC
@@ -179,19 +183,19 @@ def test_nfc_expanding_char_snippet_match(char: str, description: str) -> None:
     result = find_snippet_in_content(content, snippet)
 
     assert result.snippet_located, f"[{description}] Snippet should be found in content"
-    assert (
-        0 <= result.start_idx < len(content)
-    ), f"[{description}] start_idx {result.start_idx} out of bounds"
-    assert (
-        0 <= result.end_idx < len(content)
-    ), f"[{description}] end_idx {result.end_idx} out of bounds"
-    assert (
-        result.start_idx <= result.end_idx
-    ), f"[{description}] start_idx {result.start_idx} > end_idx {result.end_idx}"
+    assert 0 <= result.start_idx < len(content), (
+        f"[{description}] start_idx {result.start_idx} out of bounds"
+    )
+    assert 0 <= result.end_idx < len(content), (
+        f"[{description}] end_idx {result.end_idx} out of bounds"
+    )
+    assert result.start_idx <= result.end_idx, (
+        f"[{description}] start_idx {result.start_idx} > end_idx {result.end_idx}"
+    )
 
     matched = content[result.start_idx : result.end_idx + 1]
     matched_nfc = unicodedata.normalize("NFC", matched)
     snippet_nfc = unicodedata.normalize("NFC", snippet)
-    assert (
-        snippet_nfc in matched_nfc or matched_nfc in snippet_nfc
-    ), f"[{description}] Matched span '{matched}' does not overlap with expected snippet '{snippet}'"
+    assert snippet_nfc in matched_nfc or matched_nfc in snippet_nfc, (
+        f"[{description}] Matched span '{matched}' does not overlap with expected snippet '{snippet}'"
+    )

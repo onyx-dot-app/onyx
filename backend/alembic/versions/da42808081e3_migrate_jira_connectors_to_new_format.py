@@ -13,7 +13,6 @@ import json
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.utils import extract_jira_project
 
-
 # revision identifiers, used by Alembic.
 revision = "da42808081e3"
 down_revision = "f13db29f3101"
@@ -30,13 +29,11 @@ def upgrade() -> None:
 
     # First get all Jira connectors
     jira_connectors = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = :source
-            """
-        ),
+            """),
         {"source": DocumentSource.JIRA.value.upper()},
     ).fetchall()
 
@@ -71,13 +68,11 @@ def upgrade() -> None:
 
         # Update the connector config
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE connector
                 SET connector_specific_config = :new_config
                 WHERE id = :id
-                """
-            ),
+                """),
             {"id": connector_id, "new_config": json.dumps(new_config)},
         )
 
@@ -88,13 +83,11 @@ def downgrade() -> None:
 
     # First get all Jira connectors
     jira_connectors = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = :source
-            """
-        ),
+            """),
         {"source": DocumentSource.JIRA.value.upper()},
     ).fetchall()
 
@@ -120,12 +113,10 @@ def downgrade() -> None:
 
         # Update the connector config
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE connector
                 SET connector_specific_config = :old_config
                 WHERE id = :id
-                """
-            ),
+                """),
             {"id": connector_id, "old_config": json.dumps(old_config)},
         )

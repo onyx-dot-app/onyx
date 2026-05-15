@@ -21,7 +21,7 @@ export interface MessageIDs {
  */
 export function processPacket(
   packet: Packet,
-  currentMessage: ChatMessage | null,
+  currentMessage: ChatMessage | null
 ): {
   message: ChatMessage | null;
   citation?: { citation_number: number; document_id: string };

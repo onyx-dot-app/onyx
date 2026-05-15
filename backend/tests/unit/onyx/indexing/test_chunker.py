@@ -47,8 +47,10 @@ def test_chunk_document(
     mock_llm_invoke_count = 0
 
     def mock_llm_invoke(
-        self: Any, *args: Any, **kwargs: Any  # noqa: ARG001
-    ) -> Mock:  # noqa: ARG001
+        self: Any,  # noqa: ARG001
+        *args: Any,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
+    ) -> Mock:
         nonlocal mock_llm_invoke_count
         mock_llm_invoke_count += 1
         m = Mock()

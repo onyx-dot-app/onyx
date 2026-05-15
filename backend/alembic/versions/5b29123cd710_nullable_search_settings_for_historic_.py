@@ -9,7 +9,6 @@ Create Date: 2024-10-30 19:37:59.630704
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "5b29123cd710"
 down_revision = "949b4a92a401"
@@ -41,12 +40,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Warning: This will delete all index attempts that don't have search settings
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM index_attempt
         WHERE search_settings_id IS NULL
-    """
-    )
+    """)
 
     # Drop foreign key constraint
     op.drop_constraint(

@@ -172,7 +172,9 @@ class XenforoConnector(LoadConnector):
             # Get all pages on thread_list_page
             for pre_count, thread_list_page in enumerate(pages, start=1):
                 logger.info(
-                    f"Getting pages from thread_list_page.. Current: {pre_count}/{len(pages)}\r"
+                    "Getting pages from thread_list_page.. Current: %s/%s\r",
+                    pre_count,
+                    len(pages),
                 )
                 all_threads += self.get_threads(thread_list_page)
         # If the URL contains "threads/", add the thread to the list.
@@ -183,13 +185,17 @@ class XenforoConnector(LoadConnector):
         for thread_count, thread_url in enumerate(all_threads, start=1):
             soup = self.requestsite(thread_url)
             if soup is None:
-                logger.error(f"Failed to load page: {self.base_url}")
+                logger.error("Failed to load page: %s", self.base_url)
                 continue
             pages = get_pages(soup, thread_url)
             # Getting all pages for all threads
             for page_index, page in enumerate(pages, start=1):
                 logger.info(
-                    f"Progress: Page {page_index}/{len(pages)} - Thread {thread_count}/{len(all_threads)}\r"
+                    "Progress: Page %s/%s - Thread %s/%s\r",
+                    page_index,
+                    len(pages),
+                    thread_count,
+                    len(all_threads),
                 )
                 soup_page = self.requestsite(page)
                 doc_batch.extend(
@@ -225,13 +231,16 @@ class XenforoConnector(LoadConnector):
             )
             if response.status_code != 200:
                 logger.error(
-                    f"<{url}> Request Error: {response.status_code} - {response.reason}"
+                    "<%s> Request Error: %s - %s",
+                    url,
+                    response.status_code,
+                    response.reason,
                 )
             return BeautifulSoup(response.text, "html.parser")
         except TimeoutError:
             logger.error("Timed out Error.")
         except Exception as e:
-            logger.error(f"Error on {url}")
+            logger.error("Error on %s", url)
             logger.exception(e)
         return BeautifulSoup("", "html.parser")
 

@@ -21,10 +21,10 @@ def get_kg_config_settings() -> KGConfigSettings:
         return KGConfigSettings.model_validate(stored_config or {})
     except KvKeyNotFoundError:
         # Default to empty kg config if no config have been set yet
-        logger.debug(f"No kg config found in KV store for key: {KV_KG_CONFIG_KEY}")
+        logger.debug("No kg config found in KV store for key: %s", KV_KG_CONFIG_KEY)
         return KGConfigSettings()
     except Exception as e:
-        logger.error(f"Error loading kg config from KV store: {str(e)}")
+        logger.error("Error loading kg config from KV store: %s", str(e))
         return KGConfigSettings()
 
 

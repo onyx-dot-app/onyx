@@ -190,8 +190,9 @@ def safe_record_single_event(
             )
     except Exception:
         logger.exception(
-            f"Failed to record stage event {stage.value} "
-            f"for attempt {index_attempt_id}"
+            "Failed to record stage event %s for attempt %s",
+            stage.value,
+            index_attempt_id,
         )
 
 
@@ -260,8 +261,9 @@ def time_stage(
                 )
         except Exception:
             logger.exception(
-                f"Failed to record stage event {stage.value} "
-                f"for attempt {index_attempt_id}"
+                "Failed to record stage event %s for attempt %s",
+                stage.value,
+                index_attempt_id,
             )
 
 
@@ -353,8 +355,9 @@ class StageEventBuffer:
                 )
         except Exception:
             logger.exception(
-                f"Failed to flush StageEventBuffer for "
-                f"{self.stage.value} / attempt {self.index_attempt_id}"
+                "Failed to flush StageEventBuffer for %s / attempt %s",
+                self.stage.value,
+                self.index_attempt_id,
             )
 
     def _reset(self) -> None:

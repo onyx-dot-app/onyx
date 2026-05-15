@@ -1,4 +1,4 @@
-import redis
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisConnectorStop:
@@ -14,7 +14,7 @@ class RedisConnectorStop:
     TIMEOUT_PREFIX = f"{PREFIX}_timeout"
     TIMEOUT_TTL = 300
 
-    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+    def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id: int = id
         self.redis = redis
@@ -43,7 +43,7 @@ class RedisConnectorStop:
         self.redis.set(f"{self.timeout_key}", 0, ex=self.TIMEOUT_TTL)
 
     @staticmethod
-    def reset_all(r: redis.Redis) -> None:
+    def reset_all(r: TenantRedisClient) -> None:
         for key in r.scan_iter(RedisConnectorStop.FENCE_PREFIX + "*"):
             r.delete(key)
 

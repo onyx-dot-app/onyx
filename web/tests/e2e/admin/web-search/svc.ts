@@ -9,7 +9,7 @@ export const FAKE_SEARCH_PROVIDERS = {
     provider_type: "exa",
     is_active: true,
     config: null,
-    has_api_key: true,
+    masked_api_key: "abcd...efgh",
   },
   brave: {
     id: 2,
@@ -17,7 +17,7 @@ export const FAKE_SEARCH_PROVIDERS = {
     provider_type: "brave",
     is_active: false,
     config: null,
-    has_api_key: true,
+    masked_api_key: "abcd...efgh",
   },
 };
 
@@ -28,7 +28,7 @@ export const FAKE_CONTENT_PROVIDERS = {
     provider_type: "firecrawl",
     is_active: true,
     config: { base_url: "https://api.firecrawl.dev/v2/scrape" },
-    has_api_key: true,
+    masked_api_key: "abcd...efgh",
   },
   exa: {
     id: 11,
@@ -36,7 +36,7 @@ export const FAKE_CONTENT_PROVIDERS = {
     provider_type: "exa",
     is_active: false,
     config: null,
-    has_api_key: true,
+    masked_api_key: "abcd...efgh",
   },
 };
 

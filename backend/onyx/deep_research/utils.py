@@ -117,9 +117,9 @@ def _extract_reasoning_chunk(state: ThinkToolProcessorState) -> str | None:
     return to_emit if to_emit else None
 
 
-def create_think_tool_token_processor() -> (
-    Callable[[Delta | None, Any], tuple[Delta | None, Any]]
-):
+def create_think_tool_token_processor() -> Callable[
+    [Delta | None, Any], tuple[Delta | None, Any]
+]:
     """
     Create a custom token processor that converts think_tool calls to reasoning content.
 

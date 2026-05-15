@@ -64,7 +64,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
       <Text as="span" mainUiBody text03>
-        {row.role ? USER_ROLE_LABELS[row.role] ?? row.role : "\u2014"}
+        {row.role ? (USER_ROLE_LABELS[row.role] ?? row.role) : "\u2014"}
       </Text>
     </div>
   );

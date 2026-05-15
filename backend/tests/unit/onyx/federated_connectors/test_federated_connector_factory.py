@@ -63,29 +63,29 @@ class TestFederatedConnectorMappingValidation:
         sources = list(FEDERATED_CONNECTOR_CLASS_MAP.keys())
         unique_sources = set(sources)
 
-        assert len(sources) == len(
-            unique_sources
-        ), "Duplicate FederatedConnectorSource entries found"
+        assert len(sources) == len(unique_sources), (
+            "Duplicate FederatedConnectorSource entries found"
+        )
 
     def test_mapping_format_consistency(self) -> None:
         """Test that all mappings follow the expected format."""
         for source, mapping in FEDERATED_CONNECTOR_CLASS_MAP.items():
-            assert isinstance(
-                mapping, FederatedConnectorMapping
-            ), f"{source.value} mapping is not a FederatedConnectorMapping"
+            assert isinstance(mapping, FederatedConnectorMapping), (
+                f"{source.value} mapping is not a FederatedConnectorMapping"
+            )
 
-            assert isinstance(
-                mapping.module_path, str
-            ), f"{source.value} module_path is not a string"
-            assert isinstance(
-                mapping.class_name, str
-            ), f"{source.value} class_name is not a string"
-            assert mapping.module_path.startswith(
-                "onyx.federated_connectors."
-            ), f"{source.value} module_path doesn't start with onyx.federated_connectors."
-            assert mapping.class_name.endswith(
-                "FederatedConnector"
-            ), f"{source.value} class_name doesn't end with FederatedConnector"
+            assert isinstance(mapping.module_path, str), (
+                f"{source.value} module_path is not a string"
+            )
+            assert isinstance(mapping.class_name, str), (
+                f"{source.value} class_name is not a string"
+            )
+            assert mapping.module_path.startswith("onyx.federated_connectors."), (
+                f"{source.value} module_path doesn't start with onyx.federated_connectors."
+            )
+            assert mapping.class_name.endswith("FederatedConnector"), (
+                f"{source.value} class_name doesn't end with FederatedConnector"
+            )
 
 
 class TestFederatedConnectorClassLoading:

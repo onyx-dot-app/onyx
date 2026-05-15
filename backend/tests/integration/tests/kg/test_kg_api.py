@@ -70,18 +70,18 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Check KG
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
 
     actual_config = KGConfigAPIModel.model_validate_json(res2.text)
     assert actual_config == KGConfigAPIModel(
@@ -99,18 +99,18 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Check KG
     res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
 
     actual_config = KGConfigAPIModel.model_validate_json(res4.text)
     assert actual_config == KGConfigAPIModel(
@@ -158,18 +158,18 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Get old entity types
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
     res2_parsed = SourceAndEntityTypeView.model_validate(res2.json())
 
     # Update entity types
@@ -191,9 +191,9 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Check connector kg_processing is enabled
     with get_session_with_current_tenant() as db_session:
@@ -209,9 +209,9 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
     res4_parsed = SourceAndEntityTypeView.model_validate(res4.json())
 
     def to_entity_type_map(map: dict[str, list[EntityType]]) -> dict[str, EntityType]:
@@ -253,18 +253,18 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Get old entity types
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
 
     # Update entity types with non-existent entity type
     req3 = [
@@ -275,18 +275,18 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Get entity types after the update attempt
     res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
 
     # Should be the same as before since non-existent entity type should be ignored
     assert res2.json() == res4.json()

@@ -120,7 +120,7 @@ def _extract_from_batch(
             if failed_id:
                 ids[failed_id] = None
             logger.warning(
-                f"Failed to retrieve document {failed_id}: {item.failure_message}"
+                "Failed to retrieve document %s: %s", failed_id, item.failure_message
             )
         else:
             ids[item.id] = item.parent_hierarchy_raw_node_id

@@ -2,7 +2,6 @@ import time
 from datetime import datetime
 from datetime import timezone
 
-from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
@@ -21,6 +20,7 @@ from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,7 +36,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         parent_pid: int,
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
     ):
         super().__init__()
@@ -68,9 +68,10 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
             elapsed = time.monotonic() - self.start_monotonic
             if elapsed > self.timeout_seconds:
                 logger.warning(
-                    f"IndexingCallback Docprocessing - task timeout exceeded: "
-                    f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
-                    f"cc_pair={self.redis_connector.cc_pair_id}"
+                    "IndexingCallback Docprocessing - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
+                    format(elapsed, ".0f"),
+                    self.timeout_seconds,
+                    self.redis_connector.cc_pair_id,
                 )
                 return True
 
@@ -107,12 +108,13 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
             self.last_tag = tag
         except LockError:
             logger.exception(
-                f"{self.__class__.__name__} - lock.reacquire exceptioned: "
-                f"lock_timeout={self.redis_lock.timeout} "
-                f"start={self.started} "
-                f"last_tag={self.last_tag} "
-                f"last_reacquired={self.last_lock_reacquire} "
-                f"now={datetime.now(timezone.utc)}"
+                "%s - lock.reacquire exceptioned: lock_timeout=%s start=%s last_tag=%s last_reacquired=%s now=%s",
+                self.__class__.__name__,
+                self.redis_lock.timeout,
+                self.started,
+                self.last_tag,
+                self.last_lock_reacquire,
+                datetime.now(timezone.utc),
             )
 
             redis_lock_dump(self.redis_lock, self.redis_client)

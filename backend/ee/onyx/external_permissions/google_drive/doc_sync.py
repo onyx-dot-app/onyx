@@ -115,7 +115,8 @@ def get_external_access_for_raw_gdrive_file(
         )
         if len(permissions_list) != len(permission_ids) and retriever_drive_service:
             logger.warning(
-                f"Failed to get all permissions for file {doc_id} with retriever service, trying admin service"
+                "Failed to get all permissions for file %s with retriever service, trying admin service",
+                doc_id,
             )
             backup_permissions_list = _get_permissions(admin_drive_service)
             permissions_list = _merge_permissions_lists(
@@ -132,9 +133,11 @@ def get_external_access_for_raw_gdrive_file(
     # but the actual fetch can still return empty due to a 403.
     if not permissions_list:
         logger.info(
-            f"No permission info available for file {doc_id} "
-            f"(likely owned by a user outside of your organization). "
-            f"Falling back to granting access to retriever user: {fallback_user_email}"
+            "No permission info available for file %s "
+            "(likely owned by a user outside of your organization). "
+            "Falling back to granting access to retriever user: %s",
+            doc_id,
+            fallback_user_email,
         )
         return ExternalAccess(
             external_user_emails={fallback_user_email},
@@ -170,7 +173,9 @@ def get_external_access_for_raw_gdrive_file(
                 # skip the permission — warn instead of error so the doc_id
                 # in the message doesn't explode Sentry fingerprinting.
                 logger.warning(
-                    f"Permission is type `user` but no email address is provided for document {doc_id}\n {permission}"
+                    "Permission is type `user` but no email address is provided for document %s\n %s",
+                    doc_id,
+                    permission,
                 )
         elif permission.type == PermissionType.GROUP:
             # groups are represented as email addresses within Drive
@@ -178,14 +183,17 @@ def get_external_access_for_raw_gdrive_file(
                 group_emails.add(permission.email_address)
             else:
                 logger.warning(
-                    f"Permission is type `group` but no email address is provided for document {doc_id}\n {permission}"
+                    "Permission is type `group` but no email address is provided for document %s\n %s",
+                    doc_id,
+                    permission,
                 )
         elif permission.type == PermissionType.DOMAIN and company_domain:
             if permission.domain == company_domain:
                 public = True
             else:
                 logger.warning(
-                    f"Permission is type domain but does not match company domain:\n {permission}"
+                    "Permission is type domain but does not match company domain:\n %s",
+                    permission,
                 )
         elif permission.type == PermissionType.ANYONE:
             public = True
@@ -244,7 +252,7 @@ def get_external_access_for_folder(
     # Get permission IDs from folder metadata
     permission_ids = folder.get("permissionIds") or []
     if not permission_ids:
-        logger.debug(f"No permissionIds found for folder {folder_id}")
+        logger.debug("No permissionIds found for folder %s", folder_id)
         return ExternalAccess(
             external_user_emails=set(),
             external_user_group_ids=set(),
@@ -267,13 +275,15 @@ def get_external_access_for_folder(
             if permission.email_address:
                 user_emails.add(permission.email_address)
             else:
-                logger.warning(f"User permission without email for folder {folder_id}")
+                logger.warning("User permission without email for folder %s", folder_id)
         elif permission.type == PermissionType.GROUP:
             # Groups are represented as email addresses in Google Drive
             if permission.email_address:
                 group_emails.add(permission.email_address)
             else:
-                logger.warning(f"Group permission without email for folder {folder_id}")
+                logger.warning(
+                    "Group permission without email for folder %s", folder_id
+                )
         elif permission.type == PermissionType.DOMAIN:
             # Domain permission - check if it matches company domain
             if permission.domain == google_domain:
@@ -282,8 +292,11 @@ def get_external_access_for_folder(
                 is_public = permission.allow_file_discovery is not False
             else:
                 logger.debug(
-                    f"Domain permission for {permission.domain} does not match "
-                    f"company domain {google_domain} for folder {folder_id}"
+                    "Domain permission for %s does not match "
+                    "company domain %s for folder %s",
+                    permission.domain,
+                    google_domain,
+                    folder_id,
                 )
         elif permission.type == PermissionType.ANYONE:
             # Only public if discoverable (allowFileDiscovery is not False)
@@ -331,7 +344,7 @@ def gdrive_doc_sync(
 
     total_processed = 0
     for slim_doc_batch in slim_doc_generator:
-        logger.info(f"Drive perm sync: Processing {len(slim_doc_batch)} documents")
+        logger.info("Drive perm sync: Processing %s documents", len(slim_doc_batch))
         for slim_doc in slim_doc_batch:
             if callback:
                 if callback.should_stop():
@@ -357,4 +370,4 @@ def gdrive_doc_sync(
                 doc_id=slim_doc.id,
             )
         total_processed += len(slim_doc_batch)
-        logger.info(f"Drive perm sync: Processed {total_processed} total documents")
+        logger.info("Drive perm sync: Processed %s total documents", total_processed)

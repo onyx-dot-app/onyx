@@ -202,7 +202,7 @@ def _cluster_one_grounded_entity(
     # if there is a match, update the entity, otherwise create a new one
     with get_session_with_current_tenant() as db_session:
         if best_entity:
-            logger.debug(f"Merged {entity.name} with {best_entity.name}")
+            logger.debug("Merged %s with %s", entity.name, best_entity.name)
             update_vespa = (
                 best_entity.document_id is None and entity.document_id is not None
             )
@@ -281,7 +281,8 @@ def _transfer_one_relationship(
         }
         if len(entity_translations) != len(staging_entity_id_names):
             logger.error(
-                f"Missing entity translations for {staging_entity_id_names - entity_translations.keys()}"
+                "Missing entity translations for %s",
+                staging_entity_id_names - entity_translations.keys(),
             )
             return
 
@@ -312,7 +313,7 @@ def kg_clustering(
     This will change with deep extraction, where grounded-sourceless entities
     can be extracted and then need to be clustered.
     """
-    logger.info(f"Starting kg clustering for tenant {tenant_id}")
+    logger.info("Starting kg clustering for tenant %s", tenant_id)
 
     kg_config_settings = get_kg_config_settings()
     validate_kg_settings(kg_config_settings)
@@ -336,7 +337,9 @@ def kg_clustering(
     # NOTE: we assume every entity is transferred, as we currently only have grounded entities
     time_delta = time.monotonic() - start_time
     logger.info(
-        f"Finished transferring {i_batch + 1} entity batches in {time_delta:.2f}s"
+        "Finished transferring %s entity batches in %ss",
+        i_batch + 1,
+        format(time_delta, ".2f"),
     )
 
     # Create parent-child relationships in parallel
@@ -373,7 +376,9 @@ def kg_clustering(
         # logger.debug(f"Transferred relationship types batch {i}")
     time_delta = time.monotonic() - start_time
     logger.info(
-        f"Finished transferring {i_batch + 1} relationship type batches in {time_delta:.2f}s"
+        "Finished transferring %s relationship type batches in %ss",
+        i_batch + 1,
+        format(time_delta, ".2f"),
     )
 
     # Transfer the relationships in parallel
@@ -394,7 +399,9 @@ def kg_clustering(
         # logger.debug(f"Transferred relationships batch {i}")
     time_delta = time.monotonic() - start_time
     logger.info(
-        f"Finished transferring {i_batch + 1} relationship batches in {time_delta:.2f}s"
+        "Finished transferring %s relationship batches in %ss",
+        i_batch + 1,
+        format(time_delta, ".2f"),
     )
 
     # Update vespa for each document
@@ -413,14 +420,16 @@ def kg_clustering(
             try:
                 update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
             except Exception as e:
-                logger.error(f"Error updating vespa for document {document.id}: {e}")
+                logger.error("Error updating vespa for document %s: %s", document.id, e)
         last_lock_time = extend_lock(
             lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
         )
         # logger.debug(f"Updated vespa for documents batch {i}")
     time_delta = time.monotonic() - start_time
     logger.info(
-        f"Finished updating {i_batch + 1} document batches in {time_delta:.2f}s"
+        "Finished updating %s document batches in %ss",
+        i_batch + 1,
+        format(time_delta, ".2f"),
     )
 
     # Delete the transferred objects from the staging tables
@@ -431,7 +440,7 @@ def kg_clustering(
             ).delete(synchronize_session=False)
             db_session.commit()
     except Exception as e:
-        logger.error(f"Error deleting relationships: {e}")
+        logger.error("Error deleting relationships: %s", e)
 
     try:
         with get_session_with_current_tenant() as db_session:
@@ -440,7 +449,7 @@ def kg_clustering(
             ).delete(synchronize_session=False)
             db_session.commit()
     except Exception as e:
-        logger.error(f"Error deleting relationship types: {e}")
+        logger.error("Error deleting relationship types: %s", e)
 
     try:
         with get_session_with_current_tenant() as db_session:
@@ -449,5 +458,5 @@ def kg_clustering(
             ).delete(synchronize_session=False)
             db_session.commit()
     except Exception as e:
-        logger.error(f"Error deleting entities: {e}")
+        logger.error("Error deleting entities: %s", e)
     logger.info("Finished deleting all transferred staging entries")

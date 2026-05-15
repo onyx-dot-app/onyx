@@ -1,7 +1,7 @@
 import json
-import os
 import resource
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -20,51 +20,43 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from tests.load_env_vars import load_env_vars
+from tests.utils.secret_names import TestSecret
 
 # Load environment variables at the module level
 load_env_vars()
 
 
-_USER_TO_OAUTH_CREDENTIALS_MAP = {
-    "admin@onyx-test.com": "GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR",
-    "test_user_1@onyx-test.com": "GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1",
+_USER_TO_OAUTH_TESTSECRET_MAP: dict[str, TestSecret] = {
+    "admin@onyx-test.com": TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR,
+    "test_user_1@onyx-test.com": (
+        TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1
+    ),
 }
 
-_USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP = {
-    "admin@onyx-test.com": "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR",
+_USER_TO_SERVICE_ACCOUNT_TESTSECRET_MAP: dict[str, TestSecret] = {
+    "admin@onyx-test.com": TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR,
 }
 
 
-def parse_credentials(env_str: str) -> dict:
-    """
-    Parse a double-escaped JSON string from environment variables into a Python dictionary.
-
-    Args:
-        env_str (str): The double-escaped JSON string from environment variables
-
-    Returns:
-        dict: Parsed OAuth credentials
-    """
-    # first try normally
+def parse_credentials(env_str: str) -> dict[str, Any]:
+    """Parse a (potentially double-escaped) JSON string into a dict."""
     try:
         return json.loads(env_str)
     except Exception:
-        # First, try remove extra escaping backslashes
-        unescaped = env_str.replace('\\"', '"')
-
-        # remove leading / trailing quotes
-        unescaped = unescaped.strip('"')
-
-        # Now parse the JSON
+        unescaped = env_str.replace('\\"', '"').strip('"')
         return json.loads(unescaped)
 
 
-def get_credentials_from_env(email: str, oauth: bool) -> dict:
+def build_credentials(
+    email: str,
+    oauth: bool,
+    test_secrets: dict[TestSecret, str],
+) -> dict[str, Any]:
     if oauth:
-        raw_credential_string = os.environ[_USER_TO_OAUTH_CREDENTIALS_MAP[email]]
+        raw_credential_string = test_secrets[_USER_TO_OAUTH_TESTSECRET_MAP[email]]
     else:
-        raw_credential_string = os.environ[
-            _USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP[email]
+        raw_credential_string = test_secrets[
+            _USER_TO_SERVICE_ACCOUNT_TESTSECRET_MAP[email]
         ]
 
     refried_credential_string = json.dumps(parse_credentials(raw_credential_string))
@@ -82,9 +74,9 @@ def get_credentials_from_env(email: str, oauth: bool) -> dict:
 
 
 @pytest.fixture
-def google_drive_oauth_uploaded_connector_factory() -> (
-    Callable[..., GoogleDriveConnector]
-):
+def google_drive_oauth_uploaded_connector_factory(
+    test_secrets: dict[TestSecret, str],
+) -> Callable[..., GoogleDriveConnector]:
     def _connector_factory(
         primary_admin_email: str,
         include_shared_drives: bool,
@@ -104,7 +96,9 @@ def google_drive_oauth_uploaded_connector_factory() -> (
             shared_folder_urls=shared_folder_urls,
         )
 
-        credentials_json = get_credentials_from_env(primary_admin_email, oauth=True)
+        credentials_json = build_credentials(
+            primary_admin_email, oauth=True, test_secrets=test_secrets
+        )
         connector.load_credentials(credentials_json)
         return connector
 
@@ -112,9 +106,9 @@ def google_drive_oauth_uploaded_connector_factory() -> (
 
 
 @pytest.fixture
-def google_drive_service_acct_connector_factory() -> (
-    Callable[..., GoogleDriveConnector]
-):
+def google_drive_service_acct_connector_factory(
+    test_secrets: dict[TestSecret, str],
+) -> Callable[..., GoogleDriveConnector]:
     def _connector_factory(
         primary_admin_email: str,
         include_shared_drives: bool,
@@ -136,9 +130,8 @@ def google_drive_service_acct_connector_factory() -> (
             specific_user_emails=specific_user_emails,
         )
 
-        # Load Service Account Credentials
-        credentials_json = get_credentials_from_env(
-            email=primary_admin_email, oauth=False
+        credentials_json = build_credentials(
+            email=primary_admin_email, oauth=False, test_secrets=test_secrets
         )
         connector.load_credentials(credentials_json)
         return connector

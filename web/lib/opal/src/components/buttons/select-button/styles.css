@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* SelectButton — layout only; colors handled by Interactive.Stateful */
 
 .opal-select-button {

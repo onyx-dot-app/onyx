@@ -14,6 +14,7 @@ func NewDeployCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(NewDeployEdgeCommand())
+	cmd.AddCommand(NewDeployWikiCommand())
 
 	return cmd
 }

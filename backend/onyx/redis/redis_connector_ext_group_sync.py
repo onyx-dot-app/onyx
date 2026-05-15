@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import cast
 
-import redis
 from celery import Celery
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisConnectorExternalGroupSyncPayload(BaseModel):
@@ -45,7 +45,7 @@ class RedisConnectorExternalGroupSync:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = 3600
 
-    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+    def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
@@ -69,8 +69,7 @@ class RedisConnectorExternalGroupSync:
 
     def get_remaining(self) -> int:
         # todo: move into fence
-        remaining = cast(int, self.redis.scard(self.taskset_key))
-        return remaining
+        return self.redis.scard(self.taskset_key)
 
     def get_active_task_count(self) -> int:
         """Count of active external group syncing tasks"""
@@ -90,11 +89,10 @@ class RedisConnectorExternalGroupSync:
     @property
     def payload(self) -> RedisConnectorExternalGroupSyncPayload | None:
         # read related data and evaluate/print task progress
-        fence_raw = self.redis.get(self.fence_key)
-        if fence_raw is None:
+        fence_bytes = self.redis.get(self.fence_key)
+        if fence_bytes is None:
             return None
 
-        fence_bytes = cast(bytes, fence_raw)
         fence_str = fence_bytes.decode("utf-8")
         payload = RedisConnectorExternalGroupSyncPayload.model_validate_json(fence_str)
 
@@ -165,13 +163,13 @@ class RedisConnectorExternalGroupSync:
         self.redis.delete(self.fence_key)
 
     @staticmethod
-    def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:
+    def remove_from_taskset(id: int, task_id: str, r: TenantRedisClient) -> None:
         taskset_key = f"{RedisConnectorExternalGroupSync.TASKSET_PREFIX}_{id}"
         r.srem(taskset_key, task_id)
         return
 
     @staticmethod
-    def reset_all(r: redis.Redis) -> None:
+    def reset_all(r: TenantRedisClient) -> None:
         """Deletes all redis values for all connectors"""
         for key in r.scan_iter(RedisConnectorExternalGroupSync.ACTIVE_PREFIX + "*"):
             r.delete(key)

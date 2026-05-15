@@ -27,7 +27,7 @@ def build_opencode_config(
         api_base: Optional custom API base URL
         disabled_tools: Optional list of tools to disable (e.g., ["question", "webfetch"])
         dev_mode: If True, allow all external directories. If False (Docker/Kubernetes),
-                  only whitelist /workspace/files and /workspace/demo_data.
+                  deny all external directories by default.
 
     Returns:
         Configuration dict ready to be serialized to JSON
@@ -40,6 +40,7 @@ def build_opencode_config(
         "$schema": "https://opencode.ai/config.json",
         "model": opencode_model,
         "provider": {},
+        "enabled_providers": [provider],
     }
 
     # Build provider configuration
@@ -56,21 +57,26 @@ def build_opencode_config(
     # Build model configuration with thinking/reasoning options
     options: dict[str, Any] = {}
 
+    # Models that support adaptive thinking (4.6+). Older models (4.5 and
+    # earlier) require thinking.type: "enabled" with budget_tokens.
+    _ADAPTIVE_THINKING_MODELS = {
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+    }
+
     if provider == "openai":
         options["reasoningEffort"] = "high"
-    elif provider == "anthropic":
-        options["thinking"] = {
-            "type": "enabled",
-            "budgetTokens": 16000,
-        }
+    elif provider in ("anthropic", "bedrock"):
+        if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
+            tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
+        ):
+            options["thinking"] = {"type": "adaptive"}
+        else:
+            options["thinking"] = {"type": "enabled", "budgetTokens": 16000}
     elif provider == "google":
         options["thinking_budget"] = 16000
         options["thinking_level"] = "high"
-    elif provider == "bedrock":
-        options["thinking"] = {
-            "type": "enabled",
-            "budgetTokens": 16000,
-        }
     elif provider == "azure":
         options["reasoningEffort"] = "high"
 
@@ -142,16 +148,12 @@ def build_opencode_config(
         "webfetch": "allow",
         # External directory permissions:
         # - dev_mode: Allow all external directories for local development
-        # - Docker/Kubernetes: Whitelist only specific directories
+        # - Docker/Kubernetes: Deny all external directories by default
         "external_directory": (
             "allow"
             if dev_mode
             else {
                 "*": "deny",  # Deny all external directories by default
-                "/workspace/files": "allow",  # Allow files directory
-                "/workspace/files/**": "allow",  # Allow files directory contents
-                "/workspace/demo_data": "allow",  # Allow demo data directory
-                "/workspace/demo_data/**": "allow",  # Allow demo data directory contents
             }
         ),
     }

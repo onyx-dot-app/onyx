@@ -37,7 +37,7 @@ def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] 
         response = requests.get(JWT_PUBLIC_KEY_URL)
         response.raise_for_status()
     except requests.RequestException as exc:
-        logger.error(f"Failed to fetch JWT public key: {str(exc)}")
+        logger.error("Failed to fetch JWT public key: %s", str(exc))
         return None
     content_type = response.headers.get("Content-Type", "").lower()
     raw_body = response.text
@@ -88,7 +88,7 @@ def _resolve_public_key_from_jwks(
     try:
         header = jwt.get_unverified_header(token)
     except PyJWTError as e:
-        logger.error(f"Unable to parse JWT header: {str(e)}")
+        logger.error("Unable to parse JWT header: %s", str(e))
         return None
 
     keys = jwks_payload.get("keys", []) if isinstance(jwks_payload, dict) else []
@@ -123,7 +123,7 @@ def _resolve_public_key_from_jwks(
     try:
         return cast(RSAPublicKey, RSAAlgorithm.from_jwk(json.dumps(jwk)))
     except ValueError as e:
-        logger.error(f"Failed to construct RSA key from JWK: {str(e)}")
+        logger.error("Failed to construct RSA key from JWK: %s", str(e))
         return None
 
 
@@ -145,13 +145,13 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
                 options={"verify_aud": False},
             )
         except InvalidTokenError as e:
-            logger.error(f"Invalid JWT token: {str(e)}")
+            logger.error("Invalid JWT token: %s", str(e))
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
                 _fetch_public_key_payload.cache_clear()
                 continue
             return None
         except PyJWTError as e:
-            logger.error(f"JWT decoding error: {str(e)}")
+            logger.error("JWT decoding error: %s", str(e))
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
                 _fetch_public_key_payload.cache_clear()
                 continue

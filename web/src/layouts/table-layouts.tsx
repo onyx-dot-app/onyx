@@ -13,8 +13,9 @@ import React from "react";
  * @param onClick - Click handler for the row
  * @param children - Row content
  */
-interface TableRowProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface TableRowProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   selected?: boolean;
 }
 function TableRow({ selected, children, onClick, ...rest }: TableRowProps) {
@@ -38,8 +39,9 @@ function TableRow({ selected, children, onClick, ...rest }: TableRowProps) {
  * @param width - Optional fixed width in rem
  * @param children - Cell content
  */
-interface TableCellProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface TableCellProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   flex?: boolean;
   width?: number;
 }
@@ -62,8 +64,9 @@ function TableCell({ flex, width, children, ...rest }: TableCellProps) {
  *
  * @param children - Sidebar content
  */
-interface SidebarLayoutProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {}
+interface SidebarLayoutProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {}
 function SidebarLayout({ children, ...rest }: SidebarLayoutProps) {
   return (
     <div className="sidebar-layout" {...rest}>
@@ -77,8 +80,9 @@ function SidebarLayout({ children, ...rest }: SidebarLayoutProps) {
  *
  * @param children - Should contain sidebar and content sections
  */
-interface TwoColumnLayoutProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface TwoColumnLayoutProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   minHeight?: number;
 }
 function TwoColumnLayout({
@@ -100,8 +104,9 @@ function TwoColumnLayout({
 /**
  * ContentColumn - The main content area in a two-column layout
  */
-interface ContentColumnProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {}
+interface ContentColumnProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {}
 function ContentColumn({ children, ...rest }: ContentColumnProps) {
   return (
     <div className="content-column-layout" {...rest}>
@@ -123,8 +128,9 @@ function HiddenInput({ inputRef, ...rest }: HiddenInputProps) {
 /**
  * CheckboxCell - A fixed-width cell for checkboxes in tables
  */
-interface CheckboxCellProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {}
+interface CheckboxCellProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {}
 function CheckboxCell({ children, ...rest }: CheckboxCellProps) {
   return (
     <div className="checkbox-cell-layout" {...rest}>
@@ -136,8 +142,9 @@ function CheckboxCell({ children, ...rest }: CheckboxCellProps) {
 /**
  * SourceIconsRow - A row of source icons
  */
-interface SourceIconsRowProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {}
+interface SourceIconsRowProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {}
 function SourceIconsRow({ children, ...rest }: SourceIconsRowProps) {
   return (
     <div className="source-icons-layout" {...rest}>

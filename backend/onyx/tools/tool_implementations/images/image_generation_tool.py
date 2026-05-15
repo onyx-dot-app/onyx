@@ -181,7 +181,7 @@ class ImageGenerationTool(Tool[None]):
                 size = "1024x1792"
         else:
             size = "1024x1024"
-        logger.debug(f"Generating image with model: {self.model}, size: {size}")
+        logger.debug("Generating image with model: %s, size: %s", self.model, size)
         try:
             response = self.img_provider.generate_image(
                 prompt=prompt,
@@ -215,12 +215,12 @@ class ImageGenerationTool(Tool[None]):
             )
 
         except requests.RequestException as e:
-            logger.error(f"Error fetching or converting image: {e}")
+            logger.error("Error fetching or converting image: %s", e)
             raise ToolExecutionException(
                 "Failed to fetch or convert the generated image", emit_error_packet=True
             )
         except Exception as e:
-            logger.debug(f"Error occurred during image generation: {e}")
+            logger.debug("Error occurred during image generation: %s", e)
 
             error_message = str(e)
             if "OpenAIException" in str(type(e)):

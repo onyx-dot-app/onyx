@@ -78,7 +78,7 @@ def export_query_history_task(
                 )
 
         except Exception:
-            logger.exception(f"Failed to export query history with {task_id=}")
+            logger.exception("Failed to export query history with task_id=%r", task_id)
             mark_task_as_finished_with_id(
                 db_session=db_session,
                 task_id=task_id,
@@ -109,7 +109,7 @@ def export_query_history_task(
             )
         except Exception:
             logger.exception(
-                f"Failed to save query history export file; {report_name=}"
+                "Failed to save query history export file; report_name=%r", report_name
             )
             mark_task_as_finished_with_id(
                 db_session=db_session,

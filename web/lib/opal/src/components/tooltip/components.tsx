@@ -100,7 +100,7 @@ function Tooltip({
 
   const content =
     typeof tooltip === "string" || isRichStr(tooltip) ? (
-      <Text font="secondary-body" color="inherit">
+      <Text font="secondary-body" color="inherit" as="p">
         {tooltip}
       </Text>
     ) : (
