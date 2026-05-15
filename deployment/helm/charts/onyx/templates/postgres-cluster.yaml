@@ -1,7 +1,9 @@
 {{- /*
 CNPG Cluster CR — the `postgresql` subchart only installs the operator.
 Name must be `<release>-<postgresql.nameOverride>` to match POSTGRES_HOST
-in configmap.yaml.
+in configmap.yaml. Applied as a post-install/post-upgrade hook because
+the CNPG CRDs ship in templates/ (not crds/), so the Cluster kind isn't
+registered during the main template-build phase.
 */}}
 {{- if .Values.postgresql.enabled }}
 {{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
@@ -11,6 +13,10 @@ metadata:
   name: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   instances: {{ .Values.postgresql.cluster.instances | default 1 }}
   storage:
