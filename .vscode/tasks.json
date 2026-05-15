@@ -179,7 +179,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "set -e; telepresence connect -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file ${workspaceFolder}/.vscode/.env.k8s; if [ -f ${workspaceFolder}/.vscode/.env.k8s.local ]; then echo '' >> ${workspaceFolder}/.vscode/.env.k8s; cat ${workspaceFolder}/.vscode/.env.k8s.local >> ${workspaceFolder}/.vscode/.env.k8s; fi"
+        "set -e; telepresence connect -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file \"${workspaceFolder}/.vscode/.env.k8s\"; if [ -f \"${workspaceFolder}/.vscode/.env.k8s.local\" ]; then echo '' >> \"${workspaceFolder}/.vscode/.env.k8s\"; cat \"${workspaceFolder}/.vscode/.env.k8s.local\" >> \"${workspaceFolder}/.vscode/.env.k8s\"; fi"
       ],
       "presentation": {
         "reveal": "silent",
