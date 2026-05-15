@@ -1477,14 +1477,13 @@ sandboxJobs:
     sidecarPort: 8080
     previewPort: 3000
 
-  # Per-session workspace + per-user knowledge PVC config. Defaults assume the
-  # cluster has a sensible default StorageClass; override storageClassName to
-  # pin a specific one (e.g. sandbox-gp3 below).
+  # Per-session workspace PVC config. Defaults assume the cluster has a sensible
+  # default StorageClass; override storageClassName to pin a specific one (e.g.
+  # sandbox-gp3 below).
   storage:
     storageClassName: ""
     snapshotClassName: ""
     workspaceSize: 50Gi
-    knowledgeSize: 5Gi
 
     # Optionally create a gp3 StorageClass managed by this chart. Off by default
     # because StorageClass is cluster-scoped; opt in per cluster via overlay if

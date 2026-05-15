@@ -11,8 +11,7 @@ data:
   # The backend reads these YAML strings at startup and substitutes ${placeholders}
   # via Python's string.Template before POSTing the rendered manifests to the K8s API.
   # Placeholders used: ${job_name}, ${session_id}, ${user_id}, ${tenant_id},
-  # ${workspace_pvc_name}, ${knowledge_pvc_name}, ${auth_secret_name},
-  # ${service_name}, ${auth_token}.
+  # ${workspace_pvc_name}, ${auth_secret_name}, ${service_name}, ${auth_token}.
 
   job.yaml: |
     apiVersion: batch/v1
@@ -72,9 +71,6 @@ data:
               volumeMounts:
                 - name: workspace
                   mountPath: /workspace
-                - name: knowledge
-                  mountPath: /workspace/files
-                  readOnly: true
             - name: sidecar
               image: {{ .Values.sandboxJobs.jobTemplate.sidecarImage | quote }}
               imagePullPolicy: {{ .Values.sandboxJobs.jobTemplate.imagePullPolicy }}
@@ -114,9 +110,6 @@ data:
             - name: workspace
               persistentVolumeClaim:
                 claimName: ${workspace_pvc_name}
-            - name: knowledge
-              persistentVolumeClaim:
-                claimName: ${knowledge_pvc_name}
             - name: sidecar-auth
               secret:
                 secretName: ${auth_secret_name}
@@ -161,25 +154,6 @@ data:
       resources:
         requests:
           storage: {{ .Values.sandboxJobs.storage.workspaceSize }}
-      {{- with .Values.sandboxJobs.storage.storageClassName }}
-      storageClassName: {{ . | quote }}
-      {{- end }}
-
-  knowledge-pvc.yaml: |
-    apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: ${knowledge_pvc_name}
-      namespace: {{ .Values.sandboxJobs.namespace }}
-      labels:
-        app.kubernetes.io/component: sandbox-knowledge
-        onyx.app/user-id: "${user_id}"
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: {{ .Values.sandboxJobs.storage.knowledgeSize }}
       {{- with .Values.sandboxJobs.storage.storageClassName }}
       storageClassName: {{ . | quote }}
       {{- end }}
