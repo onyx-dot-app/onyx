@@ -1,16 +1,16 @@
 {{- /*
-CNPG Cluster CR — the `postgresql` subchart only installs the operator.
-Name must be `<release>-<postgresql.nameOverride>` to match POSTGRES_HOST
-in configmap.yaml. Applied as a post-install/post-upgrade hook because
-the CNPG CRDs ship in templates/ (not crds/), so the Cluster kind isn't
-registered during the main template-build phase.
+CNPG Cluster CR. Name must differ from the operator Deployment name
+(`<release>-<nameOverride>`) to avoid a ServiceAccount collision that
+prevents the initdb Job from starting. POSTGRES_HOST in configmap.yaml
+must stay in sync: `<cluster-name>-rw`. Applied as a post-install hook
+because the CNPG CRDs ship in templates/ (not crds/).
 */}}
 {{- if .Values.postgresql.enabled }}
 {{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}
+  name: {{ .Release.Name }}-pg
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
   annotations:
