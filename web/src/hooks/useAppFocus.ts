@@ -13,7 +13,6 @@ export type AppFocusType =
   | { type: "agent" | "project" | "chat"; id: string }
   | "new-session"
   | "more-agents"
-  | "skills"
   | "user-settings"
   | "shared-chat";
 
@@ -44,10 +43,6 @@ export class AppFocus {
     return this.value === "more-agents";
   }
 
-  isSkills(): boolean {
-    return this.value === "skills";
-  }
-
   isUserSettings(): boolean {
     return this.value === "user-settings";
   }
@@ -63,7 +58,6 @@ export class AppFocus {
     | "shared-chat"
     | "new-session"
     | "more-agents"
-    | "skills"
     | "user-settings" {
     return typeof this.value === "object" ? this.value.type : this.value;
   }
@@ -88,9 +82,6 @@ export default function useAppFocus(): AppFocus {
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppFocus("more-agents");
-    }
-    if (pathname.startsWith("/app/skills")) {
-      return new AppFocus("skills");
     }
     if (chatId) return new AppFocus({ type: "chat", id: chatId });
     if (agentId) return new AppFocus({ type: "agent", id: agentId });

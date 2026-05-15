@@ -15,6 +15,17 @@ export const MOCK_CURRENT_USER: SkillAuthor = {
   is_admin: false,
 };
 
+/**
+ * Synthetic "author" used to attribute built-in skills to Onyx itself.
+ * Surfaces inside the author filter on the user-facing skills page.
+ */
+export const ONYX_BUILTIN_AUTHOR: SkillAuthor = {
+  id: "onyx-builtin",
+  name: "Onyx",
+  email: "Onyx",
+  is_admin: false,
+};
+
 const MOCK_ADMIN_AUTHOR: SkillAuthor = {
   id: "user-admin",
   name: "Onyx Admin",

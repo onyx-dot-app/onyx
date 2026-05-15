@@ -27,6 +27,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgEditBig,
   SvgArrowLeft,
+  SvgBlocks,
   SvgClock,
   SvgSettings,
   SvgMoreHorizontal,
@@ -45,6 +46,7 @@ import {
 import {
   CRAFT_PATH,
   CRAFT_CONFIGURE_PATH,
+  CRAFT_SKILLS_PATH,
   CRAFT_TASKS_PATH,
 } from "@/app/craft/v1/constants";
 
@@ -405,6 +407,20 @@ const MemoizedBuildSidebarInner = memo(
       [folded, pathname]
     );
 
+    const skillsPanel = useMemo(
+      () => (
+        <SidebarTab
+          icon={SvgBlocks}
+          folded={folded}
+          href={CRAFT_SKILLS_PATH}
+          selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+        >
+          Skills
+        </SidebarTab>
+      ),
+      [folded, pathname]
+    );
+
     const backToChatButton = useMemo(
       () => (
         <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
@@ -432,6 +448,7 @@ const MemoizedBuildSidebarInner = memo(
               {newBuildButton}
               {buildConfigurePanel}
               {scheduledTasksPanel}
+              {skillsPanel}
             </div>
           }
           footer={footer}
@@ -453,6 +470,7 @@ const MemoizedBuildSidebarInner = memo(
                     isActive={
                       !pathname.startsWith(CRAFT_CONFIGURE_PATH) &&
                       !pathname.startsWith(CRAFT_TASKS_PATH) &&
+                      !pathname.startsWith(CRAFT_SKILLS_PATH) &&
                       session?.id === historyItem.id
                     }
                     onLoad={() => handleLoadSession(historyItem.id)}

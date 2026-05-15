@@ -23,7 +23,7 @@ import { cn } from "@opal/utils";
 
 interface CustomSkillRowActionsProps {
   skill: CustomSkill;
-  /** True on /admin/skills, false on /app/skills (user view). */
+  /** True on /admin/skills, false on /craft/v1/skills (user view). */
   adminMode: boolean;
   onOpen: () => void;
   onShare: () => void;

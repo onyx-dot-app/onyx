@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Button, Tag } from "@opal/components";
-import { SvgBlocks, SvgPlus } from "@opal/icons";
-import * as AppLayouts from "@/layouts/app-layouts";
+import { useMemo, useRef, useState } from "react";
+import { Button, FilterButton, LineItemButton } from "@opal/components";
+import { Popover, PopoverMenu } from "@opal/components";
+import { SvgBlocks, SvgPlus, SvgUser } from "@opal/icons";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
+import Tabs from "@/refresh-components/Tabs";
+import TextSeparator from "@/refresh-components/TextSeparator";
+import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import useOnMount from "@/hooks/useOnMount";
+import useFilter from "@/hooks/useFilter";
 import { toast } from "@/hooks/useToast";
-import CustomSkillsTable from "@/refresh-pages/admin/SkillsPage/CustomSkillsTable";
+import SkillCard, { type SkillCardItem } from "@/sections/cards/SkillCard";
 import UploadSkillModal from "@/refresh-pages/admin/SkillsPage/UploadSkillModal";
 import ShareSkillModal from "@/refresh-pages/admin/SkillsPage/ShareSkillModal";
 import InspectSkillModal from "@/refresh-pages/admin/SkillsPage/InspectSkillModal";
@@ -16,11 +20,11 @@ import {
   MOCK_BUILTIN_SKILLS,
   MOCK_CUSTOM_SKILLS,
   MOCK_CURRENT_USER,
-  skillsOwnedBy,
-  skillsSharedWith,
+  ONYX_BUILTIN_AUTHOR,
 } from "@/refresh-pages/admin/SkillsPage/mockData";
 import type {
   CustomSkill,
+  SkillAuthor,
   SkillVisibility,
 } from "@/refresh-pages/admin/SkillsPage/interfaces";
 
@@ -34,29 +38,114 @@ export default function UserSkillsPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const [inspectTarget, setInspectTarget] = useState<CustomSkill | null>(null);
-
-  const owned = useMemo(
-    () => allSkills.filter((s) => s.author.id === MOCK_CURRENT_USER.id),
-    [allSkills]
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"all" | "your">("all");
+  const [selectedAuthorIds, setSelectedAuthorIds] = useState<Set<string>>(
+    new Set()
   );
-  const sharedWithMe = useMemo(
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useOnMount(() => {
+    searchInputRef.current?.focus();
+  });
+
+  // -- Build the unified list of display items ------------------------------
+
+  const builtinItems = useMemo<SkillCardItem[]>(
     () =>
-      allSkills.filter(
-        (s) =>
-          s.author.id !== MOCK_CURRENT_USER.id &&
-          s.enabled &&
-          (s.visibility === "org_wide" ||
-            s.visibility === "groups" ||
-            s.visibility === "users_and_groups" ||
-            s.visibility === "users")
-      ),
+      MOCK_BUILTIN_SKILLS.map((skill) => ({
+        id: `builtin:${skill.slug}`,
+        name: skill.name,
+        description: skill.description,
+        author: ONYX_BUILTIN_AUTHOR,
+        source: "builtin",
+        available: skill.available,
+        unavailable_reason: skill.unavailable_reason,
+      })),
+    []
+  );
+
+  const customItems = useMemo<SkillCardItem[]>(
+    () =>
+      allSkills
+        .filter((skill) => {
+          if (skill.author.id === MOCK_CURRENT_USER.id) return true;
+          // Treat shared / org-wide skills as visible to the current user.
+          if (!skill.enabled) return false;
+          return (
+            skill.visibility === "org_wide" ||
+            skill.visibility === "groups" ||
+            skill.visibility === "users_and_groups" ||
+            skill.visibility === "users"
+          );
+        })
+        .map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          author: skill.author,
+          source: skill.author.id === MOCK_CURRENT_USER.id ? "owned" : "shared",
+          customSkill: skill,
+        })),
     [allSkills]
   );
 
-  const totalCount =
-    MOCK_BUILTIN_SKILLS.filter((s) => s.available).length +
-    owned.length +
-    sharedWithMe.length;
+  const allItems = useMemo<SkillCardItem[]>(
+    () => [...builtinItems, ...customItems],
+    [builtinItems, customItems]
+  );
+
+  // -- Author filter data ---------------------------------------------------
+
+  const uniqueAuthors = useMemo<SkillAuthor[]>(() => {
+    const seen = new Map<string, SkillAuthor>();
+    for (const item of allItems) {
+      if (!seen.has(item.author.id)) seen.set(item.author.id, item.author);
+    }
+    // Sort: Onyx first, then current user, then everyone else alphabetically.
+    return Array.from(seen.values()).sort((a, b) => {
+      if (a.id === ONYX_BUILTIN_AUTHOR.id) return -1;
+      if (b.id === ONYX_BUILTIN_AUTHOR.id) return 1;
+      if (a.id === MOCK_CURRENT_USER.id) return -1;
+      if (b.id === MOCK_CURRENT_USER.id) return 1;
+      return a.email.localeCompare(b.email);
+    });
+  }, [allItems]);
+
+  const authorFilter = useFilter(uniqueAuthors, (a) => a.email);
+
+  const authorFilterButtonText = useMemo(() => {
+    if (selectedAuthorIds.size === 0) return "Anyone";
+    if (selectedAuthorIds.size === 1) {
+      const selectedId = Array.from(selectedAuthorIds)[0];
+      const author = uniqueAuthors.find((a) => a.id === selectedId);
+      return author ? `By ${author.email}` : "Anyone";
+    }
+    return `${selectedAuthorIds.size} authors`;
+  }, [selectedAuthorIds, uniqueAuthors]);
+
+  // -- Apply search + tab + author filters ----------------------------------
+
+  const visibleItems = useMemo(() => {
+    const lowerQuery = searchQuery.trim().toLowerCase();
+
+    return allItems.filter((item) => {
+      const tabMatch = activeTab === "all" ? true : item.source === "owned";
+
+      const authorMatch =
+        selectedAuthorIds.size === 0 || selectedAuthorIds.has(item.author.id);
+
+      const searchMatch =
+        !lowerQuery ||
+        item.name.toLowerCase().includes(lowerQuery) ||
+        item.description.toLowerCase().includes(lowerQuery) ||
+        item.author.email.toLowerCase().includes(lowerQuery);
+
+      return tabMatch && authorMatch && searchMatch;
+    });
+  }, [allItems, activeTab, selectedAuthorIds, searchQuery]);
+
+  // -- Mutations ------------------------------------------------------------
 
   function patchSkill(
     skillId: string,
@@ -109,7 +198,6 @@ export default function UserSkillsPage() {
   function handleShareSave(visibility: SkillVisibility) {
     if (!shareTarget) return;
     if (visibility === "org_wide") {
-      // Non-admins can't directly set org_wide — keep the prior visibility.
       toast.info(
         "Org-wide is admin-only. Use Request org-wide to flag for promotion."
       );
@@ -128,180 +216,183 @@ export default function UserSkillsPage() {
     toast.success(`Requested org-wide promotion for "${shareTarget.name}"`);
   }
 
-  function handleToggleEnabled(skill: CustomSkill) {
-    patchSkill(skill.id, (s) => ({ ...s, enabled: !s.enabled }));
-    toast.success(
-      `${skill.enabled ? "Disabled" : "Re-enabled"} "${skill.name}"`
-    );
-  }
-
   function handleDelete(skill: CustomSkill) {
     setAllSkills((prev) => prev.filter((s) => s.id !== skill.id));
     toast.success(`Deleted "${skill.name}"`);
   }
 
+  function handleInspect(item: SkillCardItem) {
+    if (item.customSkill) {
+      setInspectTarget(item.customSkill);
+    }
+    // Built-ins aren't inspectable in v1 — clicking is a no-op.
+  }
+
+  // -- Render ---------------------------------------------------------------
+
   return (
-    <AppLayouts.Root>
-      <SettingsLayouts.Root width="lg">
-        <SettingsLayouts.Header
-          icon={SvgBlocks}
-          title="Skills"
-          description={`Capability bundles your Craft agent can reach for. You currently have ${totalCount} ${
-            totalCount === 1 ? "skill" : "skills"
-          } available across built-in, shared, and personal sources.`}
-          rightChildren={
-            <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-              Upload skill
-            </Button>
-          }
-        />
-        <SettingsLayouts.Body>
-          <Section gap={2} alignItems="stretch">
-            {/* My skills */}
-            <Section gap={0.5} alignItems="stretch">
-              <Section gap={0.25} alignItems="start">
-                <Text as="p" headingH3 text05>
-                  Your skills
-                </Text>
-                <Text as="span" mainUiBody text03>
-                  Skills you authored. Private by default — share with specific
-                  users, with groups you belong to, or request admin promotion
-                  to org-wide.
-                </Text>
-              </Section>
-              {owned.length === 0 ? (
-                <div className="rounded-md border border-dashed border-border-02 p-6 bg-background-tint-01">
-                  <Section gap={0.5} alignItems="center">
-                    <Text as="span" mainUiAction text05>
-                      You haven&apos;t uploaded any skills yet.
-                    </Text>
-                    <Text as="span" mainUiBody text03>
-                      Build a zip bundle with `SKILL.md` at the root and click{" "}
-                      <strong>Upload skill</strong>.
-                    </Text>
-                  </Section>
-                </div>
-              ) : (
-                <CustomSkillsTable
-                  skills={owned}
-                  adminMode={false}
-                  showAuthor={false}
-                  onOpenSkill={setInspectTarget}
-                  onShareSkill={setShareTarget}
+    <SettingsLayouts.Root data-testid="UserSkillsPage/container">
+      <SettingsLayouts.Header
+        icon={SvgBlocks}
+        title="Skills"
+        description="Capability bundles your Craft agent can reach for — built-in, shared with you, and your own."
+        rightChildren={
+          <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
+            Upload skill
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-row items-center gap-2">
+            <div className="flex-2">
+              <InputTypeIn
+                ref={searchInputRef}
+                placeholder="Search skills..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                leftSearchIcon
+              />
+            </div>
+            <div className="flex-1">
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => setActiveTab(value as "all" | "your")}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="all">All Skills</Tabs.Trigger>
+                  <Tabs.Trigger value="your">Your Skills</Tabs.Trigger>
+                </Tabs.List>
+              </Tabs>
+            </div>
+          </div>
+          <div className="flex flex-row gap-2">
+            <Popover>
+              <Popover.Trigger asChild>
+                <FilterButton
+                  icon={SvgUser}
+                  active={selectedAuthorIds.size > 0}
+                  onClear={() => setSelectedAuthorIds(new Set())}
+                >
+                  {authorFilterButtonText}
+                </FilterButton>
+              </Popover.Trigger>
+              <Popover.Content align="start">
+                <PopoverMenu>
+                  {[
+                    <InputTypeIn
+                      key="author-search"
+                      placeholder="Filter authors..."
+                      variant="internal"
+                      leftSearchIcon
+                      value={authorFilter.query}
+                      onChange={(e) => authorFilter.setQuery(e.target.value)}
+                    />,
+                    ...authorFilter.filtered.map((author) => {
+                      const isSelected = selectedAuthorIds.has(author.id);
+                      const isCurrentUser = author.id === MOCK_CURRENT_USER.id;
+                      const isOnyx = author.id === ONYX_BUILTIN_AUTHOR.id;
+                      const description = isOnyx
+                        ? "Built-in skills"
+                        : isCurrentUser
+                          ? "Me"
+                          : undefined;
+                      return (
+                        <LineItemButton
+                          key={author.id}
+                          sizePreset="main-ui"
+                          rounding="sm"
+                          selectVariant="select-heavy"
+                          icon={SvgUser}
+                          title={author.email}
+                          description={description}
+                          state={isSelected ? "selected" : "empty"}
+                          onClick={() => {
+                            setSelectedAuthorIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(author.id)) {
+                                next.delete(author.id);
+                              } else {
+                                next.add(author.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                      );
+                    }),
+                  ]}
+                </PopoverMenu>
+              </Popover.Content>
+            </Popover>
+          </div>
+        </div>
+      </SettingsLayouts.Header>
+
+      <SettingsLayouts.Body>
+        {visibleItems.length === 0 ? (
+          <Text
+            as="p"
+            className="w-full h-full flex flex-col items-center justify-center py-12"
+            text03
+          >
+            No Skills found
+          </Text>
+        ) : (
+          <>
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+              {visibleItems.map((item) => (
+                <SkillCard
+                  key={item.id}
+                  item={item}
+                  onInspect={handleInspect}
+                  onShare={setShareTarget}
                   onReplaceBundle={(skill) =>
                     toast.info(
                       `Replace bundle for "${skill.name}" (wireframe — would open a file picker)`
                     )
                   }
-                  onToggleEnabled={handleToggleEnabled}
-                  onDeleteSkill={handleDelete}
+                  onDelete={handleDelete}
                 />
-              )}
-            </Section>
+              ))}
+            </div>
+            <TextSeparator
+              count={visibleItems.length}
+              text={visibleItems.length === 1 ? "Skill" : "Skills"}
+            />
+          </>
+        )}
+      </SettingsLayouts.Body>
 
-            {/* Shared with me */}
-            <Section gap={0.5} alignItems="stretch">
-              <Section gap={0.25} alignItems="start">
-                <Text as="p" headingH3 text05>
-                  Shared with you
-                </Text>
-                <Text as="span" mainUiBody text03>
-                  Skills others have shared, including org-wide skills.
-                  Read-only — if you want to modify one, download the zip and
-                  upload your own version.
-                </Text>
-              </Section>
-              {sharedWithMe.length === 0 ? (
-                <div className="rounded-md border border-dashed border-border-02 p-6 bg-background-tint-01">
-                  <Text as="span" mainUiBody text03>
-                    Nothing shared with you yet.
-                  </Text>
-                </div>
-              ) : (
-                <CustomSkillsTable
-                  skills={sharedWithMe}
-                  adminMode={false}
-                  showAuthor
-                  onOpenSkill={setInspectTarget}
-                />
-              )}
-            </Section>
+      <UploadSkillModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        canSetOrgWide={false}
+        onUpload={handleUpload}
+      />
 
-            {/* Built-ins (read-only summary) */}
-            <Section gap={0.5} alignItems="stretch">
-              <Section gap={0.25} alignItems="start">
-                <Text as="p" headingH3 text05>
-                  Built-in skills
-                </Text>
-                <Text as="span" mainUiBody text03>
-                  Ship with Onyx. Available whenever their dependencies are
-                  configured.
-                </Text>
-              </Section>
-              <Section gap={0.25} alignItems="stretch">
-                {MOCK_BUILTIN_SKILLS.map((skill) => (
-                  <div
-                    key={skill.slug}
-                    className="flex items-center justify-between gap-3 p-3 rounded-md border border-border-02 bg-background-neutral-00"
-                  >
-                    <Section gap={0.25} alignItems="start">
-                      <Text as="span" mainUiAction text05>
-                        {skill.name}
-                      </Text>
-                      <Text as="span" mainUiBody text03>
-                        {skill.description}
-                      </Text>
-                    </Section>
-                    {skill.available ? (
-                      <Tag title="Available" color="green" />
-                    ) : (
-                      <div className="flex flex-col items-end gap-0.5">
-                        <Tag title="Unavailable" color="amber" />
-                        {skill.unavailable_reason && (
-                          <Text as="span" secondaryBody text03>
-                            {skill.unavailable_reason}
-                          </Text>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </Section>
-            </Section>
-          </Section>
-        </SettingsLayouts.Body>
+      <ShareSkillModal
+        skill={shareTarget}
+        open={shareTarget !== null}
+        onClose={() => setShareTarget(null)}
+        canSetOrgWide={false}
+        onSave={handleShareSave}
+        onRequestOrgWide={handleRequestOrgWide}
+      />
 
-        <UploadSkillModal
-          open={uploadOpen}
-          onClose={() => setUploadOpen(false)}
-          canSetOrgWide={false}
-          onUpload={handleUpload}
-        />
-
-        <ShareSkillModal
-          skill={shareTarget}
-          open={shareTarget !== null}
-          onClose={() => setShareTarget(null)}
-          canSetOrgWide={false}
-          onSave={handleShareSave}
-          onRequestOrgWide={handleRequestOrgWide}
-        />
-
-        <InspectSkillModal
-          skill={inspectTarget}
-          open={inspectTarget !== null}
-          onClose={() => setInspectTarget(null)}
-          onReplaceBundle={
-            inspectTarget?.author.id === MOCK_CURRENT_USER.id
-              ? () =>
-                  toast.info(
-                    "Replace bundle (wireframe — would open file picker)"
-                  )
-              : undefined
-          }
-          onDownload={() => toast.info("Download zip (wireframe)")}
-        />
-      </SettingsLayouts.Root>
-    </AppLayouts.Root>
+      <InspectSkillModal
+        skill={inspectTarget}
+        open={inspectTarget !== null}
+        onClose={() => setInspectTarget(null)}
+        onReplaceBundle={
+          inspectTarget?.author.id === MOCK_CURRENT_USER.id
+            ? () =>
+                toast.info(
+                  "Replace bundle (wireframe — would open file picker)"
+                )
+            : undefined
+        }
+        onDownload={() => toast.info("Download zip (wireframe)")}
+      />
+    </SettingsLayouts.Root>
   );
 }
