@@ -233,6 +233,11 @@ jobs:
       - check-sidecar-changes
       - build-sidecar-amd64
       - build-sidecar-arm64
+    # GitHub treats a skipped `needs` job as a passing state, so without this
+    # guard the merge step would run with empty digests on any experimental
+    # tag push that didn't touch sidecar source — and fail trying to create
+    # a manifest from empty references.
+    if: needs.check-sidecar-changes.outputs.sidecar-changed == 'true'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
