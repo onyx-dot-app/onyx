@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Sandbox Container Image
 #
 # User-shared sandbox model:
@@ -65,9 +66,13 @@ RUN mkdir -p /workspace/sessions /workspace/templates && \
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
 RUN chown -R sandbox:sandbox /workspace/templates
 
-# Copy and install Python requirements into a venv
+# Copy and install Python requirements into a venv.
+# BuildKit cache mount keeps pip's wheel cache outside the image
+# (otherwise the downloaded .whl files get baked into the layer,
+# adding ~1-3GB) while still reusing downloads across builds.
 COPY initial-requirements.txt /tmp/initial-requirements.txt
-RUN python3 -m venv /workspace/.venv && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m venv /workspace/.venv && \
     /workspace/.venv/bin/pip install --upgrade pip && \
     /workspace/.venv/bin/pip install -r /tmp/initial-requirements.txt && \
     rm /tmp/initial-requirements.txt && \
@@ -76,8 +81,10 @@ RUN python3 -m venv /workspace/.venv && \
 # Add venv to PATH so python/pip use it by default
 ENV PATH="/workspace/.venv/bin:${PATH}"
 
-# Install pptxgenjs globally for creating presentations from scratch
-RUN npm install -g pptxgenjs
+# Install pptxgenjs globally for creating presentations from scratch.
+# Cache mount keeps npm's package cache out of the image.
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g pptxgenjs
 
 # Install opencode CLI as sandbox user so it goes to their home directory
 USER sandbox
