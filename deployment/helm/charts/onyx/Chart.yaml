@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.4.48
+version: 0.4.49
 appVersion: latest
 annotations:
   category: Productivity
@@ -28,7 +28,7 @@ dependencies:
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
   - name: opensearch
-    version: 3.4.0
+    version: 3.6.0
     repository: https://opensearch-project.github.io/helm-charts
     condition: opensearch.enabled
   - name: ingress-nginx
