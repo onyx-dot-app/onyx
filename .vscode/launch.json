@@ -77,6 +77,24 @@
         "group": "1"
       },
       "stopAll": true
+    },
+    {
+      "name": "Celery (k8s)",
+      "configurations": [
+        "Celery primary (k8s)",
+        "Celery light (k8s)",
+        "Celery heavy (k8s)",
+        "Celery monitoring (k8s)",
+        "Celery user_file_processing (k8s)",
+        "Celery scheduled_tasks (k8s)",
+        "Celery docfetching (k8s)",
+        "Celery docprocessing (k8s)",
+        "Celery beat (k8s)"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
     }
   ],
   "configurations": [
