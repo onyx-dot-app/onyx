@@ -74,7 +74,7 @@ class FilesystemEntry(BaseModel):
 
 
 class PushFailure(BaseModel):
-    sandbox_id: str
+    sandbox_id: UUID
     reason: str
     detail: str | None = None
 

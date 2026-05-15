@@ -424,7 +424,7 @@ class SandboxManager(ABC):
     def write_files_to_sandbox(
         self,
         *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: FileSet,
     ) -> None:
@@ -435,7 +435,7 @@ class SandboxManager(ABC):
     def push_to_sandbox(
         self,
         *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: FileSet,
         timeout_s: float = 30.0,
@@ -500,7 +500,7 @@ class SandboxManager(ABC):
         self,
         *,
         mount_path: str,
-        sandbox_files: dict[str, FileSet],
+        sandbox_files: dict[UUID, FileSet],
         timeout_s: float = 30.0,
     ) -> PushResult:
         """Push files to multiple sandboxes in parallel.
@@ -514,7 +514,7 @@ class SandboxManager(ABC):
         all_failures: list[PushFailure] = []
         pushed = 0
 
-        def _push_one(sandbox_id: str) -> PushResult:
+        def _push_one(sandbox_id: UUID) -> PushResult:
             return self.push_to_sandbox(
                 sandbox_id=sandbox_id,
                 mount_path=mount_path,

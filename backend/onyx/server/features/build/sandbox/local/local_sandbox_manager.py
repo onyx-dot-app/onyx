@@ -1175,7 +1175,7 @@ class LocalSandboxManager(SandboxManager):
     def write_files_to_sandbox(
         self,
         *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: FileSet,
     ) -> None:

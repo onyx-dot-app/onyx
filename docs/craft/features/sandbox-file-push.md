@@ -66,7 +66,7 @@ The push API lives on `SandboxManager` (`backend/onyx/server/features/build/sand
 class SandboxManager(ABC):
     @abstractmethod
     def write_files_to_sandbox(
-        self, *, sandbox_id: str, mount_path: str, files: dict[str, bytes],
+        self, *, sandbox_id: UUID, mount_path: str, files: dict[str, bytes],
     ) -> None: ...
 ```
 
@@ -98,7 +98,7 @@ The push API is **synchronous**, matching Onyx's codebase conventions (sync Fast
 # backend/onyx/server/features/build/sandbox/models.py
 
 class PushFailure(BaseModel):
-    sandbox_id: str
+    sandbox_id: UUID
     reason: str                  # "timeout" | "write_error" | "not_found"
     detail: str | None = None
 
@@ -121,7 +121,7 @@ class SandboxManager(ABC):
     # ---- Concrete defaults; shared across backends ----
     def push_to_sandbox(
         self, *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: dict[str, bytes],
         timeout_s: float = 30.0,
@@ -141,7 +141,7 @@ class SandboxManager(ABC):
     # ---- Backend-specific; one abstract method ----
     @abstractmethod
     def write_files_to_sandbox(
-        self, *, sandbox_id: str, mount_path: str, files: dict[str, bytes],
+        self, *, sandbox_id: UUID, mount_path: str, files: dict[str, bytes],
     ) -> None:
         """Write atomically. Raise RetriableWriteError for transients,
         FatalWriteError for permanent failures."""

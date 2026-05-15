@@ -263,7 +263,7 @@ class KubernetesSandboxManager(SandboxManager):
             self._image,
         )
 
-    def _get_pod_name(self, sandbox_id: str) -> str:
+    def _get_pod_name(self, sandbox_id: str | UUID) -> str:
         """Generate pod name from sandbox ID."""
         return f"sandbox-{str(sandbox_id)[:8]}"
 
@@ -2439,7 +2439,7 @@ fi
     def write_files_to_sandbox(
         self,
         *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: FileSet,
     ) -> None:

@@ -39,7 +39,7 @@ class StubSandboxManager(SandboxManager):
     def write_files_to_sandbox(
         self,
         *,
-        sandbox_id: str,
+        sandbox_id: UUID,
         mount_path: str,
         files: FileSet,
     ) -> None:
@@ -181,6 +181,11 @@ class StubSandboxManager(SandboxManager):
         raise NotImplementedError
 
 
+SB_1 = UUID("00000000-0000-0000-0000-000000000001")
+SB_2 = UUID("00000000-0000-0000-0000-000000000002")
+SB_FAIL = UUID("00000000-0000-0000-0000-0000000000ff")
+
+
 # ---------------------------------------------------------------------------
 # push_to_sandbox tests
 # ---------------------------------------------------------------------------
@@ -201,7 +206,7 @@ def test_push_to_sandbox_happy_path(
     mgr: StubSandboxManager,
 ) -> None:
     result = mgr.push_to_sandbox(
-        sandbox_id="sb-1",
+        sandbox_id=SB_1,
         mount_path="/workspace/managed/skills",
         files=_sample_files(),
     )
@@ -209,7 +214,7 @@ def test_push_to_sandbox_happy_path(
     assert result.succeeded == 1
     assert result.failures == []
     assert len(mgr.write_calls) == 1
-    assert mgr.write_calls[0]["sandbox_id"] == "sb-1"
+    assert mgr.write_calls[0]["sandbox_id"] == SB_1
 
 
 @patch("onyx.server.features.build.sandbox.base.time.sleep")
@@ -219,7 +224,7 @@ def test_push_to_sandbox_fatal_write_error(
 ) -> None:
     mgr.set_write_side_effect(FatalWriteError("bad auth"))
     result = mgr.push_to_sandbox(
-        sandbox_id="sb-1",
+        sandbox_id=SB_1,
         mount_path="/workspace/managed/skills",
         files=_sample_files(),
     )
@@ -239,7 +244,7 @@ def test_push_to_sandbox_retriable_all_attempts_fail(
 ) -> None:
     mgr.set_write_side_effect(RetriableWriteError("timeout"))
     result = mgr.push_to_sandbox(
-        sandbox_id="sb-1",
+        sandbox_id=SB_1,
         mount_path="/workspace/managed/skills",
         files=_sample_files(),
     )
@@ -261,7 +266,7 @@ def test_push_to_sandbox_retriable_then_success(
         [RetriableWriteError("transient"), RetriableWriteError("transient"), None]
     )
     result = mgr.push_to_sandbox(
-        sandbox_id="sb-1",
+        sandbox_id=SB_1,
         mount_path="/workspace/managed/skills",
         files=_sample_files(),
     )
@@ -279,7 +284,7 @@ def test_push_to_sandbox_unexpected_exception(
     """Unexpected exceptions are caught and converted to PushFailure, not re-raised."""
     mgr.set_write_side_effect(RuntimeError("boom"))
     result = mgr.push_to_sandbox(
-        sandbox_id="sb-1",
+        sandbox_id=SB_1,
         mount_path="/workspace/managed/skills",
         files=_sample_files(),
     )
@@ -316,10 +321,11 @@ def test_push_to_sandboxes_multiple_all_succeed(
     mock_sleep: Any,  # noqa: ARG001
     mgr: StubSandboxManager,
 ) -> None:
-    sandbox_files: dict[str, FileSet] = {
-        "sb-1": {"a.txt": b"aaa"},
-        "sb-2": {"b.txt": b"bbb"},
-        "sb-3": {"c.txt": b"ccc"},
+    sb_3 = UUID("00000000-0000-0000-0000-000000000003")
+    sandbox_files: dict[UUID, FileSet] = {
+        SB_1: {"a.txt": b"aaa"},
+        SB_2: {"b.txt": b"bbb"},
+        sb_3: {"c.txt": b"ccc"},
     }
     result = mgr.push_to_sandboxes(
         mount_path="/workspace/managed/skills",
@@ -336,25 +342,28 @@ def test_push_to_sandboxes_mixed_success_and_failure(
 ) -> None:
     """Some sandboxes succeed, some fail with FatalWriteError."""
 
+    sb_ok_1 = UUID("00000000-0000-0000-0000-000000000011")
+    sb_ok_2 = UUID("00000000-0000-0000-0000-000000000012")
+
     class MixedStub(StubSandboxManager):
         def write_files_to_sandbox(
             self,
             *,
-            sandbox_id: str,
+            sandbox_id: UUID,
             mount_path: str,
             files: FileSet,
         ) -> None:
             self.write_calls.append(
                 {"sandbox_id": sandbox_id, "mount_path": mount_path, "files": files}
             )
-            if sandbox_id == "sb-fail":
+            if sandbox_id == SB_FAIL:
                 raise FatalWriteError("pod missing")
 
     mgr = MixedStub()
-    sandbox_files: dict[str, FileSet] = {
-        "sb-ok-1": {"a.txt": b"aaa"},
-        "sb-fail": {"b.txt": b"bbb"},
-        "sb-ok-2": {"c.txt": b"ccc"},
+    sandbox_files: dict[UUID, FileSet] = {
+        sb_ok_1: {"a.txt": b"aaa"},
+        SB_FAIL: {"b.txt": b"bbb"},
+        sb_ok_2: {"c.txt": b"ccc"},
     }
     result = mgr.push_to_sandboxes(
         mount_path="/workspace/managed/skills",
@@ -363,5 +372,5 @@ def test_push_to_sandboxes_mixed_success_and_failure(
     assert result.targets == 3
     assert result.succeeded == 2
     assert len(result.failures) == 1
-    assert result.failures[0].sandbox_id == "sb-fail"
+    assert result.failures[0].sandbox_id == SB_FAIL
     assert result.failures[0].reason == "write_error"
