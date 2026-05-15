@@ -1346,14 +1346,6 @@ sandboxJobs:
     name: sandbox-runtime
     automountServiceAccountToken: false
 
-  # ServiceAccount for the file-sync init container. Holds IRSA for S3 access.
-  # The IAM role's trust policy must list this SA before the backend's SANDBOX_BACKEND
-  # flag is flipped — set irsaRoleArn per-cluster via values overlay.
-  fileSyncServiceAccount:
-    name: sandbox-file-sync
-    automountServiceAccountToken: true
-    irsaRoleArn: ""
-
   # Identities that should be granted Job-management permissions on the sandbox namespace.
   # In Helm-deployed clusters the api-server and celery-worker pods share a single
   # ServiceAccount computed via `onyx.serviceAccountName`, so by default we bind that.
