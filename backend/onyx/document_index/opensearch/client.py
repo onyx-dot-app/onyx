@@ -1021,7 +1021,9 @@ class OpenSearchIndexClient(OpenSearchClient):
                 # function.
                 info = error.get("update")
                 if info is None:
-                    raise RuntimeError("OpenSearch returned a malformed error.")
+                    raise OpenSearchUpdateError(
+                        "OpenSearch returned a malformed error."
+                    )
                 status = info.get("status", 0)
                 err_obj = info.get("error", {})
                 err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
@@ -1040,7 +1042,14 @@ class OpenSearchIndexClient(OpenSearchClient):
                         self._index_name,
                         error,
                     )
-                    retryable_ids.append(info["_id"])
+                    retryable_id = info.get("_id", "")
+                    if not retryable_id:
+                        raise OpenSearchUpdateError(
+                            "OpenSearch returned a retryable error when trying to bulk update "
+                            f"document chunks for index {self._index_name}. Error: {error}. The "
+                            "error did not contain an ID however.",
+                        )
+                    retryable_ids.append(retryable_id)
                 else:
                     fatal_errors.append(error)
 
@@ -1070,6 +1079,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                 raise_on_error=True,
                 raise_on_exception=True,
             )
+            if new_successes != len(retryable_ids):
+                raise OpenSearchUpdateError(
+                    "OpenSearch reported no errors during the second bulk update but the number of "
+                    f"successful operations ({new_successes}) does not match the number of "
+                    f"document chunks retried ({len(retryable_ids)})."
+                )
             successes += new_successes
 
         if successes != len(document_chunk_ids):
