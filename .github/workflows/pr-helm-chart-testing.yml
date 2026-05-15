@@ -99,7 +99,11 @@ jobs:
         shell: bash
         run: |
           echo "=== Installing redis-operator CRDs ==="
+          # Pinned so an upstream release can't silently break CI. Bump
+          # deliberately after verifying compatibility with the ot-helm/redis
+          # subchart version in deployment/helm/charts/onyx/Chart.yaml.
           helm upgrade --install redis-operator ot-container-kit/redis-operator \
+            --version 0.24.0 \
             --namespace redis-operator --create-namespace --wait --timeout 300s
 
       - name: Pre-pull required images

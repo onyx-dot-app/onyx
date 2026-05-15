@@ -1249,6 +1249,16 @@ auth:
       user_auth_secret: ""
 
 configMap:
+  # WARNING: do NOT copy hostname keys from a docker-compose .env into this
+  # block. The compose stack uses underscored service names (e.g. `api_server`,
+  # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
+  # break inter-pod traffic in ways that look like a hung service.
+  # In particular, leave these UNSET and let the chart compute correct
+  # K8s-service hostnames:
+  #   REDIS_HOST, INTERNAL_URL, API_SERVER_HOST,
+  #   MODEL_SERVER_HOST, INDEXING_MODEL_SERVER_HOST
+  # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
   # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret

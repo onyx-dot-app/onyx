@@ -3,6 +3,90 @@
 * cd charts/onyx
 * helm dependency update .
 
+# Prerequisites
+
+## Redis operator (CRDs)
+
+When `redis.enabled: true` (the chart default), the bundled `ot-helm/redis`
+subchart renders a `kind: Redis` custom resource. The CRDs **and** the
+reconciling controller live in a separate chart, `ot-helm/redis-operator`,
+which the chart does **not** install for you. Install it once per cluster
+before `helm install`:
+
+```bash
+helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
+helm repo update
+helm upgrade --install redis-operator ot-container-kit/redis-operator \
+  --version 0.24.0 \
+  --namespace redis-operator --create-namespace --wait --timeout 300s
+```
+
+If you skip this step you will see install errors like:
+
+```
+no matches for kind "Redis" in version "redis.redis.opstreelabs.in/v1beta2"
+```
+
+If you don't want the bundled Redis (recommended for AWS GovCloud and other
+regulated environments where you'd rather use a managed Redis like
+ElastiCache), see [Using an external Redis](#using-an-external-redis) below
+and you can skip installing the operator entirely.
+
+## Using an external Redis
+
+To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip
+the bundled Redis + operator entirely:
+
+```yaml
+redis:
+  enabled: false
+
+configMap:
+  # Override the chart-computed REDIS_HOST. Use the cluster/primary endpoint
+  # from your managed Redis. Avoid underscores — they are invalid in K8s DNS
+  # labels and look identical to a hung service.
+  REDIS_HOST: "<elasticache-primary-endpoint>"
+  REDIS_PORT: "6379"
+  REDIS_SSL: "true"   # set to "true" if in-transit encryption is enabled
+
+auth:
+  redis:
+    enabled: true
+    # Pre-create a Secret in the release namespace holding the Redis password
+    # under the key `redis_password`.
+    existingSecret: "elasticache-auth-secret"
+    secretKeys:
+      REDIS_PASSWORD: redis_password
+```
+
+# Values that come from docker-compose (do not copy them)
+
+The Onyx docker-compose stack uses service-name hostnames like `api_server`,
+`inference_model_server`, and `cache`. Those names contain underscores, which
+are **invalid in Kubernetes DNS labels** — DNS lookups for them will fail and
+the symptom is often a blank login page or `TypeError: fetch failed` in web
+pod logs.
+
+The chart computes correct K8s service hostnames for you. If you are
+adapting an `.env` file from docker-compose, **remove** these keys from your
+Helm `configMap:` and let the chart fill them in:
+
+| Key | Don't set to (docker-compose) | Chart-computed default |
+| --- | --- | --- |
+| `REDIS_HOST` | `cache` | `{redis.redisStandalone.name | default <release>}-master` |
+| `INTERNAL_URL` | `http://api_server:8080` | `http://<release>-api-service:8080` |
+| `API_SERVER_HOST` | `api_server` | computed |
+| `MODEL_SERVER_HOST` | `inference_model_server` | `<release>-inference-model-service` |
+| `INDEXING_MODEL_SERVER_HOST` | `indexing_model_server` | `<release>-indexing-model-service` |
+
+Other docker-compose-style values you should set deliberately:
+
+* `DOMAIN` should be your public hostname (e.g. `onyx.example.com`), not
+  `localhost`. It affects cookies and CORS.
+* `WEB_DOMAIN` should be the full origin (e.g. `https://onyx.example.com`).
+  Watch for typos like `hhttps://...`; they silently break email links and
+  OAuth redirects.
+
 # Local testing
 
 ## One time setup
