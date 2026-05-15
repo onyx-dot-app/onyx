@@ -255,7 +255,7 @@ def downgrade() -> None:
         for col in columns_to_drop:
             if col in columns:
                 op.drop_column("user_file", col)
-                logger.info(f"Dropped {col} from user_file")
+                logger.info("Dropped %s from user_file", col)
 
         if "new_id" in columns:
             op.drop_constraint("uq_user_file_new_id", "user_file", type_="unique")

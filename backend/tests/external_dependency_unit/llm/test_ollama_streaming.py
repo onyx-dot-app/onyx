@@ -56,8 +56,7 @@ def test_streaming_separates_reasoning_content_from_visible_content(
         UserMessage(
             role="user",
             content=(
-                "Think briefly about what 12 * 7 is, then respond with just "
-                "the number."
+                "Think briefly about what 12 * 7 is, then respond with just the number."
             ),
         )
     ]
@@ -88,9 +87,9 @@ def test_streaming_separates_reasoning_content_from_visible_content(
         f"Expected more than 2 reasoning chunks (upstream bug drops chunks "
         f"3+), got {len(reasoning_parts)}. reasoning_parts={reasoning_parts!r}"
     )
-    assert (
-        "<think>" not in full_content and "</think>" not in full_content
-    ), f"Raw <think> tags leaked into visible content: {full_content!r}"
-    assert (
-        "<think>" not in full_reasoning and "</think>" not in full_reasoning
-    ), f"Raw <think> tags leaked into reasoning_content: {full_reasoning!r}"
+    assert "<think>" not in full_content and "</think>" not in full_content, (
+        f"Raw <think> tags leaked into visible content: {full_content!r}"
+    )
+    assert "<think>" not in full_reasoning and "</think>" not in full_reasoning, (
+        f"Raw <think> tags leaked into reasoning_content: {full_reasoning!r}"
+    )

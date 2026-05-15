@@ -1,7 +1,7 @@
 "use client";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
 import React, { createContext, useContext, useCallback } from "react";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 
 interface ProviderContextType {
   refreshProviderInfo: () => Promise<void>;

@@ -9,10 +9,11 @@ import React, {
   useState,
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
+import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import useCCPairs from "@/hooks/useCCPairs";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -20,6 +21,7 @@ import { ChatState } from "@/app/app/interfaces";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
@@ -51,7 +53,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import { Button, SelectButton } from "@opal/components";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
@@ -62,12 +64,10 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
   useCurrentQueuedMessages,
+  useCurrentLatestMessageRenderComplete,
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
-
-const MIN_INPUT_HEIGHT = 44;
-const MAX_INPUT_HEIGHT = 200;
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -84,7 +84,7 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalPersonaSnapshot | undefined;
+  selectedAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
@@ -125,8 +125,6 @@ const AppInputBar = React.memo(
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
-    // Internal message state - kept local to avoid parent re-renders on every keystroke
-    const [message, setMessage] = useState(initialMessage);
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -136,6 +134,7 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
+    const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
     const enqueueCurrentMessage = useChatSessionStore(
       (state) => state.enqueueCurrentMessage
     );
@@ -145,13 +144,36 @@ const AppInputBar = React.memo(
     const [highlightedQueueIndex, setHighlightedQueueIndex] = useState<
       number | null
     >(null);
+    const { user, isAdmin } = useUser();
     const isAutoSending = useRef(false);
-    const textAreaRef = useRef<HTMLTextAreaElement>(null);
-    const textAreaWrapperRef = useRef<HTMLDivElement>(null);
+    const inputWrapperRef = useRef<HTMLDivElement>(null);
+    const {
+      ref: inputRef,
+      message,
+      setMessage,
+      clearMessage,
+      handleInput,
+      handleCompositionStart,
+      handleCompositionEnd,
+      pasteText,
+      handleCopy,
+      handleCut,
+      setCursorToEnd,
+      handleTileMouseDown,
+      handleTileClick,
+      handleTileKeyDown,
+      tilePopover,
+      dismissTilePopover,
+      updateTileText,
+    } = useContentEditable({
+      initialContent: initialMessage,
+      wrapperRef: inputWrapperRef,
+      pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+    });
+
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const { user, isAdmin } = useUser();
     const { state } = useQueryController();
     const isClassifying = state.phase === "classifying";
     const isSearchActive =
@@ -209,11 +231,12 @@ const AppInputBar = React.memo(
     React.useImperativeHandle(ref, () => ({
       reset: () => {
         if (!isAutoSending.current) {
-          setMessage("");
+          clearMessage();
         }
       },
       focus: () => {
-        textAreaRef.current?.focus();
+        inputRef.current?.focus();
+        setCursorToEnd();
       },
     }));
 
@@ -224,7 +247,7 @@ const AppInputBar = React.memo(
       if (initialMessage) {
         setMessage(initialMessage);
       }
-    }, [initialMessage]);
+    }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
     const shouldShowRecordingWaveformBelow =
       isRecording &&
       !isVoicePlaybackActive &&
@@ -232,9 +255,9 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       if (isNewSession && !initialMessage) {
-        setMessage("");
+        clearMessage();
       }
-    }, [isNewSession, initialMessage]);
+    }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
@@ -279,41 +302,27 @@ const AppInputBar = React.memo(
 
     const combinedSettings = useContext(SettingsContext);
 
-    // TODO(@raunakab): Replace this useEffect with CSS `field-sizing: content` once
-    // Firefox ships it unflagged (currently behind `layout.css.field-sizing.enabled`).
-    // Auto-resize textarea based on content (chat mode only).
-    // Reset to min-height first so scrollHeight reflects actual content size,
-    // then clamp between min and max. This handles both growing and shrinking.
-    useEffect(() => {
-      const wrapper = textAreaWrapperRef.current;
-      const textarea = textAreaRef.current;
-      if (!wrapper || !textarea) return;
-
-      // Reset so scrollHeight reflects actual content size
-      wrapper.style.height = `${MIN_INPUT_HEIGHT}px`;
-
-      // scrollHeight doesn't include the wrapper's padding, so add it back
-      const wrapperStyle = getComputedStyle(wrapper);
-      const paddingTop = parseFloat(wrapperStyle.paddingTop);
-      const paddingBottom = parseFloat(wrapperStyle.paddingBottom);
-      const contentHeight = textarea.scrollHeight + paddingTop + paddingBottom;
-
-      wrapper.style.height = `${Math.min(
-        Math.max(contentHeight, MIN_INPUT_HEIGHT),
-        MAX_INPUT_HEIGHT
-      )}px`;
-    }, [message, isSearchMode]);
-
     const prevChatStateRef = useRef(chatState);
     const prevAwaitingRef = useRef(awaitingPreferredSelection);
+    const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
+      // "Ready" requires the backend to be idle AND the previous answer
+      // to have finished drawing on screen. Without the render-complete
+      // gate, a queued follow-up fires while the smooth-streaming
+      // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" && !prevAwaitingRef.current;
-      const isReady = chatState === "input" && !awaitingPreferredSelection;
+        prevChatStateRef.current === "input" &&
+        !prevAwaitingRef.current &&
+        prevRenderCompleteRef.current;
+      const isReady =
+        chatState === "input" &&
+        !awaitingPreferredSelection &&
+        latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
       prevAwaitingRef.current = awaitingPreferredSelection;
+      prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
@@ -326,6 +335,7 @@ const AppInputBar = React.memo(
     }, [
       chatState,
       awaitingPreferredSelection,
+      latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,
@@ -358,11 +368,19 @@ const AppInputBar = React.memo(
     }, [showFiles, currentMessageFiles]);
 
     function handlePaste(event: React.ClipboardEvent) {
+      if (disabled) return;
       const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
       if (pastedFiles.length > 0) {
         event.preventDefault();
         handleFileUpload(pastedFiles);
+        return;
       }
+
+      event.preventDefault();
+      const text = event.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      pasteText(text);
     }
 
     const handleRemoveMessageFile = useCallback(
@@ -407,7 +425,7 @@ const AppInputBar = React.memo(
 
     function updateInputPrompt(prompt: InputPrompt) {
       hidePrompts();
-      setMessage(`${prompt.content}`);
+      setMessage(prompt.content);
     }
 
     const { filtered: filteredPrompts, setQuery: setPromptFilterQuery } =
@@ -424,27 +442,18 @@ const AppInputBar = React.memo(
       setTabbingIconIndex(0);
     }, [filteredPrompts]);
 
-    const handlePromptInput = useCallback(
-      (text: string) => {
+    const handleContentEditableInput = useCallback(
+      (event: React.SyntheticEvent<HTMLDivElement>) => {
+        const text = handleInput(event);
         if (text.startsWith("/")) {
           setShowPrompts(true);
+          setPromptFilterQuery(text.slice(1));
         } else {
           hidePrompts();
+          setPromptFilterQuery("");
         }
       },
-      [hidePrompts]
-    );
-
-    const handleInputChange = useCallback(
-      (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const text = event.target.value;
-        setMessage(text);
-        handlePromptInput(text);
-
-        const promptFilterQuery = text.startsWith("/") ? text.slice(1) : "";
-        setPromptFilterQuery(promptFilterQuery);
-      },
-      [setMessage, handlePromptInput, setPromptFilterQuery]
+      [handleInput, hidePrompts, setPromptFilterQuery]
     );
 
     // Determine if we should hide processing state based on context limits
@@ -492,7 +501,7 @@ const AppInputBar = React.memo(
     ]);
 
     function handleKeyDownForPromptShortcuts(
-      e: React.KeyboardEvent<HTMLTextAreaElement>
+      e: React.KeyboardEvent<HTMLDivElement>
     ) {
       if (!user?.preferences?.shortcut_enabled || !showPrompts) return;
 
@@ -535,7 +544,7 @@ const AppInputBar = React.memo(
           "flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
-            : "opacity-100 p-1 h-[2.75rem] pointer-events-auto",
+            : "opacity-100 p-1 h-11 pointer-events-auto",
           "transition-all duration-150"
         )}
       >
@@ -715,7 +724,7 @@ const AppInputBar = React.memo(
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < 5) {
                   enqueueCurrentMessage(message.trim());
-                  setMessage("");
+                  clearMessage();
                 }
               } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -816,26 +825,36 @@ const AppInputBar = React.memo(
               >
                 <Popover.Anchor asChild>
                   <div
-                    ref={textAreaWrapperRef}
-                    className="px-3 py-2 flex-1 flex h-[2.75rem]"
+                    ref={inputWrapperRef}
+                    className="px-3 py-2 flex-1 flex h-11 overflow-hidden"
                   >
-                    <textarea
-                      id="onyx-chat-input-textarea"
-                      role="textarea"
-                      ref={textAreaRef}
+                    <div
+                      ref={inputRef}
+                      id="onyx-chat-input-textbox"
+                      role="textbox"
+                      aria-label="Message input"
+                      contentEditable={!disabled}
+                      suppressContentEditableWarning
                       onPaste={handlePaste}
+                      onCopy={handleCopy}
+                      onCut={handleCut}
+                      onMouseDown={handleTileMouseDown}
+                      onClick={handleTileClick}
                       onBlur={() => setHighlightedQueueIndex(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
-                      onChange={handleInputChange}
-                      className={cn(
-                        "p-[2px] w-full h-full outline-none bg-transparent resize-none placeholder:text-text-03 whitespace-pre-wrap break-words",
-                        "overflow-y-auto"
-                      )}
-                      autoFocus
-                      rows={1}
-                      style={{ scrollbarWidth: "thin" }}
+                      onInput={handleContentEditableInput}
+                      onCompositionStart={handleCompositionStart}
+                      onCompositionEnd={handleCompositionEnd}
+                      className="p-[2px] w-full h-full outline-hidden bg-transparent whitespace-pre-wrap wrap-break-word overflow-y-auto"
+                      tabIndex={disabled ? -1 : 0}
+                      style={{
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "var(--border-02) transparent",
+                      }}
                       aria-multiline={true}
-                      placeholder={
+                      aria-disabled={disabled}
+                      aria-placeholder="How can I help you today?"
+                      data-placeholder={
                         queuedMessages.length > 0 && !message
                           ? "Press up to edit queued messages"
                           : isRecording
@@ -846,8 +865,10 @@ const AppInputBar = React.memo(
                                 ? "Search connected sources"
                                 : "How can I help you today?"
                       }
-                      value={message}
+                      data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
+                        if (handleTileKeyDown(event)) return;
+
                         // Queue navigation mode
                         if (highlightedQueueIndex !== null) {
                           if (event.key === "Enter") {
@@ -914,7 +935,7 @@ const AppInputBar = React.memo(
                           return;
                         }
 
-                        // Enter to submit or queue
+                        // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
@@ -942,12 +963,10 @@ const AppInputBar = React.memo(
                             queuedMessages.length < 5
                           ) {
                             enqueueCurrentMessage(message.trim());
-                            setMessage("");
+                            clearMessage();
                           }
                         }
                       }}
-                      suppressContentEditableWarning={true}
-                      disabled={disabled}
                     />
                   </div>
                 </Popover.Anchor>
@@ -995,7 +1014,7 @@ const AppInputBar = React.memo(
                   <Button
                     disabled={!message || isClassifying}
                     icon={SvgX}
-                    onClick={() => setMessage("")}
+                    onClick={() => clearMessage()}
                     prominence="tertiary"
                   />
                   <Button
@@ -1031,6 +1050,14 @@ const AppInputBar = React.memo(
                   }}
                 />
               </div>
+            )}
+            {tilePopover && (
+              <PasteTilePopover
+                text={tilePopover.text}
+                tileElement={tilePopover.tile}
+                onDismiss={dismissTilePopover}
+                onTextChange={updateTileText}
+              />
             )}
           </div>
         </Disabled>

@@ -65,7 +65,9 @@ class LoopioConnector(LoadConnector, PollConnector):
             )
             if response.status_code == 400:
                 logger.error(
-                    f"Loopio API returned 400 for {resource} with params {params}",
+                    "Loopio API returned 400 for %s with params %s",
+                    resource,
+                    params,
                 )
                 logger.error(response.text)
             response.raise_for_status()
@@ -123,14 +125,15 @@ class LoopioConnector(LoadConnector, PollConnector):
                 answer_text = entry.get("answer", {}).get("text", "")
                 if not answer_text:
                     logger.warning(
-                        f"The Library entry {entry['id']} has no answer text. Skipping."
+                        "The Library entry %s has no answer text. Skipping.",
+                        entry["id"],
                     )
                     continue
 
                 try:
                     answer = parse_html_page_basic(answer_text)
                 except Exception as e:
-                    logger.error(f"Error parsing HTML for entry {entry['id']}: {e}")
+                    logger.error("Error parsing HTML for entry %s: %s", entry["id"], e)
                     continue
 
                 questions = [

@@ -12,7 +12,6 @@ from alembic import op
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import text
 
-
 # revision identifiers, used by Alembic.
 revision = "4d58345da04a"
 down_revision = "f1ca58b2f2ec"
@@ -51,7 +50,10 @@ def upgrade() -> None:
                 next_email = f"{username.lower()}_{attempt}@{domain.lower()}"
                 # Email conflict occurred, append `_1`, `_2`, etc., to the username
                 logger.warning(
-                    f"Conflict while lowercasing email: old_email={email} conflicting_email={new_email} next_email={next_email}"
+                    "Conflict while lowercasing email: old_email=%s conflicting_email=%s next_email=%s",
+                    email,
+                    new_email,
+                    next_email,
                 )
                 new_email = next_email
                 attempt += 1

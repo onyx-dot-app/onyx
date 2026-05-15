@@ -51,4 +51,4 @@ def test_verify_auth_setting_valid_auth_types(
     verify_auth_setting()
 
     mock_logger.warning.assert_not_called()
-    mock_logger.notice.assert_called_once_with(f"Using Auth Type: {auth_type.value}")
+    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", auth_type.value)

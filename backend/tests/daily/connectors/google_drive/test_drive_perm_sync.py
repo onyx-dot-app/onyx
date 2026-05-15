@@ -6,6 +6,8 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from onyx.access.models import DocExternalAccess
@@ -65,6 +67,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
+from tests.utils.secret_names import TestSecret
 
 
 def _build_connector(
@@ -84,6 +87,7 @@ def _build_connector(
     return connector
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 def test_gdrive_perm_sync_with_real_data(
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
     enable_ee: None,  # noqa: ARG001
@@ -216,9 +220,9 @@ def test_gdrive_perm_sync_with_real_data(
 
         # Verify the permissions match
         if file_numeric_id in PUBLIC_RANGE:
-            assert (
-                doc_id in public_doc_ids
-            ), f"File {doc_id} (ID: {file_numeric_id}) should be public but is not in the public_doc_ids set"
+            assert doc_id in public_doc_ids, (
+                f"File {doc_id} (ID: {file_numeric_id}) should be public but is not in the public_doc_ids set"
+            )
         else:
             assert expected_users == emails_with_access, (
                 f"File {doc_id} (ID: {file_numeric_id}) should be accessible to users {expected_users} "
@@ -296,9 +300,9 @@ def test_gdrive_perm_sync_with_real_data(
 
     # Verify permissions on perm sync drive hierarchy nodes
     for node in perm_sync_drive_nodes:
-        assert (
-            node.external_access is not None
-        ), f"Hierarchy node {node.raw_node_id} has no external access"
+        assert node.external_access is not None, (
+            f"Hierarchy node {node.raw_node_id} has no external access"
+        )
         expected_emails = PERM_SYNC_DRIVE_ACCESS_MAPPING.get(node.raw_node_id, set())
         actual_emails = node.external_access.external_user_emails
         assert actual_emails == expected_emails, (

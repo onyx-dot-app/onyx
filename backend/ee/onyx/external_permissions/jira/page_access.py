@@ -65,7 +65,9 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
 
     for raw_perm in permissions:
         if not hasattr(raw_perm, "raw"):
-            logger.warning(f"Expected a 'raw' field, but none was found: {raw_perm=}")
+            logger.warning(
+                "Expected a 'raw' field, but none was found: raw_perm=%r", raw_perm
+            )
             continue
 
         permission = Permission(**raw_perm.raw)  # ty: ignore[invalid-argument-type]
@@ -78,14 +80,16 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
         # If this doesn't exist, then we cannot associate this permission to anyone; just skip.
         if not permission.holder:
             logger.warning(
-                f"Expected to find a permission holder, but none was found: {permission=}"
+                "Expected to find a permission holder, but none was found: permission=%r",
+                permission,
             )
             continue
 
         type = permission.holder.get("type")
         if not type:
             logger.warning(
-                f"Expected to find the type of permission holder, but none was found: {permission=}"
+                "Expected to find the type of permission holder, but none was found: permission=%r",
+                permission,
             )
             continue
 
@@ -106,8 +110,8 @@ def _get_user_emails(user_holders: list[Holder]) -> list[str]:
             user_model = User.model_validate(raw_user_dict)
         except ValidationError:
             logger.error(
-                "Expected to be able to serialize the raw-user-dict into an instance of `User`, but validation failed;"
-                f"{raw_user_dict=}"
+                "Expected to be able to serialize the raw-user-dict into an instance of `User`, but validation failed;raw_user_dict=%r",
+                raw_user_dict,
             )
             continue
 
@@ -132,7 +136,7 @@ def _get_user_emails_and_groups_from_project_roles(
         if role_id:
             role_ids.append(role_id)
         else:
-            logger.warning(f"No value or parameter in projectRole holder: {holder}")
+            logger.warning("No value or parameter in projectRole holder: %s", holder)
 
     roles = [
         jira_client.project_role(project=jira_project, id=role_id)
@@ -144,7 +148,7 @@ def _get_user_emails_and_groups_from_project_roles(
 
     for role in roles:
         if not hasattr(role, "actors"):
-            logger.warning(f"Project role {role} has no actors attribute")
+            logger.warning("Project role %s has no actors attribute", role)
             continue
 
         for actor in role.actors:
@@ -161,13 +165,14 @@ def _get_user_emails_and_groups_from_project_roles(
             if hasattr(actor, "actorUser"):
                 account_id = getattr(actor.actorUser, "accountId", None)
                 if not account_id:
-                    logger.error(f"No accountId in actorUser: {actor.actorUser}")
+                    logger.error("No accountId in actorUser: %s", actor.actorUser)
                     continue
 
                 user = jira_client.user(id=account_id)
                 if not hasattr(user, "accountType") or user.accountType != "atlassian":
                     logger.info(
-                        f"Skipping user {account_id} because it is not an atlassian user"
+                        "Skipping user %s because it is not an atlassian user",
+                        account_id,
                     )
                     continue
 
@@ -181,7 +186,7 @@ def _get_user_emails_and_groups_from_project_roles(
                 emails.append(user.emailAddress)
                 continue
 
-            logger.debug(f"Skipping actor type: {actor}")
+            logger.debug("Skipping actor type: %s", actor)
 
     return emails, groups
 
@@ -239,7 +244,7 @@ def _build_external_access_from_holder_map(
             if group_name:
                 direct_groups.append(group_name)
             else:
-                logger.error(f"No parameter/value in group holder: {group_holder}")
+                logger.error("No parameter/value in group holder: %s", group_holder)
 
     external_user_emails = set(user_emails + project_role_user_emails)
     external_user_group_ids = set(project_role_groups + direct_groups)
@@ -267,11 +272,11 @@ def get_project_permissions(
     )
 
     if not hasattr(project_permissions, "permissions"):
-        logger.error(f"Project {jira_project} has no permissions attribute")
+        logger.error("Project %s has no permissions attribute", jira_project)
         return None
 
     if not isinstance(project_permissions.permissions, list):
-        logger.error(f"Project {jira_project} permissions is not a list")
+        logger.error("Project %s permissions is not a list", jira_project)
         return None
 
     holder_map = _build_holder_map(permissions=project_permissions.permissions)

@@ -7,7 +7,7 @@ import { formatDateTimeLog } from "@/lib/dateUtils";
 import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import {

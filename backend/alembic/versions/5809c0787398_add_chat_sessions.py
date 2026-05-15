@@ -10,7 +10,6 @@ import fastapi_users_db_sqlalchemy
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "5809c0787398"
 down_revision = "d929f0c1c6af"

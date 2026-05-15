@@ -97,7 +97,7 @@ class ZulipConnector(LoadConnector, PollConnector):
             narrow_link = f"{self.base_url}#narrow/stream/{stream_operand}/topic/{topic_operand}/near/{m.id}"
             return narrow_link
         except Exception as e:
-            logger.error(f"Error generating Zulip message link: {e}")
+            logger.error("Error generating Zulip message link: %s", e)
             # Fallback to a basic link that at least includes the base URL
             return f"{self.base_url}#narrow/id/{m.id}"
 
@@ -105,7 +105,7 @@ class ZulipConnector(LoadConnector, PollConnector):
         if self.client is None:
             raise ConnectorMissingCredentialError("Zulip")
 
-        logger.info(f"Fetching messages starting with anchor={anchor}")
+        logger.info("Fetching messages starting with anchor=%s", anchor)
         request = build_search_narrow(
             limit=INDEX_BATCH_SIZE, anchor=anchor, apply_md=False
         )
@@ -135,7 +135,9 @@ class ZulipConnector(LoadConnector, PollConnector):
             doc_time = edit_time if edit_time is not None else post_time
 
         except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse timestamp for message {message.id}: {e}")
+            logger.warning(
+                "Failed to parse timestamp for message %s: %s", message.id, e
+            )
             post_time = None
             edit_time = None
             doc_time = None

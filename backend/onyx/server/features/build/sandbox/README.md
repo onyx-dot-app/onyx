@@ -199,9 +199,8 @@ SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
 # S3 bucket for snapshots and files
 SANDBOX_S3_BUCKET=onyx-sandbox-files      # Default: onyx-sandbox-files
 
-# Service accounts
-SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-runner          # No AWS access
-SANDBOX_FILE_SYNC_SERVICE_ACCOUNT=sandbox-file-sync  # Has S3 access via IRSA
+# Service account
+SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for snapshots
 ```
 
 ### Lifecycle Settings
@@ -237,8 +236,7 @@ uv run pytest backend/tests/integration/sandbox/test_kubernetes_sandbox.py
 curl -X POST http://localhost:3000/api/build/session \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "user-123",
-    "file_system_path": "/path/to/files"
+    "user_id": "user-123"
   }'
 
 # Send a message to the agent
@@ -258,7 +256,6 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 **Solutions**:
 
 - Check pod logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
-- Check init container: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id} -c file-sync`
 - Verify init container completed: `kubectl describe pod -n onyx-sandboxes sandbox-{sandbox-id}`
 - Check S3 bucket access: Ensure init container service account has IRSA configured
 

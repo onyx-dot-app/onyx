@@ -8,6 +8,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,12 +27,12 @@ func fullVersion() string {
 	return Version
 }
 
-func printVersion(cmd *cobra.Command) {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Client version: %s\n", fullVersion())
+func printVersion(ios *iostreams.IOStreams, cmd *cobra.Command) {
+	fmt.Fprintf(ios.Out, "Client version: %s\n", fullVersion())
 
 	cfg := config.Load()
 	if !cfg.IsConfigured() {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (not configured)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (not configured)\n")
 		return
 	}
 
@@ -39,20 +40,20 @@ func printVersion(cmd *cobra.Command) {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 	defer cancel()
 
-	log.Debug("fetching backend version from /api/version")
+	log.Debug("fetching backend version")
 	backendVersion, err := client.GetBackendVersion(ctx)
 	if err != nil {
 		log.WithError(err).Debug("could not fetch backend version")
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (could not reach server)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (could not reach server)\n")
 		return
 	}
 
 	if backendVersion == "" {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: unknown (empty response)\n")
+		fmt.Fprintf(ios.Out, "Server version: unknown (empty response)\n")
 		return
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Server version: %s\n", backendVersion)
+	fmt.Fprintf(ios.Out, "Server version: %s\n", backendVersion)
 
 	min := version.MinServer()
 	if sv, ok := version.Parse(backendVersion); ok && sv.LessThan(min) {
@@ -63,14 +64,16 @@ func printVersion(cmd *cobra.Command) {
 
 // Execute creates and runs the root command.
 func Execute() error {
+	ios := iostreams.System()
+
 	opts := struct {
 		Debug bool
 	}{}
 
 	rootCmd := &cobra.Command{
 		Use:   "onyx-cli",
-		Short: "Terminal UI for chatting with Onyx",
-		Long:  "Onyx CLI — a terminal interface for chatting with your Onyx agent.",
+		Short: "CLI for Onyx knowledge and search",
+		Long:  "Onyx CLI — query enterprise knowledge from the terminal or as an agent tool.",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if opts.Debug {
 				log.SetLevel(log.DebugLevel)
@@ -92,21 +95,20 @@ func Execute() error {
 	// Register subcommands
 	chatCmd := newChatCmd()
 	rootCmd.AddCommand(chatCmd)
-	rootCmd.AddCommand(newAskCmd())
-	rootCmd.AddCommand(newAgentsCmd())
-	rootCmd.AddCommand(newConfigureCmd())
-	rootCmd.AddCommand(newValidateConfigCmd())
+	rootCmd.AddCommand(newAskCmd(ios))
+	rootCmd.AddCommand(newSearchCmd(ios))
+	rootCmd.AddCommand(newAgentsCmd(ios))
+	rootCmd.AddCommand(newValidateConfigCmd(ios))
 	rootCmd.AddCommand(newServeCmd())
-	rootCmd.AddCommand(newInstallSkillCmd())
-	rootCmd.AddCommand(newExperimentsCmd())
+	rootCmd.AddCommand(newInstallSkillCmd(ios))
+	rootCmd.AddCommand(newExperimentsCmd(ios))
 
-	// Default command is chat, but intercept --version first
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if showVersion {
-			printVersion(cmd)
+			printVersion(ios, cmd)
 			return nil
 		}
-		return chatCmd.RunE(cmd, args)
+		return cmd.Help()
 	}
 
 	return rootCmd.Execute()

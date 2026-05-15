@@ -12,6 +12,12 @@ from onyx.connectors.confluence.utils import AttachmentProcessingResult
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.CONFLUENCE_ACCESS_TOKEN,
+    TestSecret.CONFLUENCE_ACCESS_TOKEN_SCOPED,
+)
 
 
 def _make_connector(
@@ -38,14 +44,24 @@ def _make_connector(
 
 
 @pytest.fixture
-def confluence_connector(space: str) -> ConfluenceConnector:
-    return _make_connector(space, os.environ["CONFLUENCE_ACCESS_TOKEN"].strip())
+def confluence_connector(
+    space: str,
+    test_secrets: dict[TestSecret, str],
+) -> ConfluenceConnector:
+    return _make_connector(
+        space, test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN].strip()
+    )
 
 
 @pytest.fixture
-def confluence_connector_scoped(space: str) -> ConfluenceConnector:
+def confluence_connector_scoped(
+    space: str,
+    test_secrets: dict[TestSecret, str],
+) -> ConfluenceConnector:
     return _make_connector(
-        space, os.environ["CONFLUENCE_ACCESS_TOKEN_SCOPED"].strip(), scoped_token=True
+        space,
+        test_secrets[TestSecret.CONFLUENCE_ACCESS_TOKEN_SCOPED].strip(),
+        scoped_token=True,
     )
 
 

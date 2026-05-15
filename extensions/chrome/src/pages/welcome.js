@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", function () {
             : "dark";
         }
         applyTheme();
-      },
+      }
     );
   }
 
@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", function () {
         } else {
           window.close();
         }
-      },
+      }
     );
   }
 
@@ -158,7 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         useOnyxAsDefaultToggle.checked =
           result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
-      },
+      }
     );
   }
 

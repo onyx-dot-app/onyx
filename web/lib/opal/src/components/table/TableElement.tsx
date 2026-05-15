@@ -14,8 +14,9 @@ type TableSize = Extract<SizeVariants, "md" | "lg">;
 type TableVariant = "rows" | "cards";
 type SelectionBehavior = "no-select" | "single-select" | "multi-select";
 
-interface TableProps
-  extends WithoutStyles<React.TableHTMLAttributes<HTMLTableElement>> {
+interface TableProps extends WithoutStyles<
+  React.TableHTMLAttributes<HTMLTableElement>
+> {
   ref?: React.Ref<HTMLTableElement>;
   /** Visual row variant. @default "cards" */
   variant?: TableVariant;

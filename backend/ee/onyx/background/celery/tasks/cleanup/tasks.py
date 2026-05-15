@@ -34,6 +34,7 @@ def export_query_history_cleanup_task(*, tenant_id: str) -> None:
                         continue
 
                 logger.error(
-                    f"Task with {task.task_id=} failed; it is being deleted now"
+                    "Task with task.task_id=%r failed; it is being deleted now",
+                    task.task_id,
                 )
                 delete_task_with_id(db_session=db_session, task_id=task.task_id)

@@ -65,9 +65,9 @@ class Queries(BaseModel):
 
 class StopCondition:
     def __init__(self, num_requests_to_make: int | None, duration_s: float | None):
-        assert (
-            num_requests_to_make is not None or duration_s is not None
-        ), "Either num_requests_to_make or timestamp_to_stop_making_requests_s must be provided."
+        assert num_requests_to_make is not None or duration_s is not None, (
+            "Either num_requests_to_make or timestamp_to_stop_making_requests_s must be provided."
+        )
         self._num_requests_to_make: int | None = num_requests_to_make
         self._duration_s: float | None = duration_s
         self._timestamp_to_stop_making_requests_s: float | None = (

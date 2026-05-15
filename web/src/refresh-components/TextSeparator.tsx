@@ -18,7 +18,7 @@ export default function TextSeparator({
       className={cn("flex flex-row items-center w-full gap-2 px-4", className)}
     >
       <div className="flex-1 h-px bg-border" />
-      <div className="flex flex-row items-center gap-1 flex-shrink-0">
+      <div className="flex flex-row items-center gap-1 shrink-0">
         {count !== undefined && (
           <Text as="p" secondaryBody text03>
             {count}

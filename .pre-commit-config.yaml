@@ -16,7 +16,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "backend",
             "-o",
@@ -29,7 +28,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "dev",
             "-o",
@@ -42,7 +40,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "ee",
             "-o",
@@ -55,7 +52,6 @@ repos:
           [
             "--no-emit-project",
             "--no-default-groups",
-            "--no-hashes",
             "--group",
             "model_server",
             "-o",
@@ -64,13 +60,25 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--active", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
         alias: ty
         name: ty
         args: ["ty", "check"]
+        pass_filenames: true
+        types_or: [python]
+      - id: uv-run
+        alias: ruff
+        name: ruff
+        args: ["ruff", "check", "--fix"]
+        pass_filenames: true
+        types_or: [python]
+      - id: uv-run
+        alias: ruff-format
+        name: ruff format
+        args: ["ruff", "format"]
         pass_filenames: true
         types_or: [python]
 
@@ -97,32 +105,12 @@ repos:
             deployment/docker_compose/install\.sh
           )$
 
-  - repo: https://github.com/psf/black
-    rev: 8a737e727ac5ab2f1d4cf5876720ed276dc8dc4b # frozen: 25.1.0
-    hooks:
-      - id: black
-        language_version: python3.11
-
   - repo: https://github.com/golangci/golangci-lint
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
         language_version: "1.26.1"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: 971923581912ef60a6b70dbf0c3e9a39563c9d47 # frozen: v0.11.4
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: ffb6a759a979008c0e6dff86e39f4745a2d9eac4 # frozen: v3.1.0
-    hooks:
-      - id: prettier
-        types_or: [html, css, javascript, ts, tsx]
-        language_version: system
 
   - repo: https://github.com/sirwart/ripsecrets
     rev: 7d94620933e79b8acaa0cd9e60e9864b07673d86 # frozen: v0.1.11
@@ -133,15 +121,14 @@ repos:
           - --additional-pattern
           - ^sk-[A-Za-z0-9_\-]{20,}$
 
-  - repo: local
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform-fmt
-        name: terraform fmt
-        entry: terraform fmt -recursive
-        language: system
-        pass_filenames: false
+      - id: terraform_fmt
         files: \.tf$
 
+  - repo: local
+    hooks:
       - id: npm-install
         name: npm install
         description: "Automatically run 'npm install' after a checkout, pull or rebase"
@@ -157,6 +144,12 @@ repos:
         entry: bash -c 'cd web && npm install --package-lock-only'
         pass_filenames: false
         files: ^web/package(-lock)?\.json$
+
+      - id: oxfmt
+        name: oxfmt
+        entry: npx --prefix web oxfmt
+        language: system
+        types_or: [html, css, javascript, ts, tsx]
 
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:

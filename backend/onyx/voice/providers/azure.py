@@ -34,6 +34,8 @@ from xml.sax.saxutils import quoteattr
 
 import aiohttp
 
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
 from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
@@ -461,14 +463,19 @@ class AzureVoiceProvider(VoiceProviderInterface):
             "Accept": "application/json",
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url, params=params, headers=headers, data=payload
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"Azure STT failed: {error_text}")
-                result = await response.json()
+        with traced_llm_call(
+            flow=LLMFlow.STT,
+            model=self.stt_model or "azure-speech-stt",
+            provider="azure",
+        ):
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, params=params, headers=headers, data=payload
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"Azure STT failed: {error_text}")
+                    result = await response.json()
 
         if result.get("RecognitionStatus") != "Success":
             return ""
@@ -523,16 +530,22 @@ class AzureVoiceProvider(VoiceProviderInterface):
             "User-Agent": "Onyx",
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, data=ssml) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    raise RuntimeError(f"Azure TTS failed: {error_text}")
+        with traced_llm_call(
+            flow=LLMFlow.TTS,
+            model=self.tts_model or "azure-speech-tts",
+            provider="azure",
+            input_messages=[{"role": "user", "content": text}],
+        ):
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, data=ssml) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise RuntimeError(f"Azure TTS failed: {error_text}")
 
-                # Use 8192 byte chunks for smoother streaming
-                async for chunk in response.content.iter_chunked(8192):
-                    if chunk:
-                        yield chunk
+                    # Use 8192 byte chunks for smoother streaming
+                    async for chunk in response.content.iter_chunked(8192):
+                        if chunk:
+                            yield chunk
 
     async def validate_credentials(self) -> None:
         """Validate Azure credentials by listing available voices."""

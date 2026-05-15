@@ -8,7 +8,6 @@ Create Date: 2026-03-31 19:23:05.753184
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "8188861f4e92"
 down_revision = "d8cdfee5df80"
@@ -17,8 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET files = (
             SELECT jsonb_agg(
@@ -31,13 +29,11 @@ def upgrade() -> None:
             FROM jsonb_array_elements(files) AS elem
         )
         WHERE files::text LIKE '%"type": "csv"%'
-        """
-    )
+        """)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET files = (
             SELECT jsonb_agg(
@@ -50,5 +46,4 @@ def downgrade() -> None:
             FROM jsonb_array_elements(files) AS elem
         )
         WHERE files::text LIKE '%"type": "tabular"%'
-        """
-    )
+        """)

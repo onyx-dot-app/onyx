@@ -28,12 +28,12 @@ async function sendAndHoldResponse(
 
   await page.route(routePattern, handler);
 
-  const textarea = page.locator("#onyx-chat-input-textarea");
+  const textarea = page.locator("#onyx-chat-input-textbox");
   await textarea.fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
   // Wait for the submit flow to process (textarea cleared by resetInputBar)
-  await expect(textarea).toHaveValue("", { timeout: 5000 });
+  await expect(textarea).toHaveText("", { timeout: 5000 });
 
   return () => {
     release();
@@ -41,10 +41,10 @@ async function sendAndHoldResponse(
 }
 
 async function queueMessage(page: Page, message: string) {
-  const textarea = page.locator("#onyx-chat-input-textarea");
+  const textarea = page.locator("#onyx-chat-input-textbox");
   await textarea.fill(message);
   await textarea.press("Enter");
-  await expect(textarea).toHaveValue("", { timeout: 2000 });
+  await expect(textarea).toHaveText("", { timeout: 2000 });
 }
 
 test.describe("Queued Messages", () => {
@@ -144,7 +144,7 @@ test.describe("Queued Messages", () => {
     await queueMessage(page, "First queued");
     await queueMessage(page, "Second queued");
 
-    const textarea = page.locator("#onyx-chat-input-textarea");
+    const textarea = page.locator("#onyx-chat-input-textbox");
     const queueBars = page.locator("[data-testid='queued-message-bar']");
 
     // Up arrow: highlights last bar
@@ -162,7 +162,7 @@ test.describe("Queued Messages", () => {
 
     // Enter: move highlighted message into textarea
     await textarea.press("Enter");
-    await expect(textarea).toHaveValue("Second queued");
+    await expect(textarea).toHaveText("Second queued");
     await expect(queueBars).toHaveCount(1);
     await expect(queueBars.first()).toContainText("First queued");
 
@@ -177,7 +177,7 @@ test.describe("Queued Messages", () => {
     await queueMessage(page, "First queued");
     await queueMessage(page, "Second queued");
 
-    const textarea = page.locator("#onyx-chat-input-textarea");
+    const textarea = page.locator("#onyx-chat-input-textbox");
     const queueBars = page.locator("[data-testid='queued-message-bar']");
 
     // Highlight last bar and delete it
@@ -200,7 +200,7 @@ test.describe("Queued Messages", () => {
 
     await queueMessage(page, "Queued message");
 
-    const textarea = page.locator("#onyx-chat-input-textarea");
+    const textarea = page.locator("#onyx-chat-input-textbox");
     const queueBars = page.locator("[data-testid='queued-message-bar']");
 
     // Enter navigation, then escape
@@ -221,9 +221,9 @@ test.describe("Queued Messages", () => {
 
     await queueMessage(page, "Queued message");
 
-    const textarea = page.locator("#onyx-chat-input-textarea");
+    const textarea = page.locator("#onyx-chat-input-textbox");
     await expect(textarea).toHaveAttribute(
-      "placeholder",
+      "data-placeholder",
       "Press up to edit queued messages"
     );
 
@@ -243,11 +243,11 @@ test.describe("Queued Messages", () => {
     await expect(queueBars).toHaveCount(5);
 
     // 6th message should NOT queue — textarea keeps the text
-    const textarea = page.locator("#onyx-chat-input-textarea");
+    const textarea = page.locator("#onyx-chat-input-textbox");
     await textarea.fill("Message 6");
     await textarea.press("Enter");
 
-    await expect(textarea).toHaveValue("Message 6");
+    await expect(textarea).toHaveText("Message 6");
     await expect(queueBars).toHaveCount(5);
 
     release();

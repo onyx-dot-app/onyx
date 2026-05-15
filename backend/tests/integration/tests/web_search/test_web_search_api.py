@@ -79,19 +79,28 @@ class TestOnyxWebCrawler:
         assert data["results"] == []
 
     def test_handles_404_page(self, admin_user: DATestUser) -> None:
-        """Test that the crawler handles 404 responses gracefully."""
+        """Test that the crawler surfaces a 404 page's body to the LLM.
+
+        Some "soft 404" pages (like example.com's, which returns HTTP 404 but
+        still serves the standard Example Domain HTML body) carry useful
+        signal. We deliberately surface the parsed content so the LLM can see
+        what the URL actually returned, rather than silently dropping it.
+        """
+        url = "https://example.com/this-page-does-not-exist-12345"
         response = requests.post(
             f"{API_SERVER_URL}/web-search/open-urls",
-            json={"urls": ["https://example.com/this-page-does-not-exist-12345"]},
+            json={"urls": [url]},
             headers=admin_user.headers,
         )
         assert response.status_code == 200, response.text
         data = response.json()
 
         assert data["provider_type"] == WebContentProviderType.ONYX_WEB_CRAWLER.value
+        assert len(data["results"]) == 1
 
-        # Non-200 responses are treated as non-content and filtered out
-        assert data["results"] == []
+        result = data["results"][0]
+        assert result["unique_identifier_to_strip_away"] == url
+        assert result["content"].strip(), "Expected non-empty content for soft-404 page"
 
     def test_https_url_with_path(self, admin_user: DATestUser) -> None:
         """Test that the crawler handles HTTPS URLs with paths correctly."""

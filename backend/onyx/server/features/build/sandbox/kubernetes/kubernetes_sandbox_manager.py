@@ -5,21 +5,20 @@ container isolation. Each sandbox runs in its own pod with dedicated resources.
 
 Key features:
 - Pod-based isolation (not process-level)
-- S3-based snapshots via init containers
+- S3-based snapshots via the main sandbox container
 - Cluster-native service discovery
 - RBAC-controlled resource management
 - User-shared sandbox model with per-session workspaces
 
 Architecture Note (User-Shared Sandbox Model):
 - One pod per user (shared across all user's sessions)
-- provision() creates the pod with shared files/ directory
+- provision() creates the pod
 - setup_session_workspace() creates per-session workspace via kubectl exec
 - cleanup_session_workspace() removes session workspace via kubectl exec
 - terminate() destroys the entire pod (all sessions)
 
 Directory Structure (inside pod):
     /workspace/
-    ├── files/                     # SHARED - synced from S3
     └── sessions/
         ├── $session_id_1/         # Per-session workspace
         │   ├── outputs/
@@ -59,8 +58,8 @@ from kubernetes.stream import stream as k8s_stream
 from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
@@ -153,150 +152,12 @@ echo $NEXTJS_PID > {session_path}/nextjs.pid
 """
 
 
-def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
-    """Get AWS credential environment variables from local environment.
-
-    Checks for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
-    AWS_SESSION_TOKEN and AWS_DEFAULT_REGION in the local environment.
-    If credentials are found, returns V1EnvVar objects to pass them to containers.
-
-    This allows using local AWS credentials for development/testing while
-    IRSA (IAM Roles for Service Accounts) handles credentials in production EKS.
-
-    Returns:
-        List of V1EnvVar objects for AWS credentials, empty if not set locally.
-    """
-    env_vars: list[client.V1EnvVar] = []
-
-    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-
-    # Only add credentials if both required values are present
-    if aws_access_key and aws_secret_key:
-        env_vars.append(client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value=aws_access_key))
-        env_vars.append(
-            client.V1EnvVar(name="AWS_SECRET_ACCESS_KEY", value=aws_secret_key)
-        )
-
-        # Optional: session token for temporary credentials
-        aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
-        if aws_session_token:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_SESSION_TOKEN", value=aws_session_token)
-            )
-
-        # Optional: default region
-        aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get(
-            "AWS_REGION"
-        )
-        if aws_region:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_DEFAULT_REGION", value=aws_region)
-            )
-
-        logger.info("Using local AWS credentials for sandbox init container")
-
-    return env_vars
-
-
-def _build_filtered_symlink_script(
-    session_path: str,
-    excluded_user_library_paths: list[str],
-) -> str:
-    """Build a shell script that creates filtered symlinks for user_library.
-
-    Creates symlinks for all top-level directories in /workspace/files/,
-    then selectively symlinks user_library files, excluding disabled paths.
-
-    TODO: Replace this inline shell script with a standalone Python script
-    that gets copied onto the pod and invoked with arguments. This would
-    be easier to test and maintain.
-
-    Args:
-        session_path: The session directory path in the pod
-        excluded_user_library_paths: Paths to exclude from symlinks
-    """
-    excluded_paths_lines = "\n".join(p.lstrip("/") for p in excluded_user_library_paths)
-    heredoc_delim = f"_EXCL_{uuid4().hex[:12]}_"
-    return f"""
-# Create filtered files directory with exclusions
-mkdir -p {session_path}/files
-
-# Symlink all top-level directories except user_library
-for item in /workspace/files/*; do
-    [ -e "$item" ] || continue
-    name=$(basename "$item")
-    if [ "$name" != "user_library" ]; then
-        ln -sf "$item" {session_path}/files/"$name"
-    fi
-done
-
-# Write excluded paths to a temp file (one per line, via heredoc for safety)
-EXCL_FILE=$(mktemp)
-cat > "$EXCL_FILE" << '{heredoc_delim}'
-{excluded_paths_lines}
-{heredoc_delim}
-
-# Check if a relative path is excluded (exact match or child of excluded dir)
-is_excluded() {{
-    local rel_path="$1"
-    while IFS= read -r excl || [ -n "$excl" ]; do
-        [ -z "$excl" ] && continue
-        if [ "$rel_path" = "$excl" ]; then
-            return 0
-        fi
-        case "$rel_path" in
-            "$excl"/*) return 0 ;;
-        esac
-    done < "$EXCL_FILE"
-    return 1
-}}
-
-# Recursively create symlinks for non-excluded files
-create_filtered_symlinks() {{
-    src_dir="$1"
-    dst_dir="$2"
-    rel_base="$3"
-
-    for item in "$src_dir"/*; do
-        [ -e "$item" ] || continue
-        name=$(basename "$item")
-        if [ -n "$rel_base" ]; then
-            rel_path="$rel_base/$name"
-        else
-            rel_path="$name"
-        fi
-
-        if is_excluded "$rel_path"; then
-            continue
-        fi
-
-        if [ -d "$item" ]; then
-            mkdir -p "$dst_dir/$name"
-            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
-            rmdir "$dst_dir/$name" 2>/dev/null || true
-        else
-            ln -sf "$item" "$dst_dir/$name"
-        fi
-    done
-}}
-
-if [ -d "/workspace/files/user_library" ]; then
-    mkdir -p {session_path}/files/user_library
-    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
-    rmdir {session_path}/files/user_library 2>/dev/null || true
-fi
-
-rm -f "$EXCL_FILE"
-"""
-
-
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
     Manages sandboxes as Kubernetes pods with:
-    - Init containers for S3 file sync (snapshots, knowledge files, uploads)
     - Main sandbox container running Next.js + opencode agent
+    - S3-based snapshots via AWS CLI in the sandbox container
     - ClusterIP services for network access
 
     IMPORTANT: This manager does NOT interface with the database directly.
@@ -351,7 +212,6 @@ class KubernetesSandboxManager(SandboxManager):
         self._image = SANDBOX_CONTAINER_IMAGE
         self._s3_bucket = SANDBOX_S3_BUCKET
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
-        self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
@@ -359,7 +219,9 @@ class KubernetesSandboxManager(SandboxManager):
         self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
-            f"KubernetesSandboxManager initialized: namespace={self._namespace}, image={self._image}"
+            "KubernetesSandboxManager initialized: namespace=%s, image=%s",
+            self._namespace,
+            self._image,
         )
 
     def _get_pod_name(self, sandbox_id: str) -> str:
@@ -385,124 +247,41 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
-        files_path: Path | None = None,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        use_demo_data: bool = False,
         include_org_info: bool = False,
     ) -> str:
-        """Load and populate agent instructions from template file.
-
-
-        Args:
-            files_path: Path to the files directory (symlink to knowledge sources)
-            provider: LLM provider type
-            model_name: Model name
-            nextjs_port: Next.js port
-            disabled_tools: List of disabled tools
-            user_name: User's name for personalization
-            user_role: User's role/title for personalization
-            use_demo_data: If True, exclude user context from AGENTS.md
-            include_org_info: Whether to include the org_info section (demo data mode)
-
-        Returns:
-            Populated agent instructions content
-
-        Note:
-            In Kubernetes mode, files_path refers to paths inside the pod.
-            Since the backend cannot access the pod filesystem, these are passed as None
-            to leave placeholders intact for the container script to resolve at runtime.
-        """
+        """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_path=self._skills_path,
-            files_path=files_path,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            use_demo_data=use_demo_data,
             include_org_info=include_org_info,
         )
 
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
-        user_id: str,
         tenant_id: str,
+        onyx_pat: str,
     ) -> client.V1Pod:
         """Create Pod specification for sandbox (user-level).
 
         Creates pod with:
-        - files/ directory synced from S3 (shared across sessions)
         - sessions/ directory for per-session workspaces
 
         NOTE: Session-specific setup is done via setup_session_workspace().
         """
         pod_name = self._get_pod_name(sandbox_id)
-
-        # File-sync sidecar container for S3 file sync (knowledge files only)
-        # Runs as sidecar (not init container) so we can trigger incremental syncs
-        # via kubectl exec after new documents are indexed
-        file_sync_container = client.V1Container(
-            name="file-sync",
-            image="peakcom/s5cmd:v2.3.0",
-            env=_get_local_aws_credential_env_vars(),
-            command=["/bin/sh", "-c"],
-            args=[
-                f"""
-# Handle signals for graceful container termination
-trap 'echo "Shutting down"; exit 0' TERM INT
-
-echo "Starting initial file sync"
-echo "S3: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*"
-echo "Local: /workspace/files/"
-
-# s5cmd sync (default 256 workers)
-# Exit codes: 0=success, 1=success with warnings
-sync_exit_code=0
-/s5cmd --stat sync \
-    "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
-    /workspace/files/ 2>&1 || sync_exit_code=$?
-
-echo "=== Initial sync finished (exit code: $sync_exit_code) ==="
-
-# Handle result
-if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    file_count=$(find /workspace/files -type f 2>/dev/null | wc -l)
-    echo "Files synced: $file_count"
-    echo "Sidecar ready for incremental syncs"
-else
-    echo "ERROR: Initial sync failed (exit code: $sync_exit_code)"
-    exit $sync_exit_code
-fi
-
-# Stay alive for incremental syncs via kubectl exec
-while true; do
-    sleep 30 &
-    wait $!
-done
-"""
-            ],
-            volume_mounts=[
-                client.V1VolumeMount(name="files", mount_path="/workspace/files"),
-                # Mount sessions directory so file-sync can create snapshots
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-            ],
-            resources=client.V1ResourceRequirements(
-                # Reduced resources since sidecar is mostly idle (sleeping)
-                requests={"cpu": "250m", "memory": "256Mi"},
-                limits={"cpu": "4000m", "memory": "8Gi"},
-            ),
-        )
 
         # Main sandbox container
         # Note: Container ports are informational only in K8s. Each session's Next.js
@@ -520,16 +299,18 @@ done
                 )
             )
 
+        sandbox_env_vars = [
+            client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
+            client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+        ]
+
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
             ports=container_ports,
+            env=sandbox_env_vars,
             volume_mounts=[
-                client.V1VolumeMount(
-                    name="files", mount_path="/workspace/files", read_only=True
-                ),
-                # Mount sessions directory (shared with file-sync for snapshots)
                 client.V1VolumeMount(
                     name="workspace", mount_path="/workspace/sessions"
                 ),
@@ -556,25 +337,18 @@ done
             ),
         )
 
-        # Volumes - workspace holds sessions/, files is shared read-only
+        # Volumes - workspace holds sessions/ directory with per-session outputs
         volumes = [
             client.V1Volume(
                 name="workspace",
-                # Increased size: holds sessions/ directory with per-session outputs
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
-            ),
-            client.V1Volume(
-                name="files",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
             ),
         ]
 
         # Pod spec
-        # Note: file_sync_container runs as sidecar (not init container) so we can
-        # trigger incremental S3 syncs via kubectl exec after new documents are indexed
         pod_spec = client.V1PodSpec(
-            service_account_name=self._file_sync_service_account,
-            containers=[sandbox_container, file_sync_container],
+            service_account_name=self._service_account,
+            containers=[sandbox_container],
             volumes=volumes,
             restart_policy="Never",
             termination_grace_period_seconds=10,  # Fast pod termination
@@ -697,7 +471,7 @@ done
             # Service exists - check if it's being deleted
             if svc.metadata.deletion_timestamp:
                 logger.info(
-                    f"Service {service_name} is terminating, waiting for deletion"
+                    "Service %s is terminating, waiting for deletion", service_name
                 )
                 self._wait_for_resource_deletion("service", service_name)
                 # Now create a fresh service
@@ -706,14 +480,14 @@ done
                     namespace=self._namespace,
                     body=service,
                 )
-                logger.info(f"Recreated Service {service_name} after termination")
+                logger.info("Recreated Service %s after termination", service_name)
             else:
-                logger.debug(f"Service {service_name} already exists and is active")
+                logger.debug("Service %s already exists and is active", service_name)
 
         except ApiException as e:
             if e.status == 404:
                 # Service doesn't exist, create it
-                logger.info(f"Creating missing Service {service_name}")
+                logger.info("Creating missing Service %s", service_name)
                 service = self._create_sandbox_service(sandbox_id, tenant_id)
                 try:
                     self._core_api.create_namespaced_service(
@@ -724,7 +498,7 @@ done
                     if svc_e.status != 409:  # Ignore AlreadyExists
                         raise
                     logger.debug(
-                        f"Service {service_name} was created by another request"
+                        "Service %s was created by another request", service_name
                     )
             else:
                 raise
@@ -841,15 +615,15 @@ done
                     conditions = pod.status.conditions or []
                     for condition in conditions:
                         if condition.type == "Ready" and condition.status == "True":
-                            logger.info(f"Pod {pod_name} is ready")
+                            logger.info("Pod %s is ready", pod_name)
                             return True
 
-                logger.debug(f"Pod {pod_name} status: {phase}, waiting...")
+                logger.debug("Pod %s status: %s, waiting...", pod_name, phase)
 
             except ApiException as e:
                 if e.status == 404:
                     raise RuntimeError(f"Pod {pod_name} was deleted")
-                logger.warning(f"Error checking pod status: {e}")
+                logger.warning("Error checking pod status: %s", e)
 
             time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
 
@@ -865,7 +639,7 @@ done
         except ApiException:
             pass  # Pod might be deleted, ignore
 
-        logger.warning(f"Timeout waiting for pod {pod_name} to become ready")
+        logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
@@ -907,6 +681,7 @@ done
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
+        onyx_pat: str | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -915,9 +690,8 @@ done
         try to provision the same sandbox concurrently.
 
         Creates pod with:
-        1. Init container syncs files/ from S3
-        2. Creates sessions/ directory for per-session workspaces
-        3. Main container runs the sandbox environment
+        1. Sessions/ directory for per-session workspaces
+        2. Main container runs the sandbox environment
 
         NOTE: This does NOT set up session-specific workspaces.
         Call setup_session_workspace() to create session workspaces.
@@ -927,6 +701,7 @@ done
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
+            onyx_pat: Raw PAT token to inject as ONYX_PAT env var in the pod
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -935,7 +710,10 @@ done
             RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting Kubernetes sandbox provisioning for sandbox {sandbox_id}, user {user_id}, tenant {tenant_id}"
+            "Starting Kubernetes sandbox provisioning for sandbox %s, user %s, tenant %s",
+            sandbox_id,
+            user_id,
+            tenant_id,
         )
 
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -943,20 +721,20 @@ done
         # Check if pod already exists and is healthy (idempotency check)
         if self._pod_exists_and_healthy(pod_name):
             logger.info(
-                f"Pod {pod_name} already exists and is healthy, reusing existing pod"
+                "Pod %s already exists and is healthy, reusing existing pod", pod_name
             )
             # Ensure service exists and is not terminating
             self._ensure_service_exists(sandbox_id, tenant_id)
 
             # Wait for pod to be ready if it's still pending
-            logger.info(f"Waiting for existing pod {pod_name} to become ready...")
+            logger.info("Waiting for existing pod %s to become ready...", pod_name)
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
             logger.info(
-                f"Reusing existing Kubernetes sandbox {sandbox_id}, pod: {pod_name}"
+                "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
             )
             return SandboxInfo(
                 sandbox_id=sandbox_id,
@@ -965,13 +743,20 @@ done
                 last_heartbeat=None,
             )
 
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
+            )
+
         try:
             # 1. Create Pod (user-level only, no session setup)
-            logger.debug(f"Creating Pod {pod_name}")
+            logger.debug("Creating Pod %s", pod_name)
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
-                user_id=str(user_id),
                 tenant_id=tenant_id,
+                onyx_pat=onyx_pat,
             )
             try:
                 self._core_api.create_namespaced_pod(
@@ -983,19 +768,21 @@ done
                     # Pod was created by another concurrent request
                     # Check if it's healthy and reuse it
                     logger.warning(
-                        f"Pod {pod_name} already exists (409 conflict, this shouldn't normally happen), "
-                        "checking if it's healthy..."
+                        "Pod %s already exists (409 conflict, this shouldn't normally happen), checking if it's healthy...",
+                        pod_name,
                     )
                     if self._pod_exists_and_healthy(pod_name):
                         logger.warning(
-                            f"During provisioning, discovered that pod {pod_name} already exists. Reusing"
+                            "During provisioning, discovered that pod %s already exists. Reusing",
+                            pod_name,
                         )
                         # Continue to ensure service exists and wait for ready
                     else:
                         # Pod exists but is not healthy - this shouldn't happen often
                         # but could occur if a previous provision failed mid-way
                         logger.warning(
-                            f"Pod {pod_name} exists but is not healthy, waiting for it to become ready or fail"
+                            "Pod %s exists but is not healthy, waiting for it to become ready or fail",
+                            pod_name,
                         )
                 else:
                     raise
@@ -1004,14 +791,16 @@ done
             self._ensure_service_exists(sandbox_id, tenant_id)
 
             # 3. Wait for pod to be ready
-            logger.info(f"Waiting for pod {pod_name} to become ready...")
+            logger.info("Waiting for pod %s to become ready...", pod_name)
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
             logger.info(
-                f"Provisioned Kubernetes sandbox {sandbox_id}, pod: {pod_name} (no sessions yet)"
+                "Provisioned Kubernetes sandbox %s, pod: %s (no sessions yet)",
+                sandbox_id,
+                pod_name,
             )
 
             return SandboxInfo(
@@ -1026,12 +815,15 @@ done
             # Check if pod is healthy - if so, don't clean up (another request may own it)
             if self._pod_exists_and_healthy(pod_name):
                 logger.warning(
-                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}, "
-                    "but pod is healthy (likely owned by concurrent request), not cleaning up"
+                    "Kubernetes sandbox provisioning failed for sandbox %s: %s, but pod is healthy (likely owned by concurrent request), not cleaning up",
+                    sandbox_id,
+                    e,
                 )
             else:
                 logger.error(
-                    f"Kubernetes sandbox provisioning failed for sandbox {sandbox_id}: {e}",
+                    "Kubernetes sandbox provisioning failed for sandbox %s: %s",
+                    sandbox_id,
+                    e,
                     exc_info=True,
                 )
                 self._cleanup_kubernetes_resources(str(sandbox_id))
@@ -1075,20 +867,27 @@ done
                     raise ValueError(f"Unknown resource type: {resource_type}")
 
                 # Resource still exists, wait and retry
-                logger.debug(f"Waiting for {resource_type} {name} to be deleted...")
+                logger.debug("Waiting for %s %s to be deleted...", resource_type, name)
                 time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
 
             except ApiException as e:
                 if e.status == 404:
                     # Resource is gone
-                    logger.debug(f"{resource_type.capitalize()} {name} fully deleted")
+                    logger.debug(
+                        "%s %s fully deleted", resource_type.capitalize(), name
+                    )
                     return True
                 # Other error, log and continue waiting
-                logger.warning(f"Error checking {resource_type} {name} status: {e}")
+                logger.warning(
+                    "Error checking %s %s status: %s", resource_type, name, e
+                )
                 time.sleep(RESOURCE_DELETION_POLL_INTERVAL_SECONDS)
 
         logger.warning(
-            f"Timeout waiting for {resource_type} {name} to be deleted after {timeout}s"
+            "Timeout waiting for %s %s to be deleted after %ss",
+            resource_type,
+            name,
+            timeout,
         )
         return False
 
@@ -1118,14 +917,14 @@ done
                 name=service_name,
                 namespace=self._namespace,
             )
-            logger.debug(f"Deleted Service {service_name}")
+            logger.debug("Deleted Service %s", service_name)
             service_deleted = True
         except ApiException as e:
             if e.status == 404:
                 # Already deleted
                 service_deleted = True
             else:
-                logger.error(f"Error deleting Service {service_name}: {e}")
+                logger.error("Error deleting Service %s: %s", service_name, e)
                 raise
 
         pod_deleted = False
@@ -1134,14 +933,14 @@ done
                 name=pod_name,
                 namespace=self._namespace,
             )
-            logger.debug(f"Deleted Pod {pod_name}")
+            logger.debug("Deleted Pod %s", pod_name)
             pod_deleted = True
         except ApiException as e:
             if e.status == 404:
                 # Already deleted
                 pod_deleted = True
             else:
-                logger.error(f"Error deleting Pod {pod_name}: {e}")
+                logger.error("Error deleting Pod %s: %s", pod_name, e)
                 raise
 
         # Wait for resources to be fully deleted to prevent 409 conflicts
@@ -1165,83 +964,66 @@ done
         # Clean up Kubernetes resources (needs string for pod/service names)
         self._cleanup_kubernetes_resources(str(sandbox_id))
 
-        logger.info(f"Terminated Kubernetes sandbox {sandbox_id}")
+        logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def setup_session_workspace(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
-        file_system_path: str | None = None,  # noqa: ARG002
+        nextjs_port: int | None,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
-        use_demo_data: bool = False,
-        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
         Executes kubectl exec to:
         1. Create sessions/$session_id/ directory
-        2. Create files/ symlink (to demo data or S3-synced user files)
-        3. Copy outputs template from local templates (downloaded during init)
-        4. Write AGENTS.md
-        5. Write opencode.json with LLM config
-        6. Create org_info/ directory with user identity file (if demo data enabled)
-        7. Start Next.js dev server
-
-        Note: Snapshot restoration is not supported in Kubernetes mode since the
-        main container doesn't have S3 access. Snapshots would need to be
-        pre-downloaded during pod provisioning if needed.
+        2. Copy outputs template from local templates (downloaded during init)
+        3. Write AGENTS.md
+        4. Write opencode.json with LLM config
+        5. Create org_info/ directory with user identity file (if user_work_area provided)
+        6. Start Next.js dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't need a preview).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to user's S3-synced knowledge files (/workspace/files)
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, symlink files/ to /workspace/demo_data;
-                          else to /workspace/files (S3-synced user files)
-            excluded_user_library_paths: List of paths within user_library/ to exclude
-                (e.g., ["/data/file.xlsx"]). These files won't be accessible in the session.
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
         """
         if snapshot_path:
             logger.warning(
-                f"Snapshot restoration requested but not supported in Kubernetes mode. "
-                f"Snapshot path {snapshot_path} will be ignored. "
-                f"Session {session_id} will start with fresh outputs template."
+                "Snapshot restoration requested but not supported in Kubernetes mode. Snapshot path %s will be ignored. Session %s will start with fresh outputs template.",
+                snapshot_path,
+                session_id,
             )
 
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
         # Paths inside the pod (created during workspace setup below):
-        # - {session_path}/files: symlink to knowledge sources
         # - {session_path}/attachments: user-uploaded files
         #
-        # Note: files_path=None leaves {{KNOWLEDGE_SOURCES_SECTION}} placeholder intact
-        # for generate_agents_md.py to resolve at container runtime by scanning /workspace/files.
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            use_demo_data=use_demo_data,
-            include_org_info=use_demo_data,
+            include_org_info=bool(user_work_area),
         )
 
         # Build opencode config JSON using shared config builder
@@ -1281,29 +1063,6 @@ printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile
 printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
 """
 
-        # Build files symlink setup
-        # Choose between demo data (baked in image) or user's S3-synced files
-        if use_demo_data:
-            # Demo mode: symlink to demo data baked into the container image
-            symlink_target = "/workspace/demo_data"
-            files_symlink_setup = f"""
-# Create files symlink to demo data (baked into image)
-echo "Creating files symlink to demo data: {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
-"""
-        elif excluded_user_library_paths:
-            files_symlink_setup = _build_filtered_symlink_script(
-                session_path, excluded_user_library_paths
-            )
-        else:
-            # Normal mode: symlink to user's S3-synced knowledge files
-            symlink_target = "/workspace/files"
-            files_symlink_setup = f"""
-# Create files symlink to user's knowledge files (synced from S3)
-echo "Creating files symlink to user files: {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
-"""
-
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
 # Copy outputs template (baked into image at build time)
@@ -1319,9 +1078,16 @@ else
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup)
-        nextjs_start_script = _build_nextjs_start_script(
-            session_path, nextjs_port, check_node_modules=False
+        # Build NextJS startup script (npm install already done in outputs_setup).
+        # Headless callers (scheduled tasks) pass nextjs_port=None and don't
+        # need a dev server — the agent's tools work without one and the
+        # preview iframe isn't attached.
+        nextjs_start_script = (
+            _build_nextjs_start_script(
+                session_path, nextjs_port, check_node_modules=False
+            )
+            if nextjs_port is not None
+            else ""
         )
 
         setup_script = f"""
@@ -1331,7 +1097,7 @@ set -e
 echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs
 mkdir -p {session_path}/attachments
-{files_symlink_setup}
+
 # Setup outputs
 {outputs_setup}
 
@@ -1346,9 +1112,6 @@ fi
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
-
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
@@ -1360,7 +1123,7 @@ echo "Session workspace setup complete"
 """
 
         logger.info(
-            f"Setting up session workspace {session_id} in sandbox {sandbox_id}"
+            "Setting up session workspace %s in sandbox %s", session_id, sandbox_id
         )
 
         try:
@@ -1377,14 +1140,17 @@ echo "Session workspace setup complete"
                 tty=False,
             )
 
-            logger.debug(f"Session setup output: {exec_response}")
+            logger.debug("Session setup output: %s", exec_response)
             logger.info(
-                f"Set up session workspace {session_id} in sandbox {sandbox_id}"
+                "Set up session workspace %s in sandbox %s", session_id, sandbox_id
             )
 
         except Exception as e:
             logger.error(
-                f"Failed to setup session workspace {session_id} in sandbox {sandbox_id}: {e}",
+                "Failed to setup session workspace %s in sandbox %s: %s",
+                session_id,
+                sandbox_id,
+                e,
                 exc_info=True,
             )
             raise RuntimeError(
@@ -1427,7 +1193,7 @@ echo "Session cleanup complete"
 """
 
         logger.info(
-            f"Cleaning up session workspace {session_id} in sandbox {sandbox_id}"
+            "Cleaning up session workspace %s in sandbox %s", session_id, sandbox_id
         )
 
         try:
@@ -1443,19 +1209,21 @@ echo "Session cleanup complete"
                 tty=False,
             )
 
-            logger.debug(f"Session cleanup output: {exec_response}")
+            logger.debug("Session cleanup output: %s", exec_response)
             logger.info(
-                f"Cleaned up session workspace {session_id} in sandbox {sandbox_id}"
+                "Cleaned up session workspace %s in sandbox %s", session_id, sandbox_id
             )
 
         except ApiException as e:
             if e.status == 404:
                 # Pod not found, nothing to clean up
-                logger.debug(f"Pod {pod_name} not found, skipping cleanup")
+                logger.debug("Pod %s not found, skipping cleanup", pod_name)
             else:
-                logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+                logger.warning(
+                    "Error cleaning up session workspace %s: %s", session_id, e
+                )
         except Exception as e:
-            logger.warning(f"Error cleaning up session workspace {session_id}: {e}")
+            logger.warning("Error cleaning up session workspace %s: %s", session_id, e)
 
     def create_snapshot(
         self,
@@ -1465,8 +1233,8 @@ echo "Session cleanup complete"
     ) -> SnapshotResult | None:
         """Create a snapshot of a session's outputs and attachments directories.
 
-        For Kubernetes backend, we exec into the file-sync container to create
-        the snapshot and upload to S3. Captures:
+        Execs into the sandbox container to create a tar archive and upload
+        to S3 via AWS CLI. Captures:
         - sessions/$session_id/outputs/ (generated artifacts, web apps)
         - sessions/$session_id/attachments/ (user uploaded files)
         - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
@@ -1491,10 +1259,7 @@ echo "Session cleanup complete"
         safe_session_path = shlex.quote(f"/workspace/sessions/{session_id_str}")
         s3_path = f"s3://{self._s3_bucket}/{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
 
-        # Create tar and upload to S3 via file-sync container.
-        # .opencode-data/ is already on the shared workspace volume because we set
-        # XDG_DATA_HOME to the session directory when starting opencode (see
-        # ACPExecClient.start()). No cross-container copy needed.
+        # Create tar and upload to S3 via the sandbox container using AWS CLI.
         exec_command = [
             "/bin/sh",
             "-c",
@@ -1508,18 +1273,17 @@ fi
 dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
 [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
-tar -czf - $dirs | /s5cmd pipe {s3_path}
+tar -czf - $dirs | aws s3 cp - {s3_path}
 echo "SNAPSHOT_CREATED"
 """,
         ]
 
         try:
-            # Use exec to run snapshot command in file-sync container (has s5cmd)
             resp = k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="file-sync",
+                container="sandbox",
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -1527,12 +1291,12 @@ echo "SNAPSHOT_CREATED"
                 tty=False,
             )
 
-            logger.debug(f"Snapshot exec output: {resp}")
+            logger.debug("Snapshot exec output: %s", resp)
 
             # Check if nothing was snapshotted
             if "EMPTY_SNAPSHOT" in resp:
                 logger.info(
-                    f"No outputs or attachments to snapshot for session {session_id}"
+                    "No outputs or attachments to snapshot for session %s", session_id
                 )
                 return None
 
@@ -1550,7 +1314,7 @@ echo "SNAPSHOT_CREATED"
         # Storage path must match the S3 upload path (without s3://bucket/ prefix)
         storage_path = f"{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
 
-        logger.info(f"Created snapshot for session {session_id}")
+        logger.info("Created snapshot for session %s", session_id)
 
         return SnapshotResult(
             storage_path=storage_path,
@@ -1598,13 +1362,17 @@ echo "SNAPSHOT_CREATED"
 
             result = "WORKSPACE_FOUND" in resp
             logger.info(
-                f"[WORKSPACE_CHECK] session={session_id}, path={session_path}, raw_resp={resp!r}, result={result}"
+                "[WORKSPACE_CHECK] session=%s, path=%s, raw_resp=%r, result=%s",
+                session_id,
+                session_path,
+                resp,
+                result,
             )
             return result
 
         except ApiException as e:
             logger.warning(
-                f"Failed to check session workspace exists for {session_id}: {e}"
+                "Failed to check session workspace exists for %s: %s", session_id, e
             )
             return False
 
@@ -1614,32 +1382,26 @@ echo "SNAPSHOT_CREATED"
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,  # noqa: ARG002
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
     ) -> None:
-        """Download snapshot from S3 via s5cmd, extract, regenerate config, and start NextJS.
-
-        Uses the file-sync sidecar container (which has s5cmd + S3 credentials
-        via IRSA) to stream the snapshot directly from S3 into the session
-        directory. This avoids downloading to the backend server and the
-        base64 encoding overhead of piping through kubectl exec.
+        """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
 
         Steps:
-        1. Exec s5cmd cat in file-sync container to stream snapshot from S3
-        2. Pipe directly to tar for extraction in the shared workspace volume
-           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
-        3. Regenerate configuration files (AGENTS.md, opencode.json, files symlink)
-        4. Start the NextJS dev server
+        1. Download snapshot from S3 via aws s3 cp in the sandbox container
+        2. Pipe directly to tar for extraction
+        3. Regenerate configuration files (AGENTS.md, opencode.json)
+        4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't attach a preview).
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in S3 (relative path)
             tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
+            nextjs_port: Port number for the NextJS dev server, or None to
+                skip starting it.
             llm_config: LLM provider configuration for opencode.json
-            use_demo_data: If True, symlink files/ to demo data; else to user files
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -1650,16 +1412,13 @@ echo "SNAPSHOT_CREATED"
 
         s3_path = f"s3://{self._s3_bucket}/{snapshot_storage_path}"
 
-        # Stream snapshot directly from S3 via s5cmd in file-sync container.
-        # Mirrors the upload pattern: upload uses `tar | s5cmd pipe`,
-        # restore uses `s5cmd cat | tar`. Both run in file-sync container
-        # which has s5cmd and S3 credentials (IRSA). The shared workspace
-        # volume makes extracted files immediately visible to the sandbox
-        # container.
+        # Stream snapshot from S3 via AWS CLI in the sandbox container.
+        # Mirrors the upload pattern: upload uses `tar | aws s3 cp`,
+        # restore uses `aws s3 cp | tar`.
         restore_script = f"""
 set -eo pipefail
 mkdir -p {safe_session_path}
-/s5cmd cat {s3_path} | tar -xzf - -C {safe_session_path}
+aws s3 cp {s3_path} - | tar -xzf - -C {safe_session_path}
 echo "SNAPSHOT_RESTORED"
 """
 
@@ -1668,7 +1427,7 @@ echo "SNAPSHOT_RESTORED"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="file-sync",
+                container="sandbox",
                 command=["/bin/sh", "-c", restore_script],
                 stderr=True,
                 stdin=False,
@@ -1686,24 +1445,26 @@ echo "SNAPSHOT_RESTORED"
                 session_path=safe_session_path,
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
-                use_demo_data=use_demo_data,
             )
 
-            # Start NextJS dev server (check node_modules since restoring from snapshot)
-            start_script = _build_nextjs_start_script(
-                safe_session_path, nextjs_port, check_node_modules=True
-            )
-            k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=["/bin/sh", "-c", start_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
+            # Start NextJS dev server (check node_modules since restoring
+            # from snapshot). Skipped when nextjs_port is None — headless
+            # callers (scheduled tasks) don't attach a preview.
+            if nextjs_port is not None:
+                start_script = _build_nextjs_start_script(
+                    safe_session_path, nextjs_port, check_node_modules=True
+                )
+                k8s_stream(
+                    self._stream_core_api.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=self._namespace,
+                    container="sandbox",
+                    command=["/bin/sh", "-c", start_script],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
@@ -1712,34 +1473,30 @@ echo "SNAPSHOT_RESTORED"
         pod_name: str,
         session_path: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
-        use_demo_data: bool,
+        nextjs_port: int | None,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
         Creates:
         - AGENTS.md (agent instructions)
         - opencode.json (LLM configuration)
-        - files symlink (to demo data or user files)
 
         Args:
             pod_name: The pod name to exec into
             session_path: Path to the session directory (already shlex.quoted)
             llm_config: LLM provider configuration
-            nextjs_port: Port for NextJS (used in AGENTS.md)
-            use_demo_data: Whether to use demo data or user files
+            nextjs_port: Port for NextJS (used in AGENTS.md). None when the
+                dev server is intentionally skipped — the template renders
+                "Unknown" in that case.
         """
-        # Generate AGENTS.md content
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=None,  # Not stored, regenerate without personalization
+            user_name=None,
             user_role=None,
-            use_demo_data=use_demo_data,
-            include_org_info=False,  # Don't include org_info for restored sessions
+            include_org_info=False,
         )
 
         # Generate opencode.json
@@ -1756,25 +1513,12 @@ echo "SNAPSHOT_RESTORED"
         opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
-        # Build files symlink setup
-        if use_demo_data:
-            symlink_target = "/workspace/demo_data"
-        else:
-            symlink_target = "/workspace/files"
-
         config_script = f"""
 set -e
-
-# Create files symlink
-echo "Creating files symlink to {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
 
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
 
 # Write opencode config
 echo "Writing opencode.json"
@@ -1844,7 +1588,10 @@ echo "Session config regeneration complete"
         acp_client.start(cwd=session_path)
 
         logger.info(
-            f"[SANDBOX-ACP] Created ephemeral ACP client: sandbox={sandbox_id} pod={pod_name} api_pod={_API_SERVER_HOSTNAME}"
+            "[SANDBOX-ACP] Created ephemeral ACP client: sandbox=%s pod=%s api_pod=%s",
+            sandbox_id,
+            pod_name,
+            _API_SERVER_HOSTNAME,
         )
         return acp_client
 
@@ -1882,7 +1629,10 @@ echo "Session config regeneration complete"
             acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
 
             logger.info(
-                f"[SANDBOX-ACP] Sending message: session={session_id} acp_session={acp_session_id} api_pod={_API_SERVER_HOSTNAME}"
+                "[SANDBOX-ACP] Sending message: session=%s acp_session=%s api_pod=%s",
+                session_id,
+                acp_session_id,
+                _API_SERVER_HOSTNAME,
             )
 
             # Log the send_message call at sandbox manager level
@@ -1900,22 +1650,26 @@ echo "Session config regeneration complete"
                     yield event
 
                 logger.info(
-                    f"[SANDBOX-ACP] send_message completed: "
-                    f"session={session_id} events={events_count} "
-                    f"got_prompt_response={got_prompt_response}"
+                    "[SANDBOX-ACP] send_message completed: session=%s events=%s got_prompt_response=%s",
+                    session_id,
+                    events_count,
+                    got_prompt_response,
                 )
                 packet_logger.log_session_end(
                     session_id, success=True, events_count=events_count
                 )
             except GeneratorExit:
                 logger.warning(
-                    f"[SANDBOX-ACP] GeneratorExit: session={session_id} events={events_count}, sending session/cancel"
+                    "[SANDBOX-ACP] GeneratorExit: session=%s events=%s, sending session/cancel",
+                    session_id,
+                    events_count,
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on GeneratorExit: {cancel_err}"
+                        "[SANDBOX-ACP] session/cancel failed on GeneratorExit: %s",
+                        cancel_err,
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1926,13 +1680,17 @@ echo "Session config regeneration complete"
                 raise
             except Exception as e:
                 logger.error(
-                    f"[SANDBOX-ACP] Exception: session={session_id} events={events_count} error={e}, sending session/cancel"
+                    "[SANDBOX-ACP] Exception: session=%s events=%s error=%s, sending session/cancel",
+                    session_id,
+                    events_count,
+                    e,
                 )
                 try:
                     acp_client.cancel(session_id=acp_session_id)
                 except Exception as cancel_err:
                     logger.warning(
-                        f"[SANDBOX-ACP] session/cancel failed on Exception: {cancel_err}"
+                        "[SANDBOX-ACP] session/cancel failed on Exception: %s",
+                        cancel_err,
                     )
                 packet_logger.log_session_end(
                     session_id,
@@ -1943,7 +1701,10 @@ echo "Session config regeneration complete"
                 raise
             except BaseException as e:
                 logger.error(
-                    f"[SANDBOX-ACP] {type(e).__name__}: session={session_id} error={e}"
+                    "[SANDBOX-ACP] %s: session=%s error=%s",
+                    type(e).__name__,
+                    session_id,
+                    e,
                 )
                 packet_logger.log_session_end(
                     session_id,
@@ -1959,7 +1720,9 @@ echo "Session config regeneration complete"
                 acp_client.stop()
             except Exception as e:
                 logger.warning(
-                    f"[SANDBOX-ACP] Failed to stop ephemeral ACP client: session={session_id} error={e}"
+                    "[SANDBOX-ACP] Failed to stop ephemeral ACP client: session=%s error=%s",
+                    session_id,
+                    e,
                 )
 
     def list_directory(
@@ -1991,10 +1754,10 @@ echo "Session config regeneration complete"
         # Use shlex.quote to prevent command injection
         quoted_path = shlex.quote(target_path)
 
-        logger.info(f"Listing directory {target_path} in pod {pod_name}")
+        logger.info("Listing directory %s in pod %s", target_path, pod_name)
 
         # Use exec to list directory
-        # -L follows symlinks (important for files/ -> /workspace/demo_data)
+        # -L follows symlinks
         exec_command = [
             "/bin/sh",
             "-c",
@@ -2032,10 +1795,10 @@ echo "Session config regeneration complete"
         entries = []
         lines = ls_output.strip().split("\n")
 
-        logger.debug(f"Parsing {len(lines)} lines of ls output for {base_path}")
+        logger.debug("Parsing %s lines of ls output for %s", len(lines), base_path)
 
         for line in lines:
-            logger.debug(f"Parsing line: {line}")
+            logger.debug("Parsing line: %s", line)
 
             # Skip header line and . / .. entries
             if line.startswith("total") or not line:
@@ -2071,7 +1834,7 @@ echo "Session config regeneration complete"
 
             # Directories start with 'd', symlinks start with 'l'
             # Treat symlinks as directories (they typically point to directories
-            # in our sandbox setup, like files/ -> /workspace/demo_data)
+            # in our sandbox setup)
             is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
 
@@ -2151,7 +1914,7 @@ echo "Session config regeneration complete"
             try:
                 content = base64.b64decode(resp.strip())
             except binascii.Error as e:
-                logger.error(f"Failed to decode base64 content: {e}")
+                logger.error("Failed to decode base64 content: %s", e)
                 raise RuntimeError(f"Failed to decode file content: {e}") from e
 
             return content
@@ -2251,112 +2014,6 @@ echo "Session config regeneration complete"
         except ApiException as e:
             raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
 
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,
-        tenant_id: str,
-        source: str | None = None,
-    ) -> bool:
-        """Sync files from S3 to the running pod via the file-sync sidecar.
-
-        Executes `s5cmd sync` in the file-sync sidecar container to download
-        any new or changed files from S3 to /workspace/files/.
-
-        This is safe to call multiple times - s5cmd sync is idempotent.
-
-        Note: For user_library source, --delete is NOT used since deletions
-        are handled explicitly by the delete_file API endpoint. File visibility
-        in sessions is controlled via filtered symlinks in setup_session_workspace().
-
-        Args:
-            sandbox_id: The sandbox UUID
-            user_id: The user ID (for S3 path construction)
-            tenant_id: The tenant ID (for S3 path construction)
-            source: Optional source type (e.g., "gmail", "google_drive").
-                    If None, syncs all sources. If specified, only syncs
-                    that source's directory.
-
-        Returns:
-            True if sync was successful, False otherwise.
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Build S3 path based on whether source is specified
-        if source:
-            # Sync only the specific source directory
-            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/{source}/*"
-            local_path = f"/workspace/files/{source}/"
-        else:
-            # Sync all sources (original behavior)
-            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
-            local_path = "/workspace/files/"
-
-        # s5cmd sync with --delete for external connectors only.
-        # timeout: prevent zombie processes from kubectl exec disconnections
-        # trap: kill child processes on exit/disconnect
-        source_info = f" (source={source})" if source else ""
-
-        # Sources where --delete is explicitly forbidden (deletions handled via API)
-        NO_DELETE_SOURCES = {"user_library"}
-        use_delete = source is not None and source not in NO_DELETE_SOURCES
-        delete_flag = " --delete" if use_delete else ""
-
-        sync_script = f"""
-# Kill child processes on exit/disconnect to prevent zombie s5cmd workers
-cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
-trap cleanup EXIT INT TERM
-
-echo "Starting incremental file sync{source_info}"
-echo "S3: {s3_path}"
-echo "Local: {local_path}"
-
-# Ensure destination exists (needed for source-specific syncs)
-mkdir -p "{local_path}"
-
-# Run s5cmd with 5-minute timeout (SIGKILL after 10s if SIGTERM ignored)
-# Exit codes: 0=success, 1=success with warnings, 124=timeout
-sync_exit_code=0
-timeout --signal=TERM --kill-after=10s 5m \
-    /s5cmd --stat sync{delete_flag} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
-
-echo "=== Sync finished (exit code: $sync_exit_code) ==="
-
-# Handle result
-if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    file_count=$(find "{local_path}" -type f 2>/dev/null | wc -l)
-    echo "Files in {local_path}: $file_count"
-    echo "SYNC_SUCCESS"
-elif [ $sync_exit_code -eq 124 ]; then
-    echo "ERROR: Sync timed out after 5 minutes"
-    echo "SYNC_FAILED"
-    exit 1
-else
-    echo "ERROR: Sync failed (exit code: $sync_exit_code)"
-    echo "SYNC_FAILED"
-    exit $sync_exit_code
-fi
-"""
-        sync_command = ["/bin/sh", "-c", sync_script]
-        resp = k8s_stream(
-            self._stream_core_api.connect_get_namespaced_pod_exec,
-            pod_name,
-            self._namespace,
-            container="file-sync",  # Execute in sidecar, not sandbox container
-            command=sync_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        logger.debug(f"File sync response: {resp}")
-
-        # Check if sync succeeded based on output markers
-        if "SYNC_FAILED" in resp:
-            logger.warning(f"File sync failed for sandbox {sandbox_id}")
-            return False
-        return True
-
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID
     ) -> None:
@@ -2416,10 +2073,12 @@ fi
                 tty=False,
             )
             logger.debug(
-                f"Ensure AGENTS.md attachments section for session {session_id}: {resp.strip()}"
+                "Ensure AGENTS.md attachments section for session %s: %s",
+                session_id,
+                resp.strip(),
             )
         except ApiException as e:
-            logger.warning(f"Failed to ensure AGENTS.md attachments section: {e}")
+            logger.warning("Failed to ensure AGENTS.md attachments section: %s", e)
 
     def upload_file(
         self,
@@ -2532,7 +2191,7 @@ echo "$base"
             stderr_data += ws_client.read_stderr() or ""
 
             if stderr_data.strip():
-                logger.warning(f"Upload stderr: {stderr_data.strip()}")
+                logger.warning("Upload stderr: %s", stderr_data.strip())
 
             # Last line of output is the final filename
             final_filename = stdout_data.strip().split("\n")[-1]
@@ -2543,7 +2202,10 @@ echo "$base"
                 )
 
             logger.info(
-                f"Uploaded file to session {session_id}: attachments/{final_filename} ({len(content)} bytes)"
+                "Uploaded file to session %s: attachments/%s (%s bytes)",
+                session_id,
+                final_filename,
+                len(content),
             )
 
             # Ensure AGENTS.md has the attachments section
@@ -2616,16 +2278,55 @@ echo "$base"
 
             deleted = "DELETED" in resp
             if deleted:
-                logger.info(f"Deleted file from session {session_id}: {path}")
+                logger.info("Deleted file from session %s: %s", session_id, path)
             else:
                 logger.debug(
-                    f"File not found for deletion in session {session_id}: {path}"
+                    "File not found for deletion in session %s: %s", session_id, path
                 )
 
             return deleted
 
         except ApiException as e:
             raise RuntimeError(f"Failed to delete file: {e}") from e
+
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        if (
+            ".." in path
+            or path.startswith("/")
+            or not re.match(r"^[a-zA-Z0-9_][a-zA-Z0-9_\-./]*$", path)
+        ):
+            raise ValueError(f"Invalid sandbox file path: {path}")
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        safe_path = shlex.quote(f"/workspace/{path}")
+        safe_dir = shlex.quote(f"/workspace/{path}".rsplit("/", 1)[0])
+        escaped = content.replace("'", "'\\''")
+
+        script = f"""set -e
+mkdir -p {safe_dir}
+printf '%s' '{escaped}' > {safe_path}
+echo WRITE_OK"""
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=["/bin/sh", "-c", script],
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+            if "WRITE_OK" not in resp:
+                raise RuntimeError(f"write_sandbox_file failed for {path}: {resp}")
+        except ApiException as e:
+            raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
 
     def get_upload_stats(
         self,
@@ -2684,11 +2385,11 @@ fi
                     total_size = int(parts[1])
                     return file_count, total_size
                 except ValueError:
-                    logger.warning(f"Failed to parse upload stats: {resp}")
+                    logger.warning("Failed to parse upload stats: %s", resp)
                     return 0, 0
 
             return 0, 0
 
         except ApiException as e:
-            logger.warning(f"Failed to get upload stats: {e}")
+            logger.warning("Failed to get upload stats: %s", e)
             return 0, 0

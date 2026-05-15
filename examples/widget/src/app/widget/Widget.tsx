@@ -10,7 +10,7 @@ type NonEmptyObject = { [k: string]: any };
 
 const processSingleChunk = <T extends NonEmptyObject>(
   chunk: string,
-  currPartialChunk: string | null,
+  currPartialChunk: string | null
 ): [T | null, string | null] => {
   const completeChunk = (currPartialChunk || "") + chunk;
   try {
@@ -25,7 +25,7 @@ const processSingleChunk = <T extends NonEmptyObject>(
 
 const processRawChunkString = <T extends NonEmptyObject>(
   rawChunkString: string,
-  previousPartialChunk: string | null,
+  previousPartialChunk: string | null
 ): [T[], string | null] => {
   /* This is required because, in practice, we see that nginx does not send over
   each chunk one at a time even with buffering turned off. Instead,
@@ -41,7 +41,7 @@ const processRawChunkString = <T extends NonEmptyObject>(
   chunkSections.forEach((chunk) => {
     const [processedChunk, partialChunk] = processSingleChunk<T>(
       chunk,
-      currPartialChunk,
+      currPartialChunk
     );
     if (processedChunk) {
       parsedChunkSections.push(processedChunk);
@@ -55,7 +55,7 @@ const processRawChunkString = <T extends NonEmptyObject>(
 };
 
 async function* handleStream<T extends NonEmptyObject>(
-  streamingResponse: Response,
+  streamingResponse: Response
 ): AsyncGenerator<T[], void, unknown> {
   const reader = streamingResponse.body?.getReader();
   const decoder = new TextDecoder("utf-8");
@@ -73,7 +73,7 @@ async function* handleStream<T extends NonEmptyObject>(
 
     const [completedChunks, partialChunk] = processRawChunkString<T>(
       decoder.decode(value, { stream: true }),
-      previousPartialChunk,
+      previousPartialChunk
     );
     if (!completedChunks.length && !partialChunk) {
       break;
@@ -107,7 +107,7 @@ async function* sendMessage({
           // or specify an assistant you have defined
           persona_id: 0,
         }),
-      },
+      }
     );
 
     if (!createSessionResponse.ok) {
@@ -153,7 +153,7 @@ async function* sendMessage({
 
 export const ChatWidget = () => {
   const [messages, setMessages] = useState<{ text: string; isUser: boolean }[]>(
-    [],
+    []
   );
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);

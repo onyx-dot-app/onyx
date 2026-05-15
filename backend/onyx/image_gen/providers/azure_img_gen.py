@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.interfaces import ReferenceImage
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 
 if TYPE_CHECKING:
     from onyx.image_gen.interfaces import ImageGenerationResponse
@@ -105,8 +107,34 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
 
             from litellm import image_edit
 
-            return image_edit(
-                image=[image.data for image in reference_images],
+            with traced_llm_call(
+                flow=LLMFlow.IMAGE_EDIT,
+                model=deployment,
+                provider="azure",
+                input_messages=[{"role": "user", "content": prompt}],
+            ):
+                return image_edit(
+                    image=[image.data for image in reference_images],
+                    prompt=prompt,
+                    model=model_name,
+                    api_key=self._api_key,
+                    api_base=self._api_base,
+                    api_version=self._api_version,
+                    size=size,
+                    n=n,
+                    quality=quality,
+                    **kwargs,
+                )
+
+        from litellm import image_generation
+
+        with traced_llm_call(
+            flow=LLMFlow.IMAGE_GENERATION,
+            model=deployment,
+            provider="azure",
+            input_messages=[{"role": "user", "content": prompt}],
+        ):
+            return image_generation(
                 prompt=prompt,
                 model=model_name,
                 api_key=self._api_key,
@@ -117,17 +145,3 @@ class AzureImageGenerationProvider(ImageGenerationProvider):
                 quality=quality,
                 **kwargs,
             )
-
-        from litellm import image_generation
-
-        return image_generation(
-            prompt=prompt,
-            model=model_name,
-            api_key=self._api_key,
-            api_base=self._api_base,
-            api_version=self._api_version,
-            size=size,
-            n=n,
-            quality=quality,
-            **kwargs,
-        )

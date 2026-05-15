@@ -7,6 +7,9 @@ from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.daily.connectors.utils import to_sections
 from tests.daily.connectors.utils import to_text_sections
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.SLACK_BOT_TOKEN)
 
 
 def test_validate_slack_connector_settings(
@@ -79,16 +82,16 @@ def test_indexing_channels_with_message_count(
 
     # Verify the expected channel appears in the hierarchy nodes
     channel_display_names = {node.display_name for node in hierarchy_nodes}
-    assert (
-        f"#{expected_channel_name}" in channel_display_names
-    ), f"Expected channel '#{expected_channel_name}' not found in hierarchy nodes. Found: {channel_display_names}"
+    assert f"#{expected_channel_name}" in channel_display_names, (
+        f"Expected channel '#{expected_channel_name}' not found in hierarchy nodes. Found: {channel_display_names}"
+    )
 
     # Verify documents reference their parent channel
     channel_ids = {node.raw_node_id for node in hierarchy_nodes}
     for doc in docs:
-        assert (
-            doc.parent_hierarchy_raw_node_id is not None
-        ), f"Document '{doc.id}' has no parent_hierarchy_raw_node_id"
+        assert doc.parent_hierarchy_raw_node_id is not None, (
+            f"Document '{doc.id}' has no parent_hierarchy_raw_node_id"
+        )
         assert doc.parent_hierarchy_raw_node_id in channel_ids, (
             f"Document '{doc.id}' has parent_hierarchy_raw_node_id="
             f"'{doc.parent_hierarchy_raw_node_id}' which is not in "

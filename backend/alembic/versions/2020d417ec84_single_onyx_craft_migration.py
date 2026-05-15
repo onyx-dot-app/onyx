@@ -22,7 +22,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-
 # revision identifiers, used by Alembic.
 revision = "2020d417ec84"
 down_revision = "41fa44bef321"

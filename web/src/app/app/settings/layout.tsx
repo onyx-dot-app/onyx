@@ -37,7 +37,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Left: Tab Navigation */}
             <div
               data-testid="settings-left-tab-navigation"
-              className="flex flex-col px-2 min-w-[12.5rem]"
+              className="flex flex-col px-2 min-w-50"
             >
               <SidebarTab
                 href="/app/settings/general"

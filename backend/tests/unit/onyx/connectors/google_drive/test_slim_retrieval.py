@@ -18,6 +18,7 @@ from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveCheckpoint
 from onyx.connectors.google_drive.models import StageCompletion
+from onyx.connectors.google_utils.resources import ImpersonationError
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import SlimDocument
@@ -449,15 +450,11 @@ def _make_checkpoint_with_user(user_email: str) -> GoogleDriveCheckpoint:
 
 
 class TestImpersonateUserRefreshError:
-    def test_refresh_error_user_removed_skips_silently(self) -> None:
-        """When RefreshError occurs and the user is absent from the re-fetched
-        user list, the connector should skip them silently (no error yielded),
-        mark them DONE in completion_map, and update checkpoint.user_emails."""
+    def test_user_removed_error_skips_silently(self) -> None:
+        """RefreshError + user absent from workspace: silent skip, no error yielded, stage DONE."""
         user_email = "wilbur.suero@savvywealth.com"
         connector = _make_connector()
         checkpoint = _make_checkpoint_with_user(user_email)
-
-        refresh_error = RefreshError("invalid_grant: Invalid email or User ID")
 
         with (
             patch(
@@ -466,7 +463,7 @@ class TestImpersonateUserRefreshError:
             ),
             patch(
                 "onyx.connectors.google_drive.connector.get_root_folder_id",
-                side_effect=refresh_error,
+                side_effect=RefreshError("invalid_grant: Invalid email or User ID"),
             ),
             patch(
                 "onyx.connectors.google_drive.connector.retry_builder",
@@ -490,94 +487,59 @@ class TestImpersonateUserRefreshError:
 
         assert results == []
         assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+
+    def test_impersonation_error_yields_error(self) -> None:
+        """RefreshError + user still present: error record yielded, stage DONE."""
+        user_email = "wilbur.suero@savvywealth.com"
+        connector = _make_connector()
+        checkpoint = _make_checkpoint_with_user(user_email)
+
+        with (
+            patch(
+                "onyx.connectors.google_drive.connector.get_drive_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.get_root_folder_id",
+                side_effect=RefreshError("token_refresh_failed"),
+            ),
+            patch(
+                "onyx.connectors.google_drive.connector.retry_builder",
+                return_value=lambda f: f,
+            ),
+            patch.object(
+                connector,
+                "_get_all_user_emails",
+                return_value=[user_email, "admin@example.com"],  # user present
+            ),
+        ):
+            results = list(
+                connector._impersonate_user_for_retrieval(
+                    user_email=user_email,
+                    field_type=DriveFileFieldType.SLIM,
+                    checkpoint=checkpoint,
+                    get_new_drive_id=lambda _: None,
+                    sorted_filtered_folder_ids=[],
+                )
+            )
+
+        assert len(results) == 1
+        assert isinstance(results[0].error, ImpersonationError)
+        assert results[0].error.user_email == user_email
+        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+
+    def test_fresh_emails_callback_updates_checkpoint(self) -> None:
+        """_make_fresh_emails_callback returns a closure that calls _get_all_user_emails
+        and updates checkpoint.user_emails as a side effect."""
+        user_email = "wilbur.suero@savvywealth.com"
+        connector = _make_connector()
+        checkpoint = _make_checkpoint_with_user(user_email)
+        fresh_emails = ["admin@example.com"]  # user absent from fresh list
+
+        with patch.object(connector, "_get_all_user_emails", return_value=fresh_emails):
+            callback = connector._make_fresh_emails_callback(checkpoint)
+            result = callback()
+
+        assert result == fresh_emails
+        assert checkpoint.user_emails == fresh_emails
         assert user_email not in (checkpoint.user_emails or [])
-
-    def test_refresh_error_user_still_exists_yields_error(self) -> None:
-        """When RefreshError occurs but the user is still present in the
-        re-fetched user list, the error should be yielded as a real failure."""
-        user_email = "wilbur.suero@savvywealth.com"
-        connector = _make_connector()
-        checkpoint = _make_checkpoint_with_user(user_email)
-
-        refresh_error = RefreshError("token_refresh_failed")
-
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.get_root_folder_id",
-                side_effect=refresh_error,
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.retry_builder",
-                return_value=lambda f: f,
-            ),
-            patch.object(
-                connector,
-                "_get_all_user_emails",
-                return_value=[user_email, "admin@example.com"],  # user still present
-            ),
-        ):
-            results = list(
-                connector._impersonate_user_for_retrieval(
-                    user_email=user_email,
-                    field_type=DriveFileFieldType.SLIM,
-                    checkpoint=checkpoint,
-                    get_new_drive_id=lambda _: None,
-                    sorted_filtered_folder_ids=[],
-                )
-            )
-
-        assert len(results) == 1
-        assert results[0].error is refresh_error
-        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
-        assert checkpoint.user_emails == [user_email, "admin@example.com"]
-
-    def test_refresh_error_refetch_fails_yields_error_and_preserves_checkpoint(
-        self,
-    ) -> None:
-        """When the re-fetch of user emails itself fails, the original RefreshError
-        should be surfaced as a failure and checkpoint.user_emails must not be
-        overwritten with a partial/incorrect list."""
-        user_email = "wilbur.suero@savvywealth.com"
-        connector = _make_connector()
-        checkpoint = _make_checkpoint_with_user(user_email)
-        original_user_emails = list(checkpoint.user_emails or [])
-
-        refresh_error = RefreshError("invalid_grant: Invalid email or User ID")
-
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.get_root_folder_id",
-                side_effect=refresh_error,
-            ),
-            patch(
-                "onyx.connectors.google_drive.connector.retry_builder",
-                return_value=lambda f: f,
-            ),
-            patch.object(
-                connector,
-                "_get_all_user_emails",
-                side_effect=Exception("Admin SDK unavailable"),
-            ),
-        ):
-            results = list(
-                connector._impersonate_user_for_retrieval(
-                    user_email=user_email,
-                    field_type=DriveFileFieldType.SLIM,
-                    checkpoint=checkpoint,
-                    get_new_drive_id=lambda _: None,
-                    sorted_filtered_folder_ids=[],
-                )
-            )
-
-        assert len(results) == 1
-        assert results[0].error is refresh_error
-        assert checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
-        assert checkpoint.user_emails == original_user_emails

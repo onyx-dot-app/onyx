@@ -5,7 +5,7 @@ import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgEyeOff, SvgX } from "@opal/icons";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";

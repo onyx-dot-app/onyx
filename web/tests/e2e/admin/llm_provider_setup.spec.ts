@@ -130,7 +130,7 @@ async function exitAdminToChat(page: Page): Promise<void> {
   await page.goto("/app");
   await page.waitForURL("**/app**");
   await page
-    .locator("#onyx-chat-input-textarea")
+    .locator("#onyx-chat-input-textbox")
     .waitFor({ state: "visible", timeout: 15000 });
 }
 
@@ -439,7 +439,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
     await page
-      .locator("#onyx-chat-input-textarea")
+      .locator("#onyx-chat-input-textbox")
       .waitFor({ state: "visible", timeout: 15000 });
 
     await expect
@@ -503,7 +503,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
     await page
-      .locator("#onyx-chat-input-textarea")
+      .locator("#onyx-chat-input-textbox")
       .waitFor({ state: "visible", timeout: 15000 });
 
     await expect

@@ -193,7 +193,7 @@ function SelectionLeft({
   const showActions = hasSelection || isViewingSelected;
 
   return (
-    <div className="flex flex-row gap-1 items-center justify-center w-fit flex-shrink-0 h-fit px-1">
+    <div className="flex flex-row gap-1 items-center justify-center w-fit shrink-0 h-fit px-1">
       {isSmall ? (
         <Text
           font={hasSelection ? "secondary-action" : "secondary-body"}
@@ -211,7 +211,7 @@ function SelectionLeft({
       )}
 
       {showActions && (
-        <div className="flex flex-row items-center w-fit flex-shrink-0 h-fit">
+        <div className="flex flex-row items-center w-fit shrink-0 h-fit">
           {onView && (
             <SelectButton
               icon={SvgEye}

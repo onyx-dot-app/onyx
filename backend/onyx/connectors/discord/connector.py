@@ -54,9 +54,7 @@ def _convert_message_to_document(
         channel_name := message.channel.name
     ):
         metadata["Channel"] = channel_name  # ty: ignore[possibly-unresolved-reference]
-        semantic_substring += (
-            f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
-        )
+        semantic_substring += f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
 
     # Single messages dont have a title
     title = ""
@@ -109,7 +107,7 @@ async def _fetch_filtered_channels(
             continue
         filtered_channels.append(channel)
 
-    logger.info(f"Found {len(filtered_channels)} channels for the authenticated user")
+    logger.info("Found %s channels for the authenticated user", len(filtered_channels))
     return filtered_channels
 
 
