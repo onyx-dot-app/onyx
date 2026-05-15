@@ -1008,9 +1008,15 @@ class OpenSearchIndexClient(OpenSearchClient):
         # max_retries is the number of times to retry a request if we get a 429.
         # We do not raise on error (the default behavior of ``bulk`` is to
         # raise) because we want to attempt to retry certain failed chunks in
-        # this function.
+        # this function. Raising on exception indicates something went wrong
+        # with the entire batch, which we do not consider retryable in this
+        # function.
         successes, errors = bulk(
-            self._client, data, max_retries=3, raise_on_error=False
+            self._client,
+            data,
+            max_retries=3,
+            raise_on_error=False,
+            raise_on_exception=True,
         )
 
         if errors:
