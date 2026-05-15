@@ -1,6 +1,6 @@
 name: Craft Kubernetes Sandbox Tests
 concurrency:
-  group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 on:
@@ -101,6 +101,13 @@ jobs:
 
       - name: Load sandbox image into kind
         run: kind load docker-image onyx-sandbox:ci --name onyx-craft-ci
+
+      # The sandbox manager's pod spec sets nodeSelector
+      # `onyx.app/workload=sandbox` (kubernetes_sandbox_manager.py); in
+      # production this matches a dedicated node pool. In kind we have a
+      # single control-plane node — label it so pods can schedule.
+      - name: Label kind node for sandbox workload
+        run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
       # Namespace + ServiceAccount that KubernetesSandboxManager expects.
       # In production these come from the helm chart (sandbox-namespace.yaml,
