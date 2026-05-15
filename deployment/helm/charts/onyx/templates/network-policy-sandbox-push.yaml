@@ -12,9 +12,12 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: onyx-api-server
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: api-server
       ports:
         - protocol: TCP
           port: 8731

@@ -339,18 +339,11 @@ class KubernetesSandboxManager(SandboxManager):
                 )
             )
 
+        push_secret = os.environ.get(_PUSH_SECRET_ENV, "")
         sandbox_env_vars = [
             client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
             client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
-            client.V1EnvVar(
-                name=_PUSH_SECRET_ENV,
-                value_from=client.V1EnvVarSource(
-                    secret_key_ref=client.V1SecretKeySelector(
-                        name="onyx-sandbox-push-secret",
-                        key="shared_secret",
-                    ),
-                ),
-            ),
+            client.V1EnvVar(name=_PUSH_SECRET_ENV, value=push_secret),
         ]
 
         sandbox_container = client.V1Container(

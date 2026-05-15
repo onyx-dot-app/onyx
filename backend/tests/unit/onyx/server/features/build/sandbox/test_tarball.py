@@ -4,9 +4,12 @@ import hashlib
 import io
 import tarfile
 
+import pytest
+
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
 )
+from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 
 
@@ -68,3 +71,13 @@ def test_empty_dict() -> None:
 
     # SHA should still be valid
     assert sha == hashlib.sha256(raw).hexdigest()
+
+
+def test_oversized_bundle_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager._MAX_BUNDLE_BYTES",
+        100,
+    )
+    files: FileSet = {"big.bin": b"x" * 200}
+    with pytest.raises(FatalWriteError, match="exceeds"):
+        _build_targz(files)

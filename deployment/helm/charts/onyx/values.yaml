@@ -1297,6 +1297,9 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  # Shared secret for api-server → sandbox daemon push auth.
+  # The api-server passes this value directly to sandbox pods at provision time
+  # (same pattern as ONYX_PAT), so only the api-server needs the k8s Secret.
   sandboxPushSecret:
     enabled: false
     secretName: 'onyx-sandbox-push-secret'

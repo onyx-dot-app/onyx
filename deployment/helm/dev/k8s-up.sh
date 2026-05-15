@@ -97,9 +97,6 @@ kubectl get namespace onyx-sandboxes >/dev/null 2>&1 \
 kubectl -n onyx-sandboxes get serviceaccount sandbox-file-sync >/dev/null 2>&1 \
   || kubectl -n onyx-sandboxes create serviceaccount sandbox-file-sync
 kubectl label node --all onyx.app/workload=sandbox --overwrite >/dev/null 2>&1
-kubectl -n onyx-sandboxes get secret onyx-sandbox-push-secret >/dev/null 2>&1 \
-  || kubectl -n onyx-sandboxes create secret generic onyx-sandbox-push-secret \
-       --from-literal=shared_secret=dev-sandbox-push-secret-not-for-production
 
 # Use an isolated helm repo config: helm matches chart deps by repo NAME, so a
 # stale dev-global repo with a colliding name (we've seen this with
