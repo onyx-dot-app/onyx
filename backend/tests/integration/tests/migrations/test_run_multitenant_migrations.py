@@ -111,9 +111,9 @@ def current_head_rev() -> str:
         text=True,
         env={**os.environ, "PYTHONPATH": _BACKEND_DIR},
     )
-    assert (
-        result.returncode == 0
-    ), f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    )
     # Output looks like "d5c86e2c6dc6 (head)\n"
     rev = result.stdout.strip().split()[0]
     assert len(rev) > 0

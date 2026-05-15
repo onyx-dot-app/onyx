@@ -131,15 +131,15 @@ def test_image_gen_config_created_on_tenant_provision(
     all_configs = ImageGenerationConfigManager.get_all(user_performing_action=test_user)
 
     # Should have at least one config created during provisioning
-    assert (
-        len(all_configs) > 0
-    ), "Image generation config should be created during tenant provisioning"
+    assert len(all_configs) > 0, (
+        "Image generation config should be created during tenant provisioning"
+    )
 
     # Verify a default config exists
     default_configs = [c for c in all_configs if c.is_default]
-    assert (
-        len(default_configs) == 1
-    ), "Exactly one default image generation config should exist"
+    assert len(default_configs) == 1, (
+        "Exactly one default image generation config should exist"
+    )
 
     # Verify expected properties
     default_config = default_configs[0]

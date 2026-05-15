@@ -11,12 +11,12 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 
 
 def test_mock_llm_response_requires_integration_mode() -> None:
-    assert (
-        app_configs.INTEGRATION_TESTS_MODE is False
-    ), "Unit tests expect INTEGRATION_TESTS_MODE=false."
-    assert (
-        process_message.INTEGRATION_TESTS_MODE is False
-    ), "process_message should reflect INTEGRATION_TESTS_MODE=false in unit tests."
+    assert app_configs.INTEGRATION_TESTS_MODE is False, (
+        "Unit tests expect INTEGRATION_TESTS_MODE=false."
+    )
+    assert process_message.INTEGRATION_TESTS_MODE is False, (
+        "process_message should reflect INTEGRATION_TESTS_MODE=false in unit tests."
+    )
 
     request = SendMessageRequest(
         message="test",

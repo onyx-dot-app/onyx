@@ -356,11 +356,10 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
 /**
  * Tabs List Props
  */
-interface TabsListProps
-  extends Omit<
-    React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
-    "style"
-  > {
+interface TabsListProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
+  "style"
+> {
   /**
    * Visual variant of the tabs list.
    *
@@ -511,7 +510,7 @@ const TabsList = React.forwardRef<
           {showScrollArrows && (
             <div
               ref={scrollArrowsRef}
-              className="flex items-center gap-1 pl-2 flex-shrink-0"
+              className="flex items-center gap-1 pl-2 shrink-0"
             >
               <Button
                 disabled={!canScrollLeft}
@@ -533,7 +532,7 @@ const TabsList = React.forwardRef<
           )}
 
           {isPill && rightContent && (
-            <div ref={rightContentRef} className="ml-auto flex-shrink-0">
+            <div ref={rightContentRef} className="ml-auto shrink-0">
               {rightContent}
             </div>
           )}
@@ -557,13 +556,9 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 /**
  * Tabs Trigger Props
  */
-interface TabsTriggerProps
-  extends WithoutStyles<
-    Omit<
-      React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>,
-      "children"
-    >
-  > {
+interface TabsTriggerProps extends WithoutStyles<
+  Omit<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>, "children">
+> {
   /**
    * Visual variant of the tab trigger.
    * Automatically inherited from the parent `Tabs.List` variant via context.
@@ -726,7 +721,7 @@ const TabsContent = React.forwardRef<
     ref={ref}
     value={value}
     className={cn(
-      "pt-4 focus:outline-none focus:border-theme-primary-05 w-full",
+      "pt-4 focus:outline-hidden focus:border-theme-primary-05 w-full",
       className
     )}
   >

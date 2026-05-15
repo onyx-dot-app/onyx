@@ -39,7 +39,7 @@ function AttachmentItemLayout({
       gap={0.25}
       padding={0.25}
     >
-      <div className={cn("h-[2.25rem] aspect-square rounded-08 flex-shrink-0")}>
+      <div className={cn("h-9 aspect-square rounded-08 shrink-0")}>
         <Section>
           <div
             className="attachment-button__icon-wrapper"
@@ -72,9 +72,7 @@ function AttachmentItemLayout({
             </Truncated>
           </div>
         )}
-        {rightChildren && (
-          <div className="flex-shrink-0 px-1">{rightChildren}</div>
-        )}
+        {rightChildren && <div className="shrink-0 px-1">{rightChildren}</div>}
       </Section>
     </Section>
   );
@@ -115,7 +113,7 @@ function CardItemLayout({
             as="p"
             secondaryBody
             text03
-            className="line-clamp-2 truncate whitespace-normal h-[2.2rem] break-words"
+            className="line-clamp-2 truncate whitespace-normal h-[2.2rem] wrap-break-word"
           >
             {description}
           </Text>

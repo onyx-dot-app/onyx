@@ -152,10 +152,9 @@ function KeyValueInputItem({
   );
 }
 
-export interface KeyValueInputProps
-  extends WithoutStyles<
-    Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
-  > {
+export interface KeyValueInputProps extends WithoutStyles<
+  Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
+> {
   /** Title for the key column */
   keyTitle?: string;
 

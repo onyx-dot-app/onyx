@@ -3,6 +3,13 @@
 > **Status: IMPLEMENTED** — shipped and merged via PR #10966.
 > Annotations marked *[Diverged]* or *[New]* note where the final implementation
 > differs from or adds to the original plan.
+>
+> ⚠️ **The request/response shapes below are the original design and are now
+> stale.** The final shipped contract — collapsed `num_results`,
+> `time_cutoff_days`, `chunk_ind`, `blurb`, `llm_facing_text`,
+> `citation_mapping`, and `score` away — lives in
+> [`backend/onyx/server/features/search/models.py`](../../../../backend/onyx/server/features/search/models.py).
+> This doc is preserved for historical context.
 
 > Parent design doc: [search-design.md](search-design.md)
 

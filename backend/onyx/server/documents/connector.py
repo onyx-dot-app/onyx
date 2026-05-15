@@ -470,7 +470,6 @@ def upload_files(
     file_origin: FileOrigin = FileOrigin.CONNECTOR,
     unzip: bool = True,
 ) -> FileUploadResponse:
-
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
         normalized_path = os.path.normpath(file_path)

@@ -37,7 +37,6 @@ class FirecrawlClient(WebContentProvider):
         base_url: str = FIRECRAWL_SCRAPE_URL,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
-
         self._headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",

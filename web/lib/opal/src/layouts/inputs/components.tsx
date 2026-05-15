@@ -18,10 +18,9 @@ import { Content, ContentAction } from "@opal/layouts";
 // Label
 // ---------------------------------------------------------------------------
 
-interface LabelProps
-  extends WithoutStyles<
-    Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
-  > {
+interface LabelProps extends WithoutStyles<
+  Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "htmlFor">
+> {
   /** Sets `htmlFor` on the `<label>` to associate it with a form element by id. */
   label?: string;
   /** Switches cursor from `pointer` to `not-allowed`. */

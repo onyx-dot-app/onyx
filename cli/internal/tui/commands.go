@@ -49,7 +49,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdNew(m)
 
 	case "/connectors":
-		url := config.WebOrigin(m.config.ServerURL) + "/admin/indexing/status"
+		url := strings.TrimRight(m.config.ServerURL, "/") + "/admin/indexing/status"
 		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {
@@ -58,7 +58,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, nil
 
 	case "/settings":
-		url := config.WebOrigin(m.config.ServerURL) + "/app/settings/general"
+		url := strings.TrimRight(m.config.ServerURL, "/") + "/app/settings/general"
 		if browser.OpenBrowser(url) {
 			m.viewport.addInfo("Opened " + url + " in browser")
 		} else {

@@ -1,6 +1,15 @@
 # Part 3: CLI Search Command & Agent Tool Surface — Implementation Plan
 
 > Parent design: [search-design.md](search-design.md) (Part 3)
+>
+> ⚠️ **The flags and shapes below describe the original design and are now
+> stale.** `--limit`/`--num-results` were removed, `--days` converts to ISO
+> client-side, default output is a lean `{title, url, source_type, content,
+> updated_at}` projection, and there is no `llm_facing_text` /
+> `citation_mapping` / `score` on the wire. See
+> [`cli/cmd/search.go`](../../../../cli/cmd/search.go) and
+> [`backend/onyx/server/features/search/models.py`](../../../../backend/onyx/server/features/search/models.py)
+> for the shipped surfaces.
 
 ## Objective
 
@@ -19,7 +28,7 @@ After this work, the CLI has two primary agent-usable commands:
 
 Both commands share:
 - `--agent-id` for persona scoping
-- Non-TTY truncation via `overflow.Writer` (4096 bytes default)
+- Non-TTY truncation via `overflow.Writer` (50000 bytes default)
 - Clean exit codes, stderr for progress, stdout for results
 - No interactive prompts
 
@@ -58,7 +67,7 @@ A single command with a mode flag (e.g., `search --answer`) would hide this dist
 - **`cmd/root.go:96-104`**: Command registration via `rootCmd.AddCommand(...)`. The `search` command is added here.
 - **`cmd/common.go`**: `requireClient()` returns `(config, client, error)`. `apiErrorToExit()` maps API/auth errors to exit codes. Both used by `search`.
 - **`internal/api/client.go`**: `Client` struct with `doJSON()` for synchronous JSON requests (30s timeout). `search` needs a new `Search()` method using this pattern, but with `longHTTPClient` (5min timeout) because SearchTool runs LLM calls internally.
-- **`internal/overflow/writer.go`**: Truncation writer. `search` uses this identically to `ask` — non-TTY output truncated at 4096 bytes, full response in temp file.
+- **`internal/overflow/writer.go`**: Truncation writer. `search` uses this identically to `ask` — non-TTY output truncated at 50000 bytes, full response in temp file.
 - **`internal/exitcodes/codes.go`**: Exit codes 0-9. No new codes needed — the existing set covers all search failure modes.
 - **`internal/models/models.go`**: Go structs for API types. Needs new structs for `SearchAPIRequest`/`SearchAPIResponse`.
 - **`internal/embedded/SKILL.md`**: Agent-facing documentation. Must be updated with the `search` command.

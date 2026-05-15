@@ -50,9 +50,9 @@ def test_persona_label_management(reset: None) -> None:  # noqa: ARG001
         label=persona_label,
         user_performing_action=regular_user,
     )
-    assert (
-        result is False
-    ), "Regular user should not be able to delete the persona label"
+    assert result is False, (
+        "Regular user should not be able to delete the persona label"
+    )
 
     assert PersonaLabelManager.verify(
         label=persona_label,

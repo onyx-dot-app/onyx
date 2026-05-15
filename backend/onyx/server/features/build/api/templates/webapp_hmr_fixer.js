@@ -85,7 +85,7 @@
 
   MockHmrWebSocket.prototype.removeEventListener = function (
     eventType,
-    callback,
+    callback
   ) {
     var listeners = this._l[eventType] || [];
     this._l[eventType] = listeners.filter(function (listener) {

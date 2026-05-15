@@ -14,7 +14,7 @@ const FAKE_PROVIDERS = {
     stt_model: "whisper",
     tts_model: null,
     default_voice: null,
-    has_api_key: true,
+    api_key: "sk-***masked***",
     target_uri: null,
   },
   openai_active_both: {
@@ -26,7 +26,7 @@ const FAKE_PROVIDERS = {
     stt_model: "whisper",
     tts_model: "tts-1",
     default_voice: "alloy",
-    has_api_key: true,
+    api_key: "sk-***masked***",
     target_uri: null,
   },
   openai_connected: {
@@ -38,7 +38,7 @@ const FAKE_PROVIDERS = {
     stt_model: null,
     tts_model: null,
     default_voice: null,
-    has_api_key: true,
+    api_key: "sk-***masked***",
     target_uri: null,
   },
   elevenlabs_connected: {
@@ -50,7 +50,7 @@ const FAKE_PROVIDERS = {
     stt_model: null,
     tts_model: null,
     default_voice: null,
-    has_api_key: true,
+    api_key: "sk-***masked***",
     target_uri: null,
   },
 };
@@ -104,6 +104,7 @@ test.describe("Voice Provider Disconnect", () => {
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
+    await whisperCard.hover();
     await expect(disconnectButton).toBeVisible();
     await expect(disconnectButton).toBeEnabled();
 
@@ -181,6 +182,7 @@ test.describe("Voice Provider Disconnect", () => {
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
+    await whisperCard.hover();
     await disconnectButton.click();
 
     const confirmDialog = page.getByRole("dialog");
@@ -226,6 +228,7 @@ test.describe("Voice Provider Disconnect", () => {
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
+    await whisperCard.hover();
     await disconnectButton.click();
 
     const confirmDialog = page.getByRole("dialog");
@@ -272,6 +275,7 @@ test.describe("Voice Provider Disconnect", () => {
     const disconnectButton = whisperCard.getByRole("button", {
       name: "Disconnect Whisper",
     });
+    await whisperCard.hover();
     await disconnectButton.click();
 
     const confirmDialog = page.getByRole("dialog");

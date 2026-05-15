@@ -300,11 +300,11 @@ export default function OnboardingLlmSetup({
               onChange={(e) => handleApiKeyChange(e.target.value)}
               placeholder={currentProviderConfig.apiKeyPlaceholder}
               disabled={connectionStatus === "testing"}
-              className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+              className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-hidden"
             />
           </Disabled>
           {/* Message area */}
-          <div className="min-h-[2rem] flex justify-center pt-4">
+          <div className="min-h-8 flex justify-center pt-4">
             {connectionStatus === "error" && (
               <Text secondaryBody className="text-red-500">
                 {errorMessage}

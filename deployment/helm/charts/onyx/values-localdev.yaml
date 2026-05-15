@@ -1,0 +1,181 @@
+# Onyx local-dev overlay for kind/minikube/k3d.
+#
+# Shrinks resources and disables prod-only features so the chart fits on a
+# laptop. Pairs with telepresence intercept so api_server / celery / web run
+# in your vscode debugger while the rest of the stack runs in-cluster.
+#
+# See docs/dev/local-kubernetes.md for the full workflow.
+
+# Track nightly `edge` builds instead of `latest` (a released tag) — keeps
+# in-cluster images closer to main, reducing schema/code skew with local
+# source. Always-pull so kind picks up edge updates.
+global:
+  version: edge
+  pullPolicy: Always
+
+# ---- Persistence (kept on, sized for a laptop) ----
+
+postgresql:
+  cluster:
+    storage:
+      size: 2Gi
+
+vespa:
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+opensearch:
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  opensearchJavaOpts: "-Xmx1g -Xms1g"
+
+minio:
+  persistence:
+    enabled: true
+    size: 5Gi
+  # Upstream chart defaults to a 16 GiB memory request.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# ---- Networking (port-forward instead of ingress) ----
+
+ingress:
+  enabled: false
+
+letsencrypt:
+  enabled: false
+
+nginx:
+  controller:
+    service:
+      # kind has no LoadBalancer provider.
+      type: ClusterIP
+
+# ---- Monitoring ----
+
+monitoring:
+  grafana:
+    dashboards:
+      enabled: false
+  serviceMonitors:
+    enabled: false
+
+# ---- Code interpreter ----
+
+codeInterpreter:
+  enabled: false
+
+# ---- App pods ----
+#
+# Scaled to 0 since you run these locally via telepresence intercept.
+# api stays at 1: `telepresence intercept onyx-api-server` needs a Deployment
+# with a running pod template to inject the traffic-agent sidecar (the main
+# container is free to CrashLoopBackOff).
+
+api:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+webserver:
+  replicaCount: 0
+
+celery_beat:
+  replicaCount: 0
+
+celery_worker_primary:
+  replicaCount: 0
+
+celery_worker_light:
+  replicaCount: 0
+
+celery_worker_heavy:
+  replicaCount: 0
+
+celery_worker_docfetching:
+  replicaCount: 0
+
+celery_worker_docprocessing:
+  replicaCount: 0
+
+celery_worker_user_file_processing:
+  replicaCount: 0
+
+celery_worker_scheduled_tasks:
+  replicaCount: 0
+
+celery_worker_monitoring:
+  replicaCount: 0
+
+# slackbot / discordbot / mcpServer use .enabled (not replicaCount).
+slackbot:
+  enabled: false
+
+discordbot:
+  enabled: false
+
+mcpServer:
+  enabled: false
+
+inferenceCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+indexCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+redis:
+  redisStandalone:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi

@@ -362,9 +362,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
                 raise ValueError(
                     "Bug: Secondary index embedding dimension and precision are not set."
                 )
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             self._secondary_real_index.verify_and_create_index_if_necessary(
                 secondary_index_embedding_dim, secondary_index_embedding_precision
             )
@@ -418,9 +418,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         """
         total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
         if self.secondary_index_name:
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             total_chunks_deleted += self._secondary_real_index.delete(
                 doc_id, chunk_count
             )
@@ -476,9 +476,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         try:
             self._real_index.update([update_request])
             if self.secondary_index_name:
-                assert (
-                    self._secondary_real_index is not None
-                ), "Bug: Secondary index is not initialized."
+                assert self._secondary_real_index is not None, (
+                    "Bug: Secondary index is not initialized."
+                )
                 self._secondary_real_index.update([update_request])
         except NotFoundError:
             logger.exception(
@@ -877,15 +877,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 specified documents.
         """
         logger.debug(
-            "[OpenSearchDocumentIndex] Updating %s chunks for index %s.",
+            "[OpenSearchDocumentIndex] Processing %s chunk requests for index %s.",
             len(update_requests),
             self._index_name,
         )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
-            # TODO(andrei): Nit but consider if we can use DocumentChunk
-            # here so we don't have to think about passing in the
-            # appropriate types into this dict.
+            # TODO(andrei): Nit but consider if we can use DocumentChunk here so
+            # we don't have to think about passing in the appropriate types into
+            # this dict.
             if update_request.access is not None:
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
                     generate_opensearch_filtered_access_control_list(
@@ -922,6 +922,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 )
                 continue
 
+            doc_chunk_ids_to_update: list[str] = []
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
@@ -952,10 +953,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         document_id=doc_id,
                         chunk_index=chunk_index,
                     )
-                    self._client.update_document(
-                        document_chunk_id=document_chunk_id,
-                        properties_to_update=properties_to_update,
-                    )
+                    doc_chunk_ids_to_update.append(document_chunk_id)
+
+            self._client.bulk_update_documents(
+                document_chunk_ids=doc_chunk_ids_to_update,
+                properties_to_update=properties_to_update,
+            )
 
     def id_based_retrieval(
         self,

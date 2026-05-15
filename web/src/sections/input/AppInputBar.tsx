@@ -64,6 +64,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
   useCurrentQueuedMessages,
+  useCurrentLatestMessageRenderComplete,
   useChatSessionStore,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -133,6 +134,7 @@ const AppInputBar = React.memo(
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
     const queuedMessages = useCurrentQueuedMessages();
+    const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
     const enqueueCurrentMessage = useChatSessionStore(
       (state) => state.enqueueCurrentMessage
     );
@@ -302,14 +304,25 @@ const AppInputBar = React.memo(
 
     const prevChatStateRef = useRef(chatState);
     const prevAwaitingRef = useRef(awaitingPreferredSelection);
+    const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
+      // "Ready" requires the backend to be idle AND the previous answer
+      // to have finished drawing on screen. Without the render-complete
+      // gate, a queued follow-up fires while the smooth-streaming
+      // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" && !prevAwaitingRef.current;
-      const isReady = chatState === "input" && !awaitingPreferredSelection;
+        prevChatStateRef.current === "input" &&
+        !prevAwaitingRef.current &&
+        prevRenderCompleteRef.current;
+      const isReady =
+        chatState === "input" &&
+        !awaitingPreferredSelection &&
+        latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
       prevAwaitingRef.current = awaitingPreferredSelection;
+      prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
         const nextMessage = queuedMessages[0]!.text;
@@ -322,6 +335,7 @@ const AppInputBar = React.memo(
     }, [
       chatState,
       awaitingPreferredSelection,
+      latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
       stopTTS,
@@ -530,7 +544,7 @@ const AppInputBar = React.memo(
           "flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
-            : "opacity-100 p-1 h-[2.75rem] pointer-events-auto",
+            : "opacity-100 p-1 h-11 pointer-events-auto",
           "transition-all duration-150"
         )}
       >
@@ -812,7 +826,7 @@ const AppInputBar = React.memo(
                 <Popover.Anchor asChild>
                   <div
                     ref={inputWrapperRef}
-                    className="px-3 py-2 flex-1 flex h-[2.75rem] overflow-hidden"
+                    className="px-3 py-2 flex-1 flex h-11 overflow-hidden"
                   >
                     <div
                       ref={inputRef}
@@ -831,7 +845,7 @@ const AppInputBar = React.memo(
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
                       onCompositionEnd={handleCompositionEnd}
-                      className="p-[2px] w-full h-full outline-none bg-transparent whitespace-pre-wrap break-words overflow-y-auto"
+                      className="p-[2px] w-full h-full outline-hidden bg-transparent whitespace-pre-wrap wrap-break-word overflow-y-auto"
                       tabIndex={disabled ? -1 : 0}
                       style={{
                         scrollbarWidth: "thin",

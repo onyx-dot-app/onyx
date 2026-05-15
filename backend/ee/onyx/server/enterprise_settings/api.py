@@ -229,11 +229,11 @@ def _get_scim_dal(db_session: Session = Depends(get_session)) -> ScimDAL:
 def get_active_scim_token(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     dal: ScimDAL = Depends(_get_scim_dal),
-) -> ScimTokenResponse:
-    """Return the currently active SCIM token's metadata, or 404 if none."""
+) -> ScimTokenResponse | None:
+    """Return the currently active SCIM token's metadata, or null if none."""
     token = dal.get_active_token()
     if not token:
-        raise HTTPException(status_code=404, detail="No active SCIM token")
+        return None
 
     # Derive the IdP domain from the first synced user as a heuristic.
     idp_domain: str | None = None

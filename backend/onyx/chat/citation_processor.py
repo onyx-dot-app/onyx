@@ -179,9 +179,9 @@ class DynamicCitationProcessor:
         self.citation_mode = citation_mode
 
         # Citation tracking
-        self.cited_documents_in_order: list[SearchDoc] = (
-            []
-        )  # SearchDocs in citation order
+        self.cited_documents_in_order: list[
+            SearchDoc
+        ] = []  # SearchDocs in citation order
         self.cited_document_ids: set[str] = set()  # all cited document_ids
         self.recent_cited_documents: set[str] = (
             set()

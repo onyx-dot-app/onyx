@@ -134,11 +134,13 @@ def upgrade() -> None:
         )
 
     # Step 2: Mark ALL builtin assistants as deleted (except the unified assistant ID 0)
-    conn.execute(sa.text("""
+    conn.execute(
+        sa.text("""
             UPDATE persona
             SET deleted = true, is_visible = false, is_default_persona = false
             WHERE builtin_persona = true AND id != 0
-        """))
+        """)
+    )
 
     # Step 3: Add all built-in tools to the unified assistant
     # First, get the tool IDs for SearchTool, ImageGenerationTool, and WebSearchTool
@@ -198,28 +200,34 @@ def upgrade() -> None:
         )
 
     # Step 4: Migrate existing chat sessions from all builtin assistants to unified assistant
-    conn.execute(sa.text("""
+    conn.execute(
+        sa.text("""
             UPDATE chat_session
             SET persona_id = 0
             WHERE persona_id IN (
                 SELECT id FROM persona WHERE builtin_persona = true AND id != 0
             )
-        """))
+        """)
+    )
 
     # Step 5: Migrate user preferences - remove references to all builtin assistants
     # First, get all builtin assistant IDs (except 0)
-    builtin_assistants_result = conn.execute(sa.text("""
+    builtin_assistants_result = conn.execute(
+        sa.text("""
             SELECT id FROM persona
             WHERE builtin_persona = true AND id != 0
-        """)).fetchall()
+        """)
+    ).fetchall()
     builtin_assistant_ids = [row[0] for row in builtin_assistants_result]
 
     # Get all users with preferences
-    users_result = conn.execute(sa.text("""
+    users_result = conn.execute(
+        sa.text("""
             SELECT id, chosen_assistants, visible_assistants,
                    hidden_assistants, pinned_assistants
             FROM "user"
-        """)).fetchall()
+        """)
+    ).fetchall()
 
     for user_row in users_result:
         user = UserRow(*user_row)
@@ -282,13 +290,15 @@ def downgrade() -> None:
 
     # Only restore General (ID -1) and Art (ID -3) assistants
     # Step 1: Keep Search assistant (ID 0) as default but restore original state
-    conn.execute(sa.text("""
+    conn.execute(
+        sa.text("""
             UPDATE persona
             SET is_default_persona = true,
                 is_visible = true,
                 deleted = false
             WHERE id = 0
-        """))
+        """)
+    )
 
     # Step 2: Restore General assistant (ID -1)
     conn.execute(

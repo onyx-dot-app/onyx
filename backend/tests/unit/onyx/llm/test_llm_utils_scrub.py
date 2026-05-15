@@ -191,8 +191,7 @@ def test_run_test_llm_redacts_api_key_from_unknown_exception() -> None:
     # exception text contained the API key, it does NOT make it into the
     # returned message.
     boom = RuntimeError(
-        f"upstream blew up. Authorization: Bearer {_SECRET_KEY}; "
-        f"raw key={_SECRET_KEY}"
+        f"upstream blew up. Authorization: Bearer {_SECRET_KEY}; raw key={_SECRET_KEY}"
     )
     llm = _StubLLM(_make_config(), raise_on_invoke=boom)
 

@@ -254,7 +254,6 @@ def send_email_with_smtplib(
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
 ) -> None:
-
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject

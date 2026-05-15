@@ -58,7 +58,7 @@ func (c *Client) SendMessageStream(
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := c.longHTTPClient.Do(req)
+		resp, err := c.streamingHTTPClient.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return // cancelled

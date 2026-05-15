@@ -1313,9 +1313,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
                     obj=SectionEnd(),
                 ),
                 forward=False,
-            ).run_and_validate(
-                stream=stream
-            )
+            ).run_and_validate(stream=stream)
 
             # Phase 2: LLM produces a final answer after tool execution.
             handler.add_response(
@@ -1323,9 +1321,7 @@ def test_code_interpreter_replay_packets_include_code_and_output(
             ).expect_agent_response(
                 answer_tokens=answer_tokens,
                 turn_index=1,
-            ).run_and_validate(
-                stream=stream
-            )
+            ).run_and_validate(stream=stream)
 
             with pytest.raises(StopIteration):
                 next(stream)
@@ -1346,16 +1342,16 @@ def test_code_interpreter_replay_packets_include_code_and_output(
 
     # The response contains `packets` — a list of packet-lists, one per
     # assistant message. We should have exactly one assistant message.
-    assert (
-        len(chat_detail.packets) == 1
-    ), f"Expected 1 assistant packet list, got {len(chat_detail.packets)}"
+    assert len(chat_detail.packets) == 1, (
+        f"Expected 1 assistant packet list, got {len(chat_detail.packets)}"
+    )
     packets = chat_detail.packets[0]
 
     # Extract PythonToolStart packets – these must contain the code
     start_packets = [p for p in packets if isinstance(p.obj, PythonToolStart)]
-    assert (
-        len(start_packets) == 1
-    ), f"Expected 1 PythonToolStart packet, got {len(start_packets)}. Packet types: {[type(p.obj).__name__ for p in packets]}"
+    assert len(start_packets) == 1, (
+        f"Expected 1 PythonToolStart packet, got {len(start_packets)}. Packet types: {[type(p.obj).__name__ for p in packets]}"
+    )
     start_obj = start_packets[0].obj
     assert isinstance(start_obj, PythonToolStart)
     assert start_obj.code == code
