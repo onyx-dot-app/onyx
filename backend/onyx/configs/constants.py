@@ -93,6 +93,7 @@ POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
     "celery_worker_user_file_processing"
 )
+POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME = "celery_worker_scheduled_tasks"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -286,6 +287,8 @@ class NotificationType(str, Enum):
     FEATURE_ANNOUNCEMENT = "feature_announcement"
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
+    SCHEDULED_TASK_FAILED = "scheduled_task_failed"
+    SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
 
 
 class BlobType(str, Enum):
@@ -436,6 +439,9 @@ class OnyxCeleryQueues:
 
     # Sandbox processing queue
     SANDBOX = "sandbox"
+
+    # Scheduled tasks queue (Craft scheduled-task executor)
+    SCHEDULED_TASKS = "scheduled_tasks"
 
     OPENSEARCH_MIGRATION = "opensearch_migration"
 
@@ -626,6 +632,11 @@ class OnyxCeleryTask:
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
+
+    # Scheduled tasks (Craft)
+    SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"
+    SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
+    SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"

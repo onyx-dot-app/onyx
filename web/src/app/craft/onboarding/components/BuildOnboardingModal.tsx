@@ -90,7 +90,7 @@ function getStepsForMode(
 
       return steps;
 
-    case "edit-persona":
+    case "edit-user-info":
       return ["user-info"];
 
     case "add-llm":
@@ -376,7 +376,7 @@ export default function BuildOnboardingModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" />
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
@@ -423,13 +423,7 @@ export default function BuildOnboardingModal({
           )}
 
           {/* Page 1 - What is Onyx Craft? */}
-          {currentStep === "page1" && (
-            <OnboardingInfoPages
-              step="page1"
-              workArea={workArea}
-              level={level}
-            />
-          )}
+          {currentStep === "page1" && <OnboardingInfoPages step="page1" />}
 
           {/* Navigation buttons */}
           <div className="relative flex justify-between items-center pt-2">

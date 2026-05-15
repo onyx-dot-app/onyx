@@ -4,8 +4,9 @@ import React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
 import { cn } from "@opal/utils";
 
-interface SeparatorProps
-  extends React.ComponentPropsWithoutRef<typeof SeparatorPrimitive.Root> {
+interface SeparatorProps extends React.ComponentPropsWithoutRef<
+  typeof SeparatorPrimitive.Root
+> {
   noPadding?: boolean;
   /** Custom horizontal padding in rem. Overrides the default padding. */
   paddingXRem?: number;
@@ -79,7 +80,7 @@ const Separator = React.forwardRef(
           orientation={orientation}
           className={cn(
             "bg-border-01",
-            isHorizontal ? "h-[1px] w-full" : "h-full w-[1px]"
+            isHorizontal ? "h-px w-full" : "h-full w-px"
           )}
           {...props}
         />

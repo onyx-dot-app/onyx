@@ -83,6 +83,10 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.enums import ScheduledTaskStatus
+from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
@@ -2695,6 +2699,7 @@ class HierarchyNodeByConnectorCredentialPair(Base):
                 "connector_credential_pair.credential_id",
             ],
             ondelete="CASCADE",
+            onupdate="CASCADE",
         ),
         Index(
             "ix_hierarchy_node_cc_pair_connector_credential",
@@ -4190,7 +4195,6 @@ class Skill(Base):
     # Bundle bytes (single, replaced on re-upload).
     bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
     bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    manifest_metadata: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -4199,9 +4203,6 @@ class Skill(Base):
     )
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    deleted_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4219,14 +4220,7 @@ class Skill(Base):
         viewonly=True,
     )
 
-    __table_args__ = (
-        Index(
-            "ux_skill_slug",
-            "slug",
-            unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
-        ),
-    )
+    __table_args__ = (UniqueConstraint("slug", name="uq_skill_slug"),)
 
 
 """
@@ -5263,14 +5257,20 @@ class BuildSession(Base):
         nullable=False,
     )
     nextjs_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    demo_data_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
     sharing_scope: Mapped[SharingScope] = mapped_column(
         String,
         nullable=False,
         default=SharingScope.PRIVATE,
         server_default="private",
+    )
+    # Distinguishes user-initiated sessions from sessions created by the
+    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Craft sidebar filters on origin == INTERACTIVE.
+    origin: Mapped[SessionOrigin] = mapped_column(
+        Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
+        nullable=False,
+        default=SessionOrigin.INTERACTIVE,
+        server_default="INTERACTIVE",
     )
 
     # Relationships
@@ -5286,7 +5286,15 @@ class BuildSession(Base):
     )
 
     __table_args__ = (
-        Index("ix_build_session_user_created", "user_id", desc("created_at")),
+        # Composite index supports the Craft sidebar query:
+        #   user_id = ? AND origin = ? ORDER BY created_at DESC LIMIT ?
+        # Replaces the original (user_id, created_at desc) index.
+        Index(
+            "ix_build_session_user_origin_created",
+            "user_id",
+            "origin",
+            desc("created_at"),
+        ),
         Index("ix_build_session_status", "status"),
     )
 
@@ -5442,6 +5450,160 @@ class BuildMessage(Base):
         Index(
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
+    )
+
+
+class ScheduledTask(Base):
+    """A user-defined recurring Craft prompt + schedule.
+
+    Each fire spawns a fresh `BuildSession` (via the executor) and records a
+    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    are excluded from dispatch but retained so users can still open past
+    runs.
+    """
+
+    __tablename__ = "scheduled_task"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Canonical 5-field cron expression. The three UI editor modes (interval,
+    # daily/weekly, advanced) all compile to this string on save.
+    cron_expression: Mapped[str] = mapped_column(String, nullable=False)
+    # IANA timezone name (e.g. "America/Los_Angeles"). ZoneInfo handles DST.
+    timezone: Mapped[str] = mapped_column(String, nullable=False)
+    # UI hint for which editor mode produced this schedule; the cron string
+    # is the source of truth for execution.
+    editor_mode: Mapped[str] = mapped_column(String, nullable=False)
+
+    status: Mapped[ScheduledTaskStatus] = mapped_column(
+        Enum(ScheduledTaskStatus, native_enum=False, name="scheduledtaskstatus"),
+        nullable=False,
+        default=ScheduledTaskStatus.ACTIVE,
+        server_default="ACTIVE",
+    )
+    # The dispatcher's only read field. NULL when paused; recomputed on
+    # every fire and every schedule/timezone edit. Stored UTC.
+    next_run_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id])
+    runs: Mapped[list["ScheduledTaskRun"]] = relationship(
+        "ScheduledTaskRun",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        # Dispatcher hot path: WHERE status='active' AND deleted=false
+        #                       AND next_run_at <= now() ORDER BY next_run_at
+        Index("ix_scheduled_task_dispatch", "status", "deleted", "next_run_at"),
+        # User-scoped list query, newest first.
+        Index("ix_scheduled_task_user_created", "user_id", desc("created_at")),
+    )
+
+
+class ScheduledTaskRun(Base):
+    """One firing of a ScheduledTask.
+
+    `session_id` is nullable for the brief window between the dispatcher
+    inserting this row and the executor creating the BuildSession. On
+    session delete the FK is cleared (SET NULL) so the run row survives
+    as part of the task's run history.
+    """
+
+    __tablename__ = "scheduled_task_run"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    status: Mapped[ScheduledTaskRunStatus] = mapped_column(
+        Enum(
+            ScheduledTaskRunStatus,
+            native_enum=False,
+            name="scheduledtaskrunstatus",
+        ),
+        nullable=False,
+        default=ScheduledTaskRunStatus.QUEUED,
+        server_default="QUEUED",
+    )
+    trigger_source: Mapped[ScheduledTaskTriggerSource] = mapped_column(
+        Enum(
+            ScheduledTaskTriggerSource,
+            native_enum=False,
+            name="scheduledtasktriggersource",
+        ),
+        nullable=False,
+    )
+
+    # Populated when the dispatcher writes a `skipped` row because a prior
+    # run was still in flight, or by the stuck-run sweeper for stuck rows.
+    skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    # On `failed`: short classifier (e.g. "executor_crash", "budget",
+    # "acp_error", "stuck"). Full traceback / message lives in error_detail.
+    error_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ~120-char snippet of the final agent message, surfaced in the run
+    # history table.
+    summary: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Relationships
+    task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
+    session: Mapped[BuildSession | None] = relationship(
+        "BuildSession", foreign_keys=[session_id]
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_scheduled_task_run_task_started",
+            "task_id",
+            desc("started_at"),
+        ),
+        Index("ix_scheduled_task_run_status", "status"),
+        # Session-view banner lookup: get_scheduled_run_context filters by
+        # session_id on every session open.
+        Index("ix_scheduled_task_run_session", "session_id"),
     )
 
 

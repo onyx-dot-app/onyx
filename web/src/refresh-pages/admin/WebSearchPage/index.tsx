@@ -80,7 +80,7 @@ export default function WebSearchPage() {
     const isExa = providerType === "exa";
     const sharedExaMaskedKey =
       isExa && !hasStoredKey
-        ? exaContentProvider?.masked_api_key ?? null
+        ? (exaContentProvider?.masked_api_key ?? null)
         : null;
 
     const effectiveProvider: WebSearchProviderView | null =

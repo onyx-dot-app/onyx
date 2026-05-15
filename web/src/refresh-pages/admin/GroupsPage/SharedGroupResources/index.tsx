@@ -65,7 +65,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
         return (
           <div
             key={s.source}
-            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:!size-4 [&_img]:!m-0 [&_svg]:size-4"
+            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:size-4! [&_img]:m-0! [&_svg]:size-4"
             style={{ zIndex: unique.length - i, marginLeft: i > 0 ? -6 : 0 }}
           >
             <Icon />

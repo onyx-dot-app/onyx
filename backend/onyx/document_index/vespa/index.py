@@ -614,7 +614,6 @@ class VespaIndex(DocumentIndex):
     def kg_chunk_updates(
         self, kg_update_requests: list[KGUChunkUpdateRequest], tenant_id: str
     ) -> None:
-
         processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
         update_start = time.monotonic()
 

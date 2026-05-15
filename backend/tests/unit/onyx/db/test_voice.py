@@ -502,6 +502,6 @@ class TestSpeedClampingLogic:
             clamped = max(
                 MIN_VOICE_PLAYBACK_SPEED, min(MAX_VOICE_PLAYBACK_SPEED, speed)
             )
-            assert (
-                clamped == expected
-            ), f"speed={speed} expected={expected} got={clamped}"
+            assert clamped == expected, (
+                f"speed={speed} expected={expected} got={clamped}"
+            )

@@ -76,9 +76,9 @@ class MethodSpec(BaseModel):
 
         request_body_schema = self.get_request_body_schema()
         if request_body_schema:
-            tool_definition["function"]["parameters"]["properties"][
-                REQUEST_BODY
-            ] = request_body_schema
+            tool_definition["function"]["parameters"]["properties"][REQUEST_BODY] = (
+                request_body_schema
+            )
 
         query_param_schemas = self.get_query_param_schemas()
         if query_param_schemas:

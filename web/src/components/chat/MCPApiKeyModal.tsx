@@ -73,8 +73,8 @@ export default function MCPApiKeyModal({
 
     if (isTemplateMode) {
       // Check all required fields are filled
-      const hasAllFields = authTemplate!.required_fields.every(
-        (field) => credentials[field]?.trim()
+      const hasAllFields = authTemplate!.required_fields.every((field) =>
+        credentials[field]?.trim()
       );
       if (!hasAllFields) return;
 
@@ -173,7 +173,7 @@ export default function MCPApiKeyModal({
 
           {error && (
             <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-              <SvgAlertCircle className="h-4 w-4 flex-shrink-0" />
+              <SvgAlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -267,8 +267,8 @@ export default function MCPApiKeyModal({
                 disabled={
                   isSubmitting ||
                   (isTemplateMode
-                    ? !authTemplate!.required_fields.every(
-                        (field) => credentials[field]?.trim()
+                    ? !authTemplate!.required_fields.every((field) =>
+                        credentials[field]?.trim()
                       )
                     : !apiKey.trim())
                 }

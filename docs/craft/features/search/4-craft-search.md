@@ -6,14 +6,14 @@
 
 Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync. Provision per-user PATs with encrypted-at-rest storage, bundle the CLI binary, create a `company-search` skill with the user's available sources, and tear down the file-sync infrastructure.
 
-**Parts 1–3 are complete.** Part 1 repositioned onyx-cli as an agent-first tool with `ONYX_SERVER_URL`/`ONYX_PAT` env var support, clean exit codes, and `validate-config`. Part 2 shipped `POST /api/search` backed by the full `SearchTool.run()` pipeline (query expansion, hybrid retrieval, LLM document selection, context expansion). Part 3 added the `search` CLI command wrapping that endpoint with `--source`, `--days`, `--limit`, `--agent-id`, `--raw`, and `--no-query-expansion` flags.
+**Parts 1–3 are complete.** Part 1 repositioned onyx-cli as an agent-first tool with `ONYX_SERVER_URL`/`ONYX_PAT` env var support, clean exit codes, and `validate-config`. Part 2 shipped `POST /api/search` backed by the full `SearchTool.run()` pipeline (query expansion, hybrid retrieval, LLM document selection, context expansion). Part 3 added the `search` CLI command wrapping that endpoint with `--source`, `--days`, `--agent-id`, `--raw`, and `--no-query-expansion` flags.
 
 > Key implementation details from Parts 1–3 that affect this plan:
 > - **IOStreams pattern** (Part 1): CLI commands use an `IOStreams` struct for testable I/O. Agent-facing output goes to stdout, progress to stderr.
 > - **`NullEmitter`** (Part 2): Located in `backend/onyx/chat/emitter.py`. Allows `SearchTool` to run without a streaming consumer.
 > - **`message_history`** (Part 2): The search API accepts optional conversation context for better query expansion — not needed for Part 4's skill-based usage, but available.
-> - **`doJSONLong()`** (Part 3): CLI uses a 5-minute HTTP timeout for the search endpoint since `SearchTool.run()` includes multiple LLM calls.
-> - **Default output** (Part 3): `onyx-cli search` prints `llm_facing_text` (a JSON string with `{"results": [...]}`) to stdout by default. `--raw` prints the full `SearchAPIResponse`.
+> - **HTTP timeout** (Part 3): CLI uses the standard `doJSON()` timeout for the search endpoint. The path runs LLM query expansion + relevance selection but does NOT generate a full answer, so the standard 30s ceiling applies (no separate long-timeout client).
+> - **Default output** (Part 3): `onyx-cli search` prints a lean JSON shape — `{"results": [{title, url, source_type, content, updated_at}, ...]}` — to stdout by default. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. `--raw` prints the full `SearchResponse` (adds per-result `citation_id` and `document_id`).
 
 ---
 
@@ -261,14 +261,14 @@ assume it exists.
 |------|-------------|---------|
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
-| `--limit` | Maximum number of results | `--limit 5` |
 
 ## Output
 
-Stdout is JSON with a top-level `results` array. Each result has a `document`
-field (the citation ID), plus `title`, `content`, `source_type`, and other
-metadata. Cite results by their `document` number when referencing them in your
-response.
+Stdout is JSON with a top-level `results` array. Each result has `title`,
+`url`, `source_type`, `content`, and `updated_at`. Results contain only
+documents the LLM judged relevant, ordered by relevance; `content` is the
+full chunk text of each. Cite results by title and URL when referencing
+them in your response.
 ```
 
 **7. Add `build_available_sources_section` and `render_company_search_skill`**

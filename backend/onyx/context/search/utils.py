@@ -108,9 +108,9 @@ def get_query_embeddings(
         if queries:
             record_cache_skipped(embedding_model.provider_type, count=len(queries))
         result = embedding_model.encode(queries, text_type=EmbedTextType.QUERY)
-        assert len(result) == len(
-            queries
-        ), "Bug: The length of embeddings does not match the length of queries."
+        assert len(result) == len(queries), (
+            "Bug: The length of embeddings does not match the length of queries."
+        )
         return result
     assert search_settings is not None, "Bug: search_settings is None."
 
@@ -124,9 +124,9 @@ def get_query_embeddings(
     miss_indices = [i for i, value in enumerate(cached) if value is None]
     if not miss_indices:
         result = [emb for emb in cached if emb is not None]
-        assert len(result) == len(
-            queries
-        ), "Bug: The length of embeddings does not match the length of queries."
+        assert len(result) == len(queries), (
+            "Bug: The length of embeddings does not match the length of queries."
+        )
         return result
 
     miss_queries = [queries[i] for i in miss_indices]
@@ -148,9 +148,9 @@ def get_query_embeddings(
             result.append(next(fresh_iter))
         else:
             result.append(value)
-    assert len(result) == len(
-        queries
-    ), "Bug: The length of embeddings does not match the length of queries."
+    assert len(result) == len(queries), (
+        "Bug: The length of embeddings does not match the length of queries."
+    )
     return result
 
 

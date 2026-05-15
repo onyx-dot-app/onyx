@@ -39,9 +39,9 @@ Follow this two-step pattern for most tasks:
 ### Step 1: Information Retrieval
 
 1. **Search** company knowledge using the `company-search` skill. Run
-   `onyx-cli search "<query>"` and read the returned JSON; each result has a
-   `document` field (the citation ID) — cite results by that number when you
-   reference them.
+   `onyx-cli search "<query>"` and read the returned JSON; each result has
+   `title`, `url`, and `content` fields — cite results by title and URL when
+   you reference them.
 2. Read the `company-search` SKILL.md for available sources and flags.
 3. **Iterate** — run additional searches to refine. Use `--source` to narrow by
    connector and `--days` for recent content.

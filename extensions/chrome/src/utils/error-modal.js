@@ -335,7 +335,7 @@ export function initAuthModal() {
               if (chrome.runtime.lastError) {
                 console.error(
                   "Error closing side panel:",
-                  chrome.runtime.lastError,
+                  chrome.runtime.lastError
                 );
               }
               chrome.tabs.create(
@@ -347,14 +347,14 @@ export function initAuthModal() {
                   if (chrome.runtime.lastError) {
                     console.error(
                       "Error opening auth tab:",
-                      chrome.runtime.lastError,
+                      chrome.runtime.lastError
                     );
                   }
-                },
+                }
               );
-            },
+            }
           );
-        },
+        }
       );
     });
   }

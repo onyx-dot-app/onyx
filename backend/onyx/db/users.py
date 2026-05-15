@@ -146,8 +146,7 @@ def get_all_users(
         User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
     )
     stmt = stmt.where(
-        User.email
-        != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+        User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
     )
 
     if not include_external:

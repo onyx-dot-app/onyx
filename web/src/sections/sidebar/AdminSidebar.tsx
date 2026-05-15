@@ -210,7 +210,7 @@ function AdminSidebarInner() {
       ? true
       : Boolean(
           (billingData && hasActiveSubscription(billingData)) ||
-            licenseData?.has_license
+          licenseData?.has_license
         );
   const hooksEnabled =
     enableEnterprise && (settings?.settings.hooks_enabled ?? false);

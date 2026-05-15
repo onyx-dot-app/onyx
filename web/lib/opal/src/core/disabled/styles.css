@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* Disabled — baseline disabled visuals applied via a wrapper <div>.
  *
  * .opal-disabled                         → wrapper stretches to fill parent cross-axis

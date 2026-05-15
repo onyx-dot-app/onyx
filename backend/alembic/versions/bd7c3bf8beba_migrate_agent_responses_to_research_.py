@@ -22,7 +22,8 @@ def upgrade() -> None:
 
     # First, insert data into research_agent_iteration table
     # This creates one iteration record per primary_question_id using the earliest time_created
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             INSERT INTO research_agent_iteration (primary_question_id, created_at, iteration_nr, purpose, reasoning)
             SELECT
                 primary_question_id,
@@ -36,11 +37,13 @@ def upgrade() -> None:
                 AND chat_message.is_agentic = true
             GROUP BY primary_question_id
             ON CONFLICT DO NOTHING;
-        """))
+        """)
+    )
 
     # Then, insert data into research_agent_iteration_sub_step table
     # This migrates each sub-question as a sub-step
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             INSERT INTO research_agent_iteration_sub_step (
                 primary_question_id,
                 iteration_nr,
@@ -65,22 +68,27 @@ def upgrade() -> None:
             WHERE chat_message.is_agentic = true
             AND primary_question_id IS NOT NULL
             ON CONFLICT DO NOTHING;
-        """))
+        """)
+    )
 
     # Update chat_message records: set legacy agentic type and answer purpose for existing agentic messages
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             UPDATE chat_message
             SET research_answer_purpose = 'ANSWER'
             WHERE is_agentic = true
             AND research_type IS NULL and
                 message_type = 'ASSISTANT';
-        """))
-    connection.execute(sa.text("""
+        """)
+    )
+    connection.execute(
+        sa.text("""
             UPDATE chat_message
             SET research_type = 'LEGACY_AGENTIC'
             WHERE is_agentic = true
             AND research_type IS NULL;
-        """))
+        """)
+    )
 
 
 def downgrade() -> None:
@@ -92,27 +100,33 @@ def downgrade() -> None:
     # if it was deleted after this migration
 
     # Delete all research_agent_iteration_sub_step records that were migrated
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             DELETE FROM research_agent_iteration_sub_step
             USING chat_message
             WHERE research_agent_iteration_sub_step.primary_question_id = chat_message.id
             AND chat_message.research_type = 'LEGACY_AGENTIC';
-        """))
+        """)
+    )
 
     # Delete all research_agent_iteration records that were migrated
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             DELETE FROM research_agent_iteration
             USING chat_message
             WHERE research_agent_iteration.primary_question_id = chat_message.id
             AND chat_message.research_type = 'LEGACY_AGENTIC';
-        """))
+        """)
+    )
 
     # Revert chat_message updates: clear research fields for legacy agentic messages
-    connection.execute(sa.text("""
+    connection.execute(
+        sa.text("""
             UPDATE chat_message
             SET research_type = NULL,
                 research_answer_purpose = NULL
             WHERE is_agentic = true
             AND research_type = 'LEGACY_AGENTIC'
             AND message_type = 'ASSISTANT';
-        """))
+        """)
+    )

@@ -25,8 +25,9 @@ type InteractiveStatefulInteraction = "rest" | "hover" | "active";
 /**
  * Props for {@link InteractiveStateful}.
  */
-interface InteractiveStatefulProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
+interface InteractiveStatefulProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLElement>
+> {
   ref?: React.Ref<HTMLElement>;
 
   /**
@@ -126,7 +127,7 @@ function InteractiveStateful({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "cursor-default! select-auto!",
     group
   );
 

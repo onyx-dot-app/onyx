@@ -1382,9 +1382,9 @@ def _stream_chat_turn(
         if new_msg_req.mock_llm_response is not None:
             mock_response_token = set_llm_mock_response(new_msg_req.mock_llm_response)
 
-        assert (
-            setup is not None
-        ), "build_chat_turn must complete before _run_models is called"
+        assert setup is not None, (
+            "build_chat_turn must complete before _run_models is called"
+        )
         yield from _run_models(
             setup=setup,
             user=user,

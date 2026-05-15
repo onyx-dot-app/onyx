@@ -84,12 +84,12 @@ def test_last_indexed_first_page_all_errors(reset: None) -> None:  # noqa: ARG00
     detail = _get_detail(cc_pair.id, admin)
     listing = _get_listing(cc_pair.id, admin)
 
-    assert (
-        detail.last_indexed is not None
-    ), "Detail page last_indexed is None even though a successful attempt exists"
-    assert (
-        listing.last_success is not None
-    ), "Listing page last_success is None even though a successful attempt exists"
+    assert detail.last_indexed is not None, (
+        "Detail page last_indexed is None even though a successful attempt exists"
+    )
+    assert listing.last_success is not None, (
+        "Listing page last_success is None even though a successful attempt exists"
+    )
 
     # Both surfaces must agree
     assert detail.last_indexed == listing.last_success, (
@@ -224,12 +224,12 @@ def test_last_indexed_completed_with_errors(reset: None) -> None:  # noqa: ARG00
     detail = _get_detail(cc_pair.id, admin)
     listing = _get_listing(cc_pair.id, admin)
 
-    assert (
-        detail.last_indexed is not None
-    ), "COMPLETED_WITH_ERRORS should count as a success for last_indexed"
-    assert (
-        listing.last_success is not None
-    ), "COMPLETED_WITH_ERRORS should count as a success for last_success"
+    assert detail.last_indexed is not None, (
+        "COMPLETED_WITH_ERRORS should count as a success for last_indexed"
+    )
+    assert listing.last_success is not None, (
+        "COMPLETED_WITH_ERRORS should count as a success for last_success"
+    )
 
     assert detail.last_indexed == listing.last_success, (
         f"Detail last_indexed={detail.last_indexed} != "

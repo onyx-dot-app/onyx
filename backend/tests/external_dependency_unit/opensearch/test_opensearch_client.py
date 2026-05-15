@@ -859,7 +859,6 @@ class TestOpenSearchClient:
             chunk_index=0,
             content="Original content",
             tenant_state=tenant_state,
-            hidden=False,
         )
         test_client.index_document(document=doc, tenant_state=tenant_state)
 
@@ -907,6 +906,105 @@ class TestOpenSearchClient:
         with pytest.raises(NotFoundError, match="404"):
             test_client.update_document(
                 document_chunk_id="test_source__nonexistent__512__0",
+                properties_to_update={"hidden": True},
+            )
+
+    def test_bulk_update_documents(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk updating document chunks' properties."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Create documents to update.
+        docs = [
+            _create_test_document_chunk(
+                document_id="test-doc-bulk-update",
+                chunk_index=i,
+                content=f"Original content {i}",
+                tenant_state=tenant_state,
+            )
+            for i in range(5)
+        ]
+        test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+
+        # Under test.
+        doc_chunk_ids = [
+            get_opensearch_doc_chunk_id(
+                tenant_state=tenant_state,
+                document_id=doc.document_id,
+                chunk_index=doc.chunk_index,
+                max_chunk_size=doc.max_chunk_size,
+            )
+            for doc in docs
+        ]
+        properties_to_update = {
+            "hidden": True,
+            "global_boost": 7,
+        }
+        test_client.bulk_update_documents(
+            document_chunk_ids=doc_chunk_ids,
+            properties_to_update=properties_to_update,
+        )
+
+        # Postcondition.
+        # Retrieve each document and verify updates were applied.
+        for doc, doc_chunk_id in zip(docs, doc_chunk_ids):
+            updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
+            assert updated_doc.hidden is True
+            assert updated_doc.global_boost == 7
+            # Other properties should remain unchanged.
+            assert updated_doc.document_id == doc.document_id
+            assert updated_doc.content == doc.content
+            assert updated_doc.public == doc.public
+
+    def test_bulk_update_documents_empty_list(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk updating with an empty list is a no-op."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Should not raise.
+        test_client.bulk_update_documents(
+            document_chunk_ids=[],
+            properties_to_update={"hidden": True},
+        )
+
+    def test_bulk_update_nonexistent_documents(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk updating nonexistent document chunks raises."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Try to bulk update document chunks that do not exist.
+        with pytest.raises(Exception):
+            test_client.bulk_update_documents(
+                document_chunk_ids=[
+                    "test_source__nonexistent-1__512__0",
+                    "test_source__nonexistent-2__512__0",
+                ],
                 properties_to_update={"hidden": True},
             )
 

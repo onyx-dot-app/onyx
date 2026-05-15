@@ -35,6 +35,7 @@ from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
+from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -58,6 +59,8 @@ from onyx.db.index_attempt_metrics import IndexAttemptStage
 from onyx.db.index_attempt_metrics import StageEventBuffer
 from onyx.db.index_attempt_metrics import time_stage
 from onyx.db.indexing_coordination import IndexingCoordination
+from onyx.db.models import Connector
+from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
@@ -686,41 +689,16 @@ def connector_document_extraction(
                     with time_stage(
                         IndexAttemptStage.HIERARCHY_UPSERT, index_attempt_id
                     ):
-                        hierarchy_node_batch_cleaned = (
-                            sanitize_hierarchy_nodes_for_postgres(hierarchy_node_batch)
+                        len_cleaned = cache_and_upsert_hierarchy_nodes(
+                            db_connector,
+                            db_credential,
+                            is_connector_public,
+                            hierarchy_node_batch,
                         )
-                        with get_session_with_current_tenant() as db_session:
-                            upserted_nodes = upsert_hierarchy_nodes_batch(
-                                db_session=db_session,
-                                nodes=hierarchy_node_batch_cleaned,
-                                source=db_connector.source,
-                                commit=True,
-                                is_connector_public=is_connector_public,
-                            )
-
-                            upsert_hierarchy_node_cc_pair_entries(
-                                db_session=db_session,
-                                hierarchy_node_ids=[n.id for n in upserted_nodes],
-                                connector_id=db_connector.id,
-                                credential_id=db_credential.id,
-                                commit=True,
-                            )
-
-                            # Cache in Redis for fast ancestor resolution during doc processing
-                            redis_client = get_redis_client(tenant_id=tenant_id)
-                            cache_entries = [
-                                HierarchyNodeCacheEntry.from_db_model(node)
-                                for node in upserted_nodes
-                            ]
-                            cache_hierarchy_nodes_batch(
-                                redis_client=redis_client,
-                                source=db_connector.source,
-                                entries=cache_entries,
-                            )
 
                     logger.debug(
                         "Persisted and cached %s hierarchy nodes for attempt=%s",
-                        len(hierarchy_node_batch_cleaned),
+                        len_cleaned,
                         index_attempt_id,
                     )
 
@@ -952,6 +930,45 @@ def connector_document_extraction(
         memory_tracer.stop()
 
 
+def cache_and_upsert_hierarchy_nodes(
+    db_connector: Connector,
+    db_credential: Credential,
+    is_connector_public: bool,
+    hierarchy_node_batch: list[HierarchyNode],
+) -> int:
+    hierarchy_node_batch_cleaned = sanitize_hierarchy_nodes_for_postgres(
+        hierarchy_node_batch
+    )
+    with get_session_with_current_tenant() as db_session:
+        upserted_nodes = upsert_hierarchy_nodes_batch(
+            db_session=db_session,
+            nodes=hierarchy_node_batch_cleaned,
+            source=db_connector.source,
+            commit=True,
+            is_connector_public=is_connector_public,
+        )
+
+        upsert_hierarchy_node_cc_pair_entries(
+            db_session=db_session,
+            hierarchy_node_ids=[n.id for n in upserted_nodes],
+            connector_id=db_connector.id,
+            credential_id=db_credential.id,
+            commit=True,
+        )
+
+        # Cache in Redis for fast ancestor resolution during doc processing
+        redis_client = get_redis_client()
+        cache_entries = [
+            HierarchyNodeCacheEntry.from_db_model(node) for node in upserted_nodes
+        ]
+        cache_hierarchy_nodes_batch(
+            redis_client=redis_client,
+            source=db_connector.source,
+            entries=cache_entries,
+        )
+    return len(hierarchy_node_batch_cleaned)
+
+
 def reissue_old_batches(
     batch_storage: DocumentBatchStorage,
     index_attempt_id: int,
@@ -983,7 +1000,7 @@ def reissue_old_batches(
         try:
             RedisDocprocessing(
                 index_attempt_id,
-                get_redis_client(tenant_id=tenant_id),
+                get_redis_client(),
             ).incr_pending()
         except Exception:
             logger.debug(

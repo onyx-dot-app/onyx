@@ -59,7 +59,7 @@ def build_user_context(user_name: str | None, user_role: str | None) -> str:
     return f"You are assisting **{user_name}** with their work."
 
 
-# Content for the org_info section when demo data is enabled
+# Content for the org_info section when user_work_area is provided
 ORG_INFO_SECTION_CONTENT = """## Organization Info
 
 The `org_info/` directory contains information about the organization and user context:
@@ -109,14 +109,8 @@ contain exactly what you need to complete the task successfully."""
 def build_org_info_section(include_org_info: bool) -> str:
     """Build the organization info section for AGENTS.md.
 
-    Only includes the org_info section when demo data is enabled,
-    since the org_info/ directory is only set up in that case.
-
-    Args:
-        include_org_info: Whether to include the org_info section
-
-    Returns:
-        Formatted org info section string, or empty string if not included
+    Included when user_work_area is provided and the org_info/
+    directory is set up in the session.
     """
     if include_org_info:
         return ORG_INFO_SECTION_CONTENT
@@ -249,7 +243,6 @@ def generate_agent_instructions(
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
     user_role: str | None = None,
-    use_demo_data: bool = False,
     include_org_info: bool = False,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
@@ -263,8 +256,7 @@ def generate_agent_instructions(
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
         user_role: User's role/title for personalization
-        use_demo_data: If True, exclude user context from AGENTS.md
-        include_org_info: Whether to include the org_info section (demo data mode)
+        include_org_info: Whether to include the org_info section
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -273,11 +265,9 @@ def generate_agent_instructions(
         logger.warning("AGENTS.template.md not found at %s", template_path)
         return "# Agent Instructions\n\nNo custom instructions provided."
 
-    # Read template content
     template_content = template_path.read_text()
 
-    # Build user context section - only include when NOT using demo data
-    user_context = "" if use_demo_data else build_user_context(user_name, user_role)
+    user_context = build_user_context(user_name, user_role)
 
     # Build LLM configuration section
     provider_display = get_provider_display_name(provider)
@@ -290,7 +280,6 @@ def generate_agent_instructions(
     # Build available skills section
     available_skills_section = build_skills_section(skills_path)
 
-    # Build org info section (only included when demo data is enabled)
     org_info_section = build_org_info_section(include_org_info)
 
     # Replace placeholders

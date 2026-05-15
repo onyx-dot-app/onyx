@@ -61,7 +61,7 @@ export function VoiceProviderSetupModal({
   const detail = getVoiceProviderDetail(providerType);
   const initialTtsModel = defaultModelId
     ? resolveModelId(defaultModelId)
-    : existingProvider?.tts_model ?? "tts-1";
+    : (existingProvider?.tts_model ?? "tts-1");
 
   const isEditing = !!existingProvider;
 
@@ -88,7 +88,7 @@ export function VoiceProviderSetupModal({
           if (!prev) return options[0]?.value ?? "";
           return options.some((o) => o.value === prev)
             ? prev
-            : options[0]?.value ?? "";
+            : (options[0]?.value ?? "");
         });
       })
       .catch(() => setVoiceOptions([]))
@@ -153,10 +153,10 @@ export function VoiceProviderSetupModal({
         tts_model: values.tts_model,
         default_voice: values.default_voice,
         activate_stt: isEditing
-          ? existingProvider?.is_default_stt ?? false
+          ? (existingProvider?.is_default_stt ?? false)
           : mode === "stt",
         activate_tts: isEditing
-          ? existingProvider?.is_default_tts ?? false
+          ? (existingProvider?.is_default_tts ?? false)
           : mode === "tts",
       });
 

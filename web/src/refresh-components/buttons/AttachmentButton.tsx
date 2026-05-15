@@ -74,8 +74,9 @@ import { Checkbox } from "@opal/components";
 import { SvgExternalLink } from "@opal/icons";
 import type { WithoutStyles } from "@opal/types";
 
-export interface AttachmentProps
-  extends WithoutStyles<React.ButtonHTMLAttributes<HTMLButtonElement>> {
+export interface AttachmentProps extends WithoutStyles<
+  React.ButtonHTMLAttributes<HTMLButtonElement>
+> {
   selected?: boolean;
   processing?: boolean;
 

@@ -434,12 +434,12 @@ def _test_query(sf_db: OnyxSalesforceSQLite) -> None:
     account_ids = sf_db.find_ids_by_type(ACCOUNT_OBJECT_TYPE)
 
     # Verify we found all expected accounts
-    assert len(account_ids) == len(
-        expected_accounts
-    ), f"Expected {len(expected_accounts)} accounts, found {len(account_ids)}"
-    assert set(account_ids) == set(
-        expected_accounts.keys()
-    ), "Found account IDs don't match expected IDs"
+    assert len(account_ids) == len(expected_accounts), (
+        f"Expected {len(expected_accounts)} accounts, found {len(account_ids)}"
+    )
+    assert set(account_ids) == set(expected_accounts.keys()), (
+        "Found account IDs don't match expected IDs"
+    )
 
     # Verify each account's data
     for acc_id in account_ids:
@@ -451,9 +451,9 @@ def _test_query(sf_db: OnyxSalesforceSQLite) -> None:
         # Verify account data matches
         for key, value in expected.items():
             value = str(value)
-            assert (
-                combined.data[key] == value
-            ), f"Account {acc_id} field {key} expected {value}, got {combined.data[key]}"
+            assert combined.data[key] == value, (
+                f"Account {acc_id} field {key} expected {value}, got {combined.data[key]}"
+            )
 
     print("All query tests passed successfully!")
 
@@ -491,9 +491,9 @@ def _test_upsert(sf_db: OnyxSalesforceSQLite) -> None:
     updated_record = sf_db.get_record(_VALID_SALESFORCE_IDS[0])
     assert updated_record is not None, "Updated record not found"
     assert updated_record.data["Name"] == "Acme Inc. Updated", "Name not updated"
-    assert (
-        updated_record.data["Description"] == "Updated company info"
-    ), "Description not added"
+    assert updated_record.data["Description"] == "Updated company info", (
+        "Description not added"
+    )
 
     # Verify the new record was created
     new_record = sf_db.get_record(_VALID_SALESFORCE_IDS[2])
@@ -556,15 +556,15 @@ def _test_relationships(sf_db: OnyxSalesforceSQLite) -> None:
     assert _VALID_SALESFORCE_IDS[13] in child_ids, "Case 1 not found in relationship"
     assert _VALID_SALESFORCE_IDS[14] in child_ids, "Case 2 not found in relationship"
     assert _VALID_SALESFORCE_IDS[48] in child_ids, "Contact not found in relationship"
-    assert (
-        _VALID_SALESFORCE_IDS[62] in child_ids
-    ), "Opportunity not found in relationship"
+    assert _VALID_SALESFORCE_IDS[62] in child_ids, (
+        "Opportunity not found in relationship"
+    )
 
     # Test querying relationships for a different account (should be empty)
     other_account_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[1])
-    assert (
-        len(other_account_children) == 0
-    ), "Expected no children for different account"
+    assert len(other_account_children) == 0, (
+        "Expected no children for different account"
+    )
 
     print("All relationship tests passed successfully!")
 
@@ -591,9 +591,9 @@ def _test_account_with_children(sf_db: OnyxSalesforceSQLite) -> None:
 
         # For Acme Inc., verify specific relationships
         if account_id == _VALID_SALESFORCE_IDS[0]:  # Acme Inc.
-            assert (
-                len(child_ids) == 4
-            ), f"Expected 4 children for Acme Inc., found {len(child_ids)}"
+            assert len(child_ids) == 4, (
+                f"Expected 4 children for Acme Inc., found {len(child_ids)}"
+            )
 
             # Get all child records
             child_records = []
@@ -603,31 +603,31 @@ def _test_account_with_children(sf_db: OnyxSalesforceSQLite) -> None:
                     child_records.append(child_record)
             # Verify Cases
             cases = [r for r in child_records if r.type == "Case"]
-            assert (
-                len(cases) == 2
-            ), f"Expected 2 cases for Acme Inc., found {len(cases)}"
+            assert len(cases) == 2, (
+                f"Expected 2 cases for Acme Inc., found {len(cases)}"
+            )
             case_subjects = {case.data["Subject"] for case in cases}
             assert "Test Case 1" in case_subjects, "Test Case 1 not found"
             assert "Test Case 2" in case_subjects, "Test Case 2 not found"
 
             # Verify Contacts
             contacts = [r for r in child_records if r.type == "Contact"]
-            assert (
-                len(contacts) == 1
-            ), f"Expected 1 contact for Acme Inc., found {len(contacts)}"
+            assert len(contacts) == 1, (
+                f"Expected 1 contact for Acme Inc., found {len(contacts)}"
+            )
             contact = contacts[0]
             assert contact.data["FirstName"] == "Test", "Contact first name mismatch"
             assert contact.data["LastName"] == "Contact", "Contact last name mismatch"
 
             # Verify Opportunities
             opportunities = [r for r in child_records if r.type == "Opportunity"]
-            assert (
-                len(opportunities) == 1
-            ), f"Expected 1 opportunity for Acme Inc., found {len(opportunities)}"
+            assert len(opportunities) == 1, (
+                f"Expected 1 opportunity for Acme Inc., found {len(opportunities)}"
+            )
             opportunity = opportunities[0]
-            assert (
-                opportunity.data["Name"] == "Test Opportunity"
-            ), "Opportunity name mismatch"
+            assert opportunity.data["Name"] == "Test Opportunity", (
+                "Opportunity name mismatch"
+            )
             assert opportunity.data["Amount"] == "100000", "Opportunity amount mismatch"
 
     print("All account with children tests passed successfully!")
@@ -656,9 +656,9 @@ def _test_relationship_updates(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Verify initial relationship
     acme_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[0])
-    assert (
-        _VALID_SALESFORCE_IDS[40] in acme_children
-    ), "Initial relationship not created"
+    assert _VALID_SALESFORCE_IDS[40] in acme_children, (
+        "Initial relationship not created"
+    )
 
     # Update contact to be linked to Globex Corp instead
     updated_contact = [
@@ -675,9 +675,9 @@ def _test_relationship_updates(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Verify old relationship is removed
     acme_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[0])
-    assert (
-        _VALID_SALESFORCE_IDS[40] not in acme_children
-    ), "Old relationship not removed"
+    assert _VALID_SALESFORCE_IDS[40] not in acme_children, (
+        "Old relationship not removed"
+    )
 
     # Verify new relationship is created
     globex_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[1])
@@ -731,12 +731,12 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert (
-        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
-    ), "Account type not in affected_ids_by_type"
-    assert (
-        _VALID_SALESFORCE_IDS[1] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
-    ), "Direct parent ID not included"
+    assert ACCOUNT_OBJECT_TYPE in affected_ids_by_type, (
+        "Account type not in affected_ids_by_type"
+    )
+    assert _VALID_SALESFORCE_IDS[1] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE], (
+        "Direct parent ID not included"
+    )
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
@@ -746,12 +746,12 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert (
-        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
-    ), "Account type not in affected_ids_by_type"
-    assert (
-        _VALID_SALESFORCE_IDS[0] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
-    ), "Parent of updated child not included"
+    assert ACCOUNT_OBJECT_TYPE in affected_ids_by_type, (
+        "Account type not in affected_ids_by_type"
+    )
+    assert _VALID_SALESFORCE_IDS[0] in affected_ids_by_type[ACCOUNT_OBJECT_TYPE], (
+        "Parent of updated child not included"
+    )
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
@@ -761,16 +761,16 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
-    assert (
-        ACCOUNT_OBJECT_TYPE in affected_ids_by_type
-    ), "Account type not in affected_ids_by_type"
+    assert ACCOUNT_OBJECT_TYPE in affected_ids_by_type, (
+        "Account type not in affected_ids_by_type"
+    )
     affected_ids = affected_ids_by_type[ACCOUNT_OBJECT_TYPE]
     assert len(affected_ids) == 2, "Expected exactly two affected parent IDs"
     assert _VALID_SALESFORCE_IDS[0] in affected_ids, "Parent of child not included"
     assert _VALID_SALESFORCE_IDS[1] in affected_ids, "Direct parent ID not included"
-    assert (
-        _VALID_SALESFORCE_IDS[2] not in affected_ids
-    ), "Unaffected ID incorrectly included"
+    assert _VALID_SALESFORCE_IDS[2] not in affected_ids, (
+        "Unaffected ID incorrectly included"
+    )
 
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
@@ -815,7 +815,6 @@ def test_salesforce_sqlite() -> None:
 
 @pytest.mark.skip(reason="Enable when credentials are available")
 def test_salesforce_bulk_retrieve() -> None:
-
     username = os.environ["SF_USERNAME"]
     password = os.environ["SF_PASSWORD"]
     security_token = os.environ["SF_SECURITY_TOKEN"]
@@ -997,12 +996,12 @@ def test_salesforce_connector_single() -> None:
 
     child_types: set[str] = set()
     parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
-    parent_to_child_relationships: dict[str, set[str]] = (
-        {}
-    )  # map from parent to child relationships
-    child_to_parent_types: dict[str, set[str]] = (
-        {}
-    )  # reverse map from child to parent types
+    parent_to_child_relationships: dict[
+        str, set[str]
+    ] = {}  # map from parent to child relationships
+    child_to_parent_types: dict[
+        str, set[str]
+    ] = {}  # reverse map from child to parent types
     child_relationship_to_queryable_fields: dict[str, set[str]] = {}
 
     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}

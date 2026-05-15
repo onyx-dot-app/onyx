@@ -41,7 +41,7 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
  *
  * @example
  * ```tsx
- * <ShadowDiv className="max-h-[20rem]">
+ * <ShadowDiv className="max-h-80">
  *   <div>Long content...</div>
  *   <div>More content...</div>
  * </ShadowDiv>
@@ -49,7 +49,7 @@ interface ShadowDivProps extends React.HTMLAttributes<HTMLDivElement> {
  *
  * @example
  * // Only show bottom shadow
- * <ShadowDiv bottomOnly className="max-h-[20rem]">
+ * <ShadowDiv bottomOnly className="max-h-80">
  *   <div>Content...</div>
  * </ShadowDiv>
  */

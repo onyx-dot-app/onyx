@@ -147,9 +147,9 @@ def test_kubernetes_sandbox_provision() -> None:
         )
         assert resp is not None
         print(f"DEBUG: Contents of /workspace/templates/outputs:\n{resp}")
-        assert (
-            "web" in resp
-        ), f"/workspace/templates/outputs should contain web directory. Actual contents:\n{resp}"
+        assert "web" in resp, (
+            f"/workspace/templates/outputs should contain web directory. Actual contents:\n{resp}"
+        )
 
         # Verify /workspace/templates/outputs/web/AGENTS.md file exists
         exec_command = [
@@ -169,13 +169,13 @@ def test_kubernetes_sandbox_provision() -> None:
             tty=False,
         )
         assert resp is not None
-        assert (
-            len(resp) > 0
-        ), "/workspace/templates/outputs/web/AGENTS.md file should not be empty"
+        assert len(resp) > 0, (
+            "/workspace/templates/outputs/web/AGENTS.md file should not be empty"
+        )
         # Verify it contains expected content
-        assert (
-            "Agent" in resp or "Instructions" in resp or "#" in resp
-        ), "/workspace/templates/outputs/web/AGENTS.md should contain agent instructions"
+        assert "Agent" in resp or "Instructions" in resp or "#" in resp, (
+            "/workspace/templates/outputs/web/AGENTS.md should contain agent instructions"
+        )
 
         # start session
         session_id = uuid4()
@@ -363,16 +363,16 @@ def test_kubernetes_sandbox_send_message() -> None:
         message_chunks = [e for e in events if isinstance(e, AgentMessageChunk)]
         prompt_responses = [e for e in events if isinstance(e, PromptResponse)]
 
-        assert (
-            len(message_chunks) > 0 or len(prompt_responses) > 0
-        ), "Should receive either AgentMessageChunk or PromptResponse events"
+        assert len(message_chunks) > 0 or len(prompt_responses) > 0, (
+            "Should receive either AgentMessageChunk or PromptResponse events"
+        )
 
         # If we got a PromptResponse, verify it completed successfully
         if prompt_responses:
             final_response = prompt_responses[-1]
-            assert (
-                final_response.stop_reason is not None
-            ), "PromptResponse should have a stop_reason"
+            assert final_response.stop_reason is not None, (
+                "PromptResponse should have a stop_reason"
+            )
 
     finally:
         # Clean up: terminate the sandbox
@@ -501,9 +501,9 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
                 break
             time.sleep(2)
 
-        assert (
-            nextjs_ready
-        ), f"Next.js server should be accessible at localhost:{SANDBOX_NEXTJS_PORT_START}"
+        assert nextjs_ready, (
+            f"Next.js server should be accessible at localhost:{SANDBOX_NEXTJS_PORT_START}"
+        )
         print("DEBUG: Next.js server is ready")
 
         # Verify we can fetch actual content from the Next.js server
@@ -526,9 +526,9 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         assert resp is not None, "Should receive content from Next.js server"
         assert len(resp) > 0, "Next.js server response should not be empty"
         # Basic check that it looks like HTML
-        assert (
-            "<" in resp or "html" in resp.lower() or "<!doctype" in resp.lower()
-        ), f"Response should be HTML content. Got: {resp[:200]}"
+        assert "<" in resp or "html" in resp.lower() or "<!doctype" in resp.lower(), (
+            f"Response should be HTML content. Got: {resp[:200]}"
+        )
         print(f"DEBUG: Next.js server returned content (first 200 chars): {resp[:200]}")
 
         # Verify get_nextjs_url returns correctly formatted cluster URL
@@ -537,12 +537,12 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         expected_url_pattern = (
             f"http://{expected_service_name}.{SANDBOX_NAMESPACE}.svc.cluster.local:"
         )
-        assert nextjs_url.startswith(
-            expected_url_pattern
-        ), f"Next.js URL should follow cluster service format. Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
-        assert (
-            str(SANDBOX_NEXTJS_PORT_START) in nextjs_url
-        ), f"Next.js URL should contain port {SANDBOX_NEXTJS_PORT_START}. Got: {nextjs_url}"
+        assert nextjs_url.startswith(expected_url_pattern), (
+            f"Next.js URL should follow cluster service format. Expected to start with: {expected_url_pattern}, Got: {nextjs_url}"
+        )
+        assert str(SANDBOX_NEXTJS_PORT_START) in nextjs_url, (
+            f"Next.js URL should contain port {SANDBOX_NEXTJS_PORT_START}. Got: {nextjs_url}"
+        )
         print(f"DEBUG: get_nextjs_url returned: {nextjs_url}")
 
         # Verify the service is accessible via the cluster URL from within the pod
@@ -566,7 +566,9 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
         assert resp and resp.strip() in (
             "200",
             "304",
-        ), f"Next.js server should be accessible via cluster URL {nextjs_url}. Got response: {resp}"
+        ), (
+            f"Next.js server should be accessible via cluster URL {nextjs_url}. Got response: {resp}"
+        )
 
     finally:
         # Clean up: terminate the sandbox
@@ -642,9 +644,9 @@ def test_health_check_returns_true_for_running_pod() -> None:
                 break
             time.sleep(2)
 
-        assert (
-            is_healthy
-        ), "health_check() should return True for a running, healthy pod"
+        assert is_healthy, (
+            "health_check() should return True for a running, healthy pod"
+        )
 
     finally:
         if sandbox_id:
@@ -741,6 +743,6 @@ def test_health_check_returns_false_after_termination() -> None:
     # health_check should now return False
     is_healthy_after = manager.health_check(sandbox_id, timeout=5.0)
 
-    assert (
-        not is_healthy_after
-    ), "health_check() should return False after pod has been terminated"
+    assert not is_healthy_after, (
+        "health_check() should return False after pod has been terminated"
+    )

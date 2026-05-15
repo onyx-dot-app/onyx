@@ -24,8 +24,7 @@ import { InMessageImage } from "@/app/app/components/files/images/InMessageImage
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 
 /** Table wrapper that detects horizontal overflow and shows a fade + scrollbar. */
-interface ScrollableTableProps
-  extends React.TableHTMLAttributes<HTMLTableElement> {
+interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: React.ReactNode;
 }
 
@@ -72,7 +71,7 @@ export function ScrollableTable({
           ref={tableRef}
           className={cn(
             className,
-            "min-w-full !my-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+            "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
           )}
           {...props}
         >

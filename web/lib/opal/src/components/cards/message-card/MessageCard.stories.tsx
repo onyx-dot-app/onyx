@@ -12,7 +12,7 @@ type Story = StoryObj<typeof MessageCard>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard title="Note" description="This is a default message card." />
     </div>
   ),
@@ -20,7 +20,7 @@ export const Default: Story = {
 
 export const Info: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard
         variant="info"
         title="Heads up"
@@ -32,7 +32,7 @@ export const Info: Story = {
 
 export const Success: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard
         variant="success"
         title="All set"
@@ -44,7 +44,7 @@ export const Success: Story = {
 
 export const Warning: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard
         variant="warning"
         title="Re-indexing required"
@@ -56,7 +56,7 @@ export const Warning: Story = {
 
 export const Error: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard
         variant="error"
         title="Connection failed"
@@ -68,7 +68,7 @@ export const Error: Story = {
 
 export const WithBottomChildren: Story = {
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <MessageCard
         variant="warning"
         title="Action required"
@@ -87,7 +87,7 @@ export const WithBottomChildren: Story = {
 
 export const AllVariants: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-[32rem]">
+    <div className="flex flex-col gap-4 w-128">
       {(["default", "info", "success", "warning", "error"] as const).map(
         (variant) => (
           <MessageCard

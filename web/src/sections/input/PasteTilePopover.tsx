@@ -88,7 +88,7 @@ function PasteTilePopover({
           ref={textareaRef}
           defaultValue={text}
           onChange={(e) => onTextChange(e.target.value)}
-          className="w-full resize-none rounded-04 border-none bg-transparent p-2 font-mono outline-none"
+          className="w-full resize-none rounded-04 border-none bg-transparent p-2 font-mono outline-hidden"
           style={{
             fontSize: "0.8125rem",
             color: "var(--text-04)",

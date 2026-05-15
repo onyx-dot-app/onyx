@@ -384,8 +384,7 @@ def list_all_users(
             accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
         ],
         slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
-            slack_users_page
-            * USERS_PAGE_SIZE : (slack_users_page + 1)
+            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
         ],
         invited=[InvitedUserSnapshot(email=email) for email in invited_emails][

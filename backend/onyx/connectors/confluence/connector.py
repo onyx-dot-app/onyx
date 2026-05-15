@@ -635,6 +635,7 @@ class ConfluenceConnector(
                         attachment=attachment,
                         page_id=_get_page_id(page),
                         allow_images=self.allow_images,
+                        is_cloud=self.is_cloud,
                     )
                     if response is None:
                         continue

@@ -17,7 +17,31 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.filter.outputs.python || 'true' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            python:
+              - 'backend/**'
+              - 'pyproject.toml'
+              - '.github/workflows/pr-python-checks.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+
   mypy-check:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     # See https://runs-on.com/runners/linux/
     # NOTE: This job is named mypy-check for branch protection compatibility,
     # but it actually runs ty (astral-sh's Rust type checker).

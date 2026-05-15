@@ -71,7 +71,9 @@ def load_all_from_connector(
         )
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             load_from_checkpoint_generator(  # ty: ignore[invalid-argument-type]
-                start, end, checkpoint  # ty: ignore[invalid-argument-type]
+                start,
+                end,
+                checkpoint,  # ty: ignore[invalid-argument-type]
             )
         )
 

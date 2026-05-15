@@ -129,12 +129,9 @@ def _add_user_filters(
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
         if user.role == UserRole.CURATOR:
             user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= (
-            ~exists()
-            .where(Persona__UG.persona_id == Persona.id)
-            .where(~Persona__UG.user_group_id.in_(user_groups))
-            .correlate(Persona)
-        )
+        where_clause &= ~exists().where(Persona__UG.persona_id == Persona.id).where(
+            ~Persona__UG.user_group_id.in_(user_groups)
+        ).correlate(Persona)
     else:
         listed = Persona.is_listed == True  # noqa: E712
 

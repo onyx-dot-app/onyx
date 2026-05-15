@@ -91,11 +91,10 @@ def _add_user_filters(
             user_groups = user_groups.where(
                 User__UserGroup.is_curator == True  # noqa: E712
             )
-        where_clause &= (
-            ~exists()
-            .where(UG__CCpair.cc_pair_id == ConnectorCredentialPair.id)
-            .where(~UG__CCpair.user_group_id.in_(user_groups))
-            .correlate(ConnectorCredentialPair)
+        where_clause &= ~exists().where(
+            UG__CCpair.cc_pair_id == ConnectorCredentialPair.id
+        ).where(~UG__CCpair.user_group_id.in_(user_groups)).correlate(
+            ConnectorCredentialPair
         )
         where_clause |= ConnectorCredentialPair.creator_id == user.id
     else:
@@ -127,9 +126,9 @@ def get_connector_credential_pairs_for_user(
             to avoid fetching large JSONB blobs when they aren't needed.
     """
     if eager_load_user:
-        assert (
-            eager_load_credential
-        ), "eager_load_credential must be True if eager_load_user is True"
+        assert eager_load_credential, (
+            "eager_load_credential must be True if eager_load_user is True"
+        )
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:

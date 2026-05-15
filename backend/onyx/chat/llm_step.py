@@ -349,9 +349,9 @@ def _update_tool_call_with_delta(
             tool_calls_in_progress[index]["name"] = tool_call_delta.function.name
 
         if tool_call_delta.function.arguments:
-            tool_calls_in_progress[index][
-                "arguments"
-            ] += tool_call_delta.function.arguments
+            tool_calls_in_progress[index]["arguments"] += (
+                tool_call_delta.function.arguments
+            )
 
 
 def _extract_tool_call_kickoffs(

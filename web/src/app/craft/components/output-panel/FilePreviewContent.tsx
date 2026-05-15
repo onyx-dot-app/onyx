@@ -298,7 +298,7 @@ function FetchedFilePreview({
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto p-4">
-          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
             {data.content}
           </pre>
         </div>
@@ -308,7 +308,7 @@ function FetchedFilePreview({
 
   return (
     <div className="p-4">
-      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
         {data.content}
       </pre>
     </div>

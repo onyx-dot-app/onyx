@@ -89,16 +89,16 @@ def assert_response_is_equivalent(
         for config in model_configurations
     }
 
-    assert set(actual_by_name.keys()) == set(
-        expected_by_name.keys()
-    ), f"Model names don't match. Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
+    assert set(actual_by_name.keys()) == set(expected_by_name.keys()), (
+        f"Model names don't match. Actual: {set(actual_by_name.keys())}, Expected: {set(expected_by_name.keys())}"
+    )
 
     for name in actual_by_name:
         actual_config = actual_by_name[name]
         expected_config = expected_by_name[name]
-        assert (
-            actual_config == expected_config
-        ), f"Config mismatch for {name}:\nActual: {actual_config}\nExpected: {expected_config}"
+        assert actual_config == expected_config, (
+            f"Config mismatch for {name}:\nActual: {actual_config}\nExpected: {expected_config}"
+        )
 
     # test that returned key is sanitized
     if api_key:
@@ -1045,9 +1045,9 @@ def _validate_model_configurations(
     actual_names = {config["name"] for config in actual_configs}
     expected_names = set(expected_model_names)
 
-    assert (
-        actual_names == expected_names
-    ), f"Model names mismatch. Expected: {expected_names}, Actual: {actual_names}"
+    assert actual_names == expected_names, (
+        f"Model names mismatch. Expected: {expected_names}, Actual: {actual_names}"
+    )
 
     if expected_visible:
         for config in actual_configs:
@@ -1091,18 +1091,18 @@ def _validate_provider_data(
         expected_is_public: Optional expected is_public value (admin endpoint only)
         expected_image_support: Optional dict mapping model name to expected supports_image_input
     """
-    assert (
-        provider_data["name"] == expected_name
-    ), f"Provider name mismatch. Expected: {expected_name}, Actual: {provider_data['name']}"
-    assert (
-        provider_data["provider"] == expected_provider
-    ), f"Provider type mismatch. Expected: {expected_provider}, Actual: {provider_data['provider']}"
+    assert provider_data["name"] == expected_name, (
+        f"Provider name mismatch. Expected: {expected_name}, Actual: {provider_data['name']}"
+    )
+    assert provider_data["provider"] == expected_provider, (
+        f"Provider type mismatch. Expected: {expected_provider}, Actual: {provider_data['provider']}"
+    )
 
     # Validate is_public if provided (only available in admin endpoint response)
     if expected_is_public is not None and "is_public" in provider_data:
-        assert (
-            provider_data["is_public"] == expected_is_public
-        ), f"is_public mismatch. Expected: {expected_is_public}, Actual: {provider_data['is_public']}"
+        assert provider_data["is_public"] == expected_is_public, (
+            f"is_public mismatch. Expected: {expected_is_public}, Actual: {provider_data['is_public']}"
+        )
 
     # Validate model configurations
     _validate_model_configurations(
@@ -1958,12 +1958,12 @@ def test_default_provider_and_vision_provider_selection(
     )
 
     # Verify that the providers are distinct (different providers for regular vs vision)
-    assert (
-        admin_default["name"] != admin_vision_default["name"]
-    ), "Default provider and vision provider should be different providers"
-    assert (
-        basic_default["name"] != basic_vision_default["name"]
-    ), "Default provider and vision provider should be different providers (basic endpoint)"
+    assert admin_default["name"] != admin_vision_default["name"], (
+        "Default provider and vision provider should be different providers"
+    )
+    assert basic_default["name"] != basic_vision_default["name"], (
+        "Default provider and vision provider should be different providers (basic endpoint)"
+    )
 
 
 def test_default_provider_is_not_default_vision_provider(
@@ -2087,9 +2087,9 @@ def _create_image_gen_config(
             "is_default": is_default,
         },
     )
-    assert (
-        response.status_code == 200
-    ), f"Failed to create image gen config: {response.text}"
+    assert response.status_code == 200, (
+        f"Failed to create image gen config: {response.text}"
+    )
     return response.json()
 
 
@@ -2264,12 +2264,12 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
         None,
     )
     assert image_gen_config_data is not None, "Image gen config not found"
-    assert (
-        image_gen_config_data["is_default"] is True
-    ), "Image gen config should be the default"
-    assert (
-        image_gen_config_data["model_name"] == "gpt-image-1"
-    ), "Image gen config should have correct model name"
+    assert image_gen_config_data["is_default"] is True, (
+        "Image gen config should be the default"
+    )
+    assert image_gen_config_data["model_name"] == "gpt-image-1", (
+        "Image gen config should have correct model name"
+    )
 
     # Step 5: Verify no mixup - image gen providers don't appear in LLM provider lists
     # Image gen provider should not appear in the list

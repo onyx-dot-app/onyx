@@ -124,7 +124,9 @@ class ConnectorRunner(Generic[CT]):
         self.doc_batch: list[Document] = []
         self.hierarchy_node_batch: list[HierarchyNode] = []
 
-    def run(self, checkpoint: CT) -> Generator[
+    def run(
+        self, checkpoint: CT
+    ) -> Generator[
         tuple[
             list[Document] | None,
             list[HierarchyNode] | None,

@@ -1313,7 +1313,7 @@ function AccountsAccessSettings() {
           <Section gap={0.5} alignItems="start">
             <Text>
               Any application using the token{" "}
-              <Text className="!font-bold">{tokenToDelete.name}</Text>{" "}
+              <Text className="font-bold!">{tokenToDelete.name}</Text>{" "}
               <Text secondaryMono>({tokenToDelete.token_display})</Text> will
               lose access to Onyx. This action cannot be undone.
             </Text>
@@ -1646,7 +1646,7 @@ function FederatedConnectorCard({
           <Section gap={0.5} alignItems="start">
             <Text>
               Onyx will no longer be able to access or search content from your{" "}
-              <Text className="!font-bold">{sourceMetadata.displayName}</Text>{" "}
+              <Text className="font-bold!">{sourceMetadata.displayName}</Text>{" "}
               account.
             </Text>
             <Text>

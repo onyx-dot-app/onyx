@@ -457,7 +457,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <div
             {...getRootProps()}
             className={cn(
-              "flex-1 min-h-0 w-full flex flex-col items-center outline-none",
+              "flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
               isSidePanel && "px-3"
             )}
           >
@@ -497,7 +497,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   flexDirection="row"
                   justifyContent="between"
                   alignItems="end"
-                  className="max-w-[var(--app-page-main-content-width)]"
+                  className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
                   {liveAgent && !llmManager.isLoadingProviders && (
@@ -519,7 +519,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ref={inputRef}
               className={cn(
                 "w-full flex flex-col",
-                !isSidePanel && "max-w-[var(--app-page-main-content-width)]"
+                !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
               {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
@@ -562,7 +562,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-[var(--app-page-main-content-width)] px-4 min-h-0 overflow-auto">
+              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-auto">
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>
@@ -578,7 +578,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       <div
         className={cn(
           "absolute right-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
-          documentSidebarVisible ? "w-[25rem]" : "w-0"
+          documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
         <DocumentsSidebar

@@ -105,9 +105,9 @@ def filter_tenants_by_range(
     return filtered_tenants
 
 
-def get_schema_options() -> (
-    tuple[bool, bool, bool, int | None, int | None, list[str] | None]
-):
+def get_schema_options() -> tuple[
+    bool, bool, bool, int | None, int | None, list[str] | None
+]:
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:

@@ -41,7 +41,7 @@ export function TimelineIconColumn({
   iconRowVariant = "default",
 }: TimelineIconColumnProps) {
   if (variant === "spacer") {
-    return <div className="w-[var(--timeline-rail-width)]" />;
+    return <div className="w-(--timeline-rail-width)" />;
   }
 
   const connectorColorClass = isHover ? "bg-border-04" : "bg-border-01";
@@ -50,13 +50,13 @@ export function TimelineIconColumn({
     : connectorColorClass;
 
   return (
-    <div className="relative flex flex-col items-center w-[var(--timeline-rail-width)]">
+    <div className="relative flex flex-col items-center w-(--timeline-rail-width)">
       <div
         className={cn(
           "w-full shrink-0 flex flex-col items-center",
           iconRowVariant === "compact"
-            ? "h-[var(--timeline-first-top-spacer-height)]"
-            : "h-[var(--timeline-step-header-height)]"
+            ? "h-(--timeline-first-top-spacer-height)"
+            : "h-(--timeline-step-header-height)"
         )}
       >
         {iconRowVariant === "default" ? (
@@ -67,7 +67,7 @@ export function TimelineIconColumn({
                 !isFirst && topConnectorColorClass
               )}
             />
-            <div className="h-[var(--timeline-branch-icon-wrapper-size)] w-[var(--timeline-branch-icon-wrapper-size)] shrink-0 flex items-center justify-center">
+            <div className="h-(--timeline-branch-icon-wrapper-size) w-(--timeline-branch-icon-wrapper-size) shrink-0 flex items-center justify-center">
               {showIcon && icon}
             </div>
             <div className={cn("w-px flex-1", connectorColorClass)} />

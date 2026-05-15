@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
@@ -427,7 +428,7 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
-        demo_data_enabled: bool = True,
+        origin: SessionOrigin = SessionOrigin.INTERACTIVE,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -439,11 +440,13 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
+            origin: Provenance of the session. INTERACTIVE (default) sessions
+                appear in the Craft sidebar; SCHEDULED sessions (created by
+                the scheduled-tasks executor) are excluded.
 
         Returns:
             The created BuildSession model
@@ -471,13 +474,23 @@ class SessionManager:
         # Get LLM config (uses user's selection or falls back to default)
         llm_config = self._get_llm_config(llm_provider_type, llm_model_name)
 
-        # Allocate port for this session (per-session port allocation)
-        # Both LOCAL and KUBERNETES backends use the same port allocation strategy
-        nextjs_port = allocate_nextjs_port(self._db_session)
+        # Allocate port for this session (per-session port allocation).
+        # Both LOCAL and KUBERNETES backends use the same port allocation
+        # strategy. Skipped for SCHEDULED sessions: scheduled-task fires
+        # are headless, never attach a preview, and pile up so fast they'd
+        # exhaust the [3010, 3100) range on a busy tenant.
+        nextjs_port: int | None
+        if origin == SessionOrigin.SCHEDULED:
+            nextjs_port = None
+        else:
+            nextjs_port = allocate_nextjs_port(self._db_session)
 
         # Create BuildSession record with allocated port (uses flush, caller commits)
         build_session = create_build_session__no_commit(
-            user_id, self._db_session, name=name, demo_data_enabled=demo_data_enabled
+            user_id,
+            self._db_session,
+            name=name,
+            origin=origin,
         )
         build_session.nextjs_port = nextjs_port
         self._db_session.flush()
@@ -583,7 +596,6 @@ class SessionManager:
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
-            use_demo_data=demo_data_enabled,
         )
         self.push_dynamic_skills(sandbox.id, user_id)
 
@@ -603,24 +615,21 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
-        demo_data_enabled: bool = True,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
         Used for pre-provisioning sandboxes when user lands on /build/v1.
-        Returns existing recent empty session if one exists, has a healthy sandbox,
-        AND has matching demo_data_enabled setting. Otherwise creates new.
+        Returns existing recent empty session if one exists and has a healthy sandbox.
         If an empty session exists but its sandbox is unhealthy/terminated/missing,
         the stale session is deleted and a fresh one is created (which will handle
         sandbox recovery/re-provisioning).
 
         Args:
             user_id: The user ID
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
-            demo_data_enabled: Explicit flag for demo data mode. Defaults to True if not provided.
 
         Returns:
             BuildSession (existing empty or newly created)
@@ -629,10 +638,7 @@ class SessionManager:
             ValueError: If max concurrent sandboxes reached
             RuntimeError: If sandbox provisioning fails
         """
-        # Look for existing empty session with matching demo_data setting
-        existing = get_empty_session_for_user(
-            user_id, self._db_session, demo_data_enabled=demo_data_enabled
-        )
+        existing = get_empty_session_for_user(user_id, self._db_session)
         if existing:
             logger.info(
                 "Existing empty session %s found for user %s", existing.id, user_id
@@ -688,14 +694,13 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
-            demo_data_enabled=demo_data_enabled,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:
         """Delete user's pre-provisioned (empty) session if one exists.
 
         A session is considered "empty" if it has no messages.
-        This is called when user changes LLM selection or toggles demo data
+        This is called when user changes LLM selection
         so the session can be re-created with the new LLM configuration.
 
         Args:
@@ -1126,6 +1131,229 @@ class SessionManager:
         """
         yield from self._stream_cli_agent_response(session_id, content, user_id)
 
+    # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
+    #
+    # `_yield_acp_events` is a thin wrapper around the sandbox manager that drives
+    # the agent to completion and yields raw ACP events. It does NO database
+    # writes, no SSE formatting — making it composable: the SSE endpoint wraps
+    # it with `_persist_acp_event` + an SSE formatter, and the headless
+    # scheduled-tasks executor reuses `_persist_acp_event` directly so the
+    # persisted transcript is identical to an interactive run.
+
+    @staticmethod
+    def _extract_text_from_content(content: Any) -> str:
+        """Extract text from ACP content structure."""
+        if content is None:
+            return ""
+        if hasattr(content, "type") and content.type == "text":
+            return getattr(content, "text", "") or ""
+        if isinstance(content, list):
+            texts = []
+            for block in content:
+                if hasattr(block, "type") and block.type == "text":
+                    texts.append(getattr(block, "text", "") or "")
+            return "".join(texts)
+        return ""
+
+    @staticmethod
+    def _serialize_acp_event(event: Any, event_type: str) -> str:
+        """Serialize an ACP event to SSE format, preserving ALL ACP data."""
+        if hasattr(event, "model_dump"):
+            data = event.model_dump(mode="json", by_alias=True, exclude_none=False)
+        else:
+            data = {"raw": str(event)}
+
+        data["type"] = event_type
+        data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+
+        return f"event: message\ndata: {json.dumps(data)}\n\n"
+
+    @staticmethod
+    def _format_packet_event(packet: BuildPacket) -> str:
+        """Format a BuildPacket as SSE."""
+        return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
+
+    def _save_pending_chunks(
+        self,
+        session_id: UUID,
+        state: BuildStreamingState,
+    ) -> None:
+        """Flush any pending accumulated message/thought chunks to the DB.
+
+        Called when the next ACP event is of a different type than the chunks
+        currently being accumulated, and once more at end of stream.
+        """
+        message_packet = state.finalize_message_chunks()
+        if message_packet:
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.ASSISTANT,
+                turn_index=state.turn_index,
+                message_metadata=message_packet,
+                db_session=self._db_session,
+            )
+
+        thought_packet = state.finalize_thought_chunks()
+        if thought_packet:
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.ASSISTANT,
+                turn_index=state.turn_index,
+                message_metadata=thought_packet,
+                db_session=self._db_session,
+            )
+
+        state.clear_last_chunk_type()
+
+    def _yield_acp_events(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        user_message_content: str,
+    ) -> Generator[Any, None, None]:
+        """Drain the CLI agent to completion, yielding raw ACP events.
+
+        Pure ACP generator — no DB writes, no SSE formatting. Callers compose
+        this with `_persist_acp_event` (to apply persistence side effects)
+        and, in the SSE case, an SSE serializer.
+
+        The events include `SSEKeepalive` markers from the sandbox client;
+        callers should pass them through (interactive) or drop them
+        (headless).
+        """
+        yield from self._sandbox_manager.send_message(
+            sandbox_id, session_id, user_message_content
+        )
+
+    def _persist_acp_event(
+        self,
+        session_id: UUID,
+        state: BuildStreamingState,
+        acp_event: Any,
+    ) -> None:
+        """Apply persistence side effects for a single ACP event.
+
+        This is the persistence half of the old `_stream_cli_agent_response`
+        method. It is intentionally synchronous and free of SSE / logging
+        concerns so the headless scheduled-tasks executor can reuse it byte-
+        for-byte against the same `BuildStreamingState` the interactive path
+        uses.
+
+        Behavior matches the pre-refactor interactive path exactly:
+        - SSEKeepalive: no-op (handled by callers).
+        - agent_message_chunk / agent_thought_chunk: accumulated; flushed
+          when a non-chunk event arrives or at end of stream.
+        - tool_call_start: no-op (only completed tool calls persist).
+        - tool_call_progress: TodoWrite saves every progress update; other
+          tools save only on `status == "completed"`. Completed Task
+          sub-agent calls also emit a synthetic agent_message containing
+          the task output.
+        - agent_plan_update: upserted (only the latest plan per turn).
+        - current_mode_update / prompt_response / error / unrecognized: not
+          persisted by the interactive path; preserved here for parity.
+        """
+        if isinstance(acp_event, SSEKeepalive):
+            return
+
+        # Flush any pending chunks if the event type changed.
+        event_type = self._get_event_type(acp_event)
+        if state.should_finalize_chunks(event_type):
+            self._save_pending_chunks(session_id, state)
+
+        if isinstance(acp_event, AgentMessageChunk):
+            text = self._extract_text_from_content(acp_event.content)
+            if text:
+                state.add_message_chunk(text)
+            return
+
+        if isinstance(acp_event, AgentThoughtChunk):
+            text = self._extract_text_from_content(acp_event.content)
+            if text:
+                state.add_thought_chunk(text)
+            return
+
+        if isinstance(acp_event, ToolCallStart):
+            # Stream-only; persistence happens on `completed` progress.
+            return
+
+        if isinstance(acp_event, ToolCallProgress):
+            event_data = acp_event.model_dump(
+                mode="json", by_alias=True, exclude_none=False
+            )
+            event_data["type"] = "tool_call_progress"
+            event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+
+            tool_name = (event_data.get("title") or "").lower()
+            is_todo_write = tool_name in ("todowrite", "todo_write")
+
+            raw_input = event_data.get("rawInput") or {}
+            is_task_tool = (
+                tool_name == "task"
+                or raw_input.get("subagent_type") is not None
+                or raw_input.get("subagentType") is not None
+            )
+
+            if is_todo_write or acp_event.status == "completed":
+                create_message(
+                    session_id=session_id,
+                    message_type=MessageType.ASSISTANT,
+                    turn_index=state.turn_index,
+                    message_metadata=event_data,
+                    db_session=self._db_session,
+                )
+
+            if is_task_tool and acp_event.status == "completed":
+                raw_output = event_data.get("rawOutput") or {}
+                task_output = raw_output.get("output")
+                if task_output and isinstance(task_output, str):
+                    metadata_idx = task_output.find("<task_metadata>")
+                    if metadata_idx >= 0:
+                        task_output = task_output[:metadata_idx].strip()
+
+                    if task_output:
+                        task_output_packet = {
+                            "type": "agent_message",
+                            "content": {"type": "text", "text": task_output},
+                            "source": "task_output",
+                            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                        }
+                        create_message(
+                            session_id=session_id,
+                            message_type=MessageType.ASSISTANT,
+                            turn_index=state.turn_index,
+                            message_metadata=task_output_packet,
+                            db_session=self._db_session,
+                        )
+            return
+
+        if isinstance(acp_event, AgentPlanUpdate):
+            event_data = acp_event.model_dump(
+                mode="json", by_alias=True, exclude_none=False
+            )
+            event_data["type"] = "agent_plan_update"
+            event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
+            plan_msg = upsert_agent_plan(
+                session_id=session_id,
+                turn_index=state.turn_index,
+                plan_metadata=event_data,
+                db_session=self._db_session,
+                existing_plan_id=state.plan_message_id,
+            )
+            state.plan_message_id = plan_msg.id
+            return
+
+        # CurrentModeUpdate, PromptResponse, ACPError, and unrecognized
+        # packets are not persisted (parity with prior behavior).
+        return
+
+    def _finalize_persist(
+        self,
+        session_id: UUID,
+        state: BuildStreamingState,
+    ) -> None:
+        """End-of-stream persistence hook. Flushes any pending chunks."""
+        self._save_pending_chunks(session_id, state)
+
     def _stream_cli_agent_response(
         self,
         session_id: UUID,
@@ -1147,70 +1375,6 @@ class SessionManager:
         - tool_call_progress: Only saved when status="completed"
         - agent_plan_update: Upserted (only latest plan kept per turn)
         """
-
-        def _serialize_acp_event(event: Any, event_type: str) -> str:
-            """Serialize an ACP event to SSE format, preserving ALL ACP data."""
-            if hasattr(event, "model_dump"):
-                data = event.model_dump(mode="json", by_alias=True, exclude_none=False)
-            else:
-                data = {"raw": str(event)}
-
-            data["type"] = event_type
-            data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
-
-            return f"event: message\ndata: {json.dumps(data)}\n\n"
-
-        def _format_packet_event(packet: BuildPacket) -> str:
-            """Format a BuildPacket as SSE."""
-            return f"event: message\ndata: {packet.model_dump_json(by_alias=True)}\n\n"
-
-        def _extract_text_from_content(content: Any) -> str:
-            """Extract text from ACP content structure."""
-            if content is None:
-                return ""
-            if hasattr(content, "type") and content.type == "text":
-                return getattr(content, "text", "") or ""
-            if isinstance(content, list):
-                texts = []
-                for block in content:
-                    if hasattr(block, "type") and block.type == "text":
-                        texts.append(getattr(block, "text", "") or "")
-                return "".join(texts)
-            return ""
-
-        def _save_pending_chunks(state: BuildStreamingState) -> None:
-            """Save any pending accumulated chunks to the database."""
-            # Finalize message chunks
-            message_packet = state.finalize_message_chunks()
-            if message_packet:
-                create_message(
-                    session_id=session_id,
-                    message_type=MessageType.ASSISTANT,
-                    turn_index=state.turn_index,
-                    message_metadata=message_packet,
-                    db_session=self._db_session,
-                )
-
-            # Finalize thought chunks
-            thought_packet = state.finalize_thought_chunks()
-            if thought_packet:
-                create_message(
-                    session_id=session_id,
-                    message_type=MessageType.ASSISTANT,
-                    turn_index=state.turn_index,
-                    message_metadata=thought_packet,
-                    db_session=self._db_session,
-                )
-
-            state.clear_last_chunk_type()
-
-        def _save_build_turn(state: BuildStreamingState) -> None:
-            """Save all accumulated state at the end of streaming.
-
-            Similar to save_chat_turn() in the main chat flow.
-            """
-            # 1. Save any remaining accumulated chunks
-            _save_pending_chunks(state)
 
         # Initialize packet logging
         packet_logger = get_packet_logger()
@@ -1239,7 +1403,7 @@ class SessionManager:
             if session is None:
                 error_packet = ErrorPacket(message="Session not found")
                 packet_logger.log("error", error_packet.model_dump())
-                yield _format_packet_event(error_packet)
+                yield self._format_packet_event(error_packet)
                 return
 
             # Get the user's sandbox (now user-owned, not session-owned)
@@ -1251,7 +1415,7 @@ class SessionManager:
                     message="Sandbox is not running. Please wait for it to start."
                 )
                 packet_logger.log("error", error_packet.model_dump())
-                yield _format_packet_event(error_packet)
+                yield self._format_packet_event(error_packet)
                 return
 
             # Update last activity timestamp
@@ -1292,7 +1456,7 @@ class SessionManager:
             if sandbox is None:
                 error_packet = ErrorPacket(message="Sandbox not found")
                 packet_logger.log("error", error_packet.model_dump())
-                yield _format_packet_event(error_packet)
+                yield self._format_packet_event(error_packet)
                 return
 
             sandbox_id = sandbox.id
@@ -1307,57 +1471,50 @@ class SessionManager:
                 },
             )
 
-            # Stream ACP events directly to frontend
-            for acp_event in self._sandbox_manager.send_message(
+            # Drive the agent. `_yield_acp_events` is a pure ACP generator;
+            # `_persist_acp_event` applies the persistence side effects. The
+            # SSE formatting + packet-logger book-keeping happen here.
+            for acp_event in self._yield_acp_events(
                 sandbox_id, session_id, user_message_content
             ):
-                # Handle SSE keepalive - send comment to keep connection alive
+                # Handle SSE keepalive - send comment to keep connection alive.
                 if isinstance(acp_event, SSEKeepalive):
                     # SSE comments start with : and are ignored by EventSource
-                    # but keep the HTTP connection alive
+                    # but keep the HTTP connection alive.
                     packet_logger.log_sse_emit("keepalive", session_id)
                     yield ": keepalive\n\n"
                     continue
 
-                # Check if we need to finalize pending chunks before processing
-                event_type = self._get_event_type(acp_event)
-                if state.should_finalize_chunks(event_type):
-                    _save_pending_chunks(state)
-
+                # Persistence first so DB writes precede the SSE emit (matches
+                # the prior in-loop ordering, which interleaved them).
+                self._persist_acp_event(session_id, state, acp_event)
                 events_emitted += 1
 
-                # Pass through ACP events with snake_case type names
+                # SSE-only branches: log + serialize for the HTTP client.
                 if isinstance(acp_event, AgentMessageChunk):
-                    text = _extract_text_from_content(acp_event.content)
-                    if text:
-                        state.add_message_chunk(text)
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
                     )
                     event_data["type"] = "agent_message_chunk"
                     packet_logger.log("agent_message_chunk", event_data)
                     packet_logger.log_sse_emit("agent_message_chunk", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_message_chunk")
+                    yield self._serialize_acp_event(acp_event, "agent_message_chunk")
 
                 elif isinstance(acp_event, AgentThoughtChunk):
-                    text = _extract_text_from_content(acp_event.content)
-                    if text:
-                        state.add_thought_chunk(text)
                     packet_logger.log(
                         "agent_thought_chunk",
                         acp_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("agent_thought_chunk", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_thought_chunk")
+                    yield self._serialize_acp_event(acp_event, "agent_thought_chunk")
 
                 elif isinstance(acp_event, ToolCallStart):
-                    # Stream to frontend but don't save - wait for completion
                     packet_logger.log(
                         "tool_call_start",
                         acp_event.model_dump(mode="json", by_alias=True),
                     )
                     packet_logger.log_sse_emit("tool_call_start", session_id)
-                    yield _serialize_acp_event(acp_event, "tool_call_start")
+                    yield self._serialize_acp_event(acp_event, "tool_call_start")
 
                 elif isinstance(acp_event, ToolCallProgress):
                     event_data = acp_event.model_dump(
@@ -1365,64 +1522,9 @@ class SessionManager:
                     )
                     event_data["type"] = "tool_call_progress"
                     event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
-
-                    # Check if this is a TodoWrite tool call
-                    tool_name = (event_data.get("title") or "").lower()
-                    is_todo_write = tool_name in ("todowrite", "todo_write")
-
-                    # Check if this is a Task (subagent) tool call
-                    raw_input = event_data.get("rawInput") or {}
-                    is_task_tool = (
-                        tool_name == "task"
-                        or raw_input.get("subagent_type") is not None
-                        or raw_input.get("subagentType") is not None
-                    )
-
-                    # Save to DB:
-                    # - For TodoWrite: Save every progress update (todos change frequently)
-                    # - For other tools: Only save when status="completed"
-                    if is_todo_write or acp_event.status == "completed":
-                        create_message(
-                            session_id=session_id,
-                            message_type=MessageType.ASSISTANT,
-                            turn_index=state.turn_index,
-                            message_metadata=event_data,
-                            db_session=self._db_session,
-                        )
-
-                    # For completed Task tools, also save the output as an agent_message
-                    # This allows the task output to be rendered as assistant text on reload
-                    if is_task_tool and acp_event.status == "completed":
-                        raw_output = event_data.get("rawOutput") or {}
-                        task_output = raw_output.get("output")
-                        if task_output and isinstance(task_output, str):
-                            # Strip task_metadata from the output
-                            metadata_idx = task_output.find("<task_metadata>")
-                            if metadata_idx >= 0:
-                                task_output = task_output[:metadata_idx].strip()
-
-                            if task_output:
-                                # Create agent_message packet for the task output
-                                task_output_packet = {
-                                    "type": "agent_message",
-                                    "content": {"type": "text", "text": task_output},
-                                    "source": "task_output",
-                                    "timestamp": datetime.now(
-                                        tz=timezone.utc
-                                    ).isoformat(),
-                                }
-                                create_message(
-                                    session_id=session_id,
-                                    message_type=MessageType.ASSISTANT,
-                                    turn_index=state.turn_index,
-                                    message_metadata=task_output_packet,
-                                    db_session=self._db_session,
-                                )
-
-                    # Log full event to packet logger (can handle large payloads)
                     packet_logger.log("tool_call_progress", event_data)
                     packet_logger.log_sse_emit("tool_call_progress", session_id)
-                    yield _serialize_acp_event(acp_event, "tool_call_progress")
+                    yield self._serialize_acp_event(acp_event, "tool_call_progress")
 
                 elif isinstance(acp_event, AgentPlanUpdate):
                     event_data = acp_event.model_dump(
@@ -1430,20 +1532,9 @@ class SessionManager:
                     )
                     event_data["type"] = "agent_plan_update"
                     event_data["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
-
-                    # Upsert plan immediately
-                    plan_msg = upsert_agent_plan(
-                        session_id=session_id,
-                        turn_index=state.turn_index,
-                        plan_metadata=event_data,
-                        db_session=self._db_session,
-                        existing_plan_id=state.plan_message_id,
-                    )
-                    state.plan_message_id = plan_msg.id
-
                     packet_logger.log("agent_plan_update", event_data)
                     packet_logger.log_sse_emit("agent_plan_update", session_id)
-                    yield _serialize_acp_event(acp_event, "agent_plan_update")
+                    yield self._serialize_acp_event(acp_event, "agent_plan_update")
 
                 elif isinstance(acp_event, CurrentModeUpdate):
                     event_data = acp_event.model_dump(
@@ -1452,7 +1543,7 @@ class SessionManager:
                     event_data["type"] = "current_mode_update"
                     packet_logger.log("current_mode_update", event_data)
                     packet_logger.log_sse_emit("current_mode_update", session_id)
-                    yield _serialize_acp_event(acp_event, "current_mode_update")
+                    yield self._serialize_acp_event(acp_event, "current_mode_update")
 
                 elif isinstance(acp_event, PromptResponse):
                     event_data = acp_event.model_dump(
@@ -1461,7 +1552,7 @@ class SessionManager:
                     event_data["type"] = "prompt_response"
                     packet_logger.log("prompt_response", event_data)
                     packet_logger.log_sse_emit("prompt_response", session_id)
-                    yield _serialize_acp_event(acp_event, "prompt_response")
+                    yield self._serialize_acp_event(acp_event, "prompt_response")
 
                 elif isinstance(acp_event, ACPError):
                     event_data = acp_event.model_dump(
@@ -1470,10 +1561,10 @@ class SessionManager:
                     event_data["type"] = "error"
                     packet_logger.log("error", event_data)
                     packet_logger.log_sse_emit("error", session_id)
-                    yield _serialize_acp_event(acp_event, "error")
+                    yield self._serialize_acp_event(acp_event, "error")
 
                 else:
-                    # Unrecognized packet type - log it but don't stream to frontend
+                    # Unrecognized packet type - log it but don't stream to frontend.
                     event_type_name = type(acp_event).__name__
                     event_data = acp_event.model_dump(
                         mode="json", by_alias=True, exclude_none=False
@@ -1483,8 +1574,8 @@ class SessionManager:
                         f"unrecognized_{event_type_name.lower()}", event_data
                     )
 
-            # Save all accumulated state at end of streaming
-            _save_build_turn(state)
+            # Flush any pending accumulated chunks at end of stream.
+            self._finalize_persist(session_id, state)
 
             # Log streaming completion
             packet_logger.log_raw(
@@ -1509,7 +1600,7 @@ class SessionManager:
                 session_id,
                 events_emitted,
             )
-            _save_build_turn(state)
+            self._finalize_persist(session_id, state)
             return
         except ValueError as e:
             error_packet = ErrorPacket(message=str(e))
@@ -1523,7 +1614,7 @@ class SessionManager:
                 },
             )
             logger.exception("ValueError in build message streaming")
-            yield _format_packet_event(error_packet)
+            yield self._format_packet_event(error_packet)
         except RuntimeError as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
@@ -1536,7 +1627,7 @@ class SessionManager:
                 },
             )
             logger.exception("RuntimeError in build message streaming: %s", e)
-            yield _format_packet_event(error_packet)
+            yield self._format_packet_event(error_packet)
         except Exception as e:
             error_packet = ErrorPacket(message=str(e))
             packet_logger.log("error", error_packet.model_dump())
@@ -1549,7 +1640,7 @@ class SessionManager:
                 },
             )
             logger.exception("Unexpected error in build message streaming")
-            yield _format_packet_event(error_packet)
+            yield self._format_packet_event(error_packet)
 
     def _get_event_type(self, acp_event: Any) -> str:
         """Get the event type string for an ACP event."""
