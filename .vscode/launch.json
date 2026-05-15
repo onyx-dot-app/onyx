@@ -297,7 +297,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup,opensearch_migration"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -328,7 +328,7 @@
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"
       ],
       "presentation": {
         "group": "2",
@@ -578,7 +578,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup,opensearch_migration"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -611,7 +611,7 @@
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"
       ],
       "presentation": {
         "group": "2",
