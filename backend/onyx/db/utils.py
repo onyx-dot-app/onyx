@@ -4,6 +4,7 @@ from typing import Final
 
 from psycopg2 import errorcodes
 from psycopg2 import OperationalError
+from psycopg2.errors import ForeignKeyViolation
 from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
 from sqlalchemy import inspect
@@ -39,6 +40,11 @@ def is_unique_violation(exc: IntegrityError, constraint: str) -> bool:
         isinstance(orig, UniqueViolation)
         and getattr(orig.diag, "constraint_name", None) == constraint
     )
+
+
+def is_fk_violation(exc: IntegrityError) -> bool:
+    """True iff the IntegrityError is a foreign-key violation."""
+    return isinstance(exc.orig, ForeignKeyViolation)
 
 
 def model_to_dict(model: Base) -> dict[str, Any]:

@@ -33,6 +33,7 @@ from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.utils import is_fk_violation
 from onyx.db.utils import is_unique_violation
 from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
@@ -236,10 +237,12 @@ def replace_skill_grants(
     try:
         db_session.flush()
     except IntegrityError as e:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "One or more group IDs do not exist.",
-        ) from e
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "One or more group IDs do not exist.",
+            ) from e
+        raise
 
 
 def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
