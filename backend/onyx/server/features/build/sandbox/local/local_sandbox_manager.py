@@ -24,7 +24,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
-from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
@@ -84,7 +83,6 @@ class LocalSandboxManager(SandboxManager):
             base_path=Path(SANDBOX_BASE_PATH),
             outputs_template_path=Path(OUTPUTS_TEMPLATE_PATH),
             venv_template_path=Path(VENV_TEMPLATE_PATH),
-            skills_path=Path(SKILLS_TEMPLATE_PATH),
             agent_instructions_template_path=agent_instructions_template_path,
         )
         self._process_manager = ProcessManager()
@@ -209,14 +207,6 @@ class LocalSandboxManager(SandboxManager):
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
         logger.debug("Sandbox directory created at %s", sandbox_path)
 
-        # Copy skills to sandbox root so write_sandbox_file + session symlinks work
-        sandbox_skills = sandbox_path / "skills"
-        if (
-            self._directory_manager.skills_source_path.exists()
-            and not sandbox_skills.exists()
-        ):
-            shutil.copytree(self._directory_manager.skills_source_path, sandbox_skills)
-
         logger.info(
             "Provisioned sandbox %s at %s (no sessions yet)", sandbox_id, sandbox_path
         )
@@ -297,6 +287,7 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
         snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
@@ -364,11 +355,17 @@ class LocalSandboxManager(SandboxManager):
             self._directory_manager.setup_outputs_directory(session_path)
             logger.debug("Outputs directory ready")
 
-            logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(
-                session_path, skills_target=sandbox_path / "skills"
-            )
-            logger.debug("Skills ready")
+            logger.debug("Setting up skills symlink")
+            skills_target = sandbox_path / "managed" / "skills"
+            skills_link = session_path / ".opencode" / "skills"
+            skills_link.parent.mkdir(parents=True, exist_ok=True)
+            if skills_link.is_symlink() or skills_link.exists():
+                if skills_link.is_symlink():
+                    skills_link.unlink()
+                else:
+                    shutil.rmtree(skills_link)
+            skills_link.symlink_to(skills_target)
+            logger.debug("Skills symlink ready")
 
             # Setup attachments directory
             logger.debug("Setting up attachments directory")
@@ -423,6 +420,7 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Setting up agent instructions (AGENTS.md)")
             self._directory_manager.setup_agent_instructions(
                 sandbox_path=session_path,
+                skills_section=skills_section,
                 provider=llm_config.provider,
                 model_name=llm_config.model_name,
                 nextjs_port=nextjs_port,
@@ -771,6 +769,7 @@ class LocalSandboxManager(SandboxManager):
         tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
+        skills_section: str,  # noqa: ARG002
     ) -> None:
         """Not implemented for local backend - workspaces persist on disk.
 

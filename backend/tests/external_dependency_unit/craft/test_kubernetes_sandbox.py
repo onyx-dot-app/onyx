@@ -186,6 +186,7 @@ def test_kubernetes_sandbox_provision() -> None:
             session_id=session_id,
             llm_config=llm_config,
             nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            skills_section="No skills available.",
             snapshot_path=None,
             user_name="Test User",
             user_role="Test Role",
@@ -344,7 +345,11 @@ def test_kubernetes_sandbox_send_message() -> None:
         print("DEBUG: Sandbox agent is healthy")
 
         manager.setup_session_workspace(
-            sandbox_id, session_id, llm_config, nextjs_port=SANDBOX_NEXTJS_PORT_START
+            sandbox_id,
+            session_id,
+            llm_config,
+            nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            skills_section="No skills available.",
         )
 
         # Send a simple message
@@ -467,6 +472,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             session_id=session_id,
             llm_config=llm_config,
             nextjs_port=SANDBOX_NEXTJS_PORT_START,
+            skills_section="No skills available.",
             snapshot_path=None,
             user_name="Test User",
             user_role="Test Role",

@@ -56,6 +56,8 @@ from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
+from onyx.skills.push import build_skills_section_for_user
+from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -484,6 +486,9 @@ def restore_session(
                             tenant_id=tenant_id,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
+                            skills_section=build_skills_section_for_user(
+                                user, db_session
+                            ),
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
@@ -501,11 +506,19 @@ def restore_session(
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
+                        skills_section=build_skills_section_for_user(user, db_session),
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
 
-                session_manager.push_dynamic_skills(sandbox.id, user.id)
+                try:
+                    hydrate_sandbox_skills(sandbox.id, user, db_session)
+                except Exception:
+                    logger.warning(
+                        "Failed to push skills to sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",

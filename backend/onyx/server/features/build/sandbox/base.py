@@ -57,12 +57,14 @@ class SandboxManager(ABC):
 
     Directory Structure:
         $SANDBOX_ROOT/
+        ├── managed/skills/            # Skills pushed via the skill-push system,
+        │                              # symlinked into each session
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output for this session
             │   │   └── web/           # Next.js app
             │   ├── venv/              # Python virtual environment
-            │   ├── skills/            # Opencode skills
+            │   ├── .opencode/skills   # Symlink → /workspace/managed/skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -126,6 +128,7 @@ class SandboxManager(ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -137,7 +140,7 @@ class SandboxManager(ABC):
         Creates the per-session directory structure:
         - sessions/$session_id/outputs/ (from snapshot or template)
         - sessions/$session_id/venv/
-        - sessions/$session_id/skills/
+        - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
@@ -147,6 +150,10 @@ class SandboxManager(ABC):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            nextjs_port: Port for the Next.js dev server, or None for headless.
+            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for
+                AGENTS.md. Callers build this from the registry+DB so the
+                manager stays DB-agnostic.
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
@@ -219,6 +226,7 @@ class SandboxManager(ABC):
         tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
+        skills_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.
 

@@ -152,6 +152,7 @@ from onyx.server.token_rate_limits.api import router as token_rate_limit_setting
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.skills.builtins import register_builtin_skills
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
@@ -358,6 +359,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     # fill up Postgres connection pools
     await warm_up_connections()
+
+    # Tenant-agnostic; sits outside the multi-tenant fork below.
+    register_builtin_skills()
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry

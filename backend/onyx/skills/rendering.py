@@ -1,13 +1,12 @@
-"""Render dynamic skill templates for sandbox sessions.
+"""Render dynamic skill templates for the per-user skills fileset.
 
 Templates with placeholders (e.g., {{AVAILABLE_SOURCES_SECTION}}) are
-rendered per-user using DB state. The skills_dir is passed in by the
-caller — it points to wherever skill templates live (Docker build
-context in prod, same path in local dev).
+rendered per-user using DB state. The skills_dir argument points to
+wherever the built-in source files live — ``SKILLS_TEMPLATE_PATH`` in
+the API server image.
 """
 
 from pathlib import Path
-from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
@@ -19,11 +18,6 @@ from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class RenderedSkillFile(NamedTuple):
-    path: str
-    content: str
 
 
 def build_available_sources_section(
@@ -80,8 +74,11 @@ def render_company_search_skill(
     db_session: Session,
     user: User,
     skills_dir: Path,
-) -> RenderedSkillFile:
+) -> str:
     """Render the company-search SKILL.md with the user's available sources.
+
+    ``skills_dir`` is the parent directory of ``company-search/`` — the renderer
+    appends ``company-search/SKILL.md.template`` to it.
 
     Raises:
         FileNotFoundError: If the skill template is missing from skills_dir.
@@ -89,7 +86,4 @@ def render_company_search_skill(
     template_path = skills_dir / "company-search" / "SKILL.md.template"
     template = template_path.read_text()
     sources_section = build_available_sources_section(db_session, user)
-    return RenderedSkillFile(
-        path="skills/company-search/SKILL.md",
-        content=template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section),
-    )
+    return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section)

@@ -34,17 +34,21 @@ class DirectoryManager:
     Responsible for:
     - Creating sandbox directory structure (user-level)
     - Creating session workspace directories (session-level)
-    - Copying templates (outputs, venv, skills, AGENTS.md)
+    - Copying templates (outputs, venv, AGENTS.md)
     - Cleaning up sandbox/session directories on termination
+
+    Skills are not handled here — they're delivered via the skill-push system
+    to ``managed/skills/`` and symlinked into each session by the caller.
 
     Directory Structure:
         $base_path/$sandbox_id/
+        ├── managed/skills/            # Pushed at session-setup time
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output (from template or snapshot)
             │   │   └── web/           # Next.js app
             │   ├── .venv/             # Python virtual environment
-            │   ├── .agent/skills/     # Opencode skills
+            │   ├── .opencode/skills   # Symlink → ../../managed/skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -57,7 +61,6 @@ class DirectoryManager:
         base_path: Path,
         outputs_template_path: Path,
         venv_template_path: Path,
-        skills_path: Path,
         agent_instructions_template_path: Path,
     ) -> None:
         """Initialize DirectoryManager with template paths.
@@ -66,28 +69,22 @@ class DirectoryManager:
             base_path: Root directory for all sandboxes
             outputs_template_path: Path to outputs template directory
             venv_template_path: Path to Python virtual environment template
-            skills_path: Path to agent skills directory
             agent_instructions_template_path: Path to AGENTS.md template file
         """
         self._base_path = base_path
         self._outputs_template_path = outputs_template_path
         self._venv_template_path = venv_template_path
-        self._skills_path = skills_path
         self._agent_instructions_template_path = agent_instructions_template_path
-
-    @property
-    def skills_source_path(self) -> Path:
-        return self._skills_path
 
     def create_sandbox_directory(self, sandbox_id: str) -> Path:
         """Create sandbox directory structure (user-level).
 
         Creates the base directory for a user's sandbox:
         {base_path}/{sandbox_id}/
-        ├── skills/                     # Copied from source, shared across sessions
         └── sessions/                   # Container for per-session workspaces
 
         NOTE: This only creates the sandbox-level structure.
+        ``managed/skills/`` is created lazily when the first skills push lands.
         Call create_session_directory() to create per-session workspaces.
 
         Args:
@@ -117,7 +114,7 @@ class DirectoryManager:
         ├── opencode.json               # LLM config (set up separately)
         ├── attachments/                # User-uploaded files
         └── .opencode/
-            └── skills/                 # Agent skills
+            └── skills                  # Symlink → managed/skills
 
         NOTE: This creates the directory structure but doesn't copy templates.
         Call setup_outputs_directory(), setup_venv(), etc. to set up contents.
@@ -256,6 +253,7 @@ class DirectoryManager:
     def setup_agent_instructions(
         self,
         sandbox_path: Path,
+        skills_section: str,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -264,25 +262,14 @@ class DirectoryManager:
         user_role: str | None = None,
         include_org_info: bool = False,
     ) -> None:
-        """Generate AGENTS.md with dynamic configuration.
-
-        Args:
-            sandbox_path: Path to the sandbox directory
-            provider: LLM provider type (e.g., "openai", "anthropic")
-            model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
-            nextjs_port: Port for Next.js development server
-            disabled_tools: List of disabled tools
-            user_name: User's name for personalization
-            user_role: User's role/title for personalization
-            include_org_info: Whether to include the org_info section
-        """
+        """Generate AGENTS.md with dynamic configuration."""
         agent_md_path = sandbox_path / "AGENTS.md"
         if agent_md_path.exists():
             return
 
         content = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_path=self._skills_path,
+            skills_section=skills_section,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -295,23 +282,6 @@ class DirectoryManager:
         # Write the generated content
         agent_md_path.write_text(content)
         logger.debug("Generated AGENTS.md at %s", agent_md_path)
-
-    def setup_skills(self, session_path: Path, skills_target: Path) -> None:
-        """Symlink session's .opencode/skills to the given skills directory."""
-        skills_dest = session_path / ".opencode" / "skills"
-
-        if not skills_target.exists():
-            logger.warning("Skills path %s does not exist", skills_target)
-            return
-
-        if skills_dest.is_symlink() or skills_dest.exists():
-            if skills_dest.is_symlink():
-                skills_dest.unlink()
-            else:
-                shutil.rmtree(skills_dest)
-
-        skills_dest.parent.mkdir(parents=True, exist_ok=True)
-        skills_dest.symlink_to(skills_target)
 
     def setup_opencode_config(
         self,

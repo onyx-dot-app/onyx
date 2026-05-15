@@ -255,7 +255,6 @@ class KubernetesSandboxManager(SandboxManager):
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
-        self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
             "KubernetesSandboxManager initialized: namespace=%s, image=%s",
@@ -286,6 +285,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
+        skills_section: str,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -297,7 +297,7 @@ class KubernetesSandboxManager(SandboxManager):
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_path=self._skills_path,
+            skills_section=skills_section,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -1014,6 +1014,7 @@ class KubernetesSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -1059,6 +1060,7 @@ class KubernetesSandboxManager(SandboxManager):
         #
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
+            skills_section=skills_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1143,12 +1145,13 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
-# Symlink skills (baked into image at /workspace/skills/)
-if [ -d /workspace/skills ]; then
-    mkdir -p {session_path}/.opencode
-    ln -sf /workspace/skills {session_path}/.opencode/skills
-    echo "Linked skills to /workspace/skills"
-fi
+# DO NOT mkdir /workspace/managed/skills here — the push daemon swaps
+# this path via os.rename(symlink, mount), which fails if mount is a
+# real directory. Dangling until the first push lands is fine; nothing
+# reads .opencode/skills during the rest of setup.
+mkdir -p {session_path}/.opencode
+ln -sf /workspace/managed/skills {session_path}/.opencode/skills
+echo "Linked skills to /workspace/managed/skills"
 
 # Write agent instructions
 echo "Writing AGENTS.md"
@@ -1426,6 +1429,7 @@ echo "SNAPSHOT_CREATED"
         tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
+        skills_section: str,
     ) -> None:
         """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
 
@@ -1487,6 +1491,7 @@ echo "SNAPSHOT_RESTORED"
                 session_path=safe_session_path,
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
+                skills_section=skills_section,
             )
 
             # Start NextJS dev server (check node_modules since restoring
@@ -1516,6 +1521,7 @@ echo "SNAPSHOT_RESTORED"
         session_path: str,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
@@ -1532,6 +1538,7 @@ echo "SNAPSHOT_RESTORED"
                 "Unknown" in that case.
         """
         agent_instructions = self._load_agent_instructions(
+            skills_section=skills_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -2009,7 +2016,7 @@ echo "Session config regeneration complete"
 
         exec_command = [
             "python",
-            "/workspace/skills/pptx/scripts/preview.py",
+            "/workspace/managed/skills/pptx/scripts/preview.py",
             pptx_abs,
             cache_abs,
         ]

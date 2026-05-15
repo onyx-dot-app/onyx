@@ -7,7 +7,7 @@
 #
 # Directory structure (created by init container + session setup):
 #   /workspace/
-#   ├── skills/          # Agent skills (baked into image, copied per-session)
+#   ├── managed/skills/  # Pushed at session-setup time by the API server
 #   ├── templates/       # Output templates (baked into image)
 #   └── sessions/        # Per-session workspaces (created via exec)
 #       └── $session_id/
@@ -89,9 +89,6 @@ USER root
 
 # Add opencode to PATH (installs to ~/.opencode/bin)
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
-
-# Copy agent skills (symlinked into each session's .opencode/skills/ at setup time)
-COPY --exclude=__pycache__ skills/ /workspace/skills/
 
 COPY --exclude=__pycache__ daemon/ /workspace/push_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh

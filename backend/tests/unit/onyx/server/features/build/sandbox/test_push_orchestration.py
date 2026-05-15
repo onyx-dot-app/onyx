@@ -75,6 +75,7 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -107,6 +108,7 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
+        skills_section: str,
     ) -> None:
         raise NotImplementedError
 
