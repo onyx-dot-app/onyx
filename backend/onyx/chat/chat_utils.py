@@ -163,6 +163,7 @@ def create_chat_history_chain(
     chat_session_id: UUID,
     db_session: Session,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
     # Optional id at which we finish processing
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
@@ -175,6 +176,7 @@ def create_chat_history_chain(
         db_session=db_session,
         skip_permission_check=True,
         prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
     )
 
     if not all_chat_messages:
@@ -382,7 +384,7 @@ def _get_or_extract_plaintext(
         plaintext_io = file_store.read_file(plaintext_key, mode="b")
         return plaintext_io.read().decode("utf-8")
     except Exception:
-        logger.info(f"Cache miss for file with id={file_id}")
+        logger.info("Cache miss for file with id=%s", file_id)
 
     # Cache miss — extract and store.
     content_text = extract_fn()
@@ -424,7 +426,9 @@ def load_chat_file(
             content_text = _get_or_extract_plaintext(cache_key, _extract)
         except Exception as e:
             logger.warning(
-                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
+                "Failed to retrieve content for file %s: %s",
+                file_descriptor["id"],
+                str(e),
             )
 
     # Get token count from UserFile if available
@@ -440,7 +444,7 @@ def load_chat_file(
                 token_count = user_file.token_count
         except (ValueError, TypeError) as e:
             logger.warning(
-                f"Failed to get token count for file {file_descriptor['id']}: {e}"
+                "Failed to get token count for file %s: %s", file_descriptor["id"], e
             )
 
     return ChatLoadedFile(
@@ -902,7 +906,7 @@ def build_python_chat_files_from_search_docs(
             record = file_store.read_file_record(doc.file_id)
         except Exception as e:
             logger.warning(
-                f"file_id={doc.file_id!r} not found in file store ({e}); skipping."
+                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
             )
             continue
 
@@ -911,8 +915,9 @@ def build_python_chat_files_from_search_docs(
             FileOrigin.CONNECTOR_FILE_UPLOAD,
         ):
             logger.warning(
-                f"file_id={doc.file_id!r} has origin={record.file_origin!r}, "
-                "not eligible for code-interpreter staging; skipping."
+                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
+                doc.file_id,
+                record.file_origin,
             )
             continue
 
@@ -920,7 +925,7 @@ def build_python_chat_files_from_search_docs(
             content = file_store.read_file(doc.file_id, mode="b").read()
         except Exception as e:
             logger.warning(
-                f"Failed to read bytes for file_id={doc.file_id!r}: {e}; skipping."
+                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
             )
             continue
 

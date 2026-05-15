@@ -17,6 +17,7 @@ export enum LLMProviderName {
 }
 
 export interface ModelConfiguration {
+  id?: number;
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;
@@ -48,7 +49,7 @@ export interface LLMModelDescriptor {
 
 export interface LLMProviderView {
   id: number;
-  name: string;
+  name: string | null;
   provider: string;
   api_key: string | null;
   api_base: string | null;
@@ -68,7 +69,7 @@ export interface VisionProvider extends LLMProviderView {
 
 export interface LLMProviderDescriptor {
   id: number;
-  name: string;
+  name: string | null;
   provider: string;
   provider_display_name: string;
   model_configurations: ModelConfiguration[];

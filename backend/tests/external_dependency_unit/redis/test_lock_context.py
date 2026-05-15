@@ -39,9 +39,9 @@ def test_acquire_and_release() -> None:
     """
     # Precondition.
     redis_client = get_shared_redis_client()
-    assert not redis_client.exists(
-        TEST_LOCK_NAME
-    ), "Lock key should not exist before the test."
+    assert not redis_client.exists(TEST_LOCK_NAME), (
+        "Lock key should not exist before the test."
+    )
 
     # Under test.
     with redis_shared_lock(
@@ -53,14 +53,14 @@ def test_acquire_and_release() -> None:
         assert isinstance(token, (str, bytes)), "Token is not a string or bytes."
         assert token, "Token is empty."
         # While inside the context, the lock key exists in redis.
-        assert redis_client.exists(
-            TEST_LOCK_NAME
-        ), "Lock key should exist inside the context."
+        assert redis_client.exists(TEST_LOCK_NAME), (
+            "Lock key should exist inside the context."
+        )
 
     # Postcondition.
-    assert not redis_client.exists(
-        TEST_LOCK_NAME
-    ), "Lock key should not exist after exiting the context."
+    assert not redis_client.exists(TEST_LOCK_NAME), (
+        "Lock key should not exist after exiting the context."
+    )
 
 
 def test_second_acquirer_times_out_while_first_holds() -> None:
@@ -86,9 +86,9 @@ def test_second_acquirer_times_out_while_first_holds() -> None:
     holder_thread = threading.Thread(target=first_holder)
     holder_thread.start()
     try:
-        assert first_holding.wait(
-            timeout=5.0
-        ), "First holder thread never acquired the lock."
+        assert first_holding.wait(timeout=5.0), (
+            "First holder thread never acquired the lock."
+        )
 
         blocking_timeout = 0.5
 
@@ -106,15 +106,15 @@ def test_second_acquirer_times_out_while_first_holds() -> None:
         # Postcondition.
         elapsed = time.monotonic() - start
         # We should have waited roughly the blocking timeout before failing.
-        assert (
-            blocking_timeout / 2 < elapsed < blocking_timeout * 2
-        ), f"Unexpected wait duration: {elapsed:.3f} seconds."
+        assert blocking_timeout / 2 < elapsed < blocking_timeout * 2, (
+            f"Unexpected wait duration: {elapsed:.3f} seconds."
+        )
     finally:
         first_release.set()
         holder_thread.join(timeout=5.0)
-        assert (
-            not holder_thread.is_alive()
-        ), "First holder thread should not be alive after joining."
+        assert not holder_thread.is_alive(), (
+            "First holder thread should not be alive after joining."
+        )
 
 
 def test_second_acquirer_gets_lock_after_first_releases() -> None:
@@ -158,18 +158,18 @@ def test_second_acquirer_gets_lock_after_first_releases() -> None:
 
     holder_thread = threading.Thread(target=first_holder)
     holder_thread.start()
-    assert first_holding.wait(
-        timeout=5.0
-    ), "First holder thread never acquired the lock."
+    assert first_holding.wait(timeout=5.0), (
+        "First holder thread never acquired the lock."
+    )
 
     waiter_thread = threading.Thread(target=second_waiter)
     waiter_thread.start()
 
     assert second_started.wait(timeout=5.0), "Second waiter thread never started."
     # Waiter cannot succeed while the holder is still inside the context.
-    assert (
-        not second_acquired.is_set()
-    ), "Second waiter thread acquired the lock before the first thread released it."
+    assert not second_acquired.is_set(), (
+        "Second waiter thread acquired the lock before the first thread released it."
+    )
 
     # Under test.
     # Release the holder thread.
@@ -179,12 +179,12 @@ def test_second_acquirer_gets_lock_after_first_releases() -> None:
     waiter_thread.join(timeout=10.0)
 
     # Postcondition.
-    assert (
-        not holder_thread.is_alive()
-    ), "Holder thread should not be alive after joining."
-    assert (
-        not waiter_thread.is_alive()
-    ), "Waiter thread should not be alive after joining."
+    assert not holder_thread.is_alive(), (
+        "Holder thread should not be alive after joining."
+    )
+    assert not waiter_thread.is_alive(), (
+        "Waiter thread should not be alive after joining."
+    )
     assert not errors, f"Thread errors: {errors}"
     assert second_acquired.is_set(), "Second waiter never acquired the lock."
 
@@ -236,9 +236,9 @@ def test_lock_auto_releases_after_max_time() -> None:
 
     holder_thread = threading.Thread(target=overrunning_holder)
     holder_thread.start()
-    assert first_acquired.wait(
-        timeout=5.0
-    ), "First holder thread never acquired the lock."
+    assert first_acquired.wait(timeout=5.0), (
+        "First holder thread never acquired the lock."
+    )
 
     # Under test.
     waiter_thread = threading.Thread(target=second_acquirer)
@@ -248,12 +248,12 @@ def test_lock_auto_releases_after_max_time() -> None:
     waiter_thread.join(timeout=10.0)
 
     # Postcondition.
-    assert (
-        not holder_thread.is_alive()
-    ), "Holder thread should not be alive after joining."
-    assert (
-        not waiter_thread.is_alive()
-    ), "Waiter thread should not be alive after joining."
+    assert not holder_thread.is_alive(), (
+        "Holder thread should not be alive after joining."
+    )
+    assert not waiter_thread.is_alive(), (
+        "Waiter thread should not be alive after joining."
+    )
     assert not errors, f"Thread errors: {errors}"
     assert first_done.is_set(), "First holder thread should have finished."
     assert second_acquired.is_set(), "Second acquirer thread never got the lock."
@@ -292,9 +292,9 @@ def test_lock_released_when_body_raises() -> None:
             raise RuntimeError("Boom")
 
     redis_client = get_shared_redis_client()
-    assert not redis_client.exists(
-        TEST_LOCK_NAME
-    ), "Lock key should not exist after the exception was raised."
+    assert not redis_client.exists(TEST_LOCK_NAME), (
+        "Lock key should not exist after the exception was raised."
+    )
 
     # And a subsequent acquisition should succeed immediately.
     with redis_shared_lock(

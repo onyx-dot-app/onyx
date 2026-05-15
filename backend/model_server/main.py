@@ -70,7 +70,7 @@ def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     gpu_type = get_gpu_type()
-    logger.notice(f"Torch GPU Detection: gpu_type={gpu_type}")
+    logger.notice("Torch GPU Detection: gpu_type=%s", gpu_type)
 
     app.state.gpu_type = gpu_type
 
@@ -82,12 +82,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             logger.notice("Moved contents of temp_huggingface to huggingface cache.")
     except Exception as e:
         logger.warning(
-            f"Error moving contents of temp_huggingface to huggingface cache: {e}. "
-            "This is not a critical error and the model server will continue to run."
+            "Error moving contents of temp_huggingface to huggingface cache: %s. This is not a critical error and the model server will continue to run.",
+            e,
         )
 
     torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
-    logger.notice(f"Torch Threads: {torch.get_num_threads()}")
+    logger.notice("Torch Threads: %s", torch.get_num_threads())
 
     yield
 
@@ -131,7 +131,9 @@ app = get_model_app()
 
 if __name__ == "__main__":
     logger.notice(
-        f"Starting Onyx Model Server on http://{MODEL_SERVER_ALLOWED_HOST}:{str(MODEL_SERVER_PORT)}/"
+        "Starting Onyx Model Server on http://%s:%s/",
+        MODEL_SERVER_ALLOWED_HOST,
+        str(MODEL_SERVER_PORT),
     )
-    logger.notice(f"Model Server Version: {__version__}")
+    logger.notice("Model Server Version: %s", __version__)
     uvicorn.run(app, host=MODEL_SERVER_ALLOWED_HOST, port=MODEL_SERVER_PORT)

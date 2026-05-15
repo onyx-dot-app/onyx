@@ -9,7 +9,6 @@ Create Date: 2025-02-17 11:15:43.081150
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "9c00a2bccb83"
 down_revision = "b7a7eee5aa15"
@@ -22,8 +21,7 @@ def upgrade() -> None:
     op.add_column("chat_message", sa.Column("is_agentic", sa.Boolean(), nullable=True))
 
     # Update existing rows based on presence of SubQuestions
-    op.execute(
-        """
+    op.execute("""
         UPDATE chat_message
         SET is_agentic = EXISTS (
             SELECT 1
@@ -31,8 +29,7 @@ def upgrade() -> None:
             WHERE agent__sub_question.primary_question_id = chat_message.id
         )
         WHERE is_agentic IS NULL
-    """
-    )
+    """)
 
     # Make the column non-nullable with a default value of False
     op.alter_column(

@@ -15,7 +15,7 @@ class SearXNGClient(WebSearchProvider):
         searxng_base_url: str,
         num_results: int = 10,
     ) -> None:
-        logger.debug(f"Initializing SearXNGClient with base URL: {searxng_base_url}")
+        logger.debug("Initializing SearXNGClient with base URL: %s", searxng_base_url)
         self._searxng_base_url = searxng_base_url
         self._num_results = num_results
 
@@ -26,7 +26,7 @@ class SearXNGClient(WebSearchProvider):
             "format": "json",
         }
         logger.debug(
-            f"Searching with payload: {payload} to {self._searxng_base_url}/search"
+            "Searching with payload: %s to %s/search", payload, self._searxng_base_url
         )
         response = requests.post(
             f"{self._searxng_base_url}/search",
@@ -50,14 +50,17 @@ class SearXNGClient(WebSearchProvider):
 
     def test_connection(self) -> dict[str, str]:
         try:
-            logger.debug(f"Testing connection to {self._searxng_base_url}/config")
+            logger.debug("Testing connection to %s/config", self._searxng_base_url)
             response = requests.get(f"{self._searxng_base_url}/config")
-            logger.debug(f"Response: {response.status_code}, text: {response.text}")
+            logger.debug("Response: %s, text: %s", response.status_code, response.text)
             response.raise_for_status()
         except requests.HTTPError as e:
             status_code = e.response.status_code
             logger.debug(
-                f"HTTPError: status_code={status_code}, e.response={e.response.status_code if e.response else None}, error={e}"
+                "HTTPError: status_code=%s, e.response=%s, error=%s",
+                status_code,
+                e.response.status_code if e.response else None,
+                e,
             )
             if status_code == 429:
                 raise HTTPException(

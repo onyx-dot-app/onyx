@@ -54,7 +54,9 @@ async def leave_organization(
             logger.debug("User deleted from control plane")
         except Exception as e:
             logger.exception(
-                f"Failed to delete user from control plane for tenant {tenant_id}: {e}"
+                "Failed to delete user from control plane for tenant %s: %s",
+                tenant_id,
+                e,
             )
             raise HTTPException(
                 status_code=500,

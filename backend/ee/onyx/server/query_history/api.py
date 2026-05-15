@@ -130,7 +130,9 @@ def snapshot_from_chat_session(
     try:
         # Older chats may not have the right structure
         messages = create_chat_history_chain(
-            chat_session_id=chat_session.id, db_session=db_session
+            chat_session_id=chat_session.id,
+            db_session=db_session,
+            prefetch_message_details=True,
         )
     except RuntimeError:
         return None

@@ -229,13 +229,13 @@ export default function NotificationsPopover({
       </Section>
 
       {isLoading ? (
-        <div className="h-[var(--notifications-popover)]">
+        <div className="h-(--notifications-popover)">
           <Section>
             <SimpleLoader />
           </Section>
         </div>
       ) : !notifications || notifications.length === 0 ? (
-        <div className="h-[var(--notifications-popover)]">
+        <div className="h-(--notifications-popover)">
           <Section>
             <IllustrationContent
               title="No notifications"
@@ -244,7 +244,7 @@ export default function NotificationsPopover({
           </Section>
         </div>
       ) : (
-        <div className="max-h-[var(--notifications-popover)] overflow-y-auto flex flex-col gap-1">
+        <div className="max-h-(--notifications-popover) overflow-y-auto flex flex-col gap-1">
           {newNotifications.length > 0 && (
             <>
               <Divider title="New" />

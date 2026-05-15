@@ -4,11 +4,16 @@ from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR)
 
 _THREAD_1_START_TIME = 1730568700
 _THREAD_1_END_TIME = 1730569000

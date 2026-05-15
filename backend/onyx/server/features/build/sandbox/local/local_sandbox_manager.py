@@ -9,6 +9,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 
 import mimetypes
 import re
+import shutil
 import subprocess
 import threading
 from collections.abc import Generator
@@ -19,10 +20,10 @@ import httpx
 
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import DEMO_DATA_PATH
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
@@ -74,14 +75,13 @@ class LocalSandboxManager(SandboxManager):
         """Initialize managers."""
         # Paths for templates
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
-        skills_path = build_dir / "sandbox" / "kubernetes" / "docker" / "skills"
         agent_instructions_template_path = build_dir / "AGENTS.template.md"
 
         self._directory_manager = DirectoryManager(
             base_path=Path(SANDBOX_BASE_PATH),
             outputs_template_path=Path(OUTPUTS_TEMPLATE_PATH),
             venv_template_path=Path(VENV_TEMPLATE_PATH),
-            skills_path=skills_path,
+            skills_path=Path(SKILLS_TEMPLATE_PATH),
             agent_instructions_template_path=agent_instructions_template_path,
         )
         self._process_manager = ProcessManager()
@@ -137,8 +137,8 @@ class LocalSandboxManager(SandboxManager):
             error_msg += "\n".join(f"  - {template}" for template in missing_templates)
             raise RuntimeError(error_msg)
 
-        logger.debug(f"Outputs template found at {outputs_path}")
-        logger.debug(f"Venv template found at {venv_path}")
+        logger.debug("Outputs template found at %s", outputs_path)
+        logger.debug("Venv template found at %s", venv_path)
 
     def _get_sandbox_path(self, sandbox_id: str | UUID) -> Path:
         """Get the filesystem path for a sandbox based on sandbox_id.
@@ -163,123 +163,13 @@ class LocalSandboxManager(SandboxManager):
         """
         return self._get_sandbox_path(sandbox_id) / "sessions" / str(session_id)
 
-    def _setup_filtered_files(
-        self,
-        session_path: Path,
-        source_path: Path,
-        excluded_paths: list[str],
-    ) -> None:
-        """Set up files directory with filtered symlinks based on exclusions.
-
-        Instead of symlinking the entire source directory, this creates a files/
-        directory structure where:
-        - Top-level items (except user_library) are symlinked directly
-        - user_library/ is created as a real directory with filtered symlinks
-
-        Args:
-            session_path: Path to the session directory
-            source_path: Path to the user's knowledge files (e.g., /storage/tenant/knowledge/user/)
-            excluded_paths: List of paths within user_library to exclude
-                (e.g., ["/data/file.xlsx", "/reports/old.pdf"])
-        """
-        files_dir = session_path / "files"
-        files_dir.mkdir(parents=True, exist_ok=True)
-
-        # Normalize excluded paths for comparison (remove leading slash)
-        excluded_set = {p.lstrip("/") for p in excluded_paths}
-
-        if not source_path.exists():
-            logger.warning(f"Source path does not exist: {source_path}")
-            return
-
-        # Iterate through top-level items in source
-        for item in source_path.iterdir():
-            target_link = files_dir / item.name
-
-            if item.name == "user_library":
-                # user_library needs filtered handling
-                self._setup_filtered_user_library(
-                    target_dir=target_link,
-                    source_dir=item,
-                    excluded_set=excluded_set,
-                    base_path="",
-                )
-            else:
-                # Other directories/files: symlink directly
-                if not target_link.exists():
-                    target_link.symlink_to(item, target_is_directory=item.is_dir())
-
-    def _setup_filtered_user_library(
-        self,
-        target_dir: Path,
-        source_dir: Path,
-        excluded_set: set[str],
-        base_path: str,
-    ) -> bool:
-        """Recursively set up user_library with filtered symlinks.
-
-        Creates directory structure and symlinks only non-excluded files.
-        Only creates directories if they will contain at least one enabled file.
-
-        Args:
-            target_dir: Where to create the filtered structure
-            source_dir: Source user_library directory
-            excluded_set: Set of excluded relative paths (e.g., {"data/file.xlsx"})
-            base_path: Current path relative to user_library root (for recursion)
-
-        Returns:
-            True if any content was created (files or non-empty subdirectories)
-        """
-        if not source_dir.exists():
-            return False
-
-        has_content = False
-
-        for item in source_dir.iterdir():
-            # Build relative path for exclusion check
-            rel_path = (
-                f"{base_path}/{item.name}".lstrip("/") if base_path else item.name
-            )
-            target_link = target_dir / item.name
-
-            if item.is_dir():
-                # Check if entire directory is excluded
-                if rel_path in excluded_set:
-                    logger.debug(f"Excluding directory: user_library/{rel_path}")
-                    continue
-
-                # Recurse into directory - only create if it has content
-                subdir_has_content = self._setup_filtered_user_library(
-                    target_dir=target_link,
-                    source_dir=item,
-                    excluded_set=excluded_set,
-                    base_path=rel_path,
-                )
-                if subdir_has_content:
-                    has_content = True
-            else:
-                # Check if file is excluded
-                if rel_path in excluded_set:
-                    logger.debug(f"Excluding file: user_library/{rel_path}")
-                    continue
-
-                # Create parent directory if needed (lazy creation)
-                if not target_dir.exists():
-                    target_dir.mkdir(parents=True, exist_ok=True)
-
-                # Create symlink to file
-                if not target_link.exists():
-                    target_link.symlink_to(item)
-                has_content = True
-
-        return has_content
-
     def provision(
         self,
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
+        onyx_pat: str | None = None,  # noqa: ARG002
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
 
@@ -295,6 +185,8 @@ class LocalSandboxManager(SandboxManager):
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration (stored for default config)
+            onyx_pat: Not used for LocalSandboxManager as it requires onyx-cli pre-configured
+                with the correct URL and PAT token.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -303,16 +195,27 @@ class LocalSandboxManager(SandboxManager):
             RuntimeError: If provisioning fails
         """
         logger.info(
-            f"Starting sandbox provisioning for sandbox {sandbox_id}, user {user_id}, tenant {tenant_id}"
+            "Starting sandbox provisioning for sandbox %s, user %s, tenant %s",
+            sandbox_id,
+            user_id,
+            tenant_id,
         )
 
         # Create sandbox directory structure (user-level only)
-        logger.info(f"Creating sandbox directory structure for sandbox {sandbox_id}")
+        logger.info("Creating sandbox directory structure for sandbox %s", sandbox_id)
         sandbox_path = self._directory_manager.create_sandbox_directory(str(sandbox_id))
-        logger.debug(f"Sandbox directory created at {sandbox_path}")
+        logger.debug("Sandbox directory created at %s", sandbox_path)
+
+        # Copy skills to sandbox root so write_sandbox_file + session symlinks work
+        sandbox_skills = sandbox_path / "skills"
+        if (
+            self._directory_manager.skills_source_path.exists()
+            and not sandbox_skills.exists()
+        ):
+            shutil.copytree(self._directory_manager.skills_source_path, sandbox_skills)
 
         logger.info(
-            f"Provisioned sandbox {sandbox_id} at {sandbox_path} (no sessions yet)"
+            "Provisioned sandbox %s at %s (no sessions yet)", sandbox_id, sandbox_path
         )
 
         return SandboxInfo(
@@ -350,7 +253,10 @@ class LocalSandboxManager(SandboxManager):
                     self._nextjs_processes.pop(key, None)
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop Next.js for sandbox {sandbox_id}, session {session_id}: {e}"
+                    "Failed to stop Next.js for sandbox %s, session %s: %s",
+                    sandbox_id,
+                    session_id,
+                    e,
                 )
 
         # Stop all ACP clients for this sandbox (keyed by (sandbox_id, session_id))
@@ -365,7 +271,10 @@ class LocalSandboxManager(SandboxManager):
                 del self._acp_clients[key]
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for sandbox {sandbox_id}, session {key[1]}: {e}"
+                    "Failed to stop ACP client for sandbox %s, session %s: %s",
+                    sandbox_id,
+                    key[1],
+                    e,
                 )
 
         # Cleanup directory
@@ -377,22 +286,19 @@ class LocalSandboxManager(SandboxManager):
                 f"Failed to cleanup sandbox directory {sandbox_path}: {e}"
             ) from e
 
-        logger.info(f"Terminated sandbox {sandbox_id}")
+        logger.info("Terminated sandbox %s", sandbox_id)
 
     def setup_session_workspace(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
-        file_system_path: str | None = None,
+        nextjs_port: int | None,
         snapshot_path: str | None = None,  # noqa: ARG002
         user_name: str | None = None,
         user_role: str | None = None,
         user_work_area: str | None = None,
         user_level: str | None = None,
-        use_demo_data: bool = False,
-        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -402,25 +308,22 @@ class LocalSandboxManager(SandboxManager):
         3. .venv/ (from template)
         4. AGENTS.md
         5. .agent/skills/
-        6. files/ (symlink to demo data OR filtered user files)
-        7. opencode.json
-        8. org_info/ (if demo_data is enabled, the org structure and user identity for the user's demo persona)
-        9. attachments/
-        10. Start Next.js dev server for this session
+        6. opencode.json
+        7. org_info/ (if user_work_area provided)
+        8. attachments/
+        9. Start Next.js dev server for this session (skipped when
+           ``nextjs_port`` is None — headless callers like the scheduled-task
+           executor don't attach a preview).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to user's knowledge/source files
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, symlink files/ to demo data; else to user files
-            excluded_user_library_paths: List of paths within user_library/ to exclude
-                (e.g., ["/data/file.xlsx"]). These files won't be linked in the sandbox.
+            user_work_area: User's work area for persona (e.g., "engineering")
+            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -433,56 +336,23 @@ class LocalSandboxManager(SandboxManager):
             )
 
         logger.info(
-            f"Setting up session workspace for session {session_id} in sandbox {sandbox_id}"
+            "Setting up session workspace for session %s in sandbox %s",
+            session_id,
+            sandbox_id,
         )
 
         # Create session directory
         session_path = self._directory_manager.create_session_directory(
             sandbox_path, str(session_id)
         )
-        logger.debug(f"Session directory created at {session_path}")
+        logger.debug("Session directory created at %s", session_path)
 
         try:
-            # Setup files access - choose between demo data or user files
-            if use_demo_data:
-                # Demo mode: symlink to demo data directory
-                symlink_target = Path(DEMO_DATA_PATH)
-                if not symlink_target.exists():
-                    logger.warning(
-                        f"Demo data directory does not exist: {symlink_target}"
-                    )
-                logger.info(f"Setting up files symlink to demo data: {symlink_target}")
-                self._directory_manager.setup_files_symlink(
-                    session_path, symlink_target
-                )
-            elif file_system_path:
-                source_path = Path(file_system_path)
-                # Check if we have exclusions for user_library
-                if excluded_user_library_paths:
-                    # Create filtered file structure with symlinks to enabled files only
-                    logger.debug(
-                        f"Setting up filtered files with {len(excluded_user_library_paths)} exclusions"
-                    )
-                    self._setup_filtered_files(
-                        session_path=session_path,
-                        source_path=source_path,
-                        excluded_paths=excluded_user_library_paths,
-                    )
-                else:
-                    # No exclusions: simple symlink to entire directory
-                    logger.debug(
-                        f"Setting up files symlink to user files: {source_path}"
-                    )
-                    self._directory_manager.setup_files_symlink(
-                        session_path, source_path
-                    )
-            else:
-                raise ValueError("No files symlink target provided")
-            logger.debug("Files ready")
-
             # Setup org_info directory with user identity (at session root)
             if user_work_area:
-                logger.debug(f"Setting up org_info for {user_work_area}/{user_level}")
+                logger.debug(
+                    "Setting up org_info for %s/%s", user_work_area, user_level
+                )
                 self._directory_manager.setup_org_info(
                     session_path, user_work_area, user_level
                 )
@@ -492,7 +362,9 @@ class LocalSandboxManager(SandboxManager):
             logger.debug("Outputs directory ready")
 
             logger.debug("Setting up skills")
-            self._directory_manager.setup_skills(session_path)
+            self._directory_manager.setup_skills(
+                session_path, skills_target=sandbox_path / "skills"
+            )
             logger.debug("Skills ready")
 
             # Setup attachments directory
@@ -502,7 +374,9 @@ class LocalSandboxManager(SandboxManager):
 
             # Setup opencode.json with LLM provider configuration
             logger.debug(
-                f"Setting up opencode config with provider: {llm_config.provider}, model: {llm_config.model_name}"
+                "Setting up opencode config with provider: %s, model: %s",
+                llm_config.provider,
+                llm_config.model_name,
             )
             self._directory_manager.setup_opencode_config(
                 sandbox_path=session_path,
@@ -514,19 +388,29 @@ class LocalSandboxManager(SandboxManager):
             )
             logger.debug("Opencode config ready")
 
-            # Start Next.js server on pre-allocated port
-            web_dir = self._directory_manager.get_web_path(
-                sandbox_path, str(session_id)
-            )
-            logger.info(f"Starting Next.js server at {web_dir} on port {nextjs_port}")
+            # Start Next.js server on pre-allocated port. Skipped for
+            # headless callers (e.g. scheduled-task fires) that pass
+            # `nextjs_port=None`.
+            if nextjs_port is not None:
+                web_dir = self._directory_manager.get_web_path(
+                    sandbox_path, str(session_id)
+                )
+                logger.info(
+                    "Starting Next.js server at %s on port %s", web_dir, nextjs_port
+                )
 
-            nextjs_process = self._process_manager.start_nextjs_server(
-                web_dir, nextjs_port
-            )
-            # Store process for clean shutdown on session delete
-            with self._nextjs_lock:
-                self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
-            logger.info("Next.js server started successfully")
+                nextjs_process = self._process_manager.start_nextjs_server(
+                    web_dir, nextjs_port
+                )
+                # Store process for clean shutdown on session delete
+                with self._nextjs_lock:
+                    self._nextjs_processes[(sandbox_id, session_id)] = nextjs_process
+                logger.info("Next.js server started successfully")
+            else:
+                logger.info(
+                    "Skipping Next.js dev server for session %s (no port allocated)",
+                    session_id,
+                )
 
             # Setup venv and AGENTS.md
             logger.debug("Setting up virtual environment")
@@ -542,20 +426,21 @@ class LocalSandboxManager(SandboxManager):
                 disabled_tools=OPENCODE_DISABLED_TOOLS,
                 user_name=user_name,
                 user_role=user_role,
-                use_demo_data=use_demo_data,
-                include_org_info=use_demo_data,
+                include_org_info=bool(user_work_area),
             )
             logger.debug("Agent instructions ready")
 
-            logger.info(f"Set up session workspace {session_id} at {session_path}")
+            logger.info("Set up session workspace %s at %s", session_id, session_path)
 
         except Exception as e:
             # Cleanup on failure
             logger.error(
-                f"Session workspace setup failed for session {session_id}: {e}",
+                "Session workspace setup failed for session %s: %s",
+                session_id,
+                e,
                 exc_info=True,
             )
-            logger.info(f"Cleaning up session directory at {session_path}")
+            logger.info("Cleaning up session directory at %s", session_path)
             self._directory_manager.cleanup_session_directory(
                 sandbox_path, str(session_id)
             )
@@ -598,16 +483,16 @@ class LocalSandboxManager(SandboxManager):
         if client:
             try:
                 client.stop()
-                logger.debug(f"Stopped ACP client for session {session_id}")
+                logger.debug("Stopped ACP client for session %s", session_id)
             except Exception as e:
                 logger.warning(
-                    f"Failed to stop ACP client for session {session_id}: {e}"
+                    "Failed to stop ACP client for session %s: %s", session_id, e
                 )
 
         # Cleanup session directory
         sandbox_path = self._get_sandbox_path(sandbox_id)
         self._directory_manager.cleanup_session_directory(sandbox_path, str(session_id))
-        logger.info(f"Cleaned up session workspace {session_id}")
+        logger.info("Cleaned up session workspace %s", session_id)
 
     def _stop_nextjs_process(
         self, process: subprocess.Popen[bytes], session_id: UUID
@@ -621,19 +506,23 @@ class LocalSandboxManager(SandboxManager):
         if process.poll() is not None:
             # Process already terminated
             logger.debug(
-                f"Next.js server for session {session_id} already terminated (exit code: {process.returncode})"
+                "Next.js server for session %s already terminated (exit code: %s)",
+                session_id,
+                process.returncode,
             )
             return
 
         try:
             logger.info(
-                f"Stopping Next.js server (PID {process.pid}) for session {session_id}"
+                "Stopping Next.js server (PID %s) for session %s",
+                process.pid,
+                session_id,
             )
             self._process_manager.terminate_process(process.pid)
-            logger.debug(f"Next.js server stopped for session {session_id}")
+            logger.debug("Next.js server stopped for session %s", session_id)
         except Exception as e:
             logger.warning(
-                f"Failed to stop Next.js server for session {session_id}: {e}"
+                "Failed to stop Next.js server for session %s: %s", session_id, e
             )
 
     def _stop_nextjs_server_on_port(self, port: int, session_id: UUID) -> None:
@@ -665,26 +554,35 @@ class LocalSandboxManager(SandboxManager):
                 ]
                 if pids:
                     logger.info(
-                        f"Found {len(pids)} process(es) on port {port} for session {session_id}, stopping all"
+                        "Found %s process(es) on port %s for session %s, stopping all",
+                        len(pids),
+                        port,
+                        session_id,
                     )
                     for pid in pids:
                         try:
                             logger.debug(
-                                f"Stopping Next.js server (PID {pid}) on port {port} for session {session_id}"
+                                "Stopping Next.js server (PID %s) on port %s for session %s",
+                                pid,
+                                port,
+                                session_id,
                             )
                             self._process_manager.terminate_process(pid)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to stop process {pid} on port {port}: {e}"
+                                "Failed to stop process %s on port %s: %s", pid, port, e
                             )
                     return
             else:
                 logger.debug(
-                    f"No process found on port {port} for session {session_id}"
+                    "No process found on port %s for session %s", port, session_id
                 )
         except subprocess.TimeoutExpired:
             logger.warning(
-                f"lsof timed out after {LSOF_TIMEOUT_SECONDS}s while looking for process on port {port} for session {session_id}"
+                "lsof timed out after %ss while looking for process on port %s for session %s",
+                LSOF_TIMEOUT_SECONDS,
+                port,
+                session_id,
             )
         except FileNotFoundError:
             # lsof not available, try psutil
@@ -708,32 +606,41 @@ class LocalSandboxManager(SandboxManager):
 
                 if pids_to_stop:
                     logger.info(
-                        f"Found {len(pids_to_stop)} process(es) on port {port} for session {session_id}, stopping all"
+                        "Found %s process(es) on port %s for session %s, stopping all",
+                        len(pids_to_stop),
+                        port,
+                        session_id,
                     )
                     for pid in pids_to_stop:
                         try:
                             logger.debug(
-                                f"Stopping Next.js server (PID {pid}) on port {port} for session {session_id}"
+                                "Stopping Next.js server (PID %s) on port %s for session %s",
+                                pid,
+                                port,
+                                session_id,
                             )
                             self._process_manager.terminate_process(pid)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to stop process {pid} on port {port}: {e}"
+                                "Failed to stop process %s on port %s: %s", pid, port, e
                             )
                     return
 
                 logger.debug(
-                    f"No process found on port {port} for session {session_id}"
+                    "No process found on port %s for session %s", port, session_id
                 )
             except ImportError:
                 logger.warning(
-                    f"Neither lsof nor psutil available to find process on port {port}"
+                    "Neither lsof nor psutil available to find process on port %s", port
                 )
             except Exception as e:
-                logger.warning(f"Failed to find process on port {port}: {e}")
+                logger.warning("Failed to find process on port %s: %s", port, e)
         except Exception as e:
             logger.warning(
-                f"Failed to stop Next.js server on port {port} for session {session_id}: {e}"
+                "Failed to stop Next.js server on port %s for session %s: %s",
+                port,
+                session_id,
+                e,
             )
 
     def create_snapshot(
@@ -810,14 +717,18 @@ class LocalSandboxManager(SandboxManager):
                     with httpx.Client(timeout=1.0) as client:
                         client.get(f"http://localhost:{nextjs_port}")
                     logger.info(
-                        f"Port {nextjs_port} already alive for session {session_id} (orphan process) — skipping restart"
+                        "Port %s already alive for session %s (orphan process) — skipping restart",
+                        nextjs_port,
+                        session_id,
                     )
                     return
                 except Exception:
                     pass  # Port is dead; proceed with restart
 
                 logger.info(
-                    f"Starting Next.js for session {session_id} on port {nextjs_port}"
+                    "Starting Next.js for session %s on port %s",
+                    session_id,
+                    nextjs_port,
                 )
                 sandbox_path = self._get_sandbox_path(sandbox_id)
                 web_dir = self._directory_manager.get_web_path(
@@ -825,7 +736,9 @@ class LocalSandboxManager(SandboxManager):
                 )
                 if not web_dir.exists():
                     logger.warning(
-                        f"Web dir missing for session {session_id}: {web_dir} — cannot restart Next.js"
+                        "Web dir missing for session %s: %s — cannot restart Next.js",
+                        session_id,
+                        web_dir,
                     )
                     return
                 process = self._process_manager.start_nextjs_server(
@@ -834,11 +747,13 @@ class LocalSandboxManager(SandboxManager):
                 with self._nextjs_lock:
                     self._nextjs_processes[process_key] = process
                 logger.info(
-                    f"Auto-restarted Next.js for session {session_id} on port {nextjs_port}"
+                    "Auto-restarted Next.js for session %s on port %s",
+                    session_id,
+                    nextjs_port,
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to auto-restart Next.js for session {session_id}: {e}"
+                    "Failed to auto-restart Next.js for session %s: %s", session_id, e
                 )
             finally:
                 self._nextjs_starting.discard(process_key)
@@ -851,9 +766,8 @@ class LocalSandboxManager(SandboxManager):
         session_id: UUID,
         snapshot_storage_path: str,
         tenant_id: str,  # noqa: ARG002
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
     ) -> None:
         """Not implemented for local backend - workspaces persist on disk.
 
@@ -929,12 +843,21 @@ class LocalSandboxManager(SandboxManager):
                 sandbox_id, session_id, str(session_path), context="local"
             )
             logger.info(
-                f"Creating new ACP client for sandbox {sandbox_id}, session {session_id}"
+                "Creating new ACP client for sandbox %s, session %s",
+                sandbox_id,
+                session_id,
             )
 
             # Create and start ACP client for this session
             client = ACPAgentClient(cwd=str(session_path))
             self._acp_clients[client_key] = client
+
+            logger.info(
+                "ACP client ready for sandbox %s, session %s (pid=%s)",
+                sandbox_id,
+                session_id,
+                client._process.pid if client._process else "none",
+            )
 
         # Log the send_message call at sandbox manager level
         packet_logger.log_session_start(session_id, sandbox_id, message)
@@ -948,6 +871,13 @@ class LocalSandboxManager(SandboxManager):
             # Log successful completion
             packet_logger.log_session_end(
                 session_id, success=True, events_count=events_count
+            )
+        except GeneratorExit:
+            logger.warning(
+                "Sandbox send_message generator closed for session %s "
+                "after %d events (consumer disconnected)",
+                session_id,
+                events_count,
             )
         except Exception as e:
             # Log failure
@@ -974,32 +904,7 @@ class LocalSandboxManager(SandboxManager):
         return str(Path(*clean_parts)) if clean_parts else "."
 
     def _is_path_allowed(self, session_path: Path, target_path: Path) -> bool:
-        """Check if target_path is allowed for access.
-
-        Allows paths within session_path OR within the files/ symlink.
-        The files/ symlink intentionally points outside session_path to
-        provide access to knowledge files.
-
-        Args:
-            session_path: The session's root directory
-            target_path: The path being accessed
-
-        Returns:
-            True if access is allowed, False otherwise
-        """
-        files_symlink = session_path / "files"
-
-        # Check if path is within the files/ symlink (or is the symlink itself)
-        if files_symlink.is_symlink():
-            try:
-                # Use lexical check (without resolving symlinks)
-                # This handles both the symlink itself (returns '.') and paths within it
-                target_path.relative_to(files_symlink)
-                return True
-            except ValueError:
-                pass
-
-        # Standard check: path must be within session directory
+        """Check if target_path is within the session directory."""
         try:
             target_path.resolve().relative_to(session_path.resolve())
             return True
@@ -1119,7 +1024,10 @@ class LocalSandboxManager(SandboxManager):
         target_path.chmod(0o644)
 
         logger.info(
-            f"Uploaded file to session {session_id}: attachments/{filename} ({len(content)} bytes)"
+            "Uploaded file to session %s: attachments/%s (%s bytes)",
+            session_id,
+            filename,
+            len(content),
         )
 
         # Inject attachments section into AGENTS.md if not already present
@@ -1204,16 +1112,33 @@ class LocalSandboxManager(SandboxManager):
             raise ValueError("Path traversal not allowed")
 
         if not file_path.exists():
-            logger.debug(f"File not found for deletion in session {session_id}: {path}")
+            logger.debug(
+                "File not found for deletion in session %s: %s", session_id, path
+            )
             return False
 
         if file_path.is_dir():
             raise ValueError("Cannot delete directory")
 
         file_path.unlink()
-        logger.info(f"Deleted file from session {session_id}: {path}")
+        logger.info("Deleted file from session %s: %s", session_id, path)
 
         return True
+
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        if ".." in path:
+            raise ValueError(f"Invalid sandbox file path: {path}")
+        sandbox_path = self._get_sandbox_path(sandbox_id)
+        target = sandbox_path / path
+        if not target.resolve().is_relative_to(sandbox_path.resolve()):
+            raise ValueError(f"Invalid sandbox file path: {path}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
 
     def get_upload_stats(
         self,
@@ -1364,31 +1289,3 @@ class LocalSandboxManager(SandboxManager):
             [str(f.relative_to(session_path)) for f in slides],
             False,
         )
-
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,  # noqa: ARG002
-        tenant_id: str,  # noqa: ARG002
-        source: str | None = None,  # noqa: ARG002
-    ) -> bool:
-        """No-op for local mode - files are directly accessible via symlink.
-
-        In local mode, the sandbox's files/ directory is a symlink to the
-        local persistent document storage, so no sync is needed. File visibility
-        in sessions is controlled via filtered symlinks in setup_session_workspace().
-
-        Args:
-            sandbox_id: The sandbox UUID (unused)
-            user_id: The user ID (unused)
-            tenant_id: The tenant ID (unused)
-            source: The source type (unused in local mode)
-
-        Returns:
-            True (always succeeds since no sync is needed)
-        """
-        source_info = f" source={source}" if source else ""
-        logger.debug(
-            f"sync_files called for local sandbox {sandbox_id}{source_info} - no-op"
-        )
-        return True

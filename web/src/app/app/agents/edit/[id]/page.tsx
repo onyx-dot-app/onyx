@@ -2,7 +2,7 @@
 
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAgent } from "@/hooks/useAgents";
+import { useAgent } from "@/lib/agents/hooks";
 import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
 import * as AppLayouts from "@/layouts/app-layouts";
 

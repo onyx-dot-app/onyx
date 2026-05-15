@@ -12,7 +12,7 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import type { ValidSources } from "@/lib/types";
 import ResourceContent from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/ResourceContent";
@@ -65,7 +65,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
         return (
           <div
             key={s.source}
-            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:!size-4 [&_img]:!m-0 [&_svg]:size-4"
+            className="flex items-center justify-center size-4 rounded-04 bg-background-tint-00 border border-border-01 overflow-hidden [&_img]:size-4! [&_img]:m-0! [&_svg]:size-4"
             style={{ zIndex: unique.length - i, marginLeft: i > 0 ? -6 : 0 }}
           >
             <Icon />

@@ -11,6 +11,7 @@ class ToolSeedingExpectedResult(BaseModel):
     display_name: str
     in_code_tool_id: str
     user_id: str | None
+    enabled: bool = True
 
 
 EXPECTED_TOOLS = {
@@ -49,6 +50,7 @@ EXPECTED_TOOLS = {
         display_name="Research Agent",
         in_code_tool_id="ResearchAgent",
         user_id=None,
+        enabled=False,
     ),
     "FileReaderTool": ToolSeedingExpectedResult(
         name="read_file",
@@ -60,6 +62,12 @@ EXPECTED_TOOLS = {
         name="MemoryTool",
         display_name="Add Memory",
         in_code_tool_id="MemoryTool",
+        user_id=None,
+    ),
+    "CodingAgentTool": ToolSeedingExpectedResult(
+        name="coding_agent",
+        display_name="Coding Agent",
+        in_code_tool_id="CodingAgentTool",
         user_id=None,
     ),
 }
@@ -93,34 +101,34 @@ def test_tool_seeding_migration() -> None:
     # Verify tools were created
     with get_session_with_current_tenant() as db_session:
         result = db_session.execute(
-            text(
-                """
+            text("""
                 SELECT id, name, display_name, description, in_code_tool_id,
-                       user_id
+                       user_id, enabled
                 FROM tool
                 ORDER BY id
-                """
-            )
+                """)
         )
         tools = result.fetchall()
 
-        # Should have all 9 builtin tools
-        assert (
-            len(tools) == 10
-        ), f"Should have created exactly 9 builtin tools, got {len(tools)}"
+        assert len(tools) == 11, (
+            f"Should have created exactly 11 builtin tools, got {len(tools)}"
+        )
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
             tool = next((t for t in tools if t[1] == expected.name), None)
             assert tool is not None, f"{expected.name} should exist"
-            assert (
-                tool[2] == expected.display_name
-            ), f"{expected.name} display name should be '{expected.display_name}'"
-            assert (
-                tool[4] == expected.in_code_tool_id
-            ), f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
-            assert (
-                tool[5] is None
-            ), f"{expected.name} should not have a user_id (builtin)"
+            assert tool[2] == expected.display_name, (
+                f"{expected.name} display name should be '{expected.display_name}'"
+            )
+            assert tool[4] == expected.in_code_tool_id, (
+                f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
+            )
+            assert tool[5] is None, (
+                f"{expected.name} should not have a user_id (builtin)"
+            )
+            assert tool[6] == expected.enabled, (
+                f"{expected.name} enabled should be {expected.enabled}"
+            )
 
         # Check SearchTool
         validate_tool(EXPECTED_TOOLS["SearchTool"])
@@ -145,3 +153,5 @@ def test_tool_seeding_migration() -> None:
 
         # Check MemoryTool
         validate_tool(EXPECTED_TOOLS["MemoryTool"])
+
+        validate_tool(EXPECTED_TOOLS["CodingAgentTool"])

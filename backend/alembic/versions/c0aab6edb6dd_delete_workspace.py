@@ -8,7 +8,6 @@ Create Date: 2024-12-17 14:37:07.660631
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "c0aab6edb6dd"
 down_revision = "35e518e0ddf4"
@@ -17,13 +16,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
     UPDATE connector
     SET connector_specific_config = connector_specific_config - 'workspace'
     WHERE source = 'SLACK'
-    """
-    )
+    """)
 
 
 def downgrade() -> None:
@@ -65,8 +62,7 @@ def downgrade() -> None:
 
             # Update only the connectors linked to this credential
             # (and which are Slack connectors).
-            op.execute(
-                f"""
+            op.execute(f"""
                 UPDATE connector AS c
                 SET connector_specific_config = jsonb_set(
                     connector_specific_config,
@@ -77,8 +73,7 @@ def downgrade() -> None:
                 WHERE ccp.connector_id = c.id
                   AND c.source = 'SLACK'
                   AND ccp.credential_id = {credential_id}
-            """
-            )
+            """)
         except Exception:
             print(
                 f"We were unable to get the workspace url for your Slack Connector with id {credential_id}."

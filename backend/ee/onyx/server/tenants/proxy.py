@@ -196,7 +196,7 @@ async def forward_to_control_plane(
             detail = error_data.get("detail", detail)
         except Exception:
             pass
-        logger.error(f"Control plane returned {status_code}: {detail}")
+        logger.error("Control plane returned %s: %s", status_code, detail)
         raise HTTPException(status_code=status_code, detail=detail)
     except httpx.RequestError:
         logger.exception("Failed to connect to control plane")
@@ -293,7 +293,7 @@ async def proxy_claim_license(
     license_data = result.get("license")
 
     if not tenant_id or not license_data:
-        logger.error(f"Control plane returned incomplete claim response: {result}")
+        logger.error("Control plane returned incomplete claim response: %s", result)
         raise HTTPException(
             status_code=502,
             detail="Control plane returned incomplete license data",
@@ -410,7 +410,7 @@ async def proxy_license_fetch(
 
     license_data = result.get("license")
     if not license_data:
-        logger.error(f"Control plane returned incomplete license response: {result}")
+        logger.error("Control plane returned incomplete license response: %s", result)
         raise HTTPException(
             status_code=502,
             detail="Control plane returned incomplete license data",

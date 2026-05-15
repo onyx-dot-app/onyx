@@ -14,7 +14,7 @@ export interface TimelineRootProps {
 export function TimelineRoot({ children, tokens }: TimelineRootProps) {
   return (
     <div
-      className="flex flex-col pl-[var(--timeline-agent-message-padding-left)]"
+      className="flex flex-col pl-(--timeline-agent-message-padding-left)"
       style={getTimelineStyles(tokens)}
     >
       {children}

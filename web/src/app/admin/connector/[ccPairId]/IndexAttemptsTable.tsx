@@ -21,8 +21,6 @@ import { SvgBarChartSmall, SvgClock, SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import useFeatureFlag from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import StageMetricsModal from "./StageMetricsModal";
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -42,9 +40,6 @@ export function IndexAttemptsTable({
     number | null
   >(null);
   const [metricsAttemptId, setMetricsAttemptId] = useState<number | null>(null);
-  const stageMetricsEnabled = useFeatureFlag(
-    FEATURE_FLAGS.INDEX_ATTEMPT_METRICS
-  );
 
   if (!indexAttempts?.length) {
     return (
@@ -72,7 +67,7 @@ export function IndexAttemptsTable({
         />
       )}
 
-      {stageMetricsEnabled && metricsAttemptId !== null && (
+      {metricsAttemptId !== null && (
         <StageMetricsModal
           indexAttemptId={metricsAttemptId}
           onClose={() => setMetricsAttemptId(null)}
@@ -151,15 +146,13 @@ export function IndexAttemptsTable({
                         <Text font="secondary-body" color="text-03">
                           {`${docsPerMinute} docs / min`}
                         </Text>
-                        {stageMetricsEnabled && (
-                          <Button
-                            icon={SvgBarChartSmall}
-                            prominence="tertiary"
-                            size="sm"
-                            tooltip="View stage metrics"
-                            onClick={() => setMetricsAttemptId(indexAttempt.id)}
-                          />
-                        )}
+                        <Button
+                          icon={SvgBarChartSmall}
+                          prominence="tertiary"
+                          size="sm"
+                          tooltip="View stage metrics"
+                          onClick={() => setMetricsAttemptId(indexAttempt.id)}
+                        />
                       </Section>
                     ) : (
                       indexAttempt.status === "success" && (

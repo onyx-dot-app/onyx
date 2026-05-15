@@ -141,7 +141,7 @@ async def upsert_voice_provider_endpoint(
         raise
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Voice provider credential validation failed on save: {e}")
+        logger.error("Voice provider credential validation failed on save: %s", e)
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
@@ -268,13 +268,13 @@ async def test_voice_provider(
     except OnyxError:
         raise
     except Exception as e:
-        logger.error(f"Voice provider connection test failed: {e}")
+        logger.error("Voice provider connection test failed: %s", e)
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE,
         ) from e
 
-    logger.info(f"Voice provider test succeeded for {request.provider_type}.")
+    logger.info("Voice provider test succeeded for %s.", request.provider_type)
     return VoiceProviderUpdateSuccess()
 
 

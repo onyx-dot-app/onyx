@@ -407,9 +407,9 @@ def test_categorize_early_exits_tokenization_for_large_text(
     assert len(result.rejected) == 1
     assert "token limit" in result.rejected[0].reason
     # 5000 chars / 100 chunk_size = 50 chunks total; should stop well before all 50
-    assert (
-        encode_call_count < 50
-    ), f"Expected early exit but encoded {encode_call_count} chunks out of 50"
+    assert encode_call_count < 50, (
+        f"Expected early exit but encoded {encode_call_count} chunks out of 50"
+    )
 
 
 def test_categorize_text_under_token_limit_accepted(

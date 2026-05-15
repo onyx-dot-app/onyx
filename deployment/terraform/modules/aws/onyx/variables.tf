@@ -91,6 +91,18 @@ variable "cluster_endpoint_public_access_cidrs" {
   default     = []
 }
 
+variable "main_node_subnet_ids" {
+  type        = list(string)
+  description = "Explicit subnet IDs for the main node group. Takes precedence over main_node_private_subnets_only."
+  default     = []
+}
+
+variable "main_node_private_subnets_only" {
+  type        = bool
+  description = "When true, pins the main node group to the VPC's private subnets so node egress always exits via the NAT gateway IP. Ignored if main_node_subnet_ids is set."
+  default     = false
+}
+
 variable "redis_auth_token" {
   type        = string
   description = "Authentication token for the Redis cluster"

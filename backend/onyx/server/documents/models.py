@@ -27,6 +27,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
@@ -283,10 +284,11 @@ class IndexAttemptStageMetricsResponse(BaseModel):
 PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
-class PermissionSyncAttemptSnapshot(BaseModel):
+class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_docs_synced: int
     docs_with_permission_errors: int
     time_created: str
@@ -294,13 +296,14 @@ class PermissionSyncAttemptSnapshot(BaseModel):
     time_finished: str | None
 
     @classmethod
-    def from_permission_sync_attempt_db_model(
+    def from_doc_permission_sync_attempt_db_model(
         cls, attempt: DocPermissionSyncAttempt
-    ) -> "PermissionSyncAttemptSnapshot":
-        return PermissionSyncAttemptSnapshot(
+    ) -> "DocPermissionSyncAttemptSnapshot":
+        return DocPermissionSyncAttemptSnapshot(
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_docs_synced=attempt.total_docs_synced or 0,
             docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
             time_created=attempt.time_created.isoformat(),
@@ -313,7 +316,58 @@ class PermissionSyncAttemptSnapshot(BaseModel):
         )
 
 
+class ExternalGroupSyncAttemptSnapshot(BaseModel):
+    id: int
+    status: PermissionSyncStatus
+    error_message: str | None
+    full_exception_trace: str | None
+    total_users_processed: int
+    total_groups_processed: int
+    total_group_memberships_synced: int
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_external_group_sync_attempt_db_model(
+        cls, attempt: ExternalGroupPermissionSyncAttempt
+    ) -> "ExternalGroupSyncAttemptSnapshot":
+        return ExternalGroupSyncAttemptSnapshot(
+            id=attempt.id,
+            status=attempt.status,
+            error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
+            total_users_processed=attempt.total_users_processed or 0,
+            total_groups_processed=attempt.total_groups_processed or 0,
+            total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            time_created=attempt.time_created.isoformat(),
+            time_started=(
+                attempt.time_started.isoformat() if attempt.time_started else None
+            ),
+            time_finished=(
+                attempt.time_finished.isoformat() if attempt.time_finished else None
+            ),
+        )
+
+
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
+
+
+class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
+    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+
+    ``applicable`` is False when the cc-pair's source does not run the kind
+    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
+    has neither doc sync nor group sync). The frontend uses this to render an
+    explanatory message instead of an empty-state — the two are distinct
+    states: ``applicable=True, items=[], total_items=0`` legitimately means
+    "no attempts yet" and must not be confused with "this kind of sync isn't
+    applicable for this source".
+    """
+
+    applicable: bool
     items: list[PaginatedType]
     total_items: int
 
@@ -349,6 +403,10 @@ class CCPairFullInfo(BaseModel):
     permission_syncing: bool
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
+
+    # True if this connector's class implements `Resolver.reindex`. The FE
+    # uses this to route Resolve-All to targeted reindex vs full reindex.
+    supports_targeted_reindex: bool
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -403,6 +461,7 @@ class CCPairFullInfo(BaseModel):
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
+        supports_targeted_reindex: bool = False,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -460,6 +519,7 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_targeted_reindex=supports_targeted_reindex,
         )
 
 

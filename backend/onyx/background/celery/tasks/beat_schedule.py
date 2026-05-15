@@ -16,6 +16,7 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
@@ -80,6 +81,7 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale checkpoints to clean.
             "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -91,6 +93,7 @@ beat_task_templates: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
             # Run on gated tenants too — they may still have stale index attempts.
             "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -144,6 +147,36 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.MONITORING,
         },
     },
+    # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
+    # Both are lightweight DB-only coordination tasks and run on the
+    # primary queue. The dedicated `scheduled_tasks` worker is reserved
+    # for the long-running executor (`run_scheduled_task`); routing the
+    # dispatcher there would let a saturated executor pool stall dispatch.
+    {
+        "name": "dispatch-due-scheduled-tasks",
+        "task": OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
+        # 30 s is the spec's contract: 60 s is too coarse for a minute-
+        # cadence cron schedule; 15 s would over-load the FOR UPDATE
+        # SKIP LOCKED path for tenants with no due tasks.
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            # Drop redundant ticks aggressively; if a tick is more than
+            # ~2 schedules behind, the next one supersedes it.
+            "expires": 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
+        "name": "cleanup-stuck-scheduled-runs",
+        "task": OnyxCeleryTask.SCHEDULED_TASKS_CLEANUP_STUCK,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": 60 * 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
     # Sandbox cleanup tasks
     {
         "name": "cleanup-idle-sandboxes",
@@ -175,7 +208,9 @@ beat_task_templates: list[dict] = [
     },
 ]
 
-if ENTERPRISE_EDITION_ENABLED:
+# Mirror set_is_ee_based_on_env_variable(): EE features are active when either
+# ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
+if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
     beat_task_templates.extend(
         [
             {

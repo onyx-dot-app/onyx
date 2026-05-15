@@ -7,7 +7,8 @@ WORKDIR /app
 
 # Integration test stuff
 COPY ./requirements/dev.txt /tmp/dev-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade -r /tmp/dev-requirements.txt && \
+# TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes -r /tmp/dev-requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
 COPY ./pytest.ini /app/pytest.ini
@@ -18,7 +19,8 @@ COPY ./tests/utils/* /app/tests/utils/
 
 FROM base AS openapi-schema
 COPY ./scripts/onyx_openapi_schema.py /app/scripts/onyx_openapi_schema.py
-# TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+# OpenAPI client codegen cannot handle some EE-only schema shapes; export
+# the MIT route set with enforcement disabled.
 RUN LICENSE_ENFORCEMENT_ENABLED=false python scripts/onyx_openapi_schema.py --filename openapi.json
 
 FROM openapitools/openapi-generator-cli:latest AS openapi-client

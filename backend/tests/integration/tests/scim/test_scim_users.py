@@ -252,12 +252,12 @@ def test_create_user_default_group_and_account_type(
     )
     assert page.total_items >= 1
     scim_user_snapshot = next((u for u in page.items if u.email == email), None)
-    assert (
-        scim_user_snapshot is not None
-    ), f"SCIM user {email} not found in user listing"
-    assert (
-        scim_user_snapshot.account_type == AccountType.STANDARD
-    ), f"Expected STANDARD, got {scim_user_snapshot.account_type}"
+    assert scim_user_snapshot is not None, (
+        f"SCIM user {email} not found in user listing"
+    )
+    assert scim_user_snapshot.account_type == AccountType.STANDARD, (
+        f"Expected STANDARD, got {scim_user_snapshot.account_type}"
+    )
 
 
 def test_get_user(scim_token: str, idp_style: str) -> None:

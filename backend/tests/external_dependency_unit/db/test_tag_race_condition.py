@@ -196,9 +196,9 @@ class TestTagRaceCondition:
                 .all()
             )
 
-        assert len(tags) == len(
-            test_tag_values
-        ), f"Expected {len(test_tag_values)} tags, found {len(tags)}"
+        assert len(tags) == len(test_tag_values), (
+            f"Expected {len(test_tag_values)} tags, found {len(tags)}"
+        )
 
     def test_concurrent_mixed_tag_operations(
         self,
@@ -282,8 +282,8 @@ class TestTagRaceCondition:
                 .all()
             )
 
-        assert (
-            len(tags) == 2
-        ), f"Expected 2 tags (is_list=True and False), found {len(tags)}"
+        assert len(tags) == 2, (
+            f"Expected 2 tags (is_list=True and False), found {len(tags)}"
+        )
         is_list_values = {tag.is_list for tag in tags}
         assert is_list_values == {True, False}

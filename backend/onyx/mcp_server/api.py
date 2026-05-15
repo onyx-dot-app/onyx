@@ -97,7 +97,7 @@ def create_mcp_fastapi_app() -> FastAPI:
     # Authentication is handled by FastMCP's OnyxTokenVerifier (see auth.py)
 
     if MCP_SERVER_CORS_ORIGINS:
-        logger.info(f"CORS origins: {MCP_SERVER_CORS_ORIGINS}")
+        logger.info("CORS origins: %s", MCP_SERVER_CORS_ORIGINS)
         app.add_middleware(
             CORSMiddleware,
             allow_origins=MCP_SERVER_CORS_ORIGINS,

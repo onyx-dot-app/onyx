@@ -11,7 +11,7 @@ import {
   logout,
 } from "@/lib/user";
 import { useUser } from "@/providers/UserProvider";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";

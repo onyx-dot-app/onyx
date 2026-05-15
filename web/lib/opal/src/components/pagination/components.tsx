@@ -26,8 +26,10 @@ type PaginationSize = "lg" | "md" | "sm";
 /**
  * Compact `currentPage / totalPages` display with prev/next arrows.
  */
-interface SimplePaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface SimplePaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant: "simple";
   /** The 1-based current page number. */
   currentPage: number;
@@ -47,8 +49,10 @@ interface SimplePaginationProps
  * Item-count display (`X~Y of Z`) with prev/next arrows.
  * Designed for table footers.
  */
-interface CountPaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface CountPaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant: "count";
   /** The 1-based current page number. */
   currentPage: number;
@@ -72,8 +76,10 @@ interface CountPaginationProps
  * Numbered page buttons with ellipsis truncation for large page counts.
  * This is the default variant.
  */
-interface ListPaginationProps
-  extends Omit<WithoutStyles<HTMLAttributes<HTMLDivElement>>, "onChange"> {
+interface ListPaginationProps extends Omit<
+  WithoutStyles<HTMLAttributes<HTMLDivElement>>,
+  "onChange"
+> {
   variant?: "list";
   /** The 1-based current page number. */
   currentPage: number;
@@ -253,9 +259,9 @@ function GoToPagePopup({ totalPages, onSubmit, children }: GoToPagePopupProps) {
             placeholder="Go to page"
             autoFocus
             className={cn(
-              "w-[7rem] bg-transparent px-1.5 py-1 rounded-08",
+              "w-28 bg-transparent px-1.5 py-1 rounded-08",
               containerSizeVariants.lg.height,
-              "border border-border-02 focus:outline-none focus:border-border-04",
+              "border border-border-02 focus:outline-hidden focus:border-border-04",
               "font-main-ui-body",
               "text-text-04 placeholder:text-text-02"
             )}

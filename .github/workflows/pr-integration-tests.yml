@@ -95,7 +95,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -122,7 +122,7 @@ jobs:
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -155,7 +155,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -182,7 +182,7 @@ jobs:
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -214,7 +214,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
@@ -227,7 +227,7 @@ jobs:
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -277,6 +277,9 @@ jobs:
         build-model-server-image,
         build-integration-image,
       ]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       - runs-on
       - runner=4cpu-linux-arm64
@@ -291,17 +294,22 @@ jobs:
         edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -334,8 +342,6 @@ jobs:
           if [ "$EDITION" = "ee" ]; then
             cat <<EOF >> deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS=0.001
           EOF
           fi
@@ -401,6 +407,19 @@ jobs:
           docker compose -f docker-compose.mock-it-services.yml \
             -p mock-it-services-stack up -d
 
+      - name: Build CLI binary (for CLI integration tests)
+        if: contains(matrix.test-dir.path, 'tests/cli')
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26"
+          cache-dependency-path: "cli/go.sum"
+
+      - name: Compile CLI binary
+        if: contains(matrix.test-dir.path, 'tests/cli')
+        run: |
+          cd cli
+          GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
+
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
@@ -409,8 +428,17 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
+
+            # Mount CLI binary into the container if it exists (CLI tests only)
+            CLI_VOLUME=""
+            if [ -f "${{ github.workspace }}/onyx-cli-test" ]; then
+              CLI_VOLUME="-v ${{ github.workspace }}/onyx-cli-test:/usr/local/bin/onyx-cli-test:ro"
+              CLI_VOLUME="$CLI_VOLUME -e ONYX_CLI_BINARY=/usr/local/bin/onyx-cli-test"
+            fi
+
             docker run --rm --network onyx_default \
               --name test-runner \
+              $CLI_VOLUME \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -452,6 +480,7 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}
 
@@ -479,6 +508,9 @@ jobs:
 
   onyx-lite-tests:
     needs: [build-backend-image, build-integration-image]
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
     runs-on:
       [
         runs-on,
@@ -489,14 +521,19 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -508,7 +545,6 @@ jobs:
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -573,6 +609,7 @@ jobs:
               -e API_SERVER_HOST=api_server \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
+              -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/tests/no_vectordb
 
@@ -616,14 +653,14 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}

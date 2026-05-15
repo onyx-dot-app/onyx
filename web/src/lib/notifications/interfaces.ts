@@ -6,6 +6,7 @@ export enum NotificationType {
 
   // SvgAlertTriangle
   TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
+  LICENSE_EXPIRY_WARNING = "license_expiry_warning",
 
   // SvgBullhorn
   RELEASE_NOTES = "release_notes",

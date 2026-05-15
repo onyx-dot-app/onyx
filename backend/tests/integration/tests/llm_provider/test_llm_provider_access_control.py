@@ -2,6 +2,7 @@ import os
 
 import pytest
 import requests
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -12,6 +13,7 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__Persona
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -71,13 +73,19 @@ def _create_persona(
     db_session: Session,
     *,
     name: str,
-    provider_name: str,
+    provider: LLMProviderModel,
+    model_name: str = "gpt-4o-mini",
 ) -> Persona:
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name == model_name,
+        )
+    )
     persona = Persona(
         name=name,
         description=f"{name} description",
-        llm_model_provider_override=provider_name,
-        llm_model_version_override="gpt-4o-mini",
+        default_model_configuration_id=model_config.id if model_config else None,
         system_prompt="System prompt",
         task_prompt="Task prompt",
         datetime_aware=True,
@@ -136,12 +144,12 @@ def test_can_user_access_llm_provider_or_logic(
         allowed_persona = _create_persona(
             db_session,
             name="allowed-persona",
-            provider_name=restricted_provider.name,
+            provider=restricted_provider,
         )
         blocked_persona = _create_persona(
             db_session,
             name="blocked-persona",
-            provider_name=restricted_provider.name,
+            provider=restricted_provider,
         )
 
         access_group = UserGroup(name="access-group")
@@ -266,12 +274,12 @@ def test_public_provider_with_persona_restrictions(
         whitelisted_persona = _create_persona(
             db_session,
             name="whitelisted-persona",
-            provider_name=public_restricted.name,
+            provider=public_restricted,
         )
         non_whitelisted_persona = _create_persona(
             db_session,
             name="non-whitelisted-persona",
-            provider_name=public_restricted.name,
+            provider=public_restricted,
         )
 
         # Only whitelist one persona
@@ -329,7 +337,7 @@ def test_public_provider_without_persona_restrictions(
         any_persona = _create_persona(
             db_session,
             name="any-persona",
-            provider_name=public_unrestricted.name,
+            provider=public_unrestricted,
         )
 
         admin_model = db_session.get(User, admin_user.id)
@@ -376,7 +384,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         persona = _create_persona(
             db_session,
             name="fallback-persona",
-            provider_name=restricted_provider.name,
+            provider=restricted_provider,
         )
 
         access_group = UserGroup(name="persona-group")
@@ -506,7 +514,11 @@ def test_provider_delete_clears_persona_references(
         user_performing_action=admin_user,
     )
     persona = PersonaManager.create(
-        llm_model_provider_override=provider.name,
+        default_model_configuration_id=(
+            provider.model_configuration_ids[0]
+            if provider.model_configuration_ids
+            else None
+        ),
         user_performing_action=admin_user,
     )
 
@@ -516,11 +528,11 @@ def test_provider_delete_clears_persona_references(
         user_performing_action=admin_user,
     )
 
-    # Verify the persona now falls back to default (llm_model_provider_override cleared)
+    # Verify the persona now falls back to default (default_model_configuration_id cleared)
     persona_response = requests.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
     )
     assert persona_response.status_code == 200
     updated_persona = persona_response.json()
-    assert updated_persona["llm_model_provider_override"] is None
+    assert updated_persona["default_model_configuration_id"] is None

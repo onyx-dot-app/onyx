@@ -33,8 +33,9 @@ const interactiveContainerRoundingVariants: Record<
  *
  * Extends standard `<div>` attributes (minus `className` and `style`).
  */
-interface InteractiveContainerProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface InteractiveContainerProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   /**
    * Ref forwarded to the underlying element.
    */
