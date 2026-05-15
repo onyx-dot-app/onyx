@@ -43,17 +43,21 @@ No direct user-grant table exists (deferred).
 All functions flush but do **not** commit; callers control transaction boundaries.
 
 ### Reads
-- `list_skills_for_user(user, db_session) -> Sequence[CustomSkill]` — visibility-filtered, `enabled=True` only.
-- `fetch_skill_for_user(skill_id, user, db_session) -> CustomSkill | None`
-- `list_skills_for_admin(db_session) -> Sequence[CustomSkill]` — unrestricted.
-- `fetch_skill_for_admin(skill_id, db_session) -> CustomSkill | None` — includes disabled skills.
+- `list_skills_for_user(user, db_session) -> Sequence[Skill]` — visibility-filtered, `enabled=True` only.
+- `fetch_skill_for_user(skill_id, user, db_session) -> Skill | None`
+- `list_skills_for_admin(db_session) -> Sequence[Skill]` — unrestricted.
+- `fetch_skill_for_admin(skill_id, db_session) -> Skill | None` — includes disabled skills.
+- `get_group_ids_for_skill(skill_id, db_session) -> list[int]` — returns granted group IDs for a skill.
 
 ### Writes
-- `create_skill(slug, name, description, bundle_file_id, bundle_sha256, is_public, author_user_id, db_session) -> CustomSkill` — pre-checks slug, converts `IntegrityError` into `OnyxError(DUPLICATE_RESOURCE)`.
-- `patch_skill(skill_id, slug=UNSET, name=UNSET, description=UNSET, is_public=UNSET, enabled=UNSET, db_session) -> CustomSkill` — uses an `UNSET` sentinel so `None` is distinguishable from "not provided".
-- `replace_skill_bundle(skill_id, new_bundle_file_id, new_bundle_sha256, db_session) -> tuple[CustomSkill, old_bundle_file_id]` — caller deletes the old blob after commit.
+- `create_skill(slug, name, description, bundle_file_id, bundle_sha256, is_public, author_user_id, db_session) -> Skill` — pre-checks slug, converts `IntegrityError` into `OnyxError(DUPLICATE_RESOURCE)`.
+- `patch_skill(skill_id, patch=SkillPatch, db_session) -> Skill` — accepts a `SkillPatch` frozen dataclass; uses `UNSET` sentinels so `None` is distinguishable from "not provided".
+- `replace_skill_bundle(skill_id, new_bundle_file_id, new_bundle_sha256, db_session) -> tuple[Skill, old_bundle_file_id]` — caller deletes the old blob after commit.
 - `replace_skill_grants(skill_id, group_ids, db_session) -> None` — atomic delete-and-insert; deduplicates.
 - `delete_skill(skill_id, db_session) -> str | None` — hard-delete; returns `bundle_file_id` for post-commit blob cleanup; idempotent.
+
+### Affected users
+- `affected_users_for_skill(skill, db_session) -> set[UUID]` — returns user IDs with an active sandbox who should have this skill.
 
 ### Visibility filter
 `_add_user_visibility_filter()` enforces `is_public OR user is in a granted group`, mirroring the persona visibility pattern.
@@ -63,10 +67,10 @@ All functions flush but do **not** commit; callers control transaction boundarie
 In-memory, process-wide singleton populated at app boot. Not DB-backed (built-ins are code artifacts).
 
 Key types:
-- `Skill` — shared metadata base (`slug`, `name`, `description`).
-- `BuiltinSkill` — adds `source = "builtin"`, `source_dir: Path`, `has_template: bool`, `is_available: Callable[[Session], bool]`, `unavailable_reason: str | None`.
-- `CustomSkill` — adds `source = "custom"`, `id`, `bundle_file_id`, `bundle_sha256`, `is_public`, `enabled`. Returned by the CRUD module.
+- `BuiltinSkill` — standalone `BaseModel` with `source = "builtin"`, `slug`, `name`, `description`, `source_dir: Path`, `has_template: bool`, `is_available: Callable[[Session], bool]`, `unavailable_reason: str | None`. Has its own slug validator.
 - `BuiltinSkillRegistry` — `register()`, `list_all()`, `list_available(db)`, `get(slug)`, `reserved_slugs()`, plus `_reset_for_testing()`.
+
+There is no `Skill` base class or `CustomSkill` domain model in the registry. Custom skills are represented solely by the ORM `Skill` model (in `db/models.py`) and the `CustomSkillResponse` Pydantic model (in `server/features/skill/models.py`). The DB CRUD module returns ORM `Skill` objects directly.
 
 `register()` parses YAML frontmatter from `SKILL.md` or `SKILL.md.template` to populate `name` and `description`. Slug regex enforced; duplicate registration raises.
 
