@@ -73,7 +73,7 @@ export default function SuggestedPrompts({
             "hover:bg-background-neutral-01 hover:border-border-02",
             "transition-all duration-200",
             "cursor-pointer",
-            "focus:outline-none focus:ring-2 focus:ring-action-link-01 focus:ring-offset-2"
+            "focus:outline-hidden focus:ring-2 focus:ring-action-link-01 focus:ring-offset-2"
           )}
         >
           {/* Summary text */}
@@ -82,7 +82,7 @@ export default function SuggestedPrompts({
           </span>
           {/* Image resized to cut in half height (4:1 aspect ratio) */}
           {prompt.image && (
-            <div className="w-full aspect-[3/1] rounded-08 overflow-hidden bg-background-neutral-01">
+            <div className="w-full aspect-3/1 rounded-08 overflow-hidden bg-background-neutral-01">
               <img
                 src={prompt.image}
                 alt={prompt.summary}

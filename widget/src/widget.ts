@@ -106,7 +106,7 @@ export class OnyxChatWidget extends LitElement {
     // Initialize API service
     this.apiService = new ApiService(
       this.config.backendUrl,
-      this.config.apiKey,
+      this.config.apiKey
     );
 
     // Load persisted session
@@ -128,7 +128,7 @@ export class OnyxChatWidget extends LitElement {
       this.style.setProperty("--theme-primary-05", this.config.primaryColor);
       this.style.setProperty(
         "--theme-primary-06",
-        this.adjustBrightness(this.config.primaryColor, -10),
+        this.adjustBrightness(this.config.primaryColor, -10)
       );
     }
 
@@ -136,11 +136,11 @@ export class OnyxChatWidget extends LitElement {
     if (this.config.backgroundColor) {
       this.style.setProperty(
         "--background-neutral-00",
-        this.config.backgroundColor,
+        this.config.backgroundColor
       );
       this.style.setProperty(
         "--background-neutral-03",
-        this.adjustBrightness(this.config.backgroundColor, -10),
+        this.adjustBrightness(this.config.backgroundColor, -10)
       );
     }
 
@@ -212,7 +212,7 @@ export class OnyxChatWidget extends LitElement {
             (_match, num) => {
               const displayNum = displayMap.get(Number(num));
               return displayNum ? `<sup>[${displayNum}]</sup>` : "";
-            },
+            }
           );
         } else {
           // Still streaming or no citations resolved yet — strip raw links
@@ -237,7 +237,7 @@ export class OnyxChatWidget extends LitElement {
    */
   private renderCitationBadge(
     c: ResolvedCitation,
-    displayNum: number,
+    displayNum: number
   ): TemplateResult {
     const title = c.semantic_identifier || "Source";
     const safeHref =
@@ -273,7 +273,7 @@ export class OnyxChatWidget extends LitElement {
    * Shows first 3 inline, collapses the rest behind a "+N more" toggle.
    */
   private renderCitations(
-    citations?: ResolvedCitation[],
+    citations?: ResolvedCitation[]
   ): string | TemplateResult {
     if (!citations?.length) return "";
     const limit = OnyxChatWidget.CITATIONS_COLLAPSED_COUNT;
@@ -290,7 +290,7 @@ export class OnyxChatWidget extends LitElement {
               </button>
               <div class="citation-overflow">
                 ${overflow.map((c, i) =>
-                  this.renderCitationBadge(c, limit + i + 1),
+                  this.renderCitationBadge(c, limit + i + 1)
                 )}
               </div>
             `
@@ -344,7 +344,7 @@ export class OnyxChatWidget extends LitElement {
       if (!this.chatSessionId) {
         this.isLoading = true;
         this.chatSessionId = await this.apiService.createChatSession(
-          this.config.agentId,
+          this.config.agentId
         );
         this.isLoading = false;
       }
@@ -377,7 +377,7 @@ export class OnyxChatWidget extends LitElement {
           // Update user message ID if we got one
           if (result.messageIds.userMessageId !== null) {
             const userMsgIndex = this.messages.findIndex(
-              (m) => m.id === userMessage.id,
+              (m) => m.id === userMessage.id
             );
             if (userMsgIndex >= 0) {
               // Create new array to trigger reactivity
@@ -412,7 +412,7 @@ export class OnyxChatWidget extends LitElement {
         if (result.citation) {
           this.citationMap.set(
             result.citation.citation_number,
-            result.citation.document_id,
+            result.citation.document_id
           );
         }
 
@@ -454,7 +454,7 @@ export class OnyxChatWidget extends LitElement {
 
           // Update or add message
           const existingIndex = this.messages.findIndex(
-            (m) => m.id === currentMessage?.id,
+            (m) => m.id === currentMessage?.id
           );
           if (existingIndex >= 0) {
             this.messages = [
@@ -590,7 +590,7 @@ export class OnyxChatWidget extends LitElement {
   private renderMessages() {
     // Check if there's a streaming message with content
     const hasStreamingContent = this.messages.some(
-      (m) => m.role === "assistant" && m.isStreaming && m.content.length > 0,
+      (m) => m.role === "assistant" && m.isStreaming && m.content.length > 0
     );
     // Show ellipsis only when: streaming AND (has status text OR no content yet)
     const showEllipsis =
@@ -609,12 +609,12 @@ export class OnyxChatWidget extends LitElement {
                 ${msg.role === "assistant"
                   ? html`${this.renderMarkdown(
                       msg.content,
-                      msg.citations,
+                      msg.citations
                     )}${this.renderCitations(msg.citations)}`
                   : msg.content}
               </div>
             </div>
-          `,
+          `
         )}
         ${showEllipsis
           ? html`

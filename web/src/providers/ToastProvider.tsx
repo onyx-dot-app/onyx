@@ -39,7 +39,7 @@ interface ExpandedDetailsProps {
 
 function ExpandedDetails({ message }: ExpandedDetailsProps) {
   return (
-    <div className="px-3 py-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-words">
+    <div className="px-3 py-2 max-h-72 overflow-y-auto whitespace-pre-wrap wrap-break-word">
       <Text font="secondary-body" color="text-03" as="p">
         {message}
       </Text>
@@ -87,7 +87,7 @@ function ToastContainer() {
   return (
     <div
       data-testid="toast-container"
-      className="fixed bottom-4 right-4 z-[var(--z-toast)] flex flex-col gap-2 items-end max-w-[var(--toast-width)] w-full"
+      className="fixed bottom-4 right-4 z-(--z-toast) flex flex-col gap-2 items-end max-w-(--toast-width) w-full"
     >
       {visible.map((t) => {
         const isTruncatable = t.message.length > MAX_TOAST_MESSAGE_LENGTH;

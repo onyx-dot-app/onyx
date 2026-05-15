@@ -157,45 +157,45 @@ def compare_documents(
         actual = actual_docs_dict[doc_id]
         expected = expected_docs_dict[doc_id]
 
-        assert (
-            actual.source == expected.source
-        ), f"Source mismatch for document {doc_id}"
-        assert (
-            actual.semantic_identifier == expected.semantic_identifier
-        ), f"Semantic identifier mismatch for document {doc_id}"
-        assert (
-            actual.metadata == expected.metadata
-        ), f"Metadata mismatch for document {doc_id}"
-        assert (
-            actual.doc_updated_at == expected.doc_updated_at
-        ), f"Updated at mismatch for document {doc_id}"
-        assert (
-            actual.primary_owners == expected.primary_owners
-        ), f"Primary owners mismatch for document {doc_id}"
-        assert (
-            actual.secondary_owners == expected.secondary_owners
-        ), f"Secondary owners mismatch for document {doc_id}"
+        assert actual.source == expected.source, (
+            f"Source mismatch for document {doc_id}"
+        )
+        assert actual.semantic_identifier == expected.semantic_identifier, (
+            f"Semantic identifier mismatch for document {doc_id}"
+        )
+        assert actual.metadata == expected.metadata, (
+            f"Metadata mismatch for document {doc_id}"
+        )
+        assert actual.doc_updated_at == expected.doc_updated_at, (
+            f"Updated at mismatch for document {doc_id}"
+        )
+        assert actual.primary_owners == expected.primary_owners, (
+            f"Primary owners mismatch for document {doc_id}"
+        )
+        assert actual.secondary_owners == expected.secondary_owners, (
+            f"Secondary owners mismatch for document {doc_id}"
+        )
         assert actual.title == expected.title, f"Title mismatch for document {doc_id}"
-        assert (
-            actual.from_ingestion_api == expected.from_ingestion_api
-        ), f"Ingestion API flag mismatch for document {doc_id}"
-        assert (
-            actual.additional_info == expected.additional_info
-        ), f"Additional info mismatch for document {doc_id}"
+        assert actual.from_ingestion_api == expected.from_ingestion_api, (
+            f"Ingestion API flag mismatch for document {doc_id}"
+        )
+        assert actual.additional_info == expected.additional_info, (
+            f"Additional info mismatch for document {doc_id}"
+        )
 
         # Compare sections
-        assert len(actual.sections) == len(
-            expected.sections
-        ), f"Number of sections mismatch for document {doc_id}"
+        assert len(actual.sections) == len(expected.sections), (
+            f"Number of sections mismatch for document {doc_id}"
+        )
         for i, (actual_section, expected_section) in enumerate(
             zip(actual.sections, expected.sections)
         ):
-            assert (
-                actual_section.text == expected_section.text
-            ), f"Section {i} text mismatch for document {doc_id}"
-            assert (
-                actual_section.link == expected_section.link
-            ), f"Section {i} link mismatch for document {doc_id}"
+            assert actual_section.text == expected_section.text, (
+                f"Section {i} text mismatch for document {doc_id}"
+            )
+            assert actual_section.link == expected_section.link, (
+                f"Section {i} link mismatch for document {doc_id}"
+            )
 
 
 def test_airtable_connector_basic(

@@ -63,7 +63,7 @@ export function CreateStdOAuthCredential({
     >
       {() => (
         <Form className="w-full flex items-stretch">
-          <CardSection className="w-full !border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full border-0! mt-4 flex flex-col gap-y-6">
             {additionalFields.map((field) => (
               <TextFormField
                 key={field.name}

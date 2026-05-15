@@ -494,9 +494,9 @@ class OpenSearchIndexClient(OpenSearchClient):
         expected_mapping_properties: dict[str, Any] = expected_mappings.get(
             "properties", {}
         )
-        assert (
-            expected_mapping_properties
-        ), "Bug: No properties were found in the provided expected mappings."
+        assert expected_mapping_properties, (
+            "Bug: No properties were found in the provided expected mappings."
+        )
 
         for property in expected_mapping_properties:
             if property not in index_mapping_properties:
@@ -510,9 +510,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             expected_property_type = expected_mapping_properties[property].get(
                 "type", ""
             )
-            assert (
-                expected_property_type
-            ), f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+            assert expected_property_type, (
+                f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+            )
 
             index_property_type = index_mapping_properties[property].get("type", "")
             if expected_property_type != index_property_type:
@@ -667,7 +667,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update_if_exists is False.
         """
         logger.debug(
-            "Trying to index document ID %s for tenant %s. " "update_if_exists=%s.",
+            "Trying to index document ID %s for tenant %s. update_if_exists=%s.",
             document.document_id,
             tenant_state.tenant_id,
             update_if_exists,
@@ -1008,9 +1008,15 @@ class OpenSearchIndexClient(OpenSearchClient):
         # max_retries is the number of times to retry a request if we get a 429.
         # We do not raise on error (the default behavior of ``bulk`` is to
         # raise) because we want to attempt to retry certain failed chunks in
-        # this function.
+        # this function. Raising on exception indicates something went wrong
+        # with the entire batch, which we do not consider retryable in this
+        # function.
         successes, errors = bulk(
-            self._client, data, max_retries=3, raise_on_error=False
+            self._client,
+            data,
+            max_retries=3,
+            raise_on_error=False,
+            raise_on_exception=True,
         )
 
         if errors:
@@ -1055,7 +1061,8 @@ class OpenSearchIndexClient(OpenSearchClient):
 
             if fatal_errors:
                 raise OpenSearchUpdateError(
-                    f"Failed to bulk update document chunks for index {self._index_name}. At least one fatal error occurred: {fatal_errors[0]}"
+                    f"Failed to bulk update document chunks for index {self._index_name}. At least "
+                    f"one fatal error occurred: {fatal_errors[0]}"
                 )
 
             data = []

@@ -26,6 +26,8 @@ export const SWR_KEYS = {
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   personaLabels: "/api/persona/labels",
+  adminAgents: "/api/admin/agents",
+  adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
@@ -114,7 +116,6 @@ export const SWR_KEYS = {
   voiceStatus: "/api/voice/status",
 
   // ── Build (Craft) ─────────────────────────────────────────────────────────
-  buildConnectors: "/api/build/connectors",
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
@@ -206,4 +207,15 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+
+  // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
+  // `scheduledTaskRuns` is a base URL — the run-history table appends
+  // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
+  // a prefix predicate so every paginated variant gets refreshed at once.
+  scheduledTasks: "/api/build/scheduled-tasks",
+  scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
+  scheduledTaskRuns: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/runs`,
+  scheduledRunContext: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/scheduled-run-context`,
 } as const;

@@ -30,7 +30,7 @@ const SvgProgressCircle = ({
     <div className={className}>
       {isComplete ? (
         <SvgCheckCircle
-          className={cn(className, "!stroke-status-success-05")}
+          className={cn(className, "stroke-status-success-05!")}
           {...props}
         />
       ) : (

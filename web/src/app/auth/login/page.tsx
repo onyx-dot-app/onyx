@@ -21,8 +21,8 @@ export default async function Page(props: PageProps) {
   const autoRedirectToSignupDisabled =
     searchParams?.autoRedirectToSignup === "false";
   const nextUrl: string | null = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0] ?? null
-    : searchParams?.next ?? null;
+    ? (searchParams?.next[0] ?? null)
+    : (searchParams?.next ?? null);
   const verified = searchParams?.verified === "true";
   const isFirstUser = searchParams?.first_user === "true";
 

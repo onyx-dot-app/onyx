@@ -47,6 +47,15 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         description:
           "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
       },
+      {
+        modelName: "embed-v4.0",
+        modelDim: 1536,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        description:
+          "Cohere's latest multilingual embedding model with the default 1536-dim output for stronger retrieval quality.",
+      },
     ],
   },
   {
@@ -100,6 +109,15 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "",
         passagePrefix: "",
         description: "Smaller, lighter-weight embedding model from Google.",
+      },
+      {
+        modelName: "gemini-embedding-2-preview",
+        modelDim: 3072,
+        normalize: false,
+        queryPrefix: "",
+        passagePrefix: "",
+        description:
+          "Google's multimodal embedding model. Higher-quality retrieval with a 3072-dim output.",
       },
     ],
   },

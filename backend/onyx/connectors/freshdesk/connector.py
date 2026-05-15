@@ -25,6 +25,16 @@ logger = setup_logger()
 
 _FRESHDESK_ID_PREFIX = "FRESHDESK_"
 
+# Freshdesk's /api/v2/tickets endpoint hard-caps pagination at 300 pages and
+# returns 400 for page >= 301. To get past this on accounts with more than
+# (per_page * 300) matching tickets, we roll the ``updated_since`` window
+# forward to the last ticket's ``updated_at`` and restart from page 1.
+# Source: https://developers.freshdesk.com/api/#list_all_tickets
+_FRESHDESK_MAX_PAGE = 300
+# 100 is the per_page maximum allowed by the API; using it minimizes the
+# number of pages and the number of window rolls.
+_FRESHDESK_PER_PAGE = 100
+
 
 _TICKET_FIELDS_TO_INCLUDE = {
     "fr_escalated",
@@ -223,10 +233,15 @@ class FreshdeskConnector(PollConnector, LoadConnector):
             raise ConnectorMissingCredentialError("freshdesk")
 
         base_url = f"https://{self.domain}.freshdesk.com/api/v2/tickets"
+        # Sort by updated_at ascending so the last ticket on each page has the
+        # largest updated_at — required to roll the updated_since window
+        # forward when we hit the 300-page cap.
         params: dict[str, int | str] = {
             "include": "description",
-            "per_page": 50,
+            "per_page": _FRESHDESK_PER_PAGE,
             "page": 1,
+            "order_by": "updated_at",
+            "order_type": "asc",
         }
 
         if start:
@@ -255,6 +270,36 @@ class FreshdeskConnector(PollConnector, LoadConnector):
 
             if len(tickets) < int(params["per_page"]):
                 break
+
+            if int(params["page"]) >= _FRESHDESK_MAX_PAGE:
+                # Hit Freshdesk's hard pagination cap. Advance the
+                # updated_since window to the last ticket's updated_at and
+                # restart from page 1. updated_since is inclusive, so any
+                # tickets sharing that exact timestamp will be re-yielded;
+                # downstream document upsert dedups by id.
+                # technically this breaks if 30,000 tickets have the same
+                # updated_at, but I think we'll accept that risk.
+                last_updated_at = tickets[-1].get("updated_at")
+                if not last_updated_at:
+                    logger.warning(
+                        "Freshdesk ticket missing updated_at at page cap; "
+                        "stopping pagination to avoid infinite loop."
+                    )
+                    break
+                logger.info(
+                    "Reached Freshdesk %s-page cap; rolling updated_since "
+                    "window forward to %s and restarting pagination.",
+                    _FRESHDESK_MAX_PAGE,
+                    last_updated_at,
+                )
+                if last_updated_at == params.get("updated_since"):
+                    raise RuntimeError(
+                        "Last updated_at is the same as the updated_since window; "
+                        "stopping pagination to avoid infinite loop."
+                    )
+                params["updated_since"] = last_updated_at
+                params["page"] = 1
+                continue
 
             params["page"] = int(params["page"]) + 1
 

@@ -15,6 +15,7 @@ from onyx.auth.pat import calculate_expiration
 from onyx.auth.pat import generate_pat
 from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.enums import PatType
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -89,6 +90,7 @@ def create_pat(
     user_id: UUID,
     name: str,
     expiration_days: int | None,
+    pat_type: PatType = PatType.USER,
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
 
@@ -109,48 +111,64 @@ def create_pat(
         token_display=build_displayable_pat(raw_token),
         user_id=user_id,
         expires_at=calculate_expiration(expiration_days),
+        pat_type=pat_type,
     )
     db_session.add(pat)
-    db_session.commit()
+    db_session.flush()
 
     return pat, raw_token
 
 
-def list_user_pats(db_session: Session, user_id: UUID) -> list[PersonalAccessToken]:
-    """List all active (non-expired) PATs for a user."""
+def list_user_pats(
+    db_session: Session,
+    user_id: UUID,
+    pat_type: PatType | None = None,
+) -> list[PersonalAccessToken]:
+    """List all active (non-expired) PATs for a user, optionally filtered by type."""
+    stmt = (
+        select(PersonalAccessToken)
+        .where(PersonalAccessToken.user_id == user_id)
+        .where(
+            (PersonalAccessToken.expires_at.is_(None))
+            | (PersonalAccessToken.expires_at > datetime.now(timezone.utc))
+        )
+    )
+    if pat_type is not None:
+        stmt = stmt.where(PersonalAccessToken.pat_type == pat_type)
     return list(
-        db_session.scalars(
-            select(PersonalAccessToken)
-            .where(PersonalAccessToken.user_id == user_id)
-            .where(
-                (PersonalAccessToken.expires_at.is_(None))
-                | (PersonalAccessToken.expires_at > datetime.now(timezone.utc))
-            )
-            .order_by(PersonalAccessToken.created_at.desc())
-        ).all()
+        db_session.scalars(stmt.order_by(PersonalAccessToken.created_at.desc())).all()
     )
 
 
-def revoke_pat(db_session: Session, pat_id: int, user_id: UUID) -> bool:
+def revoke_pat(
+    db_session: Session,
+    pat_id: int,
+    user_id: UUID,
+    pat_type: PatType | None = None,
+) -> bool:
     """Revoke PAT by setting expires_at=NOW() for immediate expiry.
 
     Returns True if revoked, False if not found, not owned by user, or already expired.
+    When pat_type is specified, only revokes PATs of that type.
     """
     now = datetime.now(timezone.utc)
-    pat = db_session.scalar(
+    stmt = (
         select(PersonalAccessToken)
         .where(PersonalAccessToken.id == pat_id)
         .where(PersonalAccessToken.user_id == user_id)
         .where(
             (PersonalAccessToken.expires_at.is_(None))
             | (PersonalAccessToken.expires_at > now)
-        )  # Only revoke active (non-expired) tokens
+        )
     )
+    if pat_type is not None:
+        stmt = stmt.where(PersonalAccessToken.pat_type == pat_type)
+    pat = db_session.scalar(stmt)
     if not pat:
         return False
 
     # Revoke by setting expires_at to NOW() and marking as revoked for audit trail
     pat.expires_at = now
     pat.is_revoked = True
-    db_session.commit()
+    db_session.flush()
     return True

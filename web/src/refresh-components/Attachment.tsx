@@ -10,7 +10,7 @@ export default function Attachments({ fileName, open }: AttachmentsProps) {
   return (
     <div className="flex items-center border bg-background-tint-00 rounded-12 p-1 gap-1">
       <div className="p-2 bg-background-tint-01 rounded-08">
-        <SvgFileText className="w-[1.25rem] h-[1.25rem] stroke-text-02" />
+        <SvgFileText className="w-5 h-5 stroke-text-02" />
       </div>
       <div className="flex flex-col px-2">
         <Text as="p" secondaryAction>

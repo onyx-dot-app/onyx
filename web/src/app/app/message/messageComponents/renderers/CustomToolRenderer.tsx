@@ -184,7 +184,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
         {/* Error display */}
         {error && (
-          <div className="pl-[var(--timeline-common-text-padding)]">
+          <div className="pl-(--timeline-common-text-padding)">
             <Text text03 mainUiMuted>
               {error.message}
             </Text>

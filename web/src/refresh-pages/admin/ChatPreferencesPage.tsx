@@ -59,7 +59,7 @@ import {
 } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import Switch from "@/refresh-components/inputs/Switch";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
@@ -590,7 +590,7 @@ export default function ChatPreferencesPage() {
                 >
                   <Switch
                     checked={
-                      enterpriseEnabled ? s.search_ui_enabled ?? true : false
+                      enterpriseEnabled ? (s.search_ui_enabled ?? true) : false
                     }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
@@ -735,7 +735,7 @@ export default function ChatPreferencesPage() {
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
-                              <div key={source} className="w-[10rem]">
+                              <div key={source} className="w-40">
                                 <Card padding="sm" border="solid">
                                   <Content
                                     icon={meta.icon}
@@ -1068,8 +1068,8 @@ export default function ChatPreferencesPage() {
                       saveSettings={saveSettings}
                       initialUploadSizeMb={
                         (s.user_file_max_upload_size_mb ?? 0) <= 0
-                          ? s.default_user_file_max_upload_size_mb?.toString() ??
-                            "100"
+                          ? (s.default_user_file_max_upload_size_mb?.toString() ??
+                            "100")
                           : s.user_file_max_upload_size_mb!.toString()
                       }
                       defaultUploadSizeMb={
@@ -1078,8 +1078,8 @@ export default function ChatPreferencesPage() {
                       }
                       initialTokenThresholdK={
                         s.file_token_count_threshold_k == null
-                          ? s.default_file_token_count_threshold_k?.toString() ??
-                            "200"
+                          ? (s.default_file_token_count_threshold_k?.toString() ??
+                            "200")
                           : s.file_token_count_threshold_k === 0
                             ? ""
                             : s.file_token_count_threshold_k.toString()

@@ -1,5 +1,5 @@
 import { JSX } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ProjectFile } from "../../projects/projectsService";
@@ -24,7 +24,7 @@ export enum RenderType {
 export type TimelineLayout = "timeline" | "content";
 
 export interface FullChatState {
-  agent: MinimalPersonaSnapshot;
+  agent: MinimalAgent;
   // Document-related context for citations
   docs?: OnyxDocument[] | null;
   userFiles?: ProjectFile[];

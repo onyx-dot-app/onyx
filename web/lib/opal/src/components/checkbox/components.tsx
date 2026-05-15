@@ -11,8 +11,10 @@ import { SvgCheck, SvgMinus } from "@opal/icons";
 
 type CheckboxState = "unchecked" | "checked" | "indeterminate";
 
-interface CheckboxProps
-  extends Omit<React.ComponentPropsWithoutRef<"input">, "type" | "size"> {
+interface CheckboxProps extends Omit<
+  React.ComponentPropsWithoutRef<"input">,
+  "type" | "size"
+> {
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;

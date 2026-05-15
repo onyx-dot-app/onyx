@@ -1257,9 +1257,9 @@ def _check_tenant_gated(client: TenantSocketModeClient, req: SocketModeRequest) 
     return True
 
 
-def create_process_slack_event() -> (
-    Callable[[TenantSocketModeClient, SocketModeRequest], None]
-):
+def create_process_slack_event() -> Callable[
+    [TenantSocketModeClient, SocketModeRequest], None
+]:
     def process_slack_event(
         client: TenantSocketModeClient, req: SocketModeRequest
     ) -> None:

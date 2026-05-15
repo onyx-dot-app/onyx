@@ -6,8 +6,8 @@ export default function ChatSessionSkeleton() {
           <div className="h-4 w-4 rounded-full bg-background-tint-02 animate-pulse" />
         </div>
         <div className="flex flex-col w-full gap-1">
-          <div className="h-5 w-2/3 rounded bg-background-tint-02 animate-pulse" />
-          <div className="h-4 w-1/2 rounded bg-background-tint-02 animate-pulse" />
+          <div className="h-5 w-2/3 rounded-sm bg-background-tint-02 animate-pulse" />
+          <div className="h-4 w-1/2 rounded-sm bg-background-tint-02 animate-pulse" />
         </div>
       </div>
     </div>

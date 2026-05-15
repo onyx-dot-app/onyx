@@ -63,9 +63,9 @@ class TestConnectorMappingValidation:
         sources = list(CONNECTOR_CLASS_MAP.keys())
         unique_sources = set(sources)
 
-        assert len(sources) == len(
-            unique_sources
-        ), "Duplicate DocumentSource entries found"
+        assert len(sources) == len(unique_sources), (
+            "Duplicate DocumentSource entries found"
+        )
 
     def test_blob_storage_connectors_correct(self) -> None:
         """Test that all blob storage sources map to the same connector."""
@@ -82,9 +82,9 @@ class TestConnectorMappingValidation:
         )
 
         for source in blob_sources:
-            assert (
-                CONNECTOR_CLASS_MAP[source] == expected_mapping
-            ), f"{source.value} should map to BlobStorageConnector"
+            assert CONNECTOR_CLASS_MAP[source] == expected_mapping, (
+                f"{source.value} should map to BlobStorageConnector"
+            )
 
 
 class TestConnectorClassLoading:
@@ -219,22 +219,22 @@ class TestConnectorMappingIntegrity:
     def test_mapping_format_consistency(self) -> None:
         """Test that all mappings follow the expected format."""
         for source, mapping in CONNECTOR_CLASS_MAP.items():
-            assert isinstance(
-                mapping, ConnectorMapping
-            ), f"{source.value} mapping is not a ConnectorMapping"
+            assert isinstance(mapping, ConnectorMapping), (
+                f"{source.value} mapping is not a ConnectorMapping"
+            )
 
-            assert isinstance(
-                mapping.module_path, str
-            ), f"{source.value} module_path is not a string"
-            assert isinstance(
-                mapping.class_name, str
-            ), f"{source.value} class_name is not a string"
-            assert mapping.module_path.startswith(
-                "onyx.connectors."
-            ), f"{source.value} module_path doesn't start with onyx.connectors."
-            assert mapping.class_name.endswith(
-                "Connector"
-            ), f"{source.value} class_name doesn't end with Connector"
+            assert isinstance(mapping.module_path, str), (
+                f"{source.value} module_path is not a string"
+            )
+            assert isinstance(mapping.class_name, str), (
+                f"{source.value} class_name is not a string"
+            )
+            assert mapping.module_path.startswith("onyx.connectors."), (
+                f"{source.value} module_path doesn't start with onyx.connectors."
+            )
+            assert mapping.class_name.endswith("Connector"), (
+                f"{source.value} class_name doesn't end with Connector"
+            )
 
 
 class TestInstantiateConnectorIntegration:

@@ -1,15 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Fixed reveal rate — NOT adaptive. Any ceil(delta/N) formula produces
-// visible chunks on burst packet arrivals. 1 = 60 cps, 2 = 120 cps.
+// Mid-stream reveal rate stays fixed — any ceil(delta/N) formula
+// produces visible chunks on burst packet arrivals. 1 = 60 cps, 2 = 120 cps.
 const CHARS_PER_FRAME = 3;
+// Once the stream is finished, the rate becomes adaptive so a long
+// backlog drains within ~CATCHUP_FRAMES frames. Bursty rendering after
+// the final packet is fine — the visible chunk size only matters while
+// the user is still reading along.
+const CATCHUP_FRAMES = 30;
+
+export interface UseTypewriterResult {
+  displayed: string;
+  /** True while post-finish adaptive drain is running. Callers can use
+   *  this to pause auto-scroll so the page doesn't yank when the
+   *  typewriter speeds up — the user is reading at this point, not
+   *  watching new content arrive. */
+  isDraining: boolean;
+}
 
 /**
  * Reveals `target` one character at a time on each animation frame.
  * When `enabled` is false (historical messages), snaps to full on mount.
  * The rAF loop pauses once caught up and resumes when `target` grows.
+ *
+ * `streamFinished` lets the loop drain any remaining backlog faster
+ * once the backend is done, so callers gating on "FE fully displayed"
+ * don't sit on a long tail when packets arrived in a burst.
  */
-export function useTypewriter(target: string, enabled: boolean): string {
+export function useTypewriter(
+  target: string,
+  enabled: boolean,
+  streamFinished: boolean = false
+): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
   targetRef.current = target;
@@ -20,6 +42,20 @@ export function useTypewriter(target: string, enabled: boolean): string {
   // animate a jump after audio ends).
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+
+  // Read inside the rAF loop without restarting it.
+  const streamFinishedRef = useRef(streamFinished);
+  streamFinishedRef.current = streamFinished;
+
+  // Captured once when post-finish drain begins, so the per-frame step
+  // size stays constant instead of decaying with the shrinking backlog.
+  // Dividing the *current* backlog each tick produces geometric decay
+  // and overshoots CATCHUP_FRAMES significantly for long tails.
+  const drainStepRef = useRef<number | null>(null);
+
+  // Exposed so callers can suppress auto-scroll while the drain runs.
+  const [isDraining, setIsDraining] = useState(false);
+  const isDrainingRef = useRef(false);
 
   // `enabled` controls initial state: animate from 0 vs snap to full for
   // history/voice. Transitions mid-stream are handled via enabledRef in
@@ -61,9 +97,30 @@ export function useTypewriter(target: string, enabled: boolean): string {
         // restart it when `target` grows.
         runningRef.current = false;
         rafIdRef.current = null;
+        if (isDrainingRef.current) {
+          isDrainingRef.current = false;
+          setIsDraining(false);
+        }
         return;
       }
-      const next = Math.min(prev + CHARS_PER_FRAME, targetLen);
+      let charsThisFrame: number;
+      if (streamFinishedRef.current) {
+        if (drainStepRef.current === null) {
+          const initialBacklog = targetLen - prev;
+          drainStepRef.current = Math.max(
+            CHARS_PER_FRAME,
+            Math.ceil(initialBacklog / CATCHUP_FRAMES)
+          );
+          if (!isDrainingRef.current) {
+            isDrainingRef.current = true;
+            setIsDraining(true);
+          }
+        }
+        charsThisFrame = drainStepRef.current;
+      } else {
+        charsThisFrame = CHARS_PER_FRAME;
+      }
+      const next = Math.min(prev + charsThisFrame, targetLen);
       displayedLengthRef.current = next;
       setDisplayedLength(next);
       rafIdRef.current = requestAnimationFrame(tick);
@@ -127,8 +184,10 @@ export function useTypewriter(target: string, enabled: boolean): string {
       document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  return useMemo(
+  const displayed = useMemo(
     () => target.slice(0, Math.min(displayedLength, target.length)),
     [target, displayedLength]
   );
+
+  return { displayed, isDraining };
 }

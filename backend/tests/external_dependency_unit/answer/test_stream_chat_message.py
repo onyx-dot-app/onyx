@@ -276,9 +276,7 @@ def test_stream_chat_with_search_and_openurl_tools(
                 create_packet_with_reasoning_delta(token, 0)
                 for token in tokenise(REASONING_RESPONSE_1)
             ]
-        ).expect(
-            Packet(placement=create_placement(0), obj=ReasoningDone())
-        ).expect(
+        ).expect(Packet(placement=create_placement(0), obj=ReasoningDone())).expect(
             Packet(
                 placement=create_placement(1),
                 obj=SearchToolStart(
@@ -311,9 +309,7 @@ def test_stream_chat_with_search_and_openurl_tools(
                 placement=create_placement(1),
                 obj=SectionEnd(),
             )
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 2
         for content in CONTENT1:
@@ -366,9 +362,7 @@ def test_stream_chat_with_search_and_openurl_tools(
                 placement=create_placement(3),
                 obj=SectionEnd(),
             )
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 3
         handler.add_response(
@@ -398,9 +392,7 @@ def test_stream_chat_with_search_and_openurl_tools(
             ]
             + [mock_web_search_result_to_search_doc(result) for result in RESULTS2]
             + [mock_web_content_to_search_doc(content) for content in CONTENT1],
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         with pytest.raises(StopIteration):
             next(answer_stream)
@@ -500,9 +492,7 @@ def test_image_generation_tool_no_reasoning(
                 obj=SectionEnd(),
             ),
             forward=False,
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 2 - the answer comes after the tool call, so turn_index=1
         handler.add_response(
@@ -524,9 +514,7 @@ def test_image_generation_tool_no_reasoning(
                 placement=create_placement(1),
                 obj=OverallStop(),
             )
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         with pytest.raises(StopIteration):
             next(answer_stream)
@@ -852,9 +840,7 @@ def test_parallel_internal_and_web_search_tool_calls(
                 placement=create_placement(1, 1),
                 obj=SectionEnd(),
             )
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 2
         for content in OPEN_URL_DOCUMENTS_1:
@@ -895,9 +881,7 @@ def test_parallel_internal_and_web_search_tool_calls(
                 obj=SectionEnd(),
             ),
             forward=False,
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 3
         for content in OPEN_URL_DOCUMENTS_2:
@@ -939,9 +923,7 @@ def test_parallel_internal_and_web_search_tool_calls(
                 placement=create_placement(4),
                 obj=SectionEnd(),
             )
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # LLM Stream Response 4
         handler.add_response(
@@ -968,9 +950,7 @@ def test_parallel_internal_and_web_search_tool_calls(
                 mock_web_content_to_search_doc(content)
                 for content in OPEN_URL_DOCUMENTS_2
             ],
-        ).run_and_validate(
-            stream=answer_stream
-        )
+        ).run_and_validate(stream=answer_stream)
 
         # End stream
         with pytest.raises(StopIteration):

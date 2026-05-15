@@ -469,6 +469,32 @@ try:
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
+# TCP keepalive settings for the sync psycopg2 engine.
+#
+# When PgBouncer (or any intermediary — NLB, NAT, firewall) silently closes
+# an idle TCP connection that's still parked in the SQLAlchemy pool,
+# `pool_pre_ping`'s `SELECT 1` can succeed (sub-ms) and then the very next
+# real query fails mid-flight with
+# `(psycopg2.OperationalError) server closed the connection unexpectedly`.
+# Enabling TCP keepalives causes the kernel to send periodic probes on
+# idle sockets, which (a) keeps the path warm so PgBouncer never sees it
+# as idle, and (b) detects dead sockets before SQLAlchemy tries to use
+# them, letting the pool invalidate them cleanly.
+#
+# Defaults are tuned so the first probe fires well under typical
+# intermediary idle timeouts (PgBouncer `server_idle_timeout` 600s, AWS
+# NLB idle 350s). Set `POSTGRES_TCP_KEEPALIVES=false` to opt out.
+POSTGRES_TCP_KEEPALIVES = (
+    os.environ.get("POSTGRES_TCP_KEEPALIVES", "true").lower() == "true"
+)
+POSTGRES_TCP_KEEPALIVES_IDLE = int(os.environ.get("POSTGRES_TCP_KEEPALIVES_IDLE") or 30)
+POSTGRES_TCP_KEEPALIVES_INTERVAL = int(
+    os.environ.get("POSTGRES_TCP_KEEPALIVES_INTERVAL") or 10
+)
+POSTGRES_TCP_KEEPALIVES_COUNT = int(
+    os.environ.get("POSTGRES_TCP_KEEPALIVES_COUNT") or 5
+)
+
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
@@ -606,6 +632,14 @@ CELERY_WORKER_MONITORING_CONCURRENCY = int(
 
 CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
+)
+
+# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
+# run one headless agent fire at a time, so this caps simultaneous in-flight
+# scheduled runs per pod. Default is intentionally modest because each fire
+# can be long-running (LLM + tool calls in a sandbox).
+CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
 )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
@@ -1103,18 +1137,10 @@ ENTERPRISE_EDITION_ENABLED = (
 # To configure image generation, please visit the Image Generation page in the Admin Panel.
 #####
 # Azure Image Configurations
-AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION") or os.environ.get(
-    "AZURE_DALLE_API_VERSION"
-)
-AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY") or os.environ.get(
-    "AZURE_DALLE_API_KEY"
-)
-AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE") or os.environ.get(
-    "AZURE_DALLE_API_BASE"
-)
-AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get(
-    "AZURE_IMAGE_DEPLOYMENT_NAME"
-) or os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
+AZURE_IMAGE_API_VERSION = os.environ.get("AZURE_IMAGE_API_VERSION")
+AZURE_IMAGE_API_KEY = os.environ.get("AZURE_IMAGE_API_KEY")
+AZURE_IMAGE_API_BASE = os.environ.get("AZURE_IMAGE_API_BASE")
+AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
@@ -1340,7 +1366,9 @@ AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
 INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
-    else "cloud" if AUTH_TYPE == AuthType.CLOUD else "self_hosted"
+    else "cloud"
+    if AUTH_TYPE == AuthType.CLOUD
+    else "self_hosted"
 )
 
 

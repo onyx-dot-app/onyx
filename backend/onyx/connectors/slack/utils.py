@@ -35,11 +35,43 @@ def get_base_url(token: str) -> str:
     return client.auth_test()["url"]
 
 
-def get_message_link(event: MessageType, client: WebClient, channel_id: str) -> str:
+def fetch_team_user_emails(
+    slack_client: WebClient,
+    team_ids: list[str],
+) -> dict[str, set[str]]:
+    """Per-workspace user email sets. Used to scope public-channel access on
+    Enterprise Grid so users from one workspace can't see another workspace's
+    public channels."""
+    result: dict[str, set[str]] = {}
+    for tid in team_ids:
+        emails: set[str] = set()
+        for user_info in make_paginated_slack_api_call(
+            slack_client.users_list, team_id=tid
+        ):
+            for user in user_info.get("members", []):
+                email = user.get("profile", {}).get("email")
+                if email:
+                    emails.add(email)
+        result[tid] = emails
+    return result
+
+
+def get_message_link(
+    event: MessageType,
+    client: WebClient,
+    channel_id: str,
+    team_id: str | None = None,
+    team_id_to_url: dict[str, str] | None = None,
+) -> str:
     message_ts = event["ts"]
     message_ts_without_dot = message_ts.replace(".", "")
     thread_ts = event.get("thread_ts")
-    base_url = get_base_url(client.token)
+
+    base_url: str | None = None
+    if team_id and team_id_to_url is not None:
+        base_url = team_id_to_url.get(team_id)
+    if not base_url:
+        base_url = get_base_url(client.token)
 
     link = f"{base_url.rstrip('/')}/archives/{channel_id}/p{message_ts_without_dot}" + (
         f"?thread_ts={thread_ts}" if thread_ts else ""

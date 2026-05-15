@@ -17,7 +17,7 @@ chrome.runtime.onInstalled.addListener((details) => {
         if (!result[CHROME_SPECIFIC_STORAGE_KEYS.ONBOARDING_COMPLETE]) {
           chrome.tabs.create({ url: "src/pages/welcome.html" });
         }
-      },
+      }
     );
   }
 });
@@ -73,7 +73,7 @@ async function sendToOnyx(info, tab) {
 async function toggleNewTabOverride() {
   try {
     const result = await chrome.storage.local.get(
-      CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB,
+      CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
     );
     const newValue =
       !result[CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB];
@@ -183,7 +183,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]:
             result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN],
         });
-      },
+      }
     );
     return true;
   }
@@ -196,7 +196,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           url: `${result[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]}/auth/login`,
           active: true,
         });
-      },
+      }
     );
     return true;
   }
@@ -233,10 +233,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .catch((error) => {
               console.error(
                 "[Onyx SW] Error opening side panel with text:",
-                error,
+                error
               );
             });
-        },
+        }
       );
     } else {
       console.error("[Onyx SW] Missing tabId or windowId");

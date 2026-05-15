@@ -11,6 +11,9 @@ dependencies:
 - name: ingress-nginx
   repository: https://kubernetes.github.io/ingress-nginx
   version: 4.13.3
+- name: redis-operator
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.24.0
 - name: redis
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.16.6
@@ -20,5 +23,5 @@ dependencies:
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
   version: 0.3.3
-digest: sha256:a57f29088b1624a72f6c70e4c3ccc2f2aad675e4624278c4e9be92083d6d5dad
-generated: "2026-04-08T16:47:29.33368-07:00"
+digest: sha256:5f9adb96f0dd6d084689b6f71b44f4997845820821833477385cf9217de0dda9
+generated: "2026-05-14T14:29:38.878556-07:00"

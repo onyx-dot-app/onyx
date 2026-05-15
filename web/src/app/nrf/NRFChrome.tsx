@@ -21,7 +21,7 @@ import useScreenSize from "@/hooks/useScreenSize";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+    <Text as="p" text03 secondaryAction className="my-0! text-center">
       {children}
     </Text>
   ),

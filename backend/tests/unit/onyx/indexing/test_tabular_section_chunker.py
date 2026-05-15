@@ -63,7 +63,7 @@ def _tabular_section(
 class TestTabularChunkerChunkSection:
     def test_simple_csv_all_rows_fit_one_chunk(self) -> None:
         # --- INPUT -----------------------------------------------------
-        csv_text = "Name,Age,City\n" "Alice,30,NYC\n" "Bob,25,SF\n"
+        csv_text = "Name,Age,City\nAlice,30,NYC\nBob,25,SF\n"
         heading = "sheet:People"
         content_token_limit = 500
 
@@ -96,14 +96,14 @@ class TestTabularChunkerChunkSection:
         # At content_token_limit=57, row_budget = max(16, 57-31-1) = 25.
         # Each row "col=a, val=1" is 12 tokens; two rows + \n = 25 (fits),
         # three rows + 2×\n = 38 (overflows) → split after 2 rows.
-        csv_text = "col,val\n" "a,1\n" "b,2\n" "c,3\n" "d,4\n"
+        csv_text = "col,val\na,1\nb,2\nc,3\nd,4\n"
         heading = "sheet:S"
         content_token_limit = 57
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
-            ("sheet:S\n" "Columns: col, val\n" "col=a, val=1\n" "col=b, val=2"),
-            ("sheet:S\n" "Columns: col, val\n" "col=c, val=3\n" "col=d, val=4"),
+            ("sheet:S\nColumns: col, val\ncol=a, val=1\ncol=b, val=2"),
+            ("sheet:S\nColumns: col, val\ncol=c, val=3\ncol=d, val=4"),
         ]
 
         # --- ACT -------------------------------------------------------
@@ -154,7 +154,7 @@ class TestTabularChunkerChunkSection:
         # --- INPUT -----------------------------------------------------
         # Alice's Age is empty; Bob's City is empty. Empty cells should
         # not appear as `field=` pairs in the output.
-        csv_text = "Name,Age,City\n" "Alice,,NYC\n" "Bob,25,\n"
+        csv_text = "Name,Age,City\nAlice,,NYC\nBob,25,\n"
         heading = "sheet:P"
 
         # --- EXPECTED --------------------------------------------------
@@ -182,12 +182,12 @@ class TestTabularChunkerChunkSection:
         # "Hello, world" is quoted in the CSV, so csv.reader parses it as
         # a single field. The surrounding quotes are stripped during
         # decoding, so the chunk text carries the bare value.
-        csv_text = "Name,Notes\n" 'Alice,"Hello, world"\n'
+        csv_text = 'Name,Notes\nAlice,"Hello, world"\n'
         heading = "sheet:P"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
-            ("sheet:P\n" "Columns: Name, Notes\n" "Name=Alice, Notes=Hello, world"),
+            ("sheet:P\nColumns: Name, Notes\nName=Alice, Notes=Hello, world"),
         ]
 
         # --- ACT -------------------------------------------------------
@@ -204,12 +204,12 @@ class TestTabularChunkerChunkSection:
         # --- INPUT -----------------------------------------------------
         # Stray blank rows in the CSV (e.g. export artifacts) shouldn't
         # produce ghost rows in the output.
-        csv_text = "A,B\n" "\n" "1,2\n" "\n" "\n" "3,4\n"
+        csv_text = "A,B\n\n1,2\n\n\n3,4\n"
         heading = "sheet:S"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
-            ("sheet:S\n" "Columns: A, B\n" "A=1, B=2\n" "A=3, B=4"),
+            ("sheet:S\nColumns: A, B\nA=1, B=2\nA=3, B=4"),
         ]
 
         # --- ACT -------------------------------------------------------
@@ -230,13 +230,13 @@ class TestTabularChunkerChunkSection:
         pending_text = "prior paragraph from an earlier text section"
         pending_link = "prev-link"
 
-        csv_text = "a,b\n" "1,2\n"
+        csv_text = "a,b\n1,2\n"
         heading = "sheet:S"
 
         # --- EXPECTED --------------------------------------------------
         expected_texts = [
             pending_text,  # flushed accumulator
-            ("sheet:S\n" "Columns: a, b\n" "a=1, b=2"),
+            ("sheet:S\nColumns: a, b\na=1, b=2"),
         ]
 
         # --- ACT -------------------------------------------------------
@@ -263,9 +263,7 @@ class TestTabularChunkerChunkSection:
         # Three small rows (20 tokens each) under a generous
         # content_token_limit=100 should pack into ONE chunk — prelude
         # emitted once, rows stacked beneath it.
-        csv_text = (
-            "x\n" "aaaaaaaaaaaaaaaaaa\n" "bbbbbbbbbbbbbbbbbb\n" "cccccccccccccccccc\n"
-        )
+        csv_text = "x\naaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbb\ncccccccccccccccccc\n"
         heading = "S"
         content_token_limit = 100
 
@@ -305,7 +303,7 @@ class TestTabularChunkerChunkSection:
         # pack per chunk (17 prelude overhead + 9 rows = 26 ≤ 30).
         # Every emitted chunk therefore carries its full prelude rather
         # than dropping Columns at emit time.
-        csv_text = "x\n" "aa\n" "bb\n" "cc\n" "dd\n" "ee\n"
+        csv_text = "x\naa\nbb\ncc\ndd\nee\n"
         heading = "S"
         content_token_limit = 30
 
@@ -342,7 +340,7 @@ class TestTabularChunkerChunkSection:
         # pieces each ≤ max_tokens, and no prelude is added to split
         # pieces (they already consume the full budget). A 53-token row
         # packs into 3 field-boundary pieces under a 20-token budget.
-        csv_text = "field 1,field 2,field 3,field 4,field 5\n" "1,2,3,4,5\n"
+        csv_text = "field 1,field 2,field 3,field 4,field 5\n1,2,3,4,5\n"
         heading = "S"
         content_token_limit = 20
 
@@ -452,7 +450,7 @@ class TestTabularChunkerChunkSection:
         # Column headers with underscores get a space-substituted friendly
         # alias appended in parens on the `Columns:` line. Plain headers
         # pass through untouched.
-        csv_text = "MTTR_hours,id,owner_name\n" "3,42,Alice\n"
+        csv_text = "MTTR_hours,id,owner_name\n3,42,Alice\n"
         heading = "sheet:M"
 
         # --- EXPECTED --------------------------------------------------
@@ -486,7 +484,7 @@ class TestTabularChunkerChunkSection:
         # Headers a,b,c,d. Row 1 and row 3 each have only column `a`
         # populated (tiny). Row 2 is a "fat" row with all four columns
         # populated.
-        csv_text = "a,b,c,d\n" "1,,,\n" "xxx,yyy,zzz,www\n" "2,,,\n"
+        csv_text = "a,b,c,d\n1,,,\nxxx,yyy,zzz,www\n2,,,\n"
         heading = "S"
         content_token_limit = 20
 
@@ -534,7 +532,7 @@ class TestTabularChunkerChunkSection:
         # row = "x=y" (3). Budget = 15.
         #   cols + row:        10+1+3          = 14 ≤ 15 ✓
         #   sheet + cols + row: 13+1+10+1+3    = 28 > 15 ✗
-        csv_text = "x\n" "y\n"
+        csv_text = "x\ny\n"
         heading = "LongSheetName"
         content_token_limit = 15
 
@@ -565,7 +563,7 @@ class TestTabularChunkerChunkSection:
         # row = "ABC=1, DEF=2" (12). Budget = 20.
         #   cols + row:        17+1+12        = 30 > 20 ✗
         #   sheet + row:        1+1+12        = 14 ≤ 20 ✓
-        csv_text = "ABC,DEF\n" "1,2\n"
+        csv_text = "ABC,DEF\n1,2\n"
         heading = "S"
         content_token_limit = 20
 
@@ -588,13 +586,13 @@ class TestTabularChunkerChunkSection:
         # appended AFTER the content chunk(s). is_continuation tracks
         # the index in the combined output, so the metadata chunk is
         # marked as a continuation.
-        csv_text = "Name,Age\n" "Alice,30\n" "Bob,25\n"
+        csv_text = "Name,Age\nAlice,30\nBob,25\n"
         heading = "sheet:T"
         content_token_limit = 500
 
         # --- EXPECTED --------------------------------------------------
         content_chunk = (
-            "sheet:T\n" "Columns: Name, Age\n" "Name=Alice, Age=30\n" "Name=Bob, Age=25"
+            "sheet:T\nColumns: Name, Age\nName=Alice, Age=30\nName=Bob, Age=25"
         )
         descriptor_chunk = (
             "sheet:T\n"
@@ -697,9 +695,7 @@ class TestBuildSheetDescriptorChunks:
         #   - Name         → categorical (with sample values)
         #   - Age          → numeric
         #   - joined_at    → date column → contributes to time range
-        csv_text = (
-            "id,Name,Age,joined_at\n" "1,Alice,30,2024-01-15\n" "2,Bob,25,2024-02-20\n"
-        )
+        csv_text = "id,Name,Age,joined_at\n1,Alice,30,2024-01-15\n2,Bob,25,2024-02-20\n"
 
         # --- EXPECTED --------------------------------------------------
         expected = [

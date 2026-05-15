@@ -116,6 +116,6 @@ def test_group_based_permissions(
             doc for doc in accessible_docs_user2 if doc not in public_docs
         ]
 
-        assert (
-            len(non_public_access_user2) == 0
-        ), f"User 2 should only have access to public documents. Found access to non-public docs: {non_public_access_user2}"
+        assert len(non_public_access_user2) == 0, (
+            f"User 2 should only have access to public documents. Found access to non-public docs: {non_public_access_user2}"
+        )
