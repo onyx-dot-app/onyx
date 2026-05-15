@@ -212,6 +212,23 @@ Also drop `SANDBOX_BACKEND=local`-only keys (`SANDBOX_BASE_PATH`,
 Keep personal vars: API keys (OPENAI, BRAINTRUST, EXA), log levels,
 password-rule relaxations, feature flags, OAuth client IDs.
 
+For Craft development, these are required:
+
+```
+ENABLE_CRAFT=true
+SANDBOX_CONTAINER_IMAGE=sandbox:dev
+SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
+```
+
+`sandbox:dev` must be built and loaded into kind before sandbox pods can
+start:
+
+```bash
+cd backend/onyx/server/features/build/sandbox/kubernetes/docker
+docker build -t sandbox:dev .
+kind load docker-image sandbox:dev --name onyx-dev
+```
+
 ## References
 
 - [CONTRIBUTING.md — Development Setup](/CONTRIBUTING.md#development-setup)

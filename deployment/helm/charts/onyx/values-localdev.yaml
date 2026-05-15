@@ -93,6 +93,13 @@ monitoring:
 codeInterpreter:
   enabled: false
 
+# ---- Secrets ----
+
+auth:
+  sandboxPushSecret:
+    values:
+      shared_secret: "dev-sandbox-push-secret-not-for-production"
+
 # ---- App pods ----
 #
 # Scaled to 0 since you run these locally via telepresence intercept.
