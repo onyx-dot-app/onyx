@@ -93,7 +93,7 @@ def test_kubernetes_sandbox_provision() -> None:
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
@@ -315,7 +315,7 @@ def test_kubernetes_sandbox_send_message() -> None:
     # Create a test LLM config (values don't matter for this test)
     llm_config = LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
@@ -433,7 +433,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
     # Create a test LLM config
     llm_config = LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
@@ -624,7 +624,7 @@ def test_health_check_returns_true_for_running_pod() -> None:
 
     llm_config = LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
@@ -714,7 +714,7 @@ def test_health_check_returns_false_after_termination() -> None:
 
     llm_config = LLMProviderConfig(
         provider="openai",
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
