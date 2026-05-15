@@ -87,7 +87,9 @@ def _create_and_link_tool_calls(
             tool_call_tokens = len(default_tokenizer.encode(arguments_json_str))
         except Exception as e:
             logger.warning(
-                f"Failed to tokenize tool call arguments for {tool_call_info.tool_call_id}: {e}. Using length as (over) estimate."
+                "Failed to tokenize tool call arguments for %s: %s. Using length as (over) estimate.",
+                tool_call_info.tool_call_id,
+                e,
             )
             arguments_json_str = json.dumps(tool_call_info.tool_call_arguments)
             tool_call_tokens = len(arguments_json_str)
@@ -143,8 +145,9 @@ def _create_and_link_tool_calls(
             else:
                 # Parent doesn't exist (likely cancelled) - skip this orphaned child
                 logger.warning(
-                    f"Skipping tool call '{tool_call_obj.tool_call_id}' with missing parent "
-                    f"'{tool_call_info.parent_tool_call_id}' (likely cancelled during execution)"
+                    "Skipping tool call '%s' with missing parent '%s' (likely cancelled during execution)",
+                    tool_call_obj.tool_call_id,
+                    tool_call_info.parent_tool_call_id,
                 )
                 # Remove from DB session to prevent saving
                 db_session.delete(tool_call_obj)
@@ -283,11 +286,13 @@ def save_chat_turn(
 
             if is_project_file:
                 logger.info(
-                    f"Project file citation {search_doc_py.document_id} not in tool calls, creating it"
+                    "Project file citation %s not in tool calls, creating it",
+                    search_doc_py.document_id,
                 )
             else:
                 logger.warning(
-                    f"Citation doc {search_doc_py.document_id} not found in tool call search_docs, creating it"
+                    "Citation doc %s not found in tool call search_docs, creating it",
+                    search_doc_py.document_id,
                 )
 
             # Create the SearchDoc in the database

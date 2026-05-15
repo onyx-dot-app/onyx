@@ -46,7 +46,7 @@ def _make_shared_session_mock(next_total: int) -> MagicMock:
 @patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch("onyx.server.manage.users.NUM_FREE_TRIAL_USER_INVITES", 5)
 def test_trial_tenant_cannot_exceed_invite_limit(*_mocks: None) -> None:
     """Post-upsert total of 6 exceeds cap=5 — must raise OnyxError."""
@@ -73,7 +73,7 @@ def test_trial_tenant_cannot_exceed_invite_limit(*_mocks: None) -> None:
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
 @patch("onyx.server.manage.users.write_invited_users", return_value=3)
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch("onyx.server.manage.users.NUM_FREE_TRIAL_USER_INVITES", 5)
 @patch(
     "onyx.server.manage.users.fetch_ee_implementation_or_noop",
@@ -99,7 +99,7 @@ def test_trial_tenant_can_invite_within_limit(*_mocks: None) -> None:
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
 @patch("onyx.server.manage.users.write_invited_users", return_value=3)
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch(
     "onyx.server.manage.users.fetch_ee_implementation_or_noop",
     return_value=lambda *_args: None,
@@ -132,7 +132,7 @@ _COMMON_PATCHES = [
     patch("onyx.server.manage.users.get_invited_users", return_value=[]),
     patch("onyx.server.manage.users.get_all_users", return_value=[]),
     patch("onyx.server.manage.users.write_invited_users", return_value=1),
-    patch("onyx.server.manage.users.enforce_seat_limit"),
+    patch("onyx.server.manage.users.enforce_seat_limit_locked"),
     patch("onyx.server.manage.users.enforce_invite_rate_limit"),
 ]
 

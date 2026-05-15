@@ -40,32 +40,12 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
+from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 CODE_FIELD = "code"
-
-
-def _truncate_output(output: str, max_length: int, label: str = "output") -> str:
-    """
-    Truncate output string to max_length and append truncation message if needed.
-
-    Args:
-        output: The original output string to truncate
-        max_length: Maximum length before truncation
-        label: Label for logging (e.g., "stdout", "stderr")
-
-    Returns:
-        Truncated string with truncation message appended if truncated
-    """
-    truncated = output[:max_length]
-    if len(output) > max_length:
-        truncated += (
-            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
-        )
-        logger.debug(f"Truncated {label}: {truncated}")
-    return truncated
 
 
 class PythonTool(Tool[PythonToolOverrideKwargs]):
@@ -118,7 +98,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             return False
 
         with CodeInterpreterClient() as client:
-            return client.health(use_cache=True)
+            return client.health(use_cache=True).healthy
 
     def tool_definition(self) -> dict:
         return {
@@ -201,13 +181,13 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     # Stage for execution
                     files_to_stage.append({"path": file_name, "file_id": ci_file_id})
 
-                    logger.info(f"Staged file for Python execution: {file_name}")
+                    logger.info("Staged file for Python execution: %s", file_name)
 
                 except Exception as e:
-                    logger.warning(f"Failed to stage file {file_name}: {e}")
+                    logger.warning("Failed to stage file %s: %s", file_name, e)
 
             try:
-                logger.debug(f"Executing code: {code}")
+                logger.debug("Executing code: %s", code)
 
                 # Execute code with streaming (falls back to batch if unavailable)
                 stdout_parts: list[str] = []
@@ -283,7 +263,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         onyx_file_id = file_store.save_file(
                             content=BytesIO(file_content),
                             display_name=filename,
-                            file_origin=FileOrigin.CHAT_UPLOAD,
+                            file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             file_type=mime_type,
                         )
 
@@ -300,7 +280,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                     except Exception as e:
                         logger.error(
-                            f"Failed to handle generated file {workspace_file.path}: {e}"
+                            "Failed to handle generated file %s: %s",
+                            workspace_file.path,
+                            e,
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -309,7 +291,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         client.delete_file(ci_file_id)
                     except Exception as e:
                         logger.error(
-                            f"Failed to delete Code Interpreter generated file {ci_file_id}: {e}"
+                            "Failed to delete Code Interpreter generated file %s: %s",
+                            ci_file_id,
+                            e,
                         )
 
                 # Note: staged input files are intentionally not deleted here because
@@ -348,7 +332,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 )
 
             except Exception as e:
-                logger.error(f"Python execution failed: {e}")
+                logger.error("Python execution failed: %s", e)
                 error_msg = str(e)
 
                 # Emit error delta

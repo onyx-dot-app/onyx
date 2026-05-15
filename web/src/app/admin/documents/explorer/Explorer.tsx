@@ -50,7 +50,7 @@ const DocumentDisplay = ({
         </a>
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
-        <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
+        <div className="px-1 py-0.5 bg-accent-background-hovered rounded-sm flex">
           <p className="mr-1 my-auto">Boost:</p>
           <ScoreSection
             documentId={document.document_id}
@@ -73,7 +73,7 @@ const DocumentDisplay = ({
               );
             }
           }}
-          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded flex cursor-pointer select-none"
+          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
             {document.hidden ? (
@@ -92,7 +92,7 @@ const DocumentDisplay = ({
           <DocumentUpdatedAtBadge updatedAt={document.updated_at} />
         </div>
       )}
-      <p className="pl-1 pt-2 pb-3 break-words">
+      <p className="pl-1 pt-2 pb-3 wrap-break-word">
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </p>
     </div>

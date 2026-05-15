@@ -266,7 +266,7 @@ class AirtableConnector(LoadConnector):
                         return attachment_response.content
                     except requests.exceptions.HTTPError as e:
                         if e.response.status_code == 410:
-                            logger.info(f"Refreshing attachment for {filename}")
+                            logger.info("Refreshing attachment for %s", filename)
                             # Re-fetch the record to get a fresh URL
                             refreshed_record = self.airtable_client.table(
                                 base_id, table_id
@@ -283,7 +283,9 @@ class AirtableConnector(LoadConnector):
                                         attachment_response.raise_for_status()
                                         return attachment_response.content
 
-                            logger.error(f"Failed to refresh attachment for {filename}")
+                            logger.error(
+                                "Failed to refresh attachment for %s", filename
+                            )
                         raise
 
                 attachment_content = get_attachment_with_retry(url, record_id)
@@ -313,7 +315,7 @@ class AirtableConnector(LoadConnector):
                             )
                     except Exception as e:
                         logger.warning(
-                            f"Failed to process attachment {filename}: {str(e)}"
+                            "Failed to process attachment %s: %s", filename, str(e)
                         )
             return attachment_texts
 
@@ -439,7 +441,10 @@ class AirtableConnector(LoadConnector):
             field_type = field_schema.type
 
             logger.debug(
-                f"Processing field '{field_name}' of type '{field_type}' for record '{record_id}'."
+                "Processing field '%s' of type '%s' for record '%s'.",
+                field_name,
+                field_type,
+                record_id,
             )
 
             field_sections, field_metadata = self._process_field(
@@ -457,7 +462,7 @@ class AirtableConnector(LoadConnector):
             metadata.update(field_metadata)
 
         if not sections:
-            logger.warning(f"No sections found for record {record_id}")
+            logger.warning("No sections found for record %s", record_id)
             return None
 
         # Include base name in semantic ID only in index_all mode
@@ -505,7 +510,7 @@ class AirtableConnector(LoadConnector):
                 if base_info.id == base_id:
                     return base_info.name
         except Exception:
-            logger.debug(f"Could not resolve base name for {base_id}")
+            logger.debug("Could not resolve base name for %s", base_id)
         return None
 
     def _index_table(
@@ -532,7 +537,10 @@ class AirtableConnector(LoadConnector):
                 break
 
         logger.info(
-            f"Processing {len(records)} records from table '{table_schema.name}' in base '{base_name or base_id}'."
+            "Processing %s records from table '%s' in base '%s'.",
+            len(records),
+            table_schema.name,
+            base_name or base_id,
         )
 
         if not records:
@@ -572,7 +580,7 @@ class AirtableConnector(LoadConnector):
                         if document:
                             record_documents.append(document)
                     except Exception as e:
-                        logger.exception(f"Failed to process record {record['id']}")
+                        logger.exception("Failed to process record %s", record["id"])
                         raise e
 
             if record_documents:
@@ -599,23 +607,25 @@ class AirtableConnector(LoadConnector):
     def _load_all(self) -> GenerateDocumentsOutput:
         """Discover all bases and tables, then index everything."""
         bases = self.airtable_client.bases()
-        logger.info(f"Discovered {len(bases)} Airtable base(s).")
+        logger.info("Discovered %s Airtable base(s).", len(bases))
 
         for base_info in bases:
             base_id = base_info.id
             base_name = base_info.name
-            logger.info(f"Listing tables for base '{base_name}' ({base_id}).")
+            logger.info("Listing tables for base '%s' (%s).", base_name, base_id)
 
             try:
                 base = self.airtable_client.base(base_id)
                 tables = base.tables()
             except Exception:
                 logger.exception(
-                    f"Failed to list tables for base '{base_name}' ({base_id}), skipping."
+                    "Failed to list tables for base '%s' (%s), skipping.",
+                    base_name,
+                    base_id,
                 )
                 continue
 
-            logger.info(f"Found {len(tables)} table(s) in base '{base_name}'.")
+            logger.info("Found %s table(s) in base '%s'.", len(tables), base_name)
 
             for table in tables:
                 try:
@@ -626,6 +636,10 @@ class AirtableConnector(LoadConnector):
                     )
                 except Exception:
                     logger.exception(
-                        f"Failed to index table '{table.name}' ({table.id}) in base '{base_name}' ({base_id}), skipping."
+                        "Failed to index table '%s' (%s) in base '%s' (%s), skipping.",
+                        table.name,
+                        table.id,
+                        base_name,
+                        base_id,
                     )
                     continue

@@ -49,9 +49,10 @@ def get_upload_size_bytes(upload: UploadFile) -> int | None:
         return size
     except Exception as e:
         logger.warning(
-            "Could not determine upload size via stream seek "
-            f"(filename='{get_safe_filename(upload)}', "
-            f"error_type={type(e).__name__}, error={e})"
+            "Could not determine upload size via stream seek (filename='%s', error_type=%s, error=%s)",
+            get_safe_filename(upload),
+            type(e).__name__,
+            e,
         )
         return None
 
@@ -61,7 +62,8 @@ def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
     size_bytes = get_upload_size_bytes(upload)
     if size_bytes is None:
         logger.warning(
-            f"Could not determine upload size; skipping size-limit check for '{get_safe_filename(upload)}'"
+            "Could not determine upload size; skipping size-limit check for '%s'",
+            get_safe_filename(upload),
         )
         return False
     return size_bytes > max_bytes
@@ -226,7 +228,7 @@ def categorize_uploaded_files(
                     token_count = estimate_image_tokens_for_upload(upload)
                 except (UnidentifiedImageError, OSError) as e:
                     logger.warning(
-                        f"Failed to process image file '{filename}': {str(e)}"
+                        "Failed to process image file '%s': %s", filename, str(e)
                     )
                     results.rejected.append(
                         RejectedFile(
@@ -256,7 +258,7 @@ def categorize_uploaded_files(
                     file_name=filename,
                     extension=extension,
                 ):
-                    logger.warning(f"{filename} is password protected")
+                    logger.warning("%s is password protected", filename)
                     results.rejected.append(
                         RejectedFile(
                             filename=filename, reason="Document is password protected"
@@ -328,11 +330,13 @@ def categorize_uploaded_files(
                             upload.file.seek(0)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to reset file pointer for '{filename}': {str(e)}"
+                                "Failed to reset file pointer for '%s': %s",
+                                filename,
+                                str(e),
                             )
                         continue
 
-                    logger.warning(f"No text content extracted from '{filename}'")
+                    logger.warning("No text content extracted from '%s'", filename)
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
@@ -370,11 +374,14 @@ def categorize_uploaded_files(
                     upload.file.seek(0)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to reset file pointer for '{filename}': {str(e)}"
+                        "Failed to reset file pointer for '%s': %s", filename, str(e)
                     )
         except Exception as e:
             logger.warning(
-                f"Failed to process uploaded file '{get_safe_filename(upload)}' (error_type={type(e).__name__}, error={str(e)})"
+                "Failed to process uploaded file '%s' (error_type=%s, error=%s)",
+                get_safe_filename(upload),
+                type(e).__name__,
+                str(e),
             )
             results.rejected.append(
                 RejectedFile(

@@ -9,7 +9,6 @@ Create Date: 2025-02-03 18:07:56.552526
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "eaa3b5593925"
 down_revision = "98a5008d8711"
@@ -47,8 +46,7 @@ def upgrade() -> None:
 
         if not existing_default:
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     INSERT INTO slack_channel_config (
                         slack_bot_id, persona_id, channel_config, enable_auto_filters, is_default
                     ) VALUES (
@@ -60,8 +58,7 @@ def upgrade() -> None:
                         '"respond_tag_only": true}',
                         FALSE, TRUE
                     )
-                """
-                ),
+                """),
                 {"bot_id": slack_bot_id},
             )
 

@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@opal/utils";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
 import { Section } from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, SelectCard } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Text from "@/refresh-components/texts/Text";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
@@ -65,37 +64,29 @@ function PrivacyOption({
   ariaLabel,
 }: PrivacyOptionProps) {
   return (
-    <div
-      className={cn(
-        "p-1.5 rounded-08 cursor-pointer ",
-        selected ? "bg-background-tint-00" : "bg-transparent",
-        "hover:bg-background-tint-02"
-      )}
+    <SelectCard
+      state={selected ? "filled" : "empty"}
+      padding="sm"
+      rounding="sm"
+      border="none"
       onClick={onClick}
       aria-label={ariaLabel}
     >
-      <div className="flex flex-row gap-1 items-center">
-        <div className="flex w-5 p-[2px] self-stretch justify-center">
-          <Icon
-            size={16}
-            className={cn(selected ? "stroke-text-05" : "stroke-text-03")}
-          />
-        </div>
-        <div className="flex flex-col flex-1 px-0.5">
-          <Text mainUiBody text05={selected} text03={!selected}>
-            {title}
-          </Text>
-          <Text secondaryBody text03>
-            {description}
-          </Text>
-        </div>
-        {selected && (
-          <div className="flex w-5 self-stretch justify-center">
-            <SvgCheck size={16} className="stroke-action-link-05" />
-          </div>
-        )}
-      </div>
-    </div>
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={Icon}
+        title={title}
+        description={description}
+        padding="fit"
+        color="interactive"
+        rightChildren={
+          selected ? (
+            <SvgCheck size={16} className="shrink-0 stroke-action-link-05" />
+          ) : undefined
+        }
+      />
+    </SelectCard>
   );
 }
 
@@ -127,14 +118,16 @@ export default function ShareChatSessionModal({
 
   const isShared = shareLink && selectedPrivacy === "public";
 
-  let submitButtonText = "Done";
-  if (wantsPublic && !isCurrentlyPublic && !shareLink) {
-    submitButtonText = "Create Share Link";
-  } else if (!wantsPublic && isCurrentlyPublic) {
-    submitButtonText = "Make Private";
-  } else if (isShared) {
+  let submitButtonText: string;
+  if (isShared) {
     submitButtonText = "Copy Link";
+  } else if (isCurrentlyPublic && !wantsPublic) {
+    submitButtonText = "Make Private";
+  } else {
+    submitButtonText = "Create Share Link";
   }
+
+  const submitDisabled = isLoading || (!isCurrentlyPublic && !wantsPublic);
 
   async function handleSubmit() {
     setIsLoading(true);
@@ -189,7 +182,7 @@ export default function ShareChatSessionModal({
             justifyContent="start"
             alignItems="stretch"
             height="auto"
-            gap={0.12}
+            gap={0.25}
           >
             <PrivacyOption
               icon={SvgLock}
@@ -236,7 +229,7 @@ export default function ShareChatSessionModal({
             </Button>
           )}
           <Button
-            disabled={isLoading}
+            disabled={submitDisabled}
             onClick={handleSubmit}
             icon={isShared ? SvgLink : undefined}
             width={isShared ? "full" : undefined}

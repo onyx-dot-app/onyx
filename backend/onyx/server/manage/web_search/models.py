@@ -14,9 +14,9 @@ class WebSearchProviderView(BaseModel):
     provider_type: WebSearchProviderType
     is_active: bool
     config: dict[str, str] | None
-    has_api_key: bool = Field(
-        default=False,
-        description="Indicates whether an API key is stored for this provider.",
+    masked_api_key: str | None = Field(
+        default=None,
+        description="Masked API key for display (e.g. 'sk-a...z456'). None means no key stored.",
     )
 
 
@@ -45,7 +45,7 @@ class WebContentProviderView(BaseModel):
     provider_type: WebContentProviderType
     is_active: bool
     config: WebContentProviderConfig | None
-    has_api_key: bool = Field(default=False)
+    masked_api_key: str | None = None
 
 
 class WebContentProviderUpsertRequest(BaseModel):

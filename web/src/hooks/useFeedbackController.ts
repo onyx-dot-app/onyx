@@ -45,7 +45,8 @@ export default function useFeedbackController() {
         ? sessions.get(currentSessionId)?.messageTree
         : undefined;
       const previousFeedback = messageTree
-        ? getMessageByMessageId(messageTree, messageId)?.currentFeedback ?? null
+        ? (getMessageByMessageId(messageTree, messageId)?.currentFeedback ??
+          null)
         : null;
 
       // Optimistically update the UI

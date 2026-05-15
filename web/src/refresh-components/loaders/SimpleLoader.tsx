@@ -4,9 +4,6 @@ import { SvgLoader } from "@opal/icons";
 
 export default function SimpleLoader({ className, ...props }: IconProps) {
   return (
-    <SvgLoader
-      className={cn("h-[1rem] w-[1rem] animate-spin", className)}
-      {...props}
-    />
+    <SvgLoader className={cn("h-4 w-4 animate-spin", className)} {...props} />
   );
 }

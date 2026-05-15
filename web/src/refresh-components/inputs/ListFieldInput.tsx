@@ -68,7 +68,7 @@ export function ListFieldInput({
               aria-label={`Remove ${value}`}
               onClick={() => removeValue(index)}
               rightIcon={SvgX}
-              className="rounded h-8"
+              className="rounded-sm h-8"
             >
               {value}
             </Button>

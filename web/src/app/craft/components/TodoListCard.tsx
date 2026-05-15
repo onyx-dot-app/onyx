@@ -120,8 +120,8 @@ export default function TodoListCard({
               {allCompleted ? (
                 <SvgCheckCircle className="size-4 stroke-status-success-05 shrink-0" />
               ) : (
-                <div className="size-4 rounded border-2 border-text-03 shrink-0 flex items-center justify-center">
-                  <div className="size-2 bg-text-03 rounded-sm" />
+                <div className="size-4 rounded-sm border-2 border-text-03 shrink-0 flex items-center justify-center">
+                  <div className="size-2 bg-text-03 rounded-xs" />
                 </div>
               )}
 
@@ -138,7 +138,7 @@ export default function TodoListCard({
             <SvgChevronDown
               className={cn(
                 "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
-                !isOpen && "rotate-[-90deg]"
+                !isOpen && "-rotate-90"
               )}
             />
           </button>

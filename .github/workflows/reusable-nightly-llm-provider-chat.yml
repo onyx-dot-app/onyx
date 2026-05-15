@@ -69,7 +69,7 @@ jobs:
     timeout-minutes: 45
     environment: ci-protected
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -112,7 +112,7 @@ jobs:
     timeout-minutes: 45
     environment: ci-protected
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -154,7 +154,7 @@ jobs:
     timeout-minutes: 45
     environment: ci-protected
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -260,7 +260,7 @@ jobs:
     timeout-minutes: 45
     environment: ci-protected
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -288,6 +288,7 @@ jobs:
             AZURE_API_KEY, test/azure-api-key
             OLLAMA_API_KEY, test/ollama-api-key
             OPENROUTER_API_KEY, test/openrouter-api-key
+            ONYX_DEV_LICENSE, test/onyx-dev-license
 
       - name: Run nightly provider chat test
         uses: ./.github/actions/run-nightly-provider-chat-test

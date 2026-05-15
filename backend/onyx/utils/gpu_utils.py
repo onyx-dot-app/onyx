@@ -31,7 +31,7 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
         gpu_status = response.json()
         return gpu_status["gpu_available"]
     except requests.RequestException as e:
-        logger.error(f"Error: Unable to fetch GPU status. Error: {str(e)}")
+        logger.error("Error: Unable to fetch GPU status. Error: %s", str(e))
         raise  # Re-raise exception to trigger a retry
 
 

@@ -84,6 +84,9 @@ class UserPreferences(BaseModel):
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
+    # Input preferences
+    paste_as_tile: bool | None = None
+
     # Voice preferences
     voice_auto_send: bool | None = None
     voice_auto_playback: bool | None = None
@@ -169,6 +172,7 @@ class UserInfo(BaseModel):
                     theme_preference=user.theme_preference,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
+                    paste_as_tile=user.paste_as_tile,
                     voice_auto_send=user.voice_auto_send,
                     voice_auto_playback=user.voice_auto_playback,
                     voice_playback_speed=user.voice_playback_speed,

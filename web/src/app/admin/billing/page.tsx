@@ -14,6 +14,10 @@ import {
   BillingInformation,
   hasActiveSubscription,
   claimLicense,
+  endTrial,
+  PaymentMethodRequiredError,
+  createCustomerPortalSession,
+  StripePortalFlowType,
 } from "@/lib/billing";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -169,6 +173,7 @@ export default function BillingPage() {
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     const portalReturn = searchParams.get("portal_return");
+    const retryUpgrade = searchParams.get("retry_upgrade") === "1";
 
     if (!sessionId && !portalReturn) return;
 
@@ -220,6 +225,39 @@ export default function BillingPage() {
         }
       }
       if (!cancelled) refreshBilling();
+
+      // Auto-retry the trial upgrade if the user just came back from the
+      // add-payment-method portal flow. This avoids making them click
+      // "Upgrade now" a second time once their card is on file.
+      if (!cancelled && retryUpgrade && NEXT_PUBLIC_CLOUD_ENABLED) {
+        try {
+          await endTrial();
+          if (!cancelled) {
+            refreshBilling();
+            router.refresh();
+            mutate(SWR_KEYS.settings);
+            mutate(SWR_KEYS.enterpriseSettings);
+          }
+        } catch (err) {
+          if (err instanceof PaymentMethodRequiredError) {
+            // Card add was abandoned or failed verification — bounce them
+            // back to the same flow so they can complete it.
+            try {
+              const response = await createCustomerPortalSession({
+                return_url: `${window.location.origin}/admin/billing?portal_return=true&retry_upgrade=1`,
+                flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
+              });
+              if (response.stripe_customer_portal_url) {
+                window.location.href = response.stripe_customer_portal_url;
+              }
+            } catch (portalErr) {
+              console.error("Failed to reopen portal after retry:", portalErr);
+            }
+          } else {
+            console.error("Auto-retry of trial upgrade failed:", err);
+          }
+        }
+      }
     };
     handleBillingReturn();
 

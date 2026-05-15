@@ -40,7 +40,7 @@ def add_api_server_tenant_id_middleware(
             return await call_next(request)
 
         except Exception as e:
-            logger.exception(f"Error in tenant ID middleware: {str(e)}")
+            logger.exception("Error in tenant ID middleware: %s", str(e))
             raise
 
 
@@ -97,7 +97,7 @@ async def _get_tenant_id_from_request(
                 return tenant_id
 
             except Exception as e:
-                logger.error(f"Error decoding anonymous user cookie: {str(e)}")
+                logger.error("Error decoding anonymous user cookie: %s", str(e))
                 # Continue and attempt to authenticate
 
         logger.debug(
@@ -110,7 +110,7 @@ async def _get_tenant_id_from_request(
         return POSTGRES_DEFAULT_SCHEMA
 
     except Exception as e:
-        logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
+        logger.error("Unexpected error in _get_tenant_id_from_request: %s", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
 
     finally:

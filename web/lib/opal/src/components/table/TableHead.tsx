@@ -81,6 +81,7 @@ export default function TableHead({
   return (
     <th
       {...thProps}
+      scope="col"
       style={width != null ? { width } : undefined}
       className={cn("table-head group", alignmentThClass[alignment])}
       data-size={resolvedSize}

@@ -51,13 +51,13 @@ def check_ee_features_enabled() -> bool:
                 with get_session_with_current_tenant() as db_session:
                     metadata = refresh_license_cache(db_session, tenant_id)
             except SQLAlchemyError as db_error:
-                logger.warning(f"Failed to load license from DB: {db_error}")
+                logger.warning("Failed to load license from DB: %s", db_error)
 
         if metadata and metadata.status != _BLOCKING_STATUS:
             # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
             return True
     except RedisError as e:
-        logger.warning(f"Failed to check license for EE features: {e}")
+        logger.warning("Failed to check license for EE features: %s", e)
         # Fail closed - if Redis is down, other things will break anyway
         return False
 
@@ -103,7 +103,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                     metadata = refresh_license_cache(db_session, tenant_id)
             except SQLAlchemyError as db_error:
                 logger.warning(
-                    f"Failed to load license from DB for settings: {db_error}"
+                    "Failed to load license from DB for settings: %s", db_error
                 )
 
         if metadata:
@@ -127,7 +127,7 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
     except CACHE_TRANSIENT_ERRORS as e:
-        logger.warning(f"Failed to check license metadata for settings: {e}")
+        logger.warning("Failed to check license metadata for settings: %s", e)
         # Fail closed - disable EE features if we can't verify license
         settings.ee_features_enabled = False
 

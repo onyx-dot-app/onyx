@@ -71,7 +71,7 @@ def _process_egnyte_file(
 
     # Explicitly excluding image extensions here. TODO: consider allowing images
     if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-        logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
+        logger.warning("Skipping file '%s' with extension '%s'", file_name, extension)
         return None
 
     # Extract text content based on file type
@@ -283,7 +283,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         # Iterate through yielded files and filter them
         for file in self._get_files_list(self.folder_path):
             if not self._should_index_file(file, start_time, end_time):
-                logger.debug(f"Skipping file '{file['path']}'.")
+                logger.debug("Skipping file '%s'.", file["path"])
                 continue
 
             try:
@@ -302,7 +302,9 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
 
                 if not response.ok:
                     logger.error(
-                        f"Failed to fetch file content: {file['path']} (status code: {response.status_code})"
+                        "Failed to fetch file content: %s (status code: %s)",
+                        file["path"],
+                        response.status_code,
                     )
                     continue
 
@@ -331,7 +333,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
                         current_batch = []
 
             except Exception:
-                logger.exception(f"Failed to process file {file['path']}")
+                logger.exception("Failed to process file %s", file["path"])
                 continue
 
         if current_batch:

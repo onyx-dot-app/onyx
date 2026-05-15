@@ -196,7 +196,7 @@ export const ConnectorMultiSelect = ({
                 className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
               >
                 <div className="flex items-center overflow-hidden">
-                  <div className="flex-shrink-0 text-xs">
+                  <div className="shrink-0 text-xs">
                     <ConnectorTitle
                       connector={connector.connector}
                       ccPairId={connector.cc_pair_id}

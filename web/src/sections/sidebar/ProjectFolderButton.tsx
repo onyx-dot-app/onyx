@@ -4,7 +4,7 @@ import React, { useState, memo } from "react";
 import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";

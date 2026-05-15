@@ -190,7 +190,7 @@ def _call_mcp_client_function_sync(
     try:
         return run_async_sync_no_cancel(run_client_function())
     except Exception as e:
-        logger.error(f"Failed to call MCP client function: {e}")
+        logger.error("Failed to call MCP client function: %s", e)
         if isinstance(e, ExceptionGroup):
             original_exception = e
             saved_e = log_exception_group(e)
@@ -288,12 +288,12 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
 
     t1 = time.time()
     init_result = await session.initialize()  # sends JSON-RPC "initialize"
-    logger.info(f"Initialized with server: {init_result.serverInfo}")
-    logger.info(f"Initialized with server time: {time.time() - t1}")
+    logger.info("Initialized with server: %s", init_result.serverInfo)
+    logger.info("Initialized with server time: %s", time.time() - t1)
     # 2) tools/list
     t2 = time.time()
     tools_response = await session.list_tools()  # sends JSON-RPC "tools/list"
-    logger.info(f"Listed tools with server time: {time.time() - t2}")
+    logger.info("Listed tools with server time: %s", time.time() - t2)
     return tools_response.tools
 
 

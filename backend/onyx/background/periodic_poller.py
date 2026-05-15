@@ -102,7 +102,7 @@ def _run_scheduled_eval() -> None:
             )
         except Exception:
             logger.exception(
-                f"Periodic poller - Failed scheduled eval for dataset {dataset_name}"
+                "Periodic poller - Failed scheduled eval for dataset %s", dataset_name
             )
 
 
@@ -208,7 +208,7 @@ def _try_run_periodic_task(task_def: _PeriodicTaskDef) -> None:
         task_def.last_run_at = now
     except Exception:
         logger.exception(
-            f"Periodic poller - Error running periodic task {task_def.name}"
+            "Periodic poller - Error running periodic task %s", task_def.name
         )
 
 
@@ -259,7 +259,9 @@ def _poller_loop(tenant_id: str) -> None:
 
     periodic_tasks = _build_periodic_tasks()
     logger.info(
-        f"Periodic poller started with {len(periodic_tasks)} periodic task(s): {[t.name for t in periodic_tasks]}"
+        "Periodic poller started with %s periodic task(s): %s",
+        len(periodic_tasks),
+        [t.name for t in periodic_tasks],
     )
 
     while not _shutdown_event.is_set():
@@ -273,7 +275,7 @@ def _poller_loop(tenant_id: str) -> None:
                 _try_run_periodic_task(task_def)
             except Exception:
                 logger.exception(
-                    f"Periodic poller - Unhandled error checking task {task_def.name}"
+                    "Periodic poller - Unhandled error checking task %s", task_def.name
                 )
 
         _shutdown_event.wait(RECOVERY_INTERVAL_SECONDS)

@@ -13,7 +13,7 @@ def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
         try:
             sources.append(DocumentSource(s))
         except ValueError:
-            logger.warning(f"Failed to translate {s} to a DocumentSource")
+            logger.warning("Failed to translate %s to a DocumentSource", s)
     return sources
 
 

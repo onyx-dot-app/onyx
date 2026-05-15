@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
@@ -51,8 +52,7 @@ class SavedSearchSettings(IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
-            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+            contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
 
 
@@ -332,7 +332,8 @@ class SearchDoc(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            *args, **kwargs  # ty: ignore[invalid-argument-type]
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None
@@ -350,6 +351,14 @@ class SearchDocsResponse(BaseModel):
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately
     displayed_docs: list[SearchDoc] | None = None
+
+    @field_validator("displayed_docs", mode="before")
+    @classmethod
+    def normalize_empty_displayed_docs(
+        cls,
+        value: list[SearchDoc] | None,
+    ) -> list[SearchDoc] | None:
+        return value or None
 
 
 class SavedSearchDoc(SearchDoc):

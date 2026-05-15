@@ -113,7 +113,7 @@ export function AccessTypeGroupSelector({
                 Assign group access for this Connector
               </Text>
               {userGroupsIsLoading ? (
-                <div className="animate-pulse bg-background-200 h-8 w-32 rounded" />
+                <div className="animate-pulse bg-background-200 h-8 w-32 rounded-sm" />
               ) : (
                 <Text as="p" mainUiMuted text03>
                   {isAdmin
@@ -127,7 +127,7 @@ export function AccessTypeGroupSelector({
               render={(arrayHelpers: ArrayHelpers) => (
                 <div className="flex flex-wrap gap-2 py-4">
                   {userGroupsIsLoading ? (
-                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded"></div>
+                    <div className="animate-pulse bg-background-200 h-8 w-32 rounded-sm"></div>
                   ) : (
                     userGroups &&
                     userGroups.map((userGroup: UserGroup) => {

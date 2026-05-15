@@ -26,13 +26,11 @@ def upgrade() -> None:
 
     # First get all GitHub connectors
     github_connectors = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """
-        )
+            """)
     ).fetchall()
 
     # Update each connector's config
@@ -40,7 +38,7 @@ def upgrade() -> None:
     for connector_id, config in github_connectors:
         try:
             if not config:
-                logger.warning(f"Connector {connector_id} has no config, skipping")
+                logger.warning("Connector %s has no config, skipping", connector_id)
                 continue
 
             # Parse the config if it's a string
@@ -57,18 +55,16 @@ def upgrade() -> None:
 
             # Update the connector with the new config
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE connector
                     SET connector_specific_config = :new_config
                     WHERE id = :connector_id
-                    """
-                ),
+                    """),
                 {"connector_id": connector_id, "new_config": json.dumps(new_config)},
             )
             updated_count += 1
         except Exception as e:
-            logger.error(f"Error updating connector {connector_id}: {str(e)}")
+            logger.error("Error updating connector %s: %s", connector_id, str(e))
 
 
 def downgrade() -> None:
@@ -80,16 +76,14 @@ def downgrade() -> None:
     )
 
     github_connectors = conn.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """
-        )
+            """)
     ).fetchall()
 
-    logger.debug(f"Found {len(github_connectors)} GitHub connectors to rollback")
+    logger.debug("Found %s GitHub connectors to rollback", len(github_connectors))
 
     # Revert each GitHub connector to use repo_name instead of repositories
     reverted_count = 0
@@ -112,15 +106,13 @@ def downgrade() -> None:
 
             # Update the connector with the new config
             conn.execute(
-                sa.text(
-                    """
+                sa.text("""
                     UPDATE connector
                     SET connector_specific_config = :new_config
                     WHERE id = :connector_id
-                    """
-                ),
+                    """),
                 {"new_config": json.dumps(new_config), "connector_id": connector_id},
             )
             reverted_count += 1
         except Exception as e:
-            logger.error(f"Error reverting connector {connector_id}: {str(e)}")
+            logger.error("Error reverting connector %s: %s", connector_id, str(e))

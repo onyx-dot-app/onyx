@@ -10,7 +10,7 @@ A containerized development environment for working on Onyx.
 - Neovim, ripgrep, fd, fzf, jq, make, wget, unzip
 - Zsh as default shell (sources host `~/.zshrc` if available)
 - Python venv auto-activation
-- Network firewall (default-deny, whitelists npm, GitHub, Anthropic APIs, Sentry, and VS Code update servers)
+- Optional opt-in network firewall (default-deny, whitelists npm, GitHub, Anthropic APIs, Sentry, and VS Code update servers)
 
 ## Usage
 
@@ -75,7 +75,8 @@ user has read/write access to the bind-mounted workspace:
 
 ## Firewall
 
-The container starts with a default-deny firewall (`init-firewall.sh`) that only allows outbound traffic to:
+The container ships with an **opt-in** default-deny firewall (`init-firewall.sh`).
+When enabled, it only allows outbound traffic to:
 
 - npm registry
 - GitHub
@@ -83,4 +84,22 @@ The container starts with a default-deny firewall (`init-firewall.sh`) that only
 - Sentry
 - VS Code update servers
 
-This requires the `NET_ADMIN` and `NET_RAW` capabilities, which are added via `runArgs` in `devcontainer.json`.
+To enable it, set `ONYX_DEVCONTAINER_FIREWALL=1` in your host environment before
+starting the container (e.g. via `ods dev up`):
+
+```bash
+export ONYX_DEVCONTAINER_FIREWALL=1
+ods dev up
+```
+
+The variable is forwarded into the container via `containerEnv` and read by
+`postStartCommand`, which then runs `init-firewall.sh`. Without the variable set
+to `1`, the firewall script is skipped and the container has unrestricted
+outbound network access.
+
+You can also enable the firewall on a running container by running
+`sudo bash /workspace/.devcontainer/init-firewall.sh` from inside it.
+
+The firewall requires the `NET_ADMIN` and `NET_RAW` capabilities, which are
+always added via `runArgs` in `devcontainer.json` so the firewall can be
+toggled on after container start without recreating the container.

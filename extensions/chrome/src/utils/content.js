@@ -26,7 +26,7 @@ function createSidePanel() {
     { action: ACTIONS.GET_CURRENT_ONYX_DOMAIN },
     function (response) {
       iframe.src = response[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN];
-    },
+    }
   );
 
   sidePanel.appendChild(iframe);

@@ -82,11 +82,9 @@ export async function processSSEStream(
 
 export interface CreateSessionOptions {
   name?: string | null;
-  demoDataEnabled?: boolean;
   userWorkArea?: string | null;
   userLevel?: string | null;
-  // LLM selection from user's cookie
-  llmProviderType?: string | null; // Provider type (e.g., "anthropic", "openai")
+  llmProviderType?: string | null;
   llmModelName?: string | null;
 }
 
@@ -98,7 +96,6 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: options?.name || null,
-      demo_data_enabled: options?.demoDataEnabled ?? true,
       user_work_area: options?.userWorkArea || null,
       user_level: options?.userLevel || null,
       llm_provider_type: options?.llmProviderType || null,
@@ -684,31 +681,6 @@ export async function fetchPptxPreview(
   }
 
   return res.json();
-}
-
-// =============================================================================
-// Connector Management API
-// =============================================================================
-
-export async function deleteConnector(
-  connectorId: number,
-  credentialId: number
-): Promise<void> {
-  const res = await fetch("/api/manage/admin/deletion-attempt", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      connector_id: connectorId,
-      credential_id: credentialId,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(
-      errorData.detail || `Failed to delete connector: ${res.status}`
-    );
-  }
 }
 
 // =============================================================================
