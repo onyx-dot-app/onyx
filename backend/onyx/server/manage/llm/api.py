@@ -1439,7 +1439,9 @@ def get_litellm_available_models(
             litellm_params_model = model_details.get_litellm_params_model()
 
             # Skip embedding models
-            if is_embedding_model(litellm_params_model) or is_embedding_model(model_details.model_name):
+            if is_embedding_model(litellm_params_model) or is_embedding_model(
+                model_details.model_name
+            ):
                 continue
 
             results.append(
