@@ -1,3 +1,9 @@
+# Runs the Craft Kubernetes sandbox tests against a kind cluster on each
+# PR that touches sandbox source. The sandbox image is built from the
+# current tree and served from a local docker registry; kind pulls from
+# that registry rather than going through `kind load docker-image`,
+# which would write a multi-GB tar to tmpfs-backed /tmp.
+# Canonical kind-in-CI pattern: https://kind.sigs.k8s.io/docs/user/local-registry/
 name: Craft Kubernetes Sandbox Tests
 concurrency:
   group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -19,17 +25,10 @@ permissions:
   contents: read
 
 env:
-  # MinIO (matches pr-external-dependency-unit-tests.yml)
   S3_ENDPOINT_URL: "http://localhost:9004"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
-  # Sandbox configuration — points the manager at the kind cluster
-  # and the locally-built image instead of the published Docker Hub tag.
-  # Image lives in a local registry on localhost:5001 (see kind setup
-  # below) so containerd inside the kind node can pull it cleanly,
-  # avoiding the docker save → /tmp → ctr import pipeline that runs
-  # out of disk on tmpfs-backed /tmp.
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
@@ -38,8 +37,6 @@ env:
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
-  # LLM keys (some tests provision pods with an LLM config; values can be
-  # placeholders for tests that don't actually call the model)
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
@@ -79,20 +76,13 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # network=host so the buildx container can reach the local registry
-      # we start below at 127.0.0.1:5001 (without it, "localhost" inside
-      # the buildx container resolves to the container, not the host).
+      # network=host so buildx (running in a container) can push to the
+      # host's registry at localhost:5001.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
         with:
           driver-opts: network=host
 
-      # Start a local Docker registry. kind will pull the sandbox image
-      # from here instead of going through `kind load docker-image`, which
-      # internally runs `docker save → /tmp tar → docker exec ctr import`
-      # and runs out of disk on tmpfs-backed /tmp for our multi-GB image.
-      # This is the canonical kind-in-CI pattern documented at
-      # https://kind.sigs.k8s.io/docs/user/local-registry/.
       - name: Start local image registry
         run: |
           docker run -d --restart=always \
@@ -100,16 +90,7 @@ jobs:
             --name "${KIND_REGISTRY_NAME}" \
             registry:2
 
-      # Build the sandbox image from the current tree so PRs that modify
-      # the Dockerfile / sandbox sources are tested against their own image,
-      # not the published Docker Hub tag. We push directly to the local
-      # registry — buildx streams the image to the registry without an
-      # intermediate tar, so there's no /tmp pressure regardless of size.
-      #
-      # GHA layer cache (type=gha) lets unchanged layers be reused across
-      # runs. Worst case (Dockerfile base or initial-requirements.txt change)
-      # is a full ~8-15 min rebuild; the common case is <1 min.
-      - name: Build and push sandbox image to local registry
+      - name: Build and push sandbox image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
         with:
           context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
@@ -120,10 +101,6 @@ jobs:
           cache-from: type=gha,scope=craft-sandbox
           cache-to: type=gha,scope=craft-sandbox,mode=max
 
-      # Create kind with a containerd registry config patch so it knows
-      # to look up `localhost:5001/*` images via /etc/containerd/certs.d.
-      # We populate certs.d after the cluster is up so the kind node can
-      # resolve the registry container by its docker network hostname.
       - name: Write kind config
         run: |
           cat > "${RUNNER_TEMP}/kind-config.yaml" <<'EOF'
@@ -141,9 +118,8 @@ jobs:
           cluster_name: onyx-craft-ci
           config: ${{ runner.temp }}/kind-config.yaml
 
-      # Wire the registry into the kind network so the kind node can
-      # resolve "kind-registry:5000". Then write a hosts.toml inside the
-      # kind node so `localhost:5001` is rewritten to that hostname.
+      # Connect the registry to kind's docker network and tell containerd
+      # to route localhost:5001 → kind-registry:5000.
       - name: Connect local registry to kind network
         run: |
           docker network connect "kind" "${KIND_REGISTRY_NAME}" || true
@@ -153,16 +129,14 @@ jobs:
           [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
           EOF"
 
-      # The sandbox manager's pod spec sets nodeSelector
-      # `onyx.app/workload=sandbox` (kubernetes_sandbox_manager.py); in
-      # production this matches a dedicated node pool. In kind we have a
-      # single control-plane node — label it so pods can schedule.
+      # Pod spec sets nodeSelector onyx.app/workload=sandbox
+      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
+      # node pool; in kind we just label the single control-plane node.
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
-      # Namespace + ServiceAccount that KubernetesSandboxManager expects.
-      # In production these come from the helm chart (sandbox-namespace.yaml,
-      # gated on ENABLE_CRAFT) plus an out-of-band SA in the internal repo.
+      # Prod-equivalent of sandbox-namespace.yaml in the helm chart plus
+      # the ServiceAccount that's normally created out-of-band.
       - name: Apply sandbox namespace + ServiceAccount
         run: |
           kubectl apply -f - <<'EOF'
