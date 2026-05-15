@@ -94,19 +94,23 @@ def create_custom_skill(
         file_type="application/zip",
     )
 
-    skill = create_skill(
-        slug=slug,
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=sha,
-        is_public=is_public,
-        author_user_id=user.id,
-        db_session=db_session,
-    )
-    if parsed_group_ids:
-        replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
-    db_session.commit()
+    try:
+        skill = create_skill(
+            slug=slug,
+            name=name,
+            description=description,
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=sha,
+            is_public=is_public,
+            author_user_id=user.id,
+            db_session=db_session,
+        )
+        if parsed_group_ids:
+            replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
+        db_session.commit()
+    except Exception:
+        _delete_old_bundle(file_store, bundle_file_id)
+        raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
     return CustomSkillResponse.from_model(skill, group_ids=parsed_group_ids)
@@ -179,13 +183,17 @@ def replace_custom_skill_bundle(
         file_type="application/zip",
     )
 
-    updated, old_file_id = replace_skill_bundle(
-        skill_id=skill_id,
-        new_bundle_file_id=new_file_id,
-        new_bundle_sha256=sha,
-        db_session=db_session,
-    )
-    db_session.commit()
+    try:
+        updated, old_file_id = replace_skill_bundle(
+            skill_id=skill_id,
+            new_bundle_file_id=new_file_id,
+            new_bundle_sha256=sha,
+            db_session=db_session,
+        )
+        db_session.commit()
+    except Exception:
+        _delete_old_bundle(file_store, new_file_id)
+        raise
 
     push_skill_to_affected_sandboxes(updated, db_session)
     _delete_old_bundle(file_store, old_file_id)

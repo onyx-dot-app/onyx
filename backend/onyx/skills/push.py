@@ -1,12 +1,7 @@
-"""Skill bundle push helpers.
+"""Push skill bundles to running sandboxes."""
 
-``build_skills_fileset_for_user`` builds the flat ``FileSet`` consumed by
-``SandboxManager.push_to_sandboxes``.  ``hydrate_sandbox_skills`` is the
-single-pod helper called from ``setup_session_workspace`` for cold-start
-hydration.  ``push_skills_for_users`` is the multi-sandbox fan-out used
-after admin mutations.
-"""
-
+import io
+import zipfile
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -28,12 +23,7 @@ SKILLS_MOUNT_PATH = "/workspace/managed/skills"
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Build the flat FileSet for all skills visible to *user*.
-
-    Each skill's bundle zip is stored in the file store. The returned dict
-    maps ``{slug}.zip`` to raw zip bytes. The sandbox daemon extracts these
-    under the mount path.
-    """
+    """Extract all visible skill bundles into a ``{slug}/`` directory tree."""
     skills = list_skills_for_user(user=user, db_session=db_session)
     file_store = get_default_file_store()
 
@@ -41,7 +31,12 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     for skill in skills:
         try:
             blob = file_store.read_file(skill.bundle_file_id)
-            files[f"{skill.slug}.zip"] = blob.read()
+            zip_bytes = blob.read()
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    files[f"{skill.slug}/{info.filename}"] = zf.read(info)
         except Exception:
             logger.warning(
                 "Failed to read bundle for skill %s (%s), skipping",

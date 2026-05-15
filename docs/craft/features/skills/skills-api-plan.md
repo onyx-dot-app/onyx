@@ -318,7 +318,7 @@ def replace_custom_skill_bundle(...) -> CustomSkillResponse:
     skill = fetch_skill_for_admin(skill_id, db_session)
     validate_custom_bundle(bundle_bytes, slug=skill.slug)
     sha = compute_bundle_sha256(bundle_bytes)
-    new_file_id = filestore.write(bundle_bytes)
+    new_file_id = file_store.write(bundle_bytes)
 
     updated, old_file_id = replace_skill_bundle(
         skill_id=skill_id, new_bundle_file_id=new_file_id,
