@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 .opal-message-card {
   @apply flex flex-col gap-1 w-full self-stretch rounded-16 border;
 }

@@ -2,16 +2,18 @@
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.pat import create_pat
 from onyx.db.pat import list_user_pats
 from onyx.db.pat import revoke_pat
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.pat.models import CreatedTokenResponse
 from onyx.server.pat.models import CreateTokenRequest
 from onyx.server.pat.models import TokenResponse
@@ -27,8 +29,8 @@ def list_tokens(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[TokenResponse]:
-    """List all active tokens for current user."""
-    pats = list_user_pats(db_session, user.id)
+    """List all active user-created tokens for current user."""
+    pats = list_user_pats(db_session, user.id, pat_type=PatType.USER)
     return [
         TokenResponse(
             id=pat.id,
@@ -57,7 +59,9 @@ def create_token(
             expiration_days=request.expiration_days,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+    db_session.commit()
 
     logger.info("User %s created PAT '%s'", user.email, request.name)
 
@@ -79,11 +83,10 @@ def delete_token(
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """Delete (revoke) personal access token. Only owner can revoke their own tokens."""
-    success = revoke_pat(db_session, token_id, user.id)
+    success = revoke_pat(db_session, token_id, user.id, pat_type=PatType.USER)
     if not success:
-        raise HTTPException(
-            status_code=404, detail="Token not found or not owned by user"
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Token not found or not owned by user")
+    db_session.commit()
 
     logger.info("User %s revoked token %s", user.email, token_id)
     return {"message": "Token deleted successfully"}

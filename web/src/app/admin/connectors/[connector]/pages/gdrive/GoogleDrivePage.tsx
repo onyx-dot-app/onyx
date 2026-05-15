@@ -160,7 +160,7 @@ const GDriveMain = () => {
         onSuccess={handleRefresh}
         existingAuthCredential={Boolean(
           googleDrivePublicUploadedCredential ||
-            googleDriveServiceAccountCredential
+          googleDriveServiceAccountCredential
         )}
       />
 

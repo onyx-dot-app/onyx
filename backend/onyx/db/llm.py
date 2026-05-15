@@ -305,7 +305,6 @@ def upsert_llm_provider(
         db_session.flush()
 
     for model_config in llm_provider_upsert_request.model_configurations:
-
         supported_flows = [LLMModelFlowType.CHAT]
         if model_config.supports_image_input:
             supported_flows.append(LLMModelFlowType.VISION)

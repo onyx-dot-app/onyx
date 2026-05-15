@@ -11,11 +11,9 @@ import {
   SvgSlack,
 } from "@opal/logos";
 import { SvgChevronRight, SvgCalendar } from "@opal/icons";
-import { useBuildConnectors } from "@/app/craft/hooks/useBuildConnectors";
-import {
-  CRAFT_CONFIGURE_PATH,
-  ONYX_CRAFT_CALENDAR_URL,
-} from "@/app/craft/v1/constants";
+import { ONYX_CRAFT_CALENDAR_URL } from "@/app/craft/v1/constants";
+import useCCPairs from "@/hooks/useCCPairs";
+import { useUser } from "@/providers/UserProvider";
 
 interface ConnectorBannersRowProps {
   className?: string;
@@ -29,26 +27,20 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Row of two banners that appear above the InputBar after first agent response.
- * - Left: "Connect your data" - exact same look as welcome page banner, but flipped
- * - Right: "Get help setting up connectors" - links to cal.com booking
- *
- * Only shows if user has no connectors configured.
- * Slides up from the input bar with animation.
- */
 export default function ConnectorBannersRow({
   className,
 }: ConnectorBannersRowProps) {
-  const { hasConnectorEverSucceeded } = useBuildConnectors();
+  const { isAdmin, isCurator } = useUser();
+  const canManageConnectors = isAdmin || isCurator;
+  const { ccPairs, isLoading } = useCCPairs(canManageConnectors);
+  const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
-  // Hide if user has successfully synced at least one connector
-  if (hasConnectorEverSucceeded) {
+  if (!canManageConnectors || isLoading || hasConnectorEverSucceeded) {
     return null;
   }
 
   const handleConnectClick = () => {
-    window.location.href = CRAFT_CONFIGURE_PATH;
+    window.location.href = "/admin/indexing/status";
   };
 
   const handleHelpClick = () => {
@@ -62,43 +54,31 @@ export default function ConnectorBannersRow({
         className
       )}
     >
-      {/* Left banner: Connect your data - exact same as welcome page but flipped */}
       <button
         onClick={handleConnectClick}
         className={cn(
-          // Layout
           "flex items-center justify-between gap-2",
           "px-4 py-2",
-          // Sizing - thin and slightly narrower than 50% width
           "h-9 w-[calc(48%-4px)]",
-          // Appearance - rounded top left only
           "bg-background-neutral-01 hover:bg-background-neutral-02",
           "rounded-tl-12 rounded-tr-none rounded-bl-none rounded-br-none",
-          // Border - flipped: no bottom border instead of no top
           "border border-b-0 border-border-01",
-          // Transition
           "transition-colors duration-200",
-          // Cursor
           "cursor-pointer",
-          // Group for hover effects
           "group"
         )}
       >
-        {/* Left side: 3 icons */}
         <div className="flex items-center -space-x-2">
-          {/* Outermost - no movement */}
           <div>
             <IconWrapper>
               <SvgSlack size={16} />
             </IconWrapper>
           </div>
-          {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:translate-x-2">
             <IconWrapper>
               <SvgGoogleDrive size={16} />
             </IconWrapper>
           </div>
-          {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:translate-x-4">
             <IconWrapper>
               <SvgConfluence size={16} />
@@ -106,7 +86,6 @@ export default function ConnectorBannersRow({
           </div>
         </div>
 
-        {/* Center: Text and Arrow */}
         <div className="flex items-center justify-center gap-1">
           <Text secondaryBody text03>
             Connect your data
@@ -114,21 +93,17 @@ export default function ConnectorBannersRow({
           <SvgChevronRight className="h-4 w-4 text-text-03" />
         </div>
 
-        {/* Right side: 3 icons */}
         <div className="flex items-center -space-x-2">
-          {/* Innermost - moves towards center */}
           <div className="transition-transform duration-200 group-hover:-translate-x-4">
             <IconWrapper>
               <SvgGithub size={16} />
             </IconWrapper>
           </div>
-          {/* Middle - slight movement */}
           <div className="transition-transform duration-200 group-hover:-translate-x-2">
             <IconWrapper>
               <SvgNotion size={16} />
             </IconWrapper>
           </div>
-          {/* Outermost - no movement */}
           <div>
             <IconWrapper>
               <SvgHubspot size={16} />
@@ -137,35 +112,23 @@ export default function ConnectorBannersRow({
         </div>
       </button>
 
-      {/* Right banner: Get help setting up connectors */}
       <button
         onClick={handleHelpClick}
         className={cn(
-          // Layout
           "flex items-center justify-center gap-2",
           "px-4 py-2",
-          // Sizing - same as left banner
           "h-9 w-[calc(49%)]",
-          // Appearance - rounded top right only
           "bg-background-neutral-01 hover:bg-background-neutral-02",
           "rounded-tr-12 rounded-tl-none rounded-bl-none rounded-br-none",
-          // Border - flipped: no bottom border
           "border border-b-0 border-border-01",
-          // Transition
           "transition-colors duration-200",
-          // Cursor
           "cursor-pointer"
         )}
       >
-        {/* Calendar icon */}
         <SvgCalendar className="h-4 w-4 text-text-03" />
-
-        {/* Text */}
         <Text secondaryBody text03>
           Get help setting up connectors
         </Text>
-
-        {/* Arrow indicator */}
         <SvgChevronRight className="h-4 w-4 text-text-03" />
       </button>
     </div>

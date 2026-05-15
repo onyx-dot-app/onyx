@@ -358,9 +358,9 @@ class TestLLMConfigurationEndpoint:
             assert len(captured_llms) == len(test_models)
 
             for i, llm in enumerate(captured_llms):
-                assert (
-                    llm.config.model_name == test_models[i]
-                ), f"Expected model {test_models[i]}, got {llm.config.model_name}"
+                assert llm.config.model_name == test_models[i], (
+                    f"Expected model {test_models[i]}, got {llm.config.model_name}"
+                )
 
         finally:
             db_session.rollback()

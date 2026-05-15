@@ -14,14 +14,19 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
     """Return a list of dicts, one per tenant, with last query info, doc count, and user count."""
 
     # Step 1: fetch all tenant schemas
-    tenant_schemas = [row[0] for row in session.execute(text("""
+    tenant_schemas = [
+        row[0]
+        for row in session.execute(
+            text("""
             SELECT nspname
             FROM pg_namespace
             WHERE nspname NOT IN ('pg_catalog', 'information_schema', 'public')
                 AND nspname NOT LIKE 'pg_toast%%'
                 AND nspname NOT LIKE 'pg_temp%%'
             ORDER BY nspname
-        """))]
+        """)
+        )
+    ]
 
     print(f"Found {len(tenant_schemas)} tenant schemas", file=sys.stderr)
 
@@ -74,7 +79,6 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-
     SqlEngine.init_engine(pool_size=5, max_overflow=2)
 
     with get_session_with_shared_schema() as session:

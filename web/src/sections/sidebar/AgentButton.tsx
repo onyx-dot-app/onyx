@@ -1,8 +1,8 @@
 "use client";
 
 import React, { memo } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { usePinnedAgents, useCurrentAgent } from "@/hooks/useAgents";
+import { MinimalAgent } from "@/lib/agents/types";
+import { usePinnedAgents, useCurrentAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SidebarTab } from "@opal/components";
@@ -44,7 +44,7 @@ function SortableItem({ id, children }: SortableItemProps) {
 }
 
 export interface AgentButtonProps {
-  agent: MinimalPersonaSnapshot;
+  agent: MinimalAgent;
 }
 
 const AgentButton = memo(({ agent }: AgentButtonProps) => {

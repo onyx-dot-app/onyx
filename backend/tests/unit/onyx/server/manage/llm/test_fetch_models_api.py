@@ -994,6 +994,42 @@ class TestGetBifrostAvailableModels:
             called_url = mock_get.call_args[0][0]
             assert called_url == "https://bifrost.example.com/v1/models"
 
+    def test_prefers_normalized_name_for_display_name(self) -> None:
+        """Bifrost's `normalized_name` (pricing-catalog-derived) wins over `name`."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "data": [
+                {
+                    "id": "anthropic/claude-sonnet-4-5",
+                    "name": "claude-sonnet-4-5",
+                    "normalized_name": "Claude Sonnet 4.5",
+                },
+                {
+                    "id": "openai/gpt-4o",
+                    "name": "GPT-4o",
+                },
+                {
+                    "id": "some/custom-model",
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com")
+            results = get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            by_name = {r.name: r.display_name for r in results}
+            assert by_name["anthropic/claude-sonnet-4-5"] == "Claude Sonnet 4.5"
+            assert by_name["openai/gpt-4o"] == "GPT-4o"
+            assert by_name["some/custom-model"] == "some/custom-model"
+
     def test_request_failure_is_logged_and_wrapped(self) -> None:
         """Test that request-layer failures are logged before raising OnyxError."""
         from onyx.server.manage.llm.api import get_bifrost_available_models

@@ -332,7 +332,8 @@ class SearchDoc(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            *args, **kwargs  # ty: ignore[invalid-argument-type]
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None

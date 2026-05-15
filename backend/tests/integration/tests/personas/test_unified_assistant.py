@@ -5,8 +5,9 @@ from tests.integration.common_utils.test_models import DATestUser
 
 
 def test_unified_assistant(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
-) -> None:  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     """Combined test verifying unified assistant existence, tools, and starter messages."""
     # Fetch all personas
     personas = PersonaManager.get_all(admin_user)
@@ -20,9 +21,9 @@ def test_unified_assistant(
 
     # Assert that there are no other assistants (personas) besides the unified assistant
     # (ID 0)
-    assert (
-        len(personas) == 1
-    ), f"Expected only the unified assistant, found {len(personas)} personas"
+    assert len(personas) == 1, (
+        f"Expected only the unified assistant, found {len(personas)} personas"
+    )
 
     # Verify the unified assistant exists
     assert unified_assistant is not None, "Unified assistant (ID 0) not found"
@@ -40,9 +41,9 @@ def test_unified_assistant(
     tools = unified_assistant.tools
     tool_names = [tool.name for tool in tools]
     assert "internal_search" in tool_names, "SearchTool not found in unified assistant"
-    assert (
-        "generate_image" in tool_names
-    ), "ImageGenerationTool not found in unified assistant"
+    assert "generate_image" in tool_names, (
+        "ImageGenerationTool not found in unified assistant"
+    )
     assert "web_search" in tool_names, "WebSearchTool not found in unified assistant"
 
     # Verify no starter messages

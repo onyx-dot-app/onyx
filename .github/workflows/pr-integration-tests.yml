@@ -407,6 +407,19 @@ jobs:
           docker compose -f docker-compose.mock-it-services.yml \
             -p mock-it-services-stack up -d
 
+      - name: Build CLI binary (for CLI integration tests)
+        if: contains(matrix.test-dir.path, 'tests/cli')
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26"
+          cache-dependency-path: "cli/go.sum"
+
+      - name: Compile CLI binary
+        if: contains(matrix.test-dir.path, 'tests/cli')
+        run: |
+          cd cli
+          GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
+
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
@@ -415,8 +428,17 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
+
+            # Mount CLI binary into the container if it exists (CLI tests only)
+            CLI_VOLUME=""
+            if [ -f "${{ github.workspace }}/onyx-cli-test" ]; then
+              CLI_VOLUME="-v ${{ github.workspace }}/onyx-cli-test:/usr/local/bin/onyx-cli-test:ro"
+              CLI_VOLUME="$CLI_VOLUME -e ONYX_CLI_BINARY=/usr/local/bin/onyx-cli-test"
+            fi
+
             docker run --rm --network onyx_default \
               --name test-runner \
+              $CLI_VOLUME \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \

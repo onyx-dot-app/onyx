@@ -34,9 +34,9 @@ def _verify_index_attempt_pagination(
         for attempt in paginated_result.items:
             if last_time_started is not None:
                 assert attempt.time_started is not None
-                assert (
-                    attempt.time_started <= last_time_started
-                ), "Index attempts not in descending time order"
+                assert attempt.time_started <= last_time_started, (
+                    "Index attempts not in descending time order"
+                )
             last_time_started = attempt.time_started
 
         # Add the retrieved index attempts to the list of retrieved attempts

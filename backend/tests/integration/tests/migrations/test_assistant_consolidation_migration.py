@@ -22,12 +22,14 @@ def test_cold_startup_default_assistant() -> None:
 
     with get_session_with_current_tenant() as db_session:
         # Check only default assistant exists
-        result = db_session.execute(text("""
+        result = db_session.execute(
+            text("""
                 SELECT id, name, builtin_persona, is_featured, deleted
                 FROM persona
                 WHERE builtin_persona = true
                 ORDER BY id
-                """))
+                """)
+        )
         assistants = result.fetchall()
 
         # Should have exactly one builtin assistant
@@ -40,52 +42,54 @@ def test_cold_startup_default_assistant() -> None:
         assert default[4] is False, "Should not be deleted"
 
         # Check tools are properly associated
-        result = db_session.execute(text("""
+        result = db_session.execute(
+            text("""
                 SELECT t.name, t.display_name
                 FROM tool t
                 JOIN persona__tool pt ON t.id = pt.tool_id
                 WHERE pt.persona_id = 0
                 ORDER BY t.name
-                """))
+                """)
+        )
         tool_associations = result.fetchall()
         tool_names = [row[0] for row in tool_associations]
         tool_display_names = [row[1] for row in tool_associations]
 
         # Verify all three main tools are attached
-        assert (
-            "internal_search" in tool_names
-        ), "Default assistant should have SearchTool attached"
-        assert (
-            "generate_image" in tool_names
-        ), "Default assistant should have ImageGenerationTool attached"
-        assert (
-            "web_search" in tool_names
-        ), "Default assistant should have WebSearchTool attached"
-        assert (
-            "read_file" in tool_names
-        ), "Default assistant should have FileReaderTool attached"
-        assert (
-            "python" in tool_names
-        ), "Default assistant should have PythonTool attached"
+        assert "internal_search" in tool_names, (
+            "Default assistant should have SearchTool attached"
+        )
+        assert "generate_image" in tool_names, (
+            "Default assistant should have ImageGenerationTool attached"
+        )
+        assert "web_search" in tool_names, (
+            "Default assistant should have WebSearchTool attached"
+        )
+        assert "read_file" in tool_names, (
+            "Default assistant should have FileReaderTool attached"
+        )
+        assert "python" in tool_names, (
+            "Default assistant should have PythonTool attached"
+        )
 
         # Also verify by display names for clarity
-        assert (
-            "Internal Search" in tool_display_names
-        ), "Default assistant should have Internal Search tool"
-        assert (
-            "Image Generation" in tool_display_names
-        ), "Default assistant should have Image Generation tool"
-        assert (
-            "Web Search" in tool_display_names
-        ), "Default assistant should have Web Search tool"
-        assert (
-            "File Reader" in tool_display_names
-        ), "Default assistant should have File Reader tool"
-        assert (
-            "Code Interpreter" in tool_display_names
-        ), "Default assistant should have Code Interpreter tool"
+        assert "Internal Search" in tool_display_names, (
+            "Default assistant should have Internal Search tool"
+        )
+        assert "Image Generation" in tool_display_names, (
+            "Default assistant should have Image Generation tool"
+        )
+        assert "Web Search" in tool_display_names, (
+            "Default assistant should have Web Search tool"
+        )
+        assert "File Reader" in tool_display_names, (
+            "Default assistant should have File Reader tool"
+        )
+        assert "Code Interpreter" in tool_display_names, (
+            "Default assistant should have Code Interpreter tool"
+        )
 
         # Should have exactly 6 tools
-        assert (
-            len(tool_associations) == 6
-        ), f"Default assistant should have exactly 6 tools attached, got {len(tool_associations)}"
+        assert len(tool_associations) == 6, (
+            f"Default assistant should have exactly 6 tools attached, got {len(tool_associations)}"
+        )

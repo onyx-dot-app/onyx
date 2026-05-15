@@ -70,12 +70,7 @@ export {
 } from "@opal/components/divider/components";
 
 /* Card */
-export {
-  Card,
-  type CardProps,
-  type BackgroundVariant,
-  type BorderVariant,
-} from "@opal/components/cards/card/components";
+export { Card, type CardProps } from "@opal/components/cards/card/components";
 
 /* SelectCard */
 export {

@@ -432,9 +432,7 @@ def process_jira_issue(
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
         people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_REPORTER] = (
-            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        )
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
         if (
             email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
         ):
@@ -445,9 +443,7 @@ def process_jira_issue(
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
         people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_ASSIGNEE] = (
-            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        )
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
         if (
             email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
         ):

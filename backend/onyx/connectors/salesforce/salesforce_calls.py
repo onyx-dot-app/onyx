@@ -51,7 +51,6 @@ def _make_time_filter_for_sf_type(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> str | None:
-
     if MODIFIED_FIELD in queryable_fields:
         return _build_last_modified_time_filter_for_salesforce(start, end)
 

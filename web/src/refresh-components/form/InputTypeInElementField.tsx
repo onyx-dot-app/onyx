@@ -9,8 +9,10 @@ import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 import { Section } from "@/layouts/general-layouts";
 
-export interface InputTypeInElementFieldProps
-  extends Omit<InputTypeInProps, "value" | "onClear"> {
+export interface InputTypeInElementFieldProps extends Omit<
+  InputTypeInProps,
+  "value" | "onClear"
+> {
   name: string;
   onRemove?: () => void;
 }
