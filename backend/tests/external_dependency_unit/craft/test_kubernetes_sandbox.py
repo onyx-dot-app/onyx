@@ -104,6 +104,7 @@ def test_kubernetes_sandbox_provision() -> None:
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
             llm_config=llm_config,
+            onyx_pat="ci-test-pat",
         )
 
         # Verify the return value
@@ -325,6 +326,7 @@ def test_kubernetes_sandbox_send_message() -> None:
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
             llm_config=llm_config,
+            onyx_pat="ci-test-pat",
         )
 
         assert sandbox_info.status == SandboxStatus.RUNNING
@@ -442,6 +444,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
             llm_config=llm_config,
+            onyx_pat="ci-test-pat",
         )
 
         assert sandbox_info.status == SandboxStatus.RUNNING
@@ -632,6 +635,7 @@ def test_health_check_returns_true_for_running_pod() -> None:
             user_id=TEST_USER_ID,
             tenant_id=TEST_TENANT_ID,
             llm_config=llm_config,
+            onyx_pat="ci-test-pat",
         )
 
         assert sandbox_info.status == SandboxStatus.RUNNING
@@ -720,6 +724,7 @@ def test_health_check_returns_false_after_termination() -> None:
         user_id=TEST_USER_ID,
         tenant_id=TEST_TENANT_ID,
         llm_config=llm_config,
+        onyx_pat="ci-test-pat",
     )
 
     assert sandbox_info.status == SandboxStatus.RUNNING
