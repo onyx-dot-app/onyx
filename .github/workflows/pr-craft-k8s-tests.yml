@@ -26,11 +26,17 @@ env:
 
   # Sandbox configuration — points the manager at the kind cluster
   # and the locally-built image instead of the published Docker Hub tag.
+  # Image lives in a local registry on localhost:5001 (see kind setup
+  # below) so containerd inside the kind node can pull it cleanly,
+  # avoiding the docker save → /tmp → ctr import pipeline that runs
+  # out of disk on tmpfs-backed /tmp.
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
-  SANDBOX_CONTAINER_IMAGE: "onyx-sandbox:ci"
+  SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+  KIND_REGISTRY_NAME: "kind-registry"
+  KIND_REGISTRY_PORT: "5001"
 
   # LLM keys (some tests provision pods with an LLM config; values can be
   # placeholders for tests that don't actually call the model)
@@ -73,34 +79,79 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      # network=host so the buildx container can reach the local registry
+      # we start below at 127.0.0.1:5001 (without it, "localhost" inside
+      # the buildx container resolves to the container, not the host).
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+
+      # Start a local Docker registry. kind will pull the sandbox image
+      # from here instead of going through `kind load docker-image`, which
+      # internally runs `docker save → /tmp tar → docker exec ctr import`
+      # and runs out of disk on tmpfs-backed /tmp for our multi-GB image.
+      # This is the canonical kind-in-CI pattern documented at
+      # https://kind.sigs.k8s.io/docs/user/local-registry/.
+      - name: Start local image registry
+        run: |
+          docker run -d --restart=always \
+            -p "127.0.0.1:${KIND_REGISTRY_PORT}:5000" \
+            --name "${KIND_REGISTRY_NAME}" \
+            registry:2
 
       # Build the sandbox image from the current tree so PRs that modify
       # the Dockerfile / sandbox sources are tested against their own image,
-      # not the published Docker Hub tag.
+      # not the published Docker Hub tag. We push directly to the local
+      # registry — buildx streams the image to the registry without an
+      # intermediate tar, so there's no /tmp pressure regardless of size.
       #
       # GHA layer cache (type=gha) lets unchanged layers be reused across
       # runs. Worst case (Dockerfile base or initial-requirements.txt change)
       # is a full ~8-15 min rebuild; the common case is <1 min.
-      - name: Build sandbox image
+      - name: Build and push sandbox image to local registry
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
         with:
           context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
           file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
           platforms: linux/amd64
-          tags: onyx-sandbox:ci
-          load: true
+          tags: localhost:5001/onyx-sandbox:ci
+          push: true
           cache-from: type=gha,scope=craft-sandbox
           cache-to: type=gha,scope=craft-sandbox,mode=max
+
+      # Create kind with a containerd registry config patch so it knows
+      # to look up `localhost:5001/*` images via /etc/containerd/certs.d.
+      # We populate certs.d after the cluster is up so the kind node can
+      # resolve the registry container by its docker network hostname.
+      - name: Write kind config
+        run: |
+          cat > "${RUNNER_TEMP}/kind-config.yaml" <<'EOF'
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          containerdConfigPatches:
+            - |-
+              [plugins."io.containerd.grpc.v1.cri".registry]
+                config_path = "/etc/containerd/certs.d"
+          EOF
 
       - name: Create kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
         with:
           cluster_name: onyx-craft-ci
+          config: ${{ runner.temp }}/kind-config.yaml
 
-      - name: Load sandbox image into kind
-        run: kind load docker-image onyx-sandbox:ci --name onyx-craft-ci
+      # Wire the registry into the kind network so the kind node can
+      # resolve "kind-registry:5000". Then write a hosts.toml inside the
+      # kind node so `localhost:5001` is rewritten to that hostname.
+      - name: Connect local registry to kind network
+        run: |
+          docker network connect "kind" "${KIND_REGISTRY_NAME}" || true
+          REGISTRY_DIR="/etc/containerd/certs.d/localhost:${KIND_REGISTRY_PORT}"
+          docker exec onyx-craft-ci-control-plane mkdir -p "${REGISTRY_DIR}"
+          docker exec onyx-craft-ci-control-plane bash -c "cat > ${REGISTRY_DIR}/hosts.toml <<EOF
+          [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
+          EOF"
 
       # The sandbox manager's pod spec sets nodeSelector
       # `onyx.app/workload=sandbox` (kubernetes_sandbox_manager.py); in
@@ -161,6 +212,14 @@ jobs:
             --ff \
             -m "not nightly" \
             backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
+
+      - name: Disk and docker status on failure
+        if: failure()
+        run: |
+          echo "=== df -h ==="; df -h || true
+          echo "=== docker system df ==="; docker system df || true
+          echo "=== docker images ==="; docker images || true
+          echo "=== /tmp contents ==="; ls -lah /tmp || true
 
       - name: Collect kind logs on failure
         if: failure()
