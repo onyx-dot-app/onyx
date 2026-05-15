@@ -15,7 +15,7 @@ Add `/admin/skills` (admin CRUD) and `/skills` (user read) HTTP endpoints, backe
 - Extending `SandboxManager` with the push API and per-backend `write_files_to_sandbox` implementation (separate workstream — see `sandbox-file-push.md`).
 - Built-in skill source files / registrations (registry exists; registering specific built-ins is a separate workstream).
 - Cold-start hydration plumbing in `setup_session_workspace` (owned by the push-primitive workstream).
-- Orphan-blob sweep job (delete/replace endpoints capture the old `bundle_file_id` but do not delete it inline — deferred to a periodic cleanup task).
+- ~~Orphan-blob sweep job~~ — resolved: delete/replace endpoints now clean up old blobs inline via `_delete_old_bundle` (best-effort, logs on failure).
 - Built-in availability flip push triggers (built-in availability is a function of external state, not an API mutation; sandboxes re-converge on next session start/wakeup).
 - `GET /skills/{slug_or_id}` single-skill endpoint (deferred unless a concrete UI need arises; DB layer has `fetch_skill_for_user` ready).
 - Front-end work.
@@ -325,9 +325,9 @@ def replace_custom_skill_bundle(...) -> CustomSkillResponse:
         new_bundle_sha256=sha, db_session=db_session,
     )
     db_session.commit()
-    # old_file_id captured but not deleted inline (deferred to orphan-blob sweep)
 
     _push_skill_to_affected_sandboxes(updated, db_session)
+    _delete_old_bundle(file_store, old_file_id)
     return CustomSkillResponse.from_model(updated, group_ids=_get_group_ids(skill_id, db_session))
 ```
 
@@ -359,9 +359,10 @@ def delete_custom_skill(...) -> None:
     affected = affected_users_for_skill(skill, db_session)
     old_file_id = delete_skill(skill_id, db_session)
     db_session.commit()
-    # old_file_id captured but not deleted inline (deferred to orphan-blob sweep)
 
     _push_skills_to_sandboxes(affected, db_session)
+    if old_file_id is not None:
+        _delete_old_bundle(get_default_file_store(), old_file_id)
 ```
 
 ### `GET /skills` (user)
@@ -502,7 +503,7 @@ For any subagent touching this code:
 - DB ops live in `backend/onyx/db/skill.py` — endpoints must not run SQL directly.
 - Commit transactions at the endpoint boundary; DB-layer functions only flush.
 - `push_to_sandboxes` runs **after** `db_session.commit()`. Push failures are logged inside `SandboxManager` and recorded in the returned `PushResult` (from `backend/onyx/server/features/build/sandbox/models.py`) — they don't surface as request errors. The request returns success on partial pod-level failure (the next mutation or cold-start hydration re-converges). This latency is acceptable for V1; for large tenants with many active sandboxes, the synchronous fan-out could move to a background task in a future iteration.
-- `validate_custom_bundle` already checks reserved slugs, size limits, and bundle format. Don't duplicate these checks in the endpoint — let the validator be the single source of truth. The one exception is the PATCH endpoint, which must check reserved slugs for slug changes (the validator only runs on bundle uploads).
-- Capture `old_file_id` from `delete_skill` and `replace_skill_bundle` but do not delete inline. Orphan-blob cleanup is deferred to a periodic sweep.
+- `validate_custom_bundle` already checks reserved slugs, size limits, and bundle format. Don't duplicate these checks in the endpoint — let the validator be the single source of truth. The PATCH endpoint additionally validates slug format via `check_slug()` and checks reserved slugs (the validator only runs on bundle uploads).
+- Old bundle blobs are deleted inline via `_delete_old_bundle` (best-effort with warning log on failure) after commit + push. No periodic sweep needed.
 - Strict typing — no `Any` unless unavoidable.
 - Use existing fixtures (`admin_user`, `basic_user`, `reset`) for integration tests; don't construct users manually.

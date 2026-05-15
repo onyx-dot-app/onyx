@@ -180,27 +180,29 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    slug_changed = not isinstance(patch.slug, UnsetType) and patch.slug != skill.slug
-    if slug_changed:
-        assert not isinstance(patch.slug, UnsetType)
-        clashing = db_session.scalars(
-            select(Skill.id).where(Skill.slug == patch.slug).where(Skill.id != skill_id)
-        ).first()
-        if clashing is not None:
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{patch.slug}' already exists.",
-            )
-        skill.slug = patch.slug
+    # Apply simple field updates
+    for field in ("name", "description", "is_public", "enabled"):
+        value = getattr(patch, field)
+        if not isinstance(value, UnsetType):
+            setattr(skill, field, value)
 
-    if not isinstance(patch.name, UnsetType):
-        skill.name = patch.name
-    if not isinstance(patch.description, UnsetType):
-        skill.description = patch.description
-    if not isinstance(patch.is_public, UnsetType):
-        skill.is_public = patch.is_public
-    if not isinstance(patch.enabled, UnsetType):
-        skill.enabled = patch.enabled
+    # Slug requires a uniqueness pre-check
+    slug_changed = False
+    if not isinstance(patch.slug, UnsetType):
+        new_slug: str = patch.slug
+        if new_slug != skill.slug:
+            slug_changed = True
+            exists = db_session.scalars(
+                select(Skill.id)
+                .where(Skill.slug == new_slug)
+                .where(Skill.id != skill_id)
+            ).first()
+            if exists is not None:
+                raise OnyxError(
+                    OnyxErrorCode.DUPLICATE_RESOURCE,
+                    f"A skill with slug '{new_slug}' already exists.",
+                )
+            skill.slug = new_slug
 
     try:
         db_session.flush()
