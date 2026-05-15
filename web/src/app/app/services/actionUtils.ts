@@ -8,6 +8,7 @@ import {
   SvgLink,
   SvgSearch,
   SvgServer,
+  SvgTerminal,
 } from "@opal/icons";
 
 // Helper functions to identify specific tools
@@ -48,6 +49,22 @@ const isOpenUrlTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
+const isCodeInterpreterTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "PythonTool" ||
+    tool.name === "python" ||
+    tool.display_name?.toLowerCase().includes("code interpreter")
+  );
+};
+
+const isCodingAgentTool = (tool: ToolSnapshot): boolean => {
+  return (
+    tool.in_code_tool_id === "CodingAgentTool" ||
+    tool.name === "coding_agent" ||
+    tool.display_name?.toLowerCase().includes("coding agent")
+  );
+};
+
 export function getIconForAction(
   action: ToolSnapshot
 ): (props: IconProps) => JSX.Element {
@@ -56,6 +73,8 @@ export function getIconForAction(
   if (isImageGenerationTool(action)) return SvgImage;
   if (isKnowledgeGraphTool(action)) return SvgServer;
   if (isOpenUrlTool(action)) return SvgLink;
+  if (isCodeInterpreterTool(action)) return SvgTerminal;
+  if (isCodingAgentTool(action)) return SvgCpu;
   return SvgCpu;
 }
 

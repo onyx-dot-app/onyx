@@ -457,7 +457,7 @@ def test_llm(llm: LLM) -> str | None:
             llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
             return None
         except Exception as e:
-            logger.warning(f"Failed to call LLM with the following error: {e!s}")
+            logger.warning("Failed to call LLM with the following error: %s", e)
             safe_msg, _, _ = litellm_exception_to_error_msg(
                 e, llm, fallback_to_error_msg=False
             )
@@ -624,9 +624,8 @@ def get_llm_contextual_cost(
         )
     except Exception:
         logger.exception(
-            "An unexpected error occurred while calculating cost for model "
-            f"{llm.config.model_name} (potentially due to malformed name). "
-            "Assuming cost is 0."
+            "An unexpected error occurred while calculating cost for model %s (potentially due to malformed name). Assuming cost is 0.",
+            llm.config.model_name,
         )
         return 0
 
@@ -642,7 +641,7 @@ def llm_max_input_tokens(
     """Best effort attempt to get the max input tokens for the LLM."""
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
-        logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
+        logger.info("Using override GEN_AI_MAX_TOKENS: %s", GEN_AI_MAX_TOKENS)
         return GEN_AI_MAX_TOKENS
 
     model_obj = find_model_obj(
@@ -652,7 +651,9 @@ def llm_max_input_tokens(
     )
     if not model_obj:
         logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+            "Model '%s' not found in LiteLLM. Falling back to %s tokens.",
+            model_name,
+            GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
@@ -665,7 +666,9 @@ def llm_max_input_tokens(
         return max_tokens
 
     logger.warning(
-        f"No max tokens found for '{model_name}'. Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+        "No max tokens found for '%s'. Falling back to %s tokens.",
+        model_name,
+        GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
     )
     return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
@@ -684,7 +687,9 @@ def get_llm_max_output_tokens(
 
     if not model_obj:
         logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. Falling back to {default_output_tokens} output tokens."
+            "Model '%s' not found in LiteLLM. Falling back to %s output tokens.",
+            model_name,
+            default_output_tokens,
         )
         return default_output_tokens
 
@@ -698,7 +703,9 @@ def get_llm_max_output_tokens(
         return int(max_tokens * 0.1)
 
     logger.warning(
-        f"No max output tokens found for '{model_name}'. Falling back to {default_output_tokens} output tokens."
+        "No max output tokens found for '%s'. Falling back to %s output tokens.",
+        model_name,
+        default_output_tokens,
     )
     return default_output_tokens
 
@@ -756,7 +763,7 @@ def get_max_input_tokens_from_llm_provider(
         max_input_tokens
         if max_input_tokens
         else get_max_input_tokens(
-            model_provider=llm_provider.name,
+            model_provider=llm_provider.provider,
             model_name=model_name,
         )
     )
@@ -834,7 +841,10 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 return True
     except Exception as e:
         logger.warning(
-            f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+            "Failed to query database for %s model %s image support: %s",
+            model_provider,
+            model_name,
+            e,
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
@@ -851,14 +861,16 @@ def litellm_thinks_model_supports_image_input(
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
             logger.warning(
-                f"No litellm entry found for {model_provider}/{model_name}, this model may or may not support image input."
+                "No litellm entry found for %s/%s, this model may or may not support image input.",
+                model_provider,
+                model_name,
             )
             return False
         # The or False here is because sometimes the dict contains the key but the value is None
         return model_obj.get("supports_vision", False) or False
     except Exception:
         logger.exception(
-            f"Failed to get model object for {model_provider}/{model_name}"
+            "Failed to get model object for %s/%s", model_provider, model_name
         )
         return False
 
@@ -878,7 +890,9 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             if reasoning is not None:
                 return reasoning
             logger.error(
-                f"Cannot find reasoning for name={model_name} and provider={model_provider}"
+                "Cannot find reasoning for name=%s and provider=%s",
+                model_name,
+                model_provider,
             )
 
         # Fallback: try using litellm.supports_reasoning() for newer models
@@ -892,13 +906,15 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             return litellm.supports_reasoning(model=full_model_name)
         except Exception:
             logger.exception(
-                f"Failed to check if {model_provider}/{model_name} supports reasoning"
+                "Failed to check if %s/%s supports reasoning",
+                model_provider,
+                model_name,
             )
             return False
 
     except Exception:
         logger.exception(
-            f"Failed to get model object for {model_provider}/{model_name}"
+            "Failed to get model object for %s/%s", model_provider, model_name
         )
         return False
 
@@ -946,7 +962,9 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
 
     except Exception:
         logger.exception(
-            f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
+            "Failed to determine if %s/%s is a true OpenAI model",
+            model_provider,
+            model_name,
         )
         return False
 

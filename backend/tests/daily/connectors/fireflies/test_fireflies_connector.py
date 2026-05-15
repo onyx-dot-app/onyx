@@ -1,5 +1,4 @@
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +9,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.FIREFLIES_API_KEY)
 
 
 def load_test_data(file_name: str = "test_fireflies_data.json") -> dict[str, Any]:
@@ -19,10 +21,12 @@ def load_test_data(file_name: str = "test_fireflies_data.json") -> dict[str, Any
 
 
 @pytest.fixture
-def fireflies_connector() -> FirefliesConnector:
+def fireflies_connector(
+    test_secrets: dict[TestSecret, str],
+) -> FirefliesConnector:
     connector = FirefliesConnector()
     connector.load_credentials(
-        {"fireflies_api_key": os.environ["FIREFLIES_API_KEY"]},
+        {"fireflies_api_key": test_secrets[TestSecret.FIREFLIES_API_KEY]},
     )
     return connector
 
@@ -41,9 +45,9 @@ def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> N
         raise ValueError("Hierarchy node returned from connector")
 
     assert target_doc is not None, "No documents were retrieved from the connector"
-    assert (
-        target_doc.primary_owners is not None
-    ), "No primary owners were retrieved from the connector"
+    assert target_doc.primary_owners is not None, (
+        "No primary owners were retrieved from the connector"
+    )
 
     assert target_doc.id == test_data["id"]
     assert target_doc.semantic_identifier == test_data["semantic_identifier"]
@@ -51,9 +55,9 @@ def test_fireflies_connector_basic(fireflies_connector: FirefliesConnector) -> N
     assert target_doc.secondary_owners == test_data["secondary_owners"]
     assert str(target_doc.doc_updated_at) == test_data["doc_updated_at"]
 
-    assert (
-        target_doc.source == DocumentSource.FIREFLIES
-    ), "Document source is not fireflies"
+    assert target_doc.source == DocumentSource.FIREFLIES, (
+        "Document source is not fireflies"
+    )
     assert target_doc.metadata == test_data["metadata"]
 
     # Check that the test data and the connector data contain the same section data

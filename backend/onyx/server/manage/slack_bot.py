@@ -69,11 +69,6 @@ def _form_channel_config(
             detail=str(e),
         )
 
-    if respond_tag_only and respond_member_group_list:
-        raise ValueError(
-            "Cannot set OnyxBot to only respond to tags only and also respond to a predetermined set of users."
-        )
-
     if (
         slack_channel_config_creation_request.is_ephemeral
         and slack_channel_config_creation_request.respond_member_group_list

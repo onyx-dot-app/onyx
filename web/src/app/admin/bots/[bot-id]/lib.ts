@@ -1,5 +1,5 @@
 import { SlackBotResponseType } from "@/lib/types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 interface SlackChannelConfigCreationRequest {
   slack_bot_id: number;
@@ -45,7 +45,9 @@ const buildRequestBodyFromCreationRequest = (
     is_ephemeral: creationRequest.is_ephemeral,
     show_continue_in_web_ui: creationRequest.show_continue_in_web_ui,
     enable_auto_filters: creationRequest.enable_auto_filters,
-    respond_member_group_list: creationRequest.respond_member_group_list,
+    respond_member_group_list: creationRequest.is_ephemeral
+      ? []
+      : creationRequest.respond_member_group_list,
     answer_filters: buildFiltersFromCreationRequest(creationRequest),
     follow_up_tags: creationRequest.follow_up_tags?.filter((tag) => tag !== ""),
     ...(creationRequest.usePersona
@@ -91,6 +93,6 @@ export const deleteSlackChannelConfig = async (id: number) => {
   });
 };
 
-export function isPersonaASlackBotPersona(persona: Persona) {
+export function isPersonaASlackBotPersona(persona: Agent) {
   return persona.name.startsWith("__slack_bot_persona__");
 }

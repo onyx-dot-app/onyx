@@ -233,13 +233,13 @@ def create_default_image_gen_config_from_api_key(
 
         db_session.commit()
 
-        logger.info(f"Created default image generation config: {image_provider_id}")
+        logger.info("Created default image generation config: %s", image_provider_id)
 
         return config
 
     except Exception:
         db_session.rollback()
         logger.exception(
-            f"Failed to create default image generation config {image_provider_id}"
+            "Failed to create default image generation config %s", image_provider_id
         )
         return None

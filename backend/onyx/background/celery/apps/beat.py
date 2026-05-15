@@ -43,7 +43,8 @@ class DynamicTenantScheduler(PersistentScheduler):
         # Let the parent class handle store initialization
         self.setup_schedule()
         task_logger.info(
-            f"DynamicTenantScheduler initialized: reload_interval={self._reload_interval}"
+            "DynamicTenantScheduler initialized: reload_interval=%s",
+            self._reload_interval,
         )
 
         self._liveness_probe_path = make_probe_path("liveness", "beat@hostname")
@@ -103,7 +104,9 @@ class DynamicTenantScheduler(PersistentScheduler):
                     "kwargs": task.get("kwargs", {}),
                 }
                 if options := task.get("options"):
-                    task_logger.debug(f"Adding options to task {task_name}: {options}")
+                    task_logger.debug(
+                        "Adding options to task %s: %s", task_name, options
+                    )
                     cloud_task["options"] = options
                 new_schedule[task_name] = cloud_task
 
@@ -120,7 +123,8 @@ class DynamicTenantScheduler(PersistentScheduler):
         for tenant_id in tenant_ids:
             if IGNORED_SYNCING_TENANT_LIST and tenant_id in IGNORED_SYNCING_TENANT_LIST:
                 task_logger.debug(
-                    f"Skipping tenant {tenant_id} as it is in the ignored syncing list"
+                    "Skipping tenant %s as it is in the ignored syncing list",
+                    tenant_id,
                 )
                 continue
 
@@ -128,7 +132,9 @@ class DynamicTenantScheduler(PersistentScheduler):
                 task_name = task["name"]
                 tenant_task_name = f"{task['name']}-{tenant_id}"
 
-                task_logger.debug(f"Creating task configuration for {tenant_task_name}")
+                task_logger.debug(
+                    "Creating task configuration for %s", tenant_task_name
+                )
                 tenant_task = {
                     "task": task["task"],
                     "schedule": task["schedule"],
@@ -136,7 +142,9 @@ class DynamicTenantScheduler(PersistentScheduler):
                 }
                 if options := task.get("options"):
                     task_logger.debug(
-                        f"Adding options to task {tenant_task_name}: {options}"
+                        "Adding options to task %s: %s",
+                        tenant_task_name,
+                        options,
                     )
                     tenant_task["options"] = options
 
@@ -151,7 +159,7 @@ class DynamicTenantScheduler(PersistentScheduler):
         task_logger.debug("_try_updating_schedule starting")
 
         tenant_ids = get_all_tenant_ids()
-        task_logger.debug(f"Found {len(tenant_ids)} IDs")
+        task_logger.debug("Found %s IDs", len(tenant_ids))
 
         # get current schedule and extract current tenants
         current_schedule = self.schedule.items()
@@ -181,7 +189,9 @@ class DynamicTenantScheduler(PersistentScheduler):
         if not do_update:
             # exit early if nothing changed
             task_logger.info(
-                f"_try_updating_schedule - Schedule unchanged: tasks={len(new_schedule)} beat_multiplier={beat_multiplier}"
+                "_try_updating_schedule - Schedule unchanged: tasks=%s beat_multiplier=%s",
+                len(new_schedule),
+                beat_multiplier,
             )
             return
 
@@ -214,11 +224,15 @@ class DynamicTenantScheduler(PersistentScheduler):
         self.sync()
 
         task_logger.info(
-            f"_try_updating_schedule - Schedule updated: "
-            f"prev_num_tasks={len(current_schedule)} "
-            f"prev_beat_multiplier={self.last_beat_multiplier} "
-            f"tasks={len(new_schedule)} "
-            f"beat_multiplier={beat_multiplier}"
+            "_try_updating_schedule - Schedule updated: "
+            "prev_num_tasks=%s "
+            "prev_beat_multiplier=%s "
+            "tasks=%s "
+            "beat_multiplier=%s",
+            len(current_schedule),
+            self.last_beat_multiplier,
+            len(new_schedule),
+            beat_multiplier,
         )
 
         self.last_beat_multiplier = beat_multiplier
@@ -243,7 +257,7 @@ def on_beat_init(sender: Any, **kwargs: Any) -> None:
     app_base.wait_for_redis(sender, **kwargs)
     path = make_probe_path("readiness", "beat@hostname")
     path.touch()
-    task_logger.info(f"Readiness signal touched at {path}.")
+    task_logger.info("Readiness signal touched at %s.", path)
 
     # first time init of the scheduler after db has been init'ed
     scheduler: DynamicTenantScheduler = sender.scheduler

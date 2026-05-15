@@ -58,7 +58,7 @@ def format_columns_header(headers: list[str]) -> str:
     for header in headers:
         friendly = header
         if "_" in header:
-            friendly = f'{header} ({header.replace("_", " ")})'
+            friendly = f"{header} ({header.replace('_', ' ')})"
         parts.append(friendly)
     return f"{COLUMNS_MARKER} " + FIELD_VALUE_SEPARATOR.join(parts)
 
@@ -274,7 +274,7 @@ class TabularChunker(SectionChunker):
 
         if not chunk_texts:
             logger.warning(
-                f"TabularChunker: skipping unparseable section (link={section.link})"
+                "TabularChunker: skipping unparseable section (link=%s)", section.link
             )
             return SectionChunkerOutput(
                 payloads=payloads, accumulator=AccumulatorState()

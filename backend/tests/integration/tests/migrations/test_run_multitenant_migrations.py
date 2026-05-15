@@ -67,16 +67,14 @@ def _force_drop_schema(engine: Engine, schema: str) -> None:
         try:
             with engine.connect() as conn:
                 conn.execute(
-                    text(
-                        """
+                    text("""
                         SELECT pg_terminate_backend(l.pid)
                         FROM pg_locks l
                         JOIN pg_class c ON c.oid = l.relation
                         JOIN pg_namespace n ON n.oid = c.relnamespace
                         WHERE n.nspname = :schema
                           AND l.pid != pg_backend_pid()
-                        """
-                    ),
+                        """),
                     {"schema": schema},
                 )
                 conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
@@ -113,9 +111,9 @@ def current_head_rev() -> str:
         text=True,
         env={**os.environ, "PYTHONPATH": _BACKEND_DIR},
     )
-    assert (
-        result.returncode == 0
-    ), f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"alembic heads failed (exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
+    )
     # Output looks like "d5c86e2c6dc6 (head)\n"
     rev = result.stdout.strip().split()[0]
     assert len(rev) > 0

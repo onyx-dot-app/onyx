@@ -59,7 +59,7 @@ class DropboxConnector(LoadConnector, PollConnector):
             )
             return link_metadata.url
         except ApiError as err:
-            logger.exception(f"Failed to create a shared link for {path}: {err}")
+            logger.exception("Failed to create a shared link for %s: %s", path, err)
             return ""
 
     def _yield_files_recursive(
@@ -117,7 +117,9 @@ class DropboxConnector(LoadConnector, PollConnector):
                         )
                     except Exception as e:
                         logger.exception(
-                            f"Error decoding file {entry.path_display} as utf-8 error occurred: {e}"
+                            "Error decoding file %s as utf-8 error occurred: %s",
+                            entry.path_display,
+                            e,
                         )
 
                 elif isinstance(entry, FolderMetadata):

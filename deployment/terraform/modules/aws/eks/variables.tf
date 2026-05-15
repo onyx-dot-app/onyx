@@ -55,6 +55,12 @@ variable "vespa_node_subnet_ids" {
   default     = []
 }
 
+variable "main_node_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for the main node group. If not specified, uses all cluster subnets. Pin to private subnets to keep node egress on the NAT gateway IP across replacements."
+  default     = []
+}
+
 variable "eks_managed_node_groups" {
   type        = map(any)
   description = "EKS managed node groups with EBS volume configuration"

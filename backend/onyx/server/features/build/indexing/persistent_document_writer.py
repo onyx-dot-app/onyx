@@ -275,7 +275,7 @@ class PersistentDocumentWriter:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(content, f, indent=2, default=str)
 
-        logger.debug(f"Wrote document to {path}")
+        logger.debug("Wrote document to %s", path)
 
     def write_raw_file(
         self,
@@ -314,7 +314,7 @@ class PersistentDocumentWriter:
         with open(full_path, "wb") as f:
             f.write(content)
 
-        logger.debug(f"Wrote raw file to {full_path}")
+        logger.debug("Wrote raw file to %s", full_path)
         return str(full_path)
 
     def delete_raw_file(self, path: str) -> None:
@@ -336,9 +336,9 @@ class PersistentDocumentWriter:
 
         if full_path.exists():
             full_path.unlink()
-            logger.debug(f"Deleted raw file at {full_path}")
+            logger.debug("Deleted raw file at %s", full_path)
         else:
-            logger.warning(f"File not found for deletion: {full_path}")
+            logger.warning("File not found for deletion: %s", full_path)
 
 
 class S3PersistentDocumentWriter:
@@ -348,7 +348,7 @@ class S3PersistentDocumentWriter:
     s3://{bucket}/{tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/document.json
 
     This matches the location that KubernetesSandboxManager reads from when
-    provisioning sandboxes (via the sidecar container's s5cmd sync command).
+    provisioning sandboxes.
     """
 
     def __init__(self, tenant_id: str, user_id: str):
@@ -416,8 +416,7 @@ class S3PersistentDocumentWriter:
         Documents are stored under tenant/user-segregated paths:
         {tenant_id}/knowledge/{user_id}/{source}/{hierarchy}/
 
-        This matches the path that KubernetesSandboxManager syncs from:
-        s5cmd sync "s3://{bucket}/{tenant_id}/knowledge/{user_id}/*" /workspace/files/
+        This path is used for user library file storage in S3.
         """
         # Tenant and user segregation (matches K8s sandbox init container path)
         parts = [self.tenant_id, "knowledge", self.user_id]
@@ -438,9 +437,9 @@ class S3PersistentDocumentWriter:
                 Body=json_content.encode("utf-8"),
                 ContentType="application/json",
             )
-            logger.debug(f"Wrote document to s3://{self.bucket}/{s3_key}")
+            logger.debug("Wrote document to s3://%s/%s", self.bucket, s3_key)
         except ClientError as e:
-            logger.error(f"Failed to write to S3: {e}")
+            logger.error("Failed to write to S3: %s", e)
             raise
 
     def write_raw_file(
@@ -477,10 +476,10 @@ class S3PersistentDocumentWriter:
                 Body=content,
                 ContentType=content_type or "application/octet-stream",
             )
-            logger.debug(f"Wrote raw file to s3://{self.bucket}/{s3_key}")
+            logger.debug("Wrote raw file to s3://%s/%s", self.bucket, s3_key)
             return s3_key
         except ClientError as e:
-            logger.error(f"Failed to write raw file to S3: {e}")
+            logger.error("Failed to write raw file to S3: %s", e)
             raise
 
     def delete_raw_file(self, s3_key: str) -> None:
@@ -493,9 +492,9 @@ class S3PersistentDocumentWriter:
 
         try:
             s3_client.delete_object(Bucket=self.bucket, Key=s3_key)
-            logger.debug(f"Deleted raw file at s3://{self.bucket}/{s3_key}")
+            logger.debug("Deleted raw file at s3://%s/%s", self.bucket, s3_key)
         except ClientError as e:
-            logger.error(f"Failed to delete raw file from S3: {e}")
+            logger.error("Failed to delete raw file from S3: %s", e)
             raise
 
     def delete_raw_file_by_path(self, path: str) -> None:

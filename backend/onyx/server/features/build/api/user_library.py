@@ -6,8 +6,8 @@ This module provides endpoints for uploading and managing raw binary files
 Files are stored at:
     s3://{bucket}/{tenant_id}/knowledge/{user_id}/user_library/{path}
 
-And synced to sandbox at:
-    /workspace/files/user_library/{path}
+And available to sandboxes at:
+    /workspace/sessions/{session_id}/files/user_library/{path}
 
 Known Issues / TODOs:
     - Memory: Upload endpoints read entire file content into memory (up to 500MB).
@@ -39,12 +39,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
@@ -206,24 +203,6 @@ def _build_document_id(user_id: str, path: str) -> str:
     """
     path_hash = hashlib.sha256(path.encode()).hexdigest()[:16]
     return f"CRAFT_FILE__{user_id}__{path_hash}"
-
-
-def _trigger_sandbox_sync(
-    user_id: str, tenant_id: str, source: str | None = None
-) -> None:
-    """Trigger sandbox file sync task.
-
-    Args:
-        user_id: The user ID whose sandbox should be synced
-        tenant_id: The tenant ID for S3 path construction
-        source: Optional source type (e.g., "user_library"). If specified,
-                only syncs that source's directory with --delete flag.
-    """
-    celery_app.send_task(
-        OnyxCeleryTask.SANDBOX_FILE_SYNC,
-        kwargs={"user_id": user_id, "tenant_id": tenant_id, "source": source},
-        queue=OnyxCeleryQueues.SANDBOX,
-    )
 
 
 def _validate_zip_contents(
@@ -469,7 +448,7 @@ async def upload_files(
         )
 
     # Mark connector as having succeeded (sets last_successful_index_time)
-    # This allows the demo data toggle to be disabled
+    # Mark as having successfully indexed
     update_connector_credential_pair(
         db_session=db_session,
         connector_id=connector_id,
@@ -479,11 +458,11 @@ async def upload_files(
         run_dt=now,
     )
 
-    # Trigger sandbox sync for user_library source only
-    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
-
     logger.info(
-        f"Uploaded {len(uploaded_entries)} files ({total_size} bytes) for user {user.id}"
+        "Uploaded %s files (%s bytes) for user %s",
+        len(uploaded_entries),
+        total_size,
+        user.id,
     )
 
     return UploadResponse(
@@ -566,7 +545,9 @@ async def upload_zip(
 
                 # Validate individual file size
                 if file_size > USER_LIBRARY_MAX_FILE_SIZE_BYTES:
-                    logger.warning(f"Skipping '{zip_info.filename}' - exceeds max size")
+                    logger.warning(
+                        "Skipping '%s' - exceeds max size", zip_info.filename
+                    )
                     continue
 
                 # Skip PDFs that would trip the per-file or per-batch image
@@ -670,7 +651,7 @@ async def upload_zip(
         )
 
     # Mark connector as having succeeded (sets last_successful_index_time)
-    # This allows the demo data toggle to be disabled
+    # Mark as having successfully indexed
     update_connector_credential_pair(
         db_session=db_session,
         connector_id=connector_id,
@@ -680,11 +661,11 @@ async def upload_zip(
         run_dt=now,
     )
 
-    # Trigger sandbox sync for user_library source only
-    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
-
     logger.info(
-        f"Extracted {len(uploaded_entries)} files ({total_size} bytes) from zip for user {user.id}"
+        "Extracted %s files (%s bytes) from zip for user %s",
+        len(uploaded_entries),
+        total_size,
+        user.id,
     )
 
     return UploadResponse(
@@ -826,7 +807,7 @@ def delete_file(
                 else:
                     writer.delete_raw_file(file_path)
             except Exception as e:
-                logger.warning(f"Failed to delete file at path {file_path}: {e}")
+                logger.warning("Failed to delete file at path %s: %s", file_path, e)
         else:
             # Fallback for documents created before file_path was stored
             storage_key = doc_metadata.get("storage_key") or doc_metadata.get("s3_key")
@@ -840,18 +821,16 @@ def delete_file(
                         writer.delete_raw_file(storage_key)
                     else:
                         logger.warning(
-                            f"Cannot delete file in local mode without file_path: {document_id}"
+                            "Cannot delete file in local mode without file_path: %s",
+                            document_id,
                         )
                 except Exception as e:
                     logger.warning(
-                        f"Failed to delete storage object {storage_key}: {e}"
+                        "Failed to delete storage object %s: %s", storage_key, e
                     )
 
     # Delete from document table
     delete_document_by_id__no_commit(db_session, document_id)
     db_session.commit()
-
-    # Trigger sync to apply changes
-    _trigger_sandbox_sync(str(user.id), tenant_id, source=USER_LIBRARY_SOURCE_DIR)
 
     return DeleteFileResponse(success=True, deleted=document_id)

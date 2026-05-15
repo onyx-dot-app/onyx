@@ -42,7 +42,7 @@ export default function SharedAppInputBar() {
       </div>
 
       {/* Fade overlay */}
-      <div className="absolute inset-0 rounded-16 backdrop-blur-sm bg-background-neutral-00/50" />
+      <div className="absolute inset-0 rounded-16 backdrop-blur-xs bg-background-neutral-00/50" />
 
       {/* CTA button */}
       <div className="absolute inset-0 flex items-center justify-center">

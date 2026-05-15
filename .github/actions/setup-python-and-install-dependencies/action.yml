@@ -25,7 +25,7 @@ runs:
     # NOTE: This comes before Setup uv since clean-ups run in reverse chronological order
     # such that Setup uv's prune-cache is able to prune the cache before we upload.
     - name: Cache uv cache directory
-      uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+      uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
       with:
         path: ~/.cache/uv
         key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
@@ -64,8 +64,18 @@ runs:
       env:
         REQUIREMENTS: ${{ inputs.requirements }}
       run: |
-        # Build the uv pip install command with each requirement file as array elements
-        cmd=("uv" "pip" "install")
+        # --require-hashes refuses to install any artifact whose hash isn't
+        # listed in the requirements file, so installs can only land on the
+        # versions resolved into uv.lock.
+        # TODO: drop --no-config and --no-deps once litellm no longer requires
+        # [tool.uv].override-dependencies in pyproject.toml. The overrides
+        # exist to relax litellm's exact transitive pins (e.g. jsonschema,
+        # aiohttp); they're unpinned ranges, which --require-hashes rejects
+        # if uv reads pyproject.toml. --no-config keeps uv from picking up
+        # the root pyproject.toml; --no-deps keeps uv from re-resolving
+        # transitive deps from package metadata (the requirements file is
+        # already a complete, pinned export of uv.lock).
+        cmd=("uv" "pip" "install" "--no-config" "--no-deps" "--require-hashes")
         while IFS= read -r req; do
           # Skip empty lines
           if [ -n "$req" ]; then

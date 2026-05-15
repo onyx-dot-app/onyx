@@ -12,8 +12,9 @@ import { widthVariants } from "@opal/shared";
 
 type HoverableInteraction = "rest" | "hover";
 
-interface HoverableRootProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface HoverableRootProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   children: React.ReactNode;
   group: string;
   /** Width preset. @default "auto" */
@@ -38,8 +39,9 @@ type HoverableItemVariant =
   | "appear-on-rest"
   | "replace-on-hover";
 
-interface HoverableItemProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface HoverableItemProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   children: React.ReactNode;
   group?: string;
   variant?: HoverableItemVariant;

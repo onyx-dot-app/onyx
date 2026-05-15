@@ -23,7 +23,7 @@ def get_code_interpreter_health(
 ) -> CodeInterpreterServerHealth:
     try:
         client = CodeInterpreterClient()
-        return CodeInterpreterServerHealth(healthy=client.health())
+        return CodeInterpreterServerHealth(healthy=client.health().healthy)
     except ValueError:
         return CodeInterpreterServerHealth(healthy=False)
 

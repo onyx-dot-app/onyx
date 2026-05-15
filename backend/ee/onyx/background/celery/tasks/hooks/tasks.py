@@ -27,8 +27,9 @@ def hook_execution_log_cleanup_task(*, tenant_id: str) -> None:  # noqa: ARG001
             db_session.commit()
             if deleted:
                 logger.info(
-                    f"Deleted {deleted} hook execution log(s) older than "
-                    f"{_HOOK_EXECUTION_LOG_RETENTION_DAYS} days."
+                    "Deleted %s hook execution log(s) older than %s days.",
+                    deleted,
+                    _HOOK_EXECUTION_LOG_RETENTION_DAYS,
                 )
     except Exception:
         logger.exception("Failed to clean up hook execution logs")

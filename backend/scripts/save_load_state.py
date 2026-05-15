@@ -40,7 +40,7 @@ def load_postgres(filename: str, container_name: str) -> None:
         alembic_cfg = Config("alembic.ini")
         command.upgrade(alembic_cfg, "head")
     except Exception as e:
-        logger.error(f"Alembic upgrade failed: {e}")
+        logger.error("Alembic upgrade failed: %s", e)
 
     host_file_path = os.path.abspath(filename)
 

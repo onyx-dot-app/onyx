@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import { PopoverMenu } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
@@ -126,7 +126,9 @@ export default function ModelListContent({
         onClick={() => onSelect(option)}
         rightChildren={
           selected ? (
-            <SvgCheck className="text-action-link-05" size={16} />
+            <div className="flex h-5 items-center">
+              <SvgCheck className="text-action-link-05" size={16} />
+            </div>
           ) : null
         }
         sizePreset="main-ui"

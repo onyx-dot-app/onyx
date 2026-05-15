@@ -2,6 +2,8 @@
 
 Comprehensive guide for writing integration tests in the Onyx web application using Jest and React Testing Library.
 
+> Playwright end-to-end tests live under `web/tests/e2e/`. See `web/tests/e2e/README.md` for the rules that apply there (Page Object Model, auto-retrying matchers).
+
 ## Table of Contents
 
 - [Running Tests](#running-tests)

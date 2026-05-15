@@ -83,7 +83,8 @@ class DisposableEmailValidator:
 
         try:
             logger.info(
-                f"Fetching disposable email domains from {DISPOSABLE_EMAIL_DOMAINS_URL}"
+                "Fetching disposable email domains from %s",
+                DISPOSABLE_EMAIL_DOMAINS_URL,
             )
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(DISPOSABLE_EMAIL_DOMAINS_URL)
@@ -93,7 +94,8 @@ class DisposableEmailValidator:
 
                 if not isinstance(domains_list, list):
                     logger.error(
-                        f"Expected list from disposable domains URL, got {type(domains_list)}"
+                        "Expected list from disposable domains URL, got %s",
+                        type(domains_list),
                     )
                     return self._fallback_domains.copy()
 
@@ -104,14 +106,14 @@ class DisposableEmailValidator:
                 domains.update(self._fallback_domains)
 
                 logger.info(
-                    f"Successfully fetched {len(domains)} disposable email domains"
+                    "Successfully fetched %s disposable email domains", len(domains)
                 )
                 return domains
 
         except httpx.HTTPError as e:
-            logger.warning(f"Failed to fetch disposable domains (HTTP error): {e}")
+            logger.warning("Failed to fetch disposable domains (HTTP error): %s", e)
         except Exception as e:
-            logger.warning(f"Failed to fetch disposable domains: {e}")
+            logger.warning("Failed to fetch disposable domains: %s", e)
 
         # On error, return fallback domains
         return self._fallback_domains.copy()

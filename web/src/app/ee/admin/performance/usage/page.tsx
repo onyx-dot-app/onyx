@@ -8,7 +8,7 @@ import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMe
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
 import { Divider } from "@opal/components";
-import { useAdminAgents } from "@/hooks/useAgents";
+import { useAdminAgents } from "@/lib/agents/hooks";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 

@@ -234,22 +234,18 @@ def downgrade() -> None:
     )
 
     # Populate the new integer foreign key columns by mapping from the UUID IDs
-    op.execute(
-        """
+    op.execute("""
         UPDATE persona__user_file AS p
         SET user_file_id_int = uf.id_int
         FROM user_file AS uf
         WHERE p.user_file_id = uf.id
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         UPDATE project__user_file AS p
         SET user_file_id_int = uf.id_int
         FROM user_file AS uf
         WHERE p.user_file_id = uf.id
-        """
-    )
+        """)
 
     op.alter_column(
         "persona__user_file",
@@ -300,16 +296,14 @@ def downgrade() -> None:
         server_default=sa.text("nextval('user_file_id_seq')"),
     )
     op.execute("ALTER SEQUENCE user_file_id_seq OWNED BY user_file.id")
-    op.execute(
-        """
+    op.execute("""
         SELECT setval(
             'user_file_id_seq',
             GREATEST(COALESCE(MAX(id), 1), 1),
             MAX(id) IS NOT NULL
         )
         FROM user_file
-        """
-    )
+        """)
     op.create_primary_key("user_file_pkey", "user_file", ["id"])
 
     # Restore primary keys on referencing tables

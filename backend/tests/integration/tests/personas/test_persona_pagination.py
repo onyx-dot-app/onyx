@@ -267,16 +267,16 @@ def test_persona_pagination_count_accuracy(
     for page_num in range(num_pages_needed):
         page, _ = _get_agents_paginated(admin_user, page_num=page_num, page_size=5)
         # All pages should report the same total.
-        assert (
-            page["total_items"] == total_items
-        ), f"Page {page_num} has inconsistent total_items"
+        assert page["total_items"] == total_items, (
+            f"Page {page_num} has inconsistent total_items"
+        )
         all_ids_from_pages.update(p["id"] for p in page["items"])
 
     # Our created personas should all appear.
     our_ids = {p.id for p in created_personas}
-    assert our_ids.issubset(
-        all_ids_from_pages
-    ), "All created personas should appear in paginated results"
+    assert our_ids.issubset(all_ids_from_pages), (
+        "All created personas should appear in paginated results"
+    )
 
 
 def test_persona_pagination_user_permissions(

@@ -14,27 +14,25 @@ def get_channel_access(
     client: WebClient,
     channel: ChannelType,
     user_cache: dict[str, BasicExpertInfo | None],
+    team_id_to_user_emails: dict[str, set[str]] | None = None,
 ) -> ExternalAccess | None:
-    """
-    Get channel access permissions for a Slack channel.
-    This functionality requires Enterprise Edition.
+    """Get channel access permissions for a Slack channel. EE only.
 
-    Args:
-        client: Slack WebClient instance
-        channel: Slack channel object containing channel info
-        user_cache: Cache of user IDs to BasicExpertInfo objects. May be updated in place.
-
-    Returns:
-        ExternalAccess object for the channel. None if EE is not enabled.
+    ``team_id_to_user_emails`` (Grid only): when provided, public channels
+    are scoped to the union of the workspaces they're shared into instead of
+    being marked org-public.
     """
-    # Check if EE is enabled
     if not global_version.is_ee_version():
         return None
 
-    # Fetch the EE implementation
     ee_get_channel_access = cast(
         Callable[
-            [WebClient, ChannelType, dict[str, BasicExpertInfo | None]],
+            [
+                WebClient,
+                ChannelType,
+                dict[str, BasicExpertInfo | None],
+                dict[str, set[str]] | None,
+            ],
             ExternalAccess,
         ],
         fetch_versioned_implementation(
@@ -42,4 +40,4 @@ def get_channel_access(
         ),
     )
 
-    return ee_get_channel_access(client, channel, user_cache)
+    return ee_get_channel_access(client, channel, user_cache, team_id_to_user_emails)

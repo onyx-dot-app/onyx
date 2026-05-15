@@ -31,7 +31,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
       )}
       aria-disabled={isInteractive ? undefined : true}
     >
-      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03>
           Interrupted Thinking
         </Text>

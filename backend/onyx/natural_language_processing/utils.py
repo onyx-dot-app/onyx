@@ -57,7 +57,10 @@ class TiktokenTokenizer(BaseTokenizer):
 
         if len(decoded) != len(encoded):
             logger.warning(
-                f"OpenAI tokenized length {len(decoded)} does not match encoded length {len(encoded)} for string: {string}"
+                "OpenAI tokenized length %s does not match encoded length %s for string: %s",
+                len(decoded),
+                len(encoded),
+                string,
             )
 
         return decoded
@@ -111,7 +114,8 @@ def _check_tokenizer_cache(
 
         if not tokenizer:
             logger.info(
-                f"Falling back to default embedding model tokenizer: {DOCUMENT_ENCODER_MODEL}"
+                "Falling back to default embedding model tokenizer: %s",
+                DOCUMENT_ENCODER_MODEL,
             )
             tokenizer = _get_default_tokenizer()
 
@@ -129,21 +133,25 @@ def _try_initialize_tokenizer(
         # Try using TiktokenTokenizer first if model_provider exists
         try:
             tokenizer = TiktokenTokenizer(model_name)
-            logger.info(f"Initialized TiktokenTokenizer for: {model_name}")
+            logger.info("Initialized TiktokenTokenizer for: %s", model_name)
             return tokenizer
         except Exception as tiktoken_error:
             logger.debug(
-                f"TiktokenTokenizer not available for model {model_name}: {tiktoken_error}"
+                "TiktokenTokenizer not available for model %s: %s",
+                model_name,
+                tiktoken_error,
             )
     else:
         # If no provider specified, try HuggingFaceTokenizer
         try:
             tokenizer = HuggingFaceTokenizer(model_name)
-            logger.info(f"Initialized HuggingFaceTokenizer for: {model_name}")
+            logger.info("Initialized HuggingFaceTokenizer for: %s", model_name)
             return tokenizer
         except Exception as hf_error:
             logger.warning(
-                f"Failed to initialize HuggingFaceTokenizer for {model_name}: {hf_error}"
+                "Failed to initialize HuggingFaceTokenizer for %s: %s",
+                model_name,
+                hf_error,
             )
 
     # If both initializations fail, return None
@@ -169,7 +177,8 @@ def get_tokenizer(
             provider_type = EmbeddingProvider(provider_type)
         except ValueError:
             logger.debug(
-                f"Invalid provider_type '{provider_type}'. Falling back to default tokenizer."
+                "Invalid provider_type '%s'. Falling back to default tokenizer.",
+                provider_type,
             )
             return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)

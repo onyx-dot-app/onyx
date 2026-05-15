@@ -15,8 +15,6 @@
 export const FEATURE_FLAGS = {
   /** Disables the Onyx Craft (Build Mode) sidebar intro animation. */
   CRAFT_ANIMATION_DISABLED: "craft-animation-disabled",
-  /** Enables the per-index-attempt stage metrics UI (admin connector page). */
-  INDEX_ATTEMPT_METRICS: "index-attempt-metrics",
 } as const;
 
 export type FeatureFlagKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];

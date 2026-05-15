@@ -87,8 +87,9 @@ class DocumentChunker:
 
             if not section_text and (not document.title or section_idx > 0):
                 logger.warning(
-                    f"Skipping empty or irrelevant section in doc "
-                    f"{document.semantic_identifier}, link={section.link}"
+                    "Skipping empty or irrelevant section in doc %s, link=%s",
+                    document.semantic_identifier,
+                    section.link,
                 )
                 continue
 

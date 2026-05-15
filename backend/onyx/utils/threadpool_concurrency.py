@@ -347,7 +347,7 @@ def run_functions_tuples_in_parallel(
                 try:
                     results.append((index, future.result()))
                 except Exception as e:
-                    logger.exception(f"Function at index {index} failed due to {e}")
+                    logger.exception("Function at index %s failed due to %s", index, e)
                     results.append((index, None))
                     if not allow_failures:
                         raise
@@ -357,7 +357,7 @@ def run_functions_tuples_in_parallel(
                 index = future_to_index[future]
                 func, args = functions_with_args[index]
                 logger.warning(
-                    f"Function at index {index} timed out after {timeout} seconds"
+                    "Function at index %s timed out after %s seconds", index, timeout
                 )
 
                 if timeout_callback:
@@ -378,7 +378,7 @@ def run_functions_tuples_in_parallel(
                 try:
                     results.append((index, future.result()))
                 except Exception as e:
-                    logger.exception(f"Function at index {index} failed due to {e}")
+                    logger.exception("Function at index %s failed due to %s", index, e)
                     results.append((index, None))
 
                     if not allow_failures:
@@ -437,7 +437,7 @@ def run_functions_in_parallel(
             try:
                 results[result_id] = future.result()
             except Exception as e:
-                logger.exception(f"Function with ID {result_id} failed due to {e}")
+                logger.exception("Function with ID %s failed due to %s", result_id, e)
                 results[result_id] = None
 
                 if not allow_failures:

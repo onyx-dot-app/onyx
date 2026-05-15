@@ -131,9 +131,9 @@ def test_jira_doc_sync(
             for doc in doc_sync_iter
             if isinstance(doc, DocExternalAccess)
         }
-        assert (
-            expected_docs == actual_docs
-        ), f"Expected docs: {expected_docs}\nActual docs: {actual_docs}"
+        assert expected_docs == actual_docs, (
+            f"Expected docs: {expected_docs}\nActual docs: {actual_docs}"
+        )
     finally:
         db_session.rollback()
 
@@ -218,9 +218,9 @@ def test_jira_doc_sync_with_specific_permissions(
                 continue
             assert doc.doc_id.startswith("https://danswerai.atlassian.net/browse/SUP-")
             # SUP project has specific users assigned, not applicationRole
-            assert (
-                not doc.external_access.is_public
-            ), f"Document {doc.doc_id} should not be public"
+            assert not doc.external_access.is_public, (
+                f"Document {doc.doc_id} should not be public"
+            )
             # Should have user emails
             assert doc.external_access.external_user_emails == _EXPECTED_USER_EMAILS
             assert (

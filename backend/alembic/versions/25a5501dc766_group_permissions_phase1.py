@@ -14,7 +14,6 @@ from onyx.db.enums import AccountType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import Permission
 
-
 # revision identifiers, used by Alembic.
 revision = "25a5501dc766"
 down_revision = "b728689f45b1"

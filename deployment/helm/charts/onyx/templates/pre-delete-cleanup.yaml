@@ -1,0 +1,96 @@
+{{- /*
+Pre-delete hook: delete operator-managed CRs while the operators are still
+running so their finalizers are processed cleanly. Without this, helm
+uninstall tears down the operators and CRs simultaneously — the operators
+die before finishing finalizer processing, and namespace cleanup hangs.
+*/}}
+{{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "onyx.fullname" . }}-pre-delete
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "onyx.fullname" . }}-pre-delete
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+rules:
+  {{- if .Values.postgresql.enabled }}
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters"]
+    verbs: ["get", "list", "delete"]
+  {{- end }}
+  {{- if .Values.redis.enabled }}
+  - apiGroups: ["redis.redis.opstreelabs.in"]
+    resources: ["redis"]
+    verbs: ["get", "list", "delete"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "onyx.fullname" . }}-pre-delete
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "onyx.fullname" . }}-pre-delete
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "onyx.fullname" . }}-pre-delete
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "onyx.fullname" . }}-pre-delete
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "onyx.fullname" . }}-pre-delete
+      restartPolicy: Never
+      containers:
+        - name: cleanup
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              {{- if .Values.postgresql.enabled }}
+              echo "Deleting CNPG Clusters..."
+              kubectl delete clusters.postgresql.cnpg.io --all -n {{ .Release.Namespace }} --wait --timeout=120s 2>/dev/null || true
+              {{- end }}
+              {{- if .Values.redis.enabled }}
+              echo "Deleting Redis instances..."
+              kubectl delete redis.redis.redis.opstreelabs.in --all -n {{ .Release.Namespace }} --wait --timeout=120s 2>/dev/null || true
+              {{- end }}
+              echo "Pre-delete cleanup complete"
+{{- end }}

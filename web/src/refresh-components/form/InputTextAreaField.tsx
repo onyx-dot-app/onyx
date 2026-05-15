@@ -6,8 +6,10 @@ import InputTextArea, {
 } from "@/refresh-components/inputs/InputTextArea";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
-export interface InputTextAreaFieldProps
-  extends Omit<InputTextAreaProps, "value"> {
+export interface InputTextAreaFieldProps extends Omit<
+  InputTextAreaProps,
+  "value"
+> {
   name: string;
 }
 

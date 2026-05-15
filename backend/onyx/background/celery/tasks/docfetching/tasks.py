@@ -93,10 +93,10 @@ def _verify_indexing_attempt(
             )
 
     logger.info(
-        f"docfetching_task - IndexAttempt verified: "
-        f"attempt_id={index_attempt_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        "docfetching_task - IndexAttempt verified: attempt_id=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        cc_pair_id,
+        search_settings_id,
     )
 
 
@@ -151,11 +151,11 @@ def _docfetching_task(
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
     logger.info(
-        f"Indexing spawned task starting: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
+        "Indexing spawned task starting: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        tenant_id,
+        cc_pair_id,
+        search_settings_id,
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -209,10 +209,11 @@ def _docfetching_task(
         )
 
         logger.info(
-            f"Indexing spawned task running entrypoint: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
+            "Indexing spawned task running entrypoint: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+            index_attempt_id,
+            tenant_id,
+            cc_pair_id,
+            search_settings_id,
         )
 
         # This is where the heavy/real work happens
@@ -236,10 +237,11 @@ def _docfetching_task(
 
     except Exception as e:
         logger.exception(
-            f"Indexing spawned task failed: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
+            "Indexing spawned task failed: attempt=%s tenant=%s cc_pair=%s search_settings=%s",
+            index_attempt_id,
+            tenant_id,
+            cc_pair_id,
+            search_settings_id,
         )
 
         # special bulletproofing ... truncate long exception messages
@@ -253,7 +255,10 @@ def _docfetching_task(
             raise e
 
     logger.info(
-        f"Indexing spawned task finished: attempt={index_attempt_id} cc_pair={cc_pair_id} search_settings={search_settings_id}"
+        "Indexing spawned task finished: attempt=%s cc_pair=%s search_settings=%s",
+        index_attempt_id,
+        cc_pair_id,
+        search_settings_id,
     )
     os._exit(0)  # ensure process exits cleanly
 
@@ -627,7 +632,8 @@ def docfetching_proxy_task(
         try:
             with get_session_with_current_tenant() as db_session:
                 logger.exception(
-                    f"Marking attempt {index_attempt_id} as canceled due to termination signal"
+                    "Marking attempt %s as canceled due to termination signal",
+                    index_attempt_id,
                 )
                 mark_attempt_canceled(
                     index_attempt_id,

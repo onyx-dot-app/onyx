@@ -140,15 +140,19 @@ class SimpleJob:
 
         pid = self.process.pid
         logger.warning(
-            f"SimpleJob.terminate_and_wait - sending SIGTERM to job: id={self.id} pid={pid}"
+            "SimpleJob.terminate_and_wait - sending SIGTERM to job: id=%s pid=%s",
+            self.id,
+            pid,
         )
         self.process.terminate()
         self.process.join(timeout=sigterm_grace_seconds)
 
         if self.process.is_alive():
             logger.warning(
-                f"SimpleJob.terminate_and_wait - SIGTERM grace exceeded, sending SIGKILL: "
-                f"id={self.id} pid={pid} grace={sigterm_grace_seconds}s"
+                "SimpleJob.terminate_and_wait - SIGTERM grace exceeded, sending SIGKILL: id=%s pid=%s grace=%ss",
+                self.id,
+                pid,
+                sigterm_grace_seconds,
             )
             self.process.kill()
             self.process.join()
@@ -201,7 +205,7 @@ class SimpleJobClient:
         for job_id in current_job_ids:
             job = self.jobs.get(job_id)
             if job and job.done():
-                logger.debug(f"Cleaning up job with id: '{job.id}'")
+                logger.debug("Cleaning up job with id: '%s'", job.id)
                 del self.jobs[job.id]
 
     def submit(
@@ -214,7 +218,9 @@ class SimpleJobClient:
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug(
-                f"No available workers to run job. Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
+                "No available workers to run job. Currently running '%s' jobs, with a limit of '%s'.",
+                len(self.jobs),
+                self.n_workers,
             )
             return None
 
