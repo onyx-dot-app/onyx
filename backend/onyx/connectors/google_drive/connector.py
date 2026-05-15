@@ -60,6 +60,8 @@ from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.google_utils.resources import ImpersonationError
+from onyx.connectors.google_utils.resources import make_user_removal_checker
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
@@ -124,7 +126,7 @@ def _clean_requested_drive_ids(
     filtered_folder_ids = requested_folder_ids - all_drive_ids_available
     if invalid_requested_drive_ids:
         logger.warning(
-            f"Some shared drive IDs were not found. IDs: {invalid_requested_drive_ids}"
+            "Some shared drive IDs were not found. IDs: %s", invalid_requested_drive_ids
         )
         logger.warning("Checking for folder access instead...")
         filtered_folder_ids.update(invalid_requested_drive_ids)
@@ -514,12 +516,21 @@ class GoogleDriveConnector(
         new ancestors.
 
         The function tracks two separate sets:
-        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (to avoid duplicates)
+        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (used to dedupe
+          emissions from walks that did NOT reach a verified terminal).
         - fully_walked_hierarchy_node_raw_ids: Nodes where we've successfully walked
           to a terminal root. Only skip walking from a node if it's in this set.
 
         This separation ensures that if User A can access folder C but not its parent B,
         a later User B who has access to both can still complete the walk to the root.
+
+        Cross-yield healing: when a walk *does* reach a verified terminal, every node
+        encountered along that walk is re-emitted (regardless of `seen`). The downstream
+        upsert is idempotent and keys on `raw_node_id`, so any node that was previously
+        emitted with an unresolvable parent (and therefore parented to SOURCE) gets its
+        `parent_id` corrected once the full chain becomes known. Walks that *don't*
+        reach a terminal keep the seen-based dedup so we don't churn upserts for
+        chains we still can't fully resolve.
 
         Args:
             files: List of retrieved drive files to get ancestors for
@@ -556,8 +567,12 @@ class GoogleDriveConnector(
             if parent_id in fully_walked_hierarchy_node_raw_ids:
                 continue
 
-            # Walk up the parent chain
+            # Walk up the parent chain.
+            # `walk_nodes` collects every node we build during this walk (no dedup).
+            # `ancestors_to_add` collects only nodes that are new to the seen-set.
+            # Which one we ultimately emit depends on whether we reach a terminal.
             ancestors_to_add: list[HierarchyNode] = []
+            walk_nodes: list[HierarchyNode] = []
             node_ids_in_walk: list[str] = []
             current_id: str | None = parent_id
             reached_terminal = False
@@ -620,6 +635,10 @@ class GoogleDriveConnector(
                     external_access=external_access,
                 )
 
+                # Always remember the node we built; if this walk reaches a verified
+                # terminal we re-emit it below to heal any prior incomplete walk.
+                walk_nodes.append(node)
+
                 # Now atomically check and add - only append if we're the first thread
                 # to successfully create this node
                 already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
@@ -658,11 +677,17 @@ class GoogleDriveConnector(
                 current_id = folder_parent_id
 
             # If we successfully reached a terminal node (or a fully-walked node),
-            # mark all nodes in this walk as fully walked
+            # mark all nodes in this walk as fully walked AND re-emit every node
+            # we touched. The downstream upsert is idempotent, so any node
+            # previously emitted with an unresolvable parent (parented to SOURCE)
+            # gets corrected once the chain can be fully resolved.
+            # Otherwise fall back to the seen-deduped subset to avoid churning
+            # upserts for chains we still can't fully resolve.
             if reached_terminal:
                 fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
-
-            new_nodes += ancestors_to_add
+                new_nodes += walk_nodes[::-1]  # locally parent-first
+            else:
+                new_nodes += ancestors_to_add[::-1]  # locally parent-first
 
         return new_nodes
 
@@ -694,7 +719,9 @@ class GoogleDriveConnector(
             )
             if failed_ids and folder_id in failed_ids:
                 logger.debug(
-                    f"Skipping folder {folder_id} using {email} (previously confirmed no parents)"
+                    "Skipping folder %s using %s (previously confirmed no parents)",
+                    folder_id,
+                    email,
                 )
                 continue
 
@@ -702,10 +729,10 @@ class GoogleDriveConnector(
             folder = get_folder_metadata(service, folder_id, field_type)
 
             if not folder:
-                logger.debug(f"Failed to fetch folder {folder_id} using {email}")
+                logger.debug("Failed to fetch folder %s using %s", folder_id, email)
                 continue
 
-            logger.debug(f"Successfully fetched folder {folder_id} using {email}")
+            logger.debug("Successfully fetched folder %s using %s", folder_id, email)
 
             # If this folder has parents, use it
             if folder.get("parents"):
@@ -720,17 +747,22 @@ class GoogleDriveConnector(
             if best_folder is None:
                 best_folder = folder
                 logger.debug(
-                    f"Folder {folder_id} has no parents when fetched by {email}, will try admin to check for parent access"
+                    "Folder %s has no parents when fetched by %s, will try admin to check for parent access",
+                    folder_id,
+                    email,
                 )
 
         if best_folder:
             logger.debug(
-                f"Successfully fetched folder {folder_id} but no parents found"
+                "Successfully fetched folder %s but no parents found", folder_id
             )
             return best_folder
 
         logger.debug(
-            f"All attempts failed to fetch folder {folder_id} (tried {retriever_email} and {self.primary_admin_email})"
+            "All attempts failed to fetch folder %s (tried %s and %s)",
+            folder_id,
+            retriever_email,
+            self.primary_admin_email,
         )
         return None
 
@@ -750,7 +782,9 @@ class GoogleDriveConnector(
         drive_service = get_drive_service(self.creds, user_email)
         is_service_account = isinstance(self.creds, ServiceAccountCredentials)
         logger.info(
-            f"Getting all drives for user {user_email} with service account: {is_service_account}"
+            "Getting all drives for user %s with service account: %s",
+            user_email,
+            is_service_account,
         )
         all_drive_ids: set[str] = set()
         for drive in execute_paginated_retrieval(
@@ -805,7 +839,7 @@ class GoogleDriveConnector(
                         completion.processed_drive_ids.add(drive_id)
                         return drive_id
                     elif status == DriveIdStatus.IN_PROGRESS:
-                        logger.debug(f"Drive id in progress: {drive_id}")
+                        logger.debug("Drive id in progress: %s", drive_id)
                         future_work = drive_id
 
                 if future_work:
@@ -823,74 +857,29 @@ class GoogleDriveConnector(
 
         return get_available_drive_id
 
-    def _impersonate_user_for_retrieval(
+    def _make_fresh_emails_callback(
+        self, checkpoint: GoogleDriveCheckpoint
+    ) -> Callable[[], list[str]]:
+        def _callback() -> list[str]:
+            fresh_emails = self._get_all_user_emails()
+            checkpoint.user_emails = fresh_emails
+            return fresh_emails
+
+        return _callback
+
+    def _post_validation_retrieval(
         self,
+        curr_stage: StageCompletion,
+        drive_service: GoogleDriveService,
         user_email: str,
         field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         get_new_drive_id: Callable[[str], str | None],
         sorted_filtered_folder_ids: list[str],
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        resuming: bool,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> Iterator[RetrievedDriveFile]:
-        logger.info(f"Impersonating user {user_email}")
-        curr_stage = checkpoint.completion_map[user_email]
-        resuming = True
-        if curr_stage.stage == DriveRetrievalStage.START:
-            logger.info(f"Setting stage to {DriveRetrievalStage.MY_DRIVE_FILES.value}")
-            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
-            resuming = False
-        drive_service = get_drive_service(self.creds, user_email)
-
-        # validate that the user has access to the drive APIs by performing a simple
-        # request and checking for a 401
-        try:
-            logger.debug(f"Getting root folder id for user {user_email}")
-            # default is ~17mins of retries, don't do that here for cases so we don't
-            # waste 17mins everytime we run into a user without access to drive APIs
-            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
-        except HttpError as e:
-            if e.status_code == 401:
-                # fail gracefully, let the other impersonations continue
-                # one user without access shouldn't block the entire connector
-                logger.warning(
-                    f"User '{user_email}' does not have access to the drive APIs."
-                )
-                # mark this user as done so we don't try to retrieve anything for them
-                # again
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            raise
-        except RefreshError as e:
-            logger.warning(
-                f"User '{user_email}' token refresh failed, re-fetching user list "
-                f"to check if they were removed. Error: {e}"
-            )
-            try:
-                fresh_emails = self._get_all_user_emails()
-                checkpoint.user_emails = fresh_emails
-            except Exception as fetch_err:
-                logger.warning(
-                    f"Could not re-fetch user list to verify '{user_email}' removal "
-                    f"(error: {fetch_err}); surfacing original RefreshError as failure."
-                )
-                fresh_emails = [user_email]  # treat as if user still exists
-            if user_email not in fresh_emails:
-                # User was removed from the workspace — skip silently
-                logger.warning(
-                    f"User '{user_email}' confirmed removed from workspace, skipping."
-                )
-                curr_stage.stage = DriveRetrievalStage.DONE
-                return
-            # User still exists — this is a real token problem, surface as a failure
-            yield RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.DONE,
-                drive_file={},
-                user_email=user_email,
-                error=e,
-            )
-            curr_stage.stage = DriveRetrievalStage.DONE
-            return
         # if we are including my drives, try to get the current user's my
         # drive if any of the following are true:
         # - include_my_drives is true
@@ -898,9 +887,11 @@ class GoogleDriveConnector(
         if curr_stage.stage == DriveRetrievalStage.MY_DRIVE_FILES:
             if self.include_my_drives or user_email in self._requested_my_drive_emails:
                 logger.info(
-                    f"Getting all files in my drive as '{user_email}. Resuming: {resuming}. "
-                    f"Stage completed until: {curr_stage.completed_until}. "
-                    f"Next page token: {curr_stage.next_page_token}"
+                    "Getting all files in my drive as '%s. Resuming: %s. Stage completed until: %s. Next page token: %s",
+                    user_email,
+                    resuming,
+                    curr_stage.completed_until,
+                    curr_stage.next_page_token,
                 )
 
                 for file_or_token in add_retrieval_info(
@@ -919,10 +910,10 @@ class GoogleDriveConnector(
                     DriveRetrievalStage.MY_DRIVE_FILES,
                 ):
                     if isinstance(file_or_token, str):
-                        logger.debug(f"Done with max num pages for user {user_email}")
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        logger.debug("Done with max num pages for user %s", user_email)
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
 
@@ -956,30 +947,33 @@ class GoogleDriveConnector(
                 )
 
             # resume from a checkpoint
-            if resuming and (drive_id := curr_stage.current_folder_or_drive_id):
-                resume_start = curr_stage.completed_until
-                for file_or_token in _yield_from_drive(
-                    drive_id, resume_start  # ty: ignore[possibly-unresolved-reference]
-                ):
-                    if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
-                        return  # done with the max num pages, return checkpoint
-                    yield file_or_token
+            if resuming:
+                drive_id = curr_stage.current_folder_or_drive_id
+                if drive_id:
+                    resume_start = curr_stage.completed_until
+                    for file_or_token in _yield_from_drive(drive_id, resume_start):
+                        if isinstance(file_or_token, str):
+                            checkpoint.completion_map[
+                                user_email
+                            ].next_page_token = file_or_token
+                            return  # done with the max num pages, return checkpoint
+                        yield file_or_token
 
             drive_id = get_new_drive_id(user_email)
             if drive_id:
                 logger.info(
-                    f"Getting files in shared drive '{drive_id}' as '{user_email}. Resuming: {resuming}"
+                    "Getting files in shared drive '%s' as '%s. Resuming: %s",
+                    drive_id,
+                    user_email,
+                    resuming,
                 )
                 curr_stage.completed_until = 0
                 curr_stage.current_folder_or_drive_id = drive_id
                 for file_or_token in _yield_from_drive(drive_id, start):
                     if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
                 curr_stage.current_folder_or_drive_id = None
@@ -1001,7 +995,7 @@ class GoogleDriveConnector(
             def _yield_from_folder_crawl(
                 folder_id: str, folder_start: SecondsSinceUnixEpoch | None
             ) -> Iterator[RetrievedDriveFile]:
-                for retrieved_file in crawl_folders_for_files(
+                yield from crawl_folders_for_files(
                     service=drive_service,
                     parent_id=folder_id,
                     field_type=field_type,
@@ -1010,8 +1004,7 @@ class GoogleDriveConnector(
                     update_traversed_ids_func=self._update_traversed_parent_ids,
                     start=folder_start,
                     end=end,
-                ):
-                    yield retrieved_file
+                )
 
             # resume from a checkpoint
             last_processed_folder = None
@@ -1019,9 +1012,8 @@ class GoogleDriveConnector(
                 folder_id = curr_stage.current_folder_or_drive_id
                 if folder_id is None:
                     logger.warning(
-                        f"folder id not set in checkpoint for user {user_email}. "
-                        "This happens occasionally when the connector is interrupted "
-                        "and resumed."
+                        "folder id not set in checkpoint for user %s. This happens occasionally when the connector is interrupted and resumed.",
+                        user_email,
                     )
                 else:
                     resume_start = curr_stage.completed_until
@@ -1047,11 +1039,106 @@ class GoogleDriveConnector(
                 if num_completed_folders >= FOLDERS_PER_CHECKPOINT:
                     return  # resume from this folder on the next run
 
-                logger.info(f"Getting files in folder '{folder_id}' as '{user_email}'")
+                logger.info(
+                    "Getting files in folder '%s' as '%s'", folder_id, user_email
+                )
                 yield from _yield_from_folder_crawl(folder_id, start)
                 num_completed_folders += 1
 
         curr_stage.stage = DriveRetrievalStage.DONE
+
+    def _impersonate_user_for_retrieval(
+        self,
+        user_email: str,
+        field_type: DriveFileFieldType,
+        checkpoint: GoogleDriveCheckpoint,
+        get_new_drive_id: Callable[[str], str | None],
+        sorted_filtered_folder_ids: list[str],
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> Iterator[RetrievedDriveFile]:
+        logger.info("Impersonating user %s", user_email)
+        curr_stage = checkpoint.completion_map[user_email]
+        resuming = True
+        if curr_stage.stage == DriveRetrievalStage.START:
+            logger.info("Setting stage to %s", DriveRetrievalStage.MY_DRIVE_FILES.value)
+            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
+            resuming = False
+        drive_service = get_drive_service(self.creds, user_email)
+        is_user_removed = make_user_removal_checker(
+            user_email, self._make_fresh_emails_callback(checkpoint)
+        )
+
+        # validate that the user has access to the drive APIs by performing a simple
+        # request and checking for a 401
+        try:
+            logger.debug("Getting root folder id for user %s", user_email)
+            # default is ~17mins of retries, don't do that here for cases so we don't
+            # waste 17mins everytime we run into a user without access to drive APIs
+            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
+        except HttpError as e:
+            if e.status_code == 401:
+                # fail gracefully, let the other impersonations continue
+                # one user without access shouldn't block the entire connector
+                logger.warning(
+                    "User '%s' does not have access to the drive APIs.", user_email
+                )
+                # mark this user as done so we don't try to retrieve anything for them
+                # again
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            raise
+        except RefreshError as e:
+            if is_user_removed():
+                logger.warning(
+                    "User '%s' confirmed removed from workspace, skipping.", user_email
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+                return
+            logger.warning(
+                "User '%s' impersonation failed at validation gate. Error: %s",
+                user_email,
+                e,
+            )
+            curr_stage.stage = DriveRetrievalStage.DONE
+            yield RetrievedDriveFile(
+                completion_stage=DriveRetrievalStage.DONE,
+                drive_file={},
+                user_email=user_email,
+                error=ImpersonationError(user_email, e),
+            )
+            return
+
+        try:
+            yield from self._post_validation_retrieval(
+                curr_stage=curr_stage,
+                drive_service=drive_service,
+                user_email=user_email,
+                field_type=field_type,
+                checkpoint=checkpoint,
+                get_new_drive_id=get_new_drive_id,
+                sorted_filtered_folder_ids=sorted_filtered_folder_ids,
+                resuming=resuming,
+                start=start,
+                end=end,
+            )
+        except RefreshError as e:
+            if is_user_removed():
+                logger.warning(
+                    "User '%s' removed mid-run, skipping remaining files.", user_email
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+            else:
+                logger.warning(
+                    "User '%s' impersonation failed mid-run. Error: %s", user_email, e
+                )
+                curr_stage.stage = DriveRetrievalStage.DONE
+                yield RetrievedDriveFile(
+                    completion_stage=DriveRetrievalStage.DONE,
+                    drive_file={},
+                    user_email=user_email,
+                    error=ImpersonationError(user_email, e),
+                )
 
     def _manage_service_account_retrieval(
         self,
@@ -1097,12 +1184,12 @@ class GoogleDriveConnector(
 
         # we've found all users and drives, now time to actually start
         # fetching stuff
-        logger.info(f"Found {len(all_org_emails)} users to impersonate")
-        logger.debug(f"Users: {all_org_emails}")
-        logger.info(f"Found {len(sorted_drive_ids)} drives to retrieve")
-        logger.debug(f"Drives: {sorted_drive_ids}")
-        logger.info(f"Found {len(sorted_folder_ids)} folders to retrieve")
-        logger.debug(f"Folders: {sorted_folder_ids}")
+        logger.info("Found %s users to impersonate", len(all_org_emails))
+        logger.debug("Users: %s", all_org_emails)
+        logger.info("Found %s drives to retrieve", len(sorted_drive_ids))
+        logger.debug("Drives: %s", sorted_drive_ids)
+        logger.info("Found %s folders to retrieve", len(sorted_folder_ids))
+        logger.debug("Folders: %s", sorted_folder_ids)
 
         drive_id_getter = self.make_drive_id_getter(sorted_drive_ids, checkpoint)
 
@@ -1113,7 +1200,7 @@ class GoogleDriveConnector(
             if stage_completion.stage != DriveRetrievalStage.DONE
         ]
 
-        logger.debug(f"Non-completed users remaining: {len(non_completed_org_emails)}")
+        logger.debug("Non-completed users remaining: %s", len(non_completed_org_emails))
 
         # don't process too many emails before returning a checkpoint. This is
         # to resolve the case where there are a ton of emails that don't have access
@@ -1157,7 +1244,7 @@ class GoogleDriveConnector(
         ) - self._retrieved_folder_and_drive_ids
         if remaining_folders:
             logger.warning(
-                f"Some folders/drives were not retrieved. IDs: {remaining_folders}"
+                "Some folders/drives were not retrieved. IDs: %s", remaining_folders
             )
         if any(
             checkpoint.completion_map[user_email].stage != DriveRetrievalStage.DONE
@@ -1216,11 +1303,11 @@ class GoogleDriveConnector(
             return
 
         logger.info(
-            f"Getting shared files/my drive files for OAuth "
-            f"with include_files_shared_with_me={self.include_files_shared_with_me}, "
-            f"include_my_drives={self.include_my_drives}, "
-            f"include_shared_drives={self.include_shared_drives}."
-            f"Using '{self.primary_admin_email}' as the account."
+            "Getting shared files/my drive files for OAuth with include_files_shared_with_me=%s, include_my_drives=%s, include_shared_drives=%s.Using '%s' as the account.",
+            self.include_files_shared_with_me,
+            self.include_my_drives,
+            self.include_shared_drives,
+            self.primary_admin_email,
         )
         yield from add_retrieval_info(
             get_all_files_for_oauth(
@@ -1296,11 +1383,13 @@ class GoogleDriveConnector(
         for drive_id in drive_ids_to_retrieve:
             if drive_id in self._retrieved_folder_and_drive_ids:
                 logger.info(
-                    f"Skipping drive '{drive_id}' as it has already been retrieved"
+                    "Skipping drive '%s' as it has already been retrieved", drive_id
                 )
                 continue
             logger.info(
-                f"Getting files in shared drive '{drive_id}' as '{self.primary_admin_email}'"
+                "Getting files in shared drive '%s' as '%s'",
+                drive_id,
+                self.primary_admin_email,
             )
             for file_or_token in _yield_from_drive(drive_id, start):
                 if isinstance(file_or_token, str):
@@ -1363,14 +1452,17 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].completed_until
             yield from _yield_from_folder_crawl(
-                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                resume_start,
             )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
         # instead, the traversed_parent_ids are used to determine what we have left to retrieve
         for folder_id in remaining_folders:
             logger.info(
-                f"Getting files in folder '{folder_id}' as '{self.primary_admin_email}'"
+                "Getting files in folder '%s' as '%s'",
+                folder_id,
+                self.primary_admin_email,
             )
             yield from _yield_from_folder_crawl(folder_id, start)
 
@@ -1379,7 +1471,7 @@ class GoogleDriveConnector(
         ) - self._retrieved_folder_and_drive_ids
         if remaining_folders:
             logger.warning(
-                f"Some folders/drives were not retrieved. IDs: {remaining_folders}"
+                "Some folders/drives were not retrieved. IDs: %s", remaining_folders
             )
 
     def _checkpointed_retrieval(
@@ -1438,8 +1530,9 @@ class GoogleDriveConnector(
                 continue
 
             logger.debug(
-                f"Updating checkpoint for file: {drive_file.get('name')}. "
-                f"Seen: {document_id in checkpoint.all_retrieved_file_ids}"
+                "Updating checkpoint for file: %s. Seen: %s",
+                drive_file.get("name"),
+                document_id in checkpoint.all_retrieved_file_ids,
             )
             if document_id in checkpoint.all_retrieved_file_ids:
                 continue
@@ -1609,7 +1702,7 @@ class GoogleDriveConnector(
             add_prefix=True,
         )
         if new_ancestors:
-            logger.debug(f"Yielding {len(new_ancestors)} new hierarchy nodes")
+            logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
         func_with_args = [
@@ -1627,7 +1720,7 @@ class GoogleDriveConnector(
         results: list[Document | ConnectorFailure] = [
             r for r in raw_results if r is not None
         ]
-        logger.debug(f"batch has {len(results)} docs or failures")
+        logger.debug("batch has %s docs or failures", len(results))
         yield from results
 
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
@@ -1653,8 +1746,8 @@ class GoogleDriveConnector(
             )
         except Exception as e:
             logger.exception(
-                f"Error extracting document: "
-                f"{retrieved_file.drive_file.get('name')} from Google Drive"
+                "Error extracting document: %s from Google Drive",
+                retrieved_file.drive_file.get("name"),
             )
             return ConnectorFailure(
                 failed_entity=EntityFailure(
@@ -1683,8 +1776,9 @@ class GoogleDriveConnector(
             )
 
         logger.info(
-            f"Loading from checkpoint with completion stage: {checkpoint.completion_stage},"
-            f"num retrieved ids: {len(checkpoint.all_retrieved_file_ids)}"
+            "Loading from checkpoint with completion stage: %s,num retrieved ids: %s",
+            checkpoint.completion_stage,
+            len(checkpoint.all_retrieved_file_ids),
         )
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
@@ -1710,7 +1804,7 @@ class GoogleDriveConnector(
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
 
         logger.info(
-            f"num drive files retrieved: {len(checkpoint.all_retrieved_file_ids)}"
+            "num drive files retrieved: %s", len(checkpoint.all_retrieved_file_ids)
         )
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
@@ -1739,7 +1833,7 @@ class GoogleDriveConnector(
         )
 
     @override
-    def resolve_errors(
+    def reindex(
         self,
         errors: list[ConnectorFailure],
         include_permissions: bool = False,
@@ -1749,7 +1843,7 @@ class GoogleDriveConnector(
                 "Credentials missing, should not call this method before calling load_credentials"
             )
 
-        logger.info(f"Resolving {len(errors)} errors")
+        logger.info("Reindexing %s docs from errors", len(errors))
         doc_ids = [
             failure.failed_document.document_id
             for failure in errors
@@ -1982,6 +2076,47 @@ class GoogleDriveConnector(
                 )
             raise ConnectorValidationError(
                 f"Unexpected error during Google Drive validation: {e}"
+            )
+
+    def probe_directory_admin_permission(self) -> None:
+        """Verify the configured primary admin can call the Workspace directory API.
+
+        Required for permission sync, which calls
+        `admin.directory.users.get` to enumerate Workspace users and groups.
+        A 403 here predicts the same 403 in `_get_drive_members` mid-sync, so
+        misconfigured connectors fail at creation time instead of generating a
+        steady stream of `PermissionError` log lines on every group-sync tick.
+        """
+        admin_service = get_admin_service(
+            creds=self.creds,
+            user_email=self.primary_admin_email,
+        )
+        try:
+            admin_service.users().get(  # ty: ignore[unresolved-attribute]
+                userKey=self.primary_admin_email
+            ).execute()
+        except HttpError as e:
+            status_code = e.resp.status if e.resp else None
+            if status_code == 403:
+                raise InsufficientPermissionsError(
+                    f"Primary admin {self.primary_admin_email} is not authorized "
+                    "on the Google Workspace directory API. Reconnect the connector "
+                    "with an account that has admin directory access."
+                )
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Google Drive credentials (401)."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
+            )
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    f"Google Drive credentials are missing required scopes. {ONYX_SCOPE_INSTRUCTIONS} Full error: {e}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Workspace directory API probe: {e}"
             )
 
     @override

@@ -8,7 +8,6 @@ import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/app/app/projects/projectsService";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
@@ -19,6 +18,7 @@ import {
   SvgFiles,
   SvgFileText,
   SvgImage,
+  SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
 } from "@opal/icons";
@@ -192,13 +192,13 @@ export default function UserFilesModal({
                 }}
               />
               {handleUploadChange && (
-                <CreateButton
+                <Button
+                  icon={SvgPlusCircle}
+                  prominence="internal"
                   onClick={triggerUploadPicker}
-                  secondary={false}
-                  internal
                 >
                   Add Files
-                </CreateButton>
+                </Button>
               )}
             </Section>
           </Modal.Header>

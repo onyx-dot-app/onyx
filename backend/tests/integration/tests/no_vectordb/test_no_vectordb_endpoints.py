@@ -159,8 +159,9 @@ def test_persona_list_works(
 
 
 def test_tool_list_works(
-    reset: None, admin_user: DATestUser  # noqa: ARG001
-) -> None:  # noqa: ARG001
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
     resp = requests.get(
         f"{API_SERVER_URL}/tool",
         headers=_headers(admin_user),
@@ -168,6 +169,6 @@ def test_tool_list_works(
     assert resp.status_code == 200
     tools = resp.json()
     tool_ids = {t["in_code_tool_id"] for t in tools if t.get("in_code_tool_id")}
-    assert (
-        "FileReaderTool" in tool_ids
-    ), "FileReaderTool should be registered as a built-in tool"
+    assert "FileReaderTool" in tool_ids, (
+        "FileReaderTool should be registered as a built-in tool"
+    )

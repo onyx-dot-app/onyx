@@ -36,10 +36,10 @@ export default defineConfig(({ mode }) => {
     define: isSelfHosted
       ? {
           "import.meta.env.VITE_WIDGET_BACKEND_URL": JSON.stringify(
-            env.VITE_WIDGET_BACKEND_URL,
+            env.VITE_WIDGET_BACKEND_URL
           ),
           "import.meta.env.VITE_WIDGET_API_KEY": JSON.stringify(
-            env.VITE_WIDGET_API_KEY,
+            env.VITE_WIDGET_API_KEY
           ),
         }
       : {},

@@ -13,7 +13,6 @@ This migration fixes the ProcessingMode enum value mismatch:
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "72aa7de2e5cf"
 down_revision = "2020d417ec84"

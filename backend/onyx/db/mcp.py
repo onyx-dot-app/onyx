@@ -167,12 +167,14 @@ def delete_mcp_server(server_id: int, db_session: Session) -> None:
 
     # Count tools that will be deleted
     tools_count = db_session.query(Tool).filter(Tool.mcp_server_id == server_id).count()
-    logger.info(f"Deleting MCP server {server_id} with {tools_count} associated tools")
+    logger.info(
+        "Deleting MCP server %s with %s associated tools", server_id, tools_count
+    )
 
     db_session.delete(server)
     db_session.commit()
 
-    logger.info(f"Successfully deleted MCP server {server_id} and its tools")
+    logger.info("Successfully deleted MCP server %s and its tools", server_id)
 
 
 def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[Tool]:

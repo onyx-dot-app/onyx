@@ -116,7 +116,7 @@ import { getOnyxDomain } from "../utils/storage.js";
         if (useOnyxAsDefaultNewTab === undefined) {
           useOnyxAsDefaultNewTab = !!(
             localStorage.getItem(
-              CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB,
+              CHROME_SPECIFIC_STORAGE_KEYS.USE_ONYX_AS_DEFAULT_NEW_TAB
             ) === "1"
           );
           chrome.storage.local.set({
@@ -133,7 +133,7 @@ import { getOnyxDomain } from "../utils/storage.js";
         }
 
         setIframeSrc(items[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] + "/nrf");
-      },
+      }
     );
   }
 
@@ -163,7 +163,7 @@ import { getOnyxDomain } from "../utils/storage.js";
 
         setTheme(theme, backgroundImage);
         checkOnyxPreference();
-      },
+      }
     );
   }
 
@@ -171,7 +171,7 @@ import { getOnyxDomain } from "../utils/storage.js";
     if (preloadedIframe && preloadedIframe.contentWindow) {
       preloadedIframe.contentWindow.postMessage(
         { type: WEB_MESSAGE.PAGE_CHANGE, href: newSrc },
-        "*",
+        "*"
       );
     } else {
       console.error("Preloaded iframe not available");
@@ -223,7 +223,7 @@ import { getOnyxDomain } from "../utils/storage.js";
           [CHROME_SPECIFIC_STORAGE_KEYS.THEME]: theme,
           [CHROME_SPECIFIC_STORAGE_KEYS.BACKGROUND_IMAGE]: backgroundUrl,
         },
-        () => {},
+        () => {}
       );
     } else if (event.data.type === CHROME_MESSAGE.LOAD_NEW_PAGE) {
       loadNewPage(event.data.href);

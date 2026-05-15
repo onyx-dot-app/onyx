@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 .opal-tooltip {
   z-index: var(--z-tooltip, 1300);
   max-width: 20rem;

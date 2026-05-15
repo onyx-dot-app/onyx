@@ -2,6 +2,21 @@ import json
 
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def truncate_output(output: str, max_length: int, label: str = "output") -> str:
+    """Truncate to ``max_length`` and append a footer noting how many chars were elided. ``label`` is only used in the debug log."""
+    truncated = output[:max_length]
+    if len(output) > max_length:
+        truncated += (
+            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
+        )
+        logger.debug("Truncated %s: %s", label, truncated)
+    return truncated
+
 
 FILE_ASSOCIATED_GUIDANCE = (
     "Only a short excerpt from this document is shown below. The complete "

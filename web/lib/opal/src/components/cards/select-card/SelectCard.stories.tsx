@@ -92,7 +92,7 @@ export const Clickable: Story = {
 
 export const WithActions: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-[28rem]">
+    <div className="flex flex-col gap-4 w-112">
       {/* Disconnected */}
       <SelectCard state="empty" onClick={() => {}}>
         <div className="flex flex-row items-stretch w-full">

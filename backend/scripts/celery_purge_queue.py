@@ -47,7 +47,7 @@ def celery_purge_queue(queue: str, tenant_id: str) -> None:  # noqa: ARG001
 
     length = celery_get_queue_length(queue, r)
 
-    logger.info(f"queue={queue} length={length}")
+    logger.info("queue=%s length=%s", queue, length)
 
     # processed = 0
     # deleted = 0

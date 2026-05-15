@@ -40,7 +40,7 @@ export default function ExpandableContentWrapper({
   };
 
   const Content = (
-    <div className="w-message-default max-w-full !rounded-lg overflow-y-hidden h-full">
+    <div className="w-message-default max-w-full rounded-lg! overflow-y-hidden h-full">
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
           <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
@@ -73,7 +73,7 @@ export default function ExpandableContentWrapper({
       </CardHeader>
       <Card
         className={cn(
-          "!rounded-none p-0 relative mx-auto w-full",
+          "rounded-none! p-0 relative mx-auto w-full",
           expanded ? "max-h-[600px]" : "max-h-[300px] h-full"
         )}
       >

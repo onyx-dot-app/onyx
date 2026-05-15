@@ -90,7 +90,7 @@ def is_file_password_protected(
 
     if extension not in extension_to_function:
         logger.warning(
-            f"Extension={extension} can be password protected, but no function found"
+            "Extension=%s can be password protected, but no function found", extension
         )
         return False
 

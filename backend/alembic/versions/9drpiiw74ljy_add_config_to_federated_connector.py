@@ -22,15 +22,13 @@ def upgrade() -> None:
 
     # Check if column already exists in current schema
     result = connection.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT column_name
             FROM information_schema.columns
             WHERE table_schema = current_schema()
             AND table_name = 'federated_connector'
             AND column_name = 'config'
-            """
-        )
+            """)
     )
     column_exists = result.fetchone() is not None
 
@@ -45,8 +43,7 @@ def upgrade() -> None:
 
     # Data migration: Single bulk update for all Slack connectors
     connection.execute(
-        sa.text(
-            """
+        sa.text("""
             WITH connector_configs AS (
                 SELECT
                     fc.id as connector_id,
@@ -88,8 +85,7 @@ def upgrade() -> None:
             SET config = cc.config
             FROM connector_configs cc
             WHERE fc.id = cc.connector_id
-            """
-        )
+            """)
     )
 
 

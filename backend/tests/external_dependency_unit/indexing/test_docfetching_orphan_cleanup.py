@@ -92,14 +92,15 @@ class MockCrashingConnector(LoadConnector):
         self.staged_file_id: str | None = None
 
     def load_credentials(
-        self, credentials: dict[str, Any]  # noqa: ARG002
+        self,
+        credentials: dict[str, Any],  # noqa: ARG002
     ) -> dict[str, Any] | None:
         return None
 
     def load_from_state(self) -> Iterator[list[Document | HierarchyNode]]:
-        assert (
-            self.raw_file_callback is not None
-        ), "Test harness must wire up raw_file_callback"
+        assert self.raw_file_callback is not None, (
+            "Test harness must wire up raw_file_callback"
+        )
         file_id = self.raw_file_callback(
             BytesIO(self.payload), "application/octet-stream"
         )

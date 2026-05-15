@@ -39,7 +39,7 @@ def generic_doc_sync(
         A `Generator` which yields existing and newly fetched external-access permissions.
     """
 
-    logger.info(f"Starting {doc_source} doc sync for CC Pair ID: {cc_pair.id}")
+    logger.info("Starting %s doc sync for CC Pair ID: %s", doc_source, cc_pair.id)
 
     indexing_start: SecondsSinceUnixEpoch | None = (
         cc_pair.connector.indexing_start.timestamp()
@@ -49,12 +49,12 @@ def generic_doc_sync(
 
     newly_fetched_doc_ids: set[str] = set()
 
-    logger.info(f"Fetching all slim documents from {doc_source}")
+    logger.info("Fetching all slim documents from %s", doc_source)
     for doc_batch in slim_connector.retrieve_all_slim_docs_perm_sync(
         start=indexing_start,
         callback=callback,
     ):
-        logger.info(f"Got {len(doc_batch)} slim documents from {doc_source}")
+        logger.info("Got %s slim documents from %s", len(doc_batch), doc_source)
 
         if callback:
             if callback.should_stop():
@@ -83,7 +83,9 @@ def generic_doc_sync(
                 external_access=doc.external_access,
             )
 
-    logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id=}")
+    logger.info(
+        "Querying existing document IDs for CC Pair ID: cc_pair.id=%r", cc_pair.id
+    )
     existing_doc_ids: list[str] = fetch_all_existing_docs_ids_fn()
 
     missing_doc_ids = set(existing_doc_ids) - newly_fetched_doc_ids
@@ -92,14 +94,15 @@ def generic_doc_sync(
         return
 
     logger.warning(
-        f"Found {len(missing_doc_ids)=} documents that are in the DB but not present in fetch. Making them inaccessible."
+        "Found len(missing_doc_ids)=%r documents that are in the DB but not present in fetch. Making them inaccessible.",
+        len(missing_doc_ids),
     )
 
     for missing_id in missing_doc_ids:
-        logger.warning(f"Removing access for {missing_id=}")
+        logger.warning("Removing access for missing_id=%r", missing_id)
         yield DocExternalAccess(
             doc_id=missing_id,
             external_access=ExternalAccess.empty(),
         )
 
-    logger.info(f"Finished {doc_source} doc sync")
+    logger.info("Finished %s doc sync", doc_source)

@@ -1,34 +1,36 @@
 import os
 
-# Set environment variables BEFORE any other imports to ensure they're picked up
-# by module-level code that reads env vars at import time
-# TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
+# Daily tests run without a live backend; EE code paths that depend on
+# Redis/Vespa/etc are not available, so disable enforcement before any
+# module-level imports below pull in EE versioned implementations.
 os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
 
-from collections.abc import AsyncGenerator
-from collections.abc import Generator
-from contextlib import asynccontextmanager
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from collections.abc import AsyncGenerator  # noqa: E402
+from collections.abc import Generator  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
-import pytest
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+import pytest  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
-from onyx.auth.users import current_user
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.models import UserRole
-from onyx.main import get_application
-from onyx.utils.logger import setup_logger
+from onyx.auth.users import current_user  # noqa: E402
+from onyx.db.engine.sql_engine import get_session  # noqa: E402
+from onyx.db.enums import Permission  # noqa: E402
+from onyx.db.models import UserRole  # noqa: E402
+from onyx.main import get_application  # noqa: E402
+from onyx.utils.logger import setup_logger  # noqa: E402
 
 # Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
-from tests.utils.pytest_secrets import (
+from tests.utils.pytest_secrets import (  # noqa: E402
     pytest_collection_modifyitems as pytest_collection_modifyitems,
 )
-from tests.utils.pytest_secrets import pytest_configure as pytest_configure
-from tests.utils.pytest_secrets import test_secrets as test_secrets
+from tests.utils.pytest_secrets import (
+    pytest_configure as pytest_configure,  # noqa: E402
+)
+from tests.utils.pytest_secrets import test_secrets as test_secrets  # noqa: E402
 
 logger = setup_logger()
 

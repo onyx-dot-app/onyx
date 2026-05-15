@@ -6,8 +6,10 @@ import InputTypeIn, {
 } from "@/refresh-components/inputs/InputTypeIn";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
-export interface InputTypeInFieldProps
-  extends Omit<InputTypeInProps, "value" | "onClear"> {
+export interface InputTypeInFieldProps extends Omit<
+  InputTypeInProps,
+  "value" | "onClear"
+> {
   name: string;
 }
 

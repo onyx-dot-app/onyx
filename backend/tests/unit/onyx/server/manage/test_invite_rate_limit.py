@@ -1,16 +1,15 @@
 """Unit tests for the Redis-backed invite + remove-invited rate limits."""
 
-from typing import Any
 from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.manage.invite_rate_limit import enforce_invite_rate_limit
 from onyx.server.manage.invite_rate_limit import enforce_remove_invited_rate_limit
 
@@ -25,15 +24,19 @@ class _StubRedis:
     """
 
     def __init__(self) -> None:
-        self.store: dict[str, int] = {}
-        self.ttls: dict[str, int] = {}
+        self.store: dict[str | bytes, int] = {}
+        self.ttls: dict[str | bytes, int] = {}
         self.eval_fail: Exception | None = None
 
-    def eval(self, _script: str, num_keys: int, *args: Any) -> int:
+    def eval(
+        self,
+        _script: str,
+        keys: list[str] | list[bytes],
+        args: list[str] | list[bytes] | list[int] | list[float] | None = None,
+    ) -> int:
         if self.eval_fail is not None:
             raise self.eval_fail
-        keys = list(args[:num_keys])
-        argv = list(args[num_keys:])
+        argv = list(args or [])
         n = int(argv[0])
         for i in range(n):
             key = keys[i]
@@ -55,8 +58,8 @@ class _StubRedis:
         return 0
 
 
-def _stub() -> Redis:
-    return cast(Redis, _StubRedis())
+def _stub() -> TenantRedisClient:
+    return cast(TenantRedisClient, _StubRedis())
 
 
 def test_invite_allows_under_all_tiers() -> None:
@@ -249,8 +252,8 @@ def test_invite_limit_zero_disables_tier() -> None:
 
 def test_invite_tenant_bucket_is_isolated_across_tenants() -> None:
     """Regression guard: tenants MUST NOT share the tenant/day counter.
-    TenantRedis does not prefix keys passed to `eval`, so the tenant_id is
-    baked into the key string itself."""
+    The tenant_id is also baked into the key string for defence in depth
+    on top of the per-tenant Redis prefix applied by ``TenantRedisClient``."""
     redis_client = _stub()
     user_id = uuid4()
 
@@ -282,7 +285,7 @@ def test_invite_fails_open_when_redis_unavailable() -> None:
     """Onyx Lite deployments ship without Redis; invite flow must still work."""
     stub = _StubRedis()
     stub.eval_fail = RedisConnectionError("Redis not reachable")
-    redis_client = cast(Redis, stub)
+    redis_client = cast(TenantRedisClient, stub)
     user_id = uuid4()
 
     with (

@@ -9,8 +9,6 @@ const IMAGE_GENERATION_URL =
 const PROVIDERS = [
   { id: "openai_gpt_image_1_5", title: "GPT Image 1.5" },
   { id: "openai_gpt_image_1", title: "GPT Image 1" },
-  { id: "openai_dalle_3", title: "DALL-E 3" },
-  { id: "azure_dalle_3", title: "Azure OpenAI DALL-E 3" },
 ];
 
 // Helper to find a provider card by its aria-label
@@ -82,7 +80,7 @@ test.describe("Image Generation Provider Configuration", () => {
     );
   });
 
-  test.describe("OpenAI DALL-E 3 Configuration", () => {
+  test.describe("OpenAI GPT Image 1 Configuration", () => {
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
     test.skip(!OPENAI_API_KEY, "OPENAI_API_KEY environment variable not set");
@@ -91,22 +89,22 @@ test.describe("Image Generation Provider Configuration", () => {
       // Clean up the image generation config created during the test
       const apiClient = new OnyxApiClient(page.request);
       try {
-        await apiClient.deleteImageGenerationConfig("openai_dalle_3");
-        console.log("[image-gen-test] Cleaned up DALL-E 3 config");
+        await apiClient.deleteImageGenerationConfig("openai_gpt_image_1");
+        console.log("[image-gen-test] Cleaned up GPT Image 1 config");
       } catch (error) {
         console.warn(
-          `[image-gen-test] Failed to clean up DALL-E 3 config: ${error}`
+          `[image-gen-test] Failed to clean up GPT Image 1 config: ${error}`
         );
       }
     });
 
-    test.skip("should configure DALL-E 3 with API key", async ({ page }) => {
-      // Click Connect on DALL-E 3 card using aria-label
-      await openProviderModal(page, "openai_dalle_3");
+    test.skip("should configure GPT Image 1 with API key", async ({ page }) => {
+      // Click Connect on GPT Image 1 card using aria-label
+      await openProviderModal(page, "openai_gpt_image_1");
 
       // Wait for modal to open
       const modalDialog = page.getByRole("dialog", {
-        name: /connect dall-e 3/i,
+        name: /connect gpt image 1/i,
       });
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
@@ -141,13 +139,13 @@ test.describe("Image Generation Provider Configuration", () => {
       // Wait for page to update
       await page.waitForLoadState("networkidle");
 
-      // Verify DALL-E 3 is now configured - should show "Current Default"
-      const dalleCard = getProviderCard(page, "openai_dalle_3");
+      // Verify GPT Image 1 is now configured - should show "Current Default"
+      const gptImageCard = getProviderCard(page, "openai_gpt_image_1");
       await expect(
-        dalleCard.getByRole("button", { name: "Current Default" })
+        gptImageCard.getByRole("button", { name: "Current Default" })
       ).toBeVisible({ timeout: 15000 });
 
-      console.log("[image-gen-test] DALL-E 3 configured successfully");
+      console.log("[image-gen-test] GPT Image 1 configured successfully");
     });
   });
 });

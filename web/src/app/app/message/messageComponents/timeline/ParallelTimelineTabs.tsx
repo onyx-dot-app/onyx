@@ -103,12 +103,12 @@ export function ParallelTimelineTabs({
           icon={
             <div
               className={cn(
-                "h-[var(--timeline-branch-icon-wrapper-size)] w-[var(--timeline-branch-icon-wrapper-size)] flex items-center justify-center text-text-02",
+                "h-(--timeline-branch-icon-wrapper-size) w-(--timeline-branch-icon-wrapper-size) flex items-center justify-center text-text-02",
                 isHover &&
                   "text-text-inverted-05 bg-background-neutral-inverted-00 rounded-full"
               )}
             >
-              <SvgBranch className="h-[var(--timeline-branch-icon-size)] w-[var(--timeline-branch-icon-size)]" />
+              <SvgBranch className="h-(--timeline-branch-icon-size) w-(--timeline-branch-icon-size)" />
             </div>
           }
         >
@@ -120,7 +120,7 @@ export function ParallelTimelineTabs({
             <TimelineTopSpacer variant={topSpacerVariant} />
 
             <div
-              className="flex items-center min-h-[var(--timeline-step-header-height)] pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]"
+              className="flex items-center min-h-(--timeline-step-header-height) pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)"
               onMouseEnter={handleHeaderEnter}
               onMouseLeave={handleHeaderLeave}
             >

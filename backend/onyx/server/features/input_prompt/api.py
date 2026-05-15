@@ -96,7 +96,7 @@ def patch_input_prompt(
         )
     except ValueError as e:
         error_msg = "Error occurred while updated input prompt"
-        logger.warning(f"{error_msg}. Stack trace: {e}")
+        logger.warning("%s. Stack trace: %s", error_msg, e)
         raise HTTPException(status_code=404, detail=error_msg)
 
     return InputPromptSnapshot.from_model(updated_input_prompt)
@@ -116,7 +116,7 @@ def delete_input_prompt(
 
     except ValueError as e:
         error_msg = "Error occurred while deleting input prompt"
-        logger.warning(f"{error_msg}. Stack trace: {e}")
+        logger.warning("%s. Stack trace: %s", error_msg, e)
         raise HTTPException(status_code=404, detail=error_msg)
 
 
@@ -131,7 +131,7 @@ def delete_public_input_prompt(
 
     except ValueError as e:
         error_msg = "Error occurred while deleting input prompt"
-        logger.warning(f"{error_msg}. Stack trace: {e}")
+        logger.warning("%s. Stack trace: %s", error_msg, e)
         raise HTTPException(status_code=404, detail=error_msg)
 
 

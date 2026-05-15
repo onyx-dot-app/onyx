@@ -147,7 +147,7 @@ export default function ArtifactsTab({
               key={artifact.id}
               className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
             >
-              <SvgGlobe size={24} className="stroke-text-02 flex-shrink-0" />
+              <SvgGlobe size={24} className="stroke-text-02 shrink-0" />
 
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <Text secondaryBody text04 className="truncate">
@@ -232,21 +232,15 @@ function OutputEntryRow({
       >
         {entry.is_directory ? (
           expanded ? (
-            <SvgChevronDown
-              size={16}
-              className="stroke-text-03 flex-shrink-0"
-            />
+            <SvgChevronDown size={16} className="stroke-text-03 shrink-0" />
           ) : (
-            <SvgChevronRight
-              size={16}
-              className="stroke-text-03 flex-shrink-0"
-            />
+            <SvgChevronRight size={16} className="stroke-text-03 shrink-0" />
           )
         ) : (
-          <div className="w-4 flex-shrink-0" />
+          <div className="w-4 shrink-0" />
         )}
 
-        <FileIcon size={20} className="stroke-text-02 flex-shrink-0" />
+        <FileIcon size={20} className="stroke-text-02 shrink-0" />
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <Text secondaryBody text04 className="truncate">

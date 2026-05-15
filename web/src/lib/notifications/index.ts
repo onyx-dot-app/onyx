@@ -12,6 +12,7 @@ export function getNotificationIcon(
       return SvgAlertCircle;
 
     case NotificationType.TRIAL_ENDS_TWO_DAYS:
+    case NotificationType.LICENSE_EXPIRY_WARNING:
       return SvgAlertTriangle;
 
     case NotificationType.RELEASE_NOTES:

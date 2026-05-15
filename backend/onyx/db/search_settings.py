@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -50,8 +51,7 @@ def create_search_settings(
         embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
         enable_contextual_rag=search_settings.enable_contextual_rag,
-        contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-        contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
     )
 
@@ -180,8 +180,9 @@ def update_search_settings(
     updated_settings: SavedSearchSettings,
     preserved_fields: list[str],
 ) -> None:
+    mapped_columns = {c.key for c in sa_inspect(SearchSettings).mapper.columns}
     for field, value in updated_settings.model_dump().items():
-        if field not in preserved_fields:
+        if field not in preserved_fields and field in mapped_columns:
             setattr(current_settings, field, value)
 
 

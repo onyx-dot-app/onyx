@@ -40,7 +40,7 @@ def admin_search(
     tenant_id = get_current_tenant_id()
 
     query = question.query
-    logger.notice(f"Received admin search query: {query}")
+    logger.notice("Received admin search query: %s", query)
     user_acl_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(

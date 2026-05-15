@@ -16,20 +16,16 @@ depends_on: None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector
         SET prune_freq = 2592000
         WHERE prune_freq = 86400
-        """
-    )
+        """)
 
 
 def downgrade() -> None:
-    op.execute(
-        """
+    op.execute("""
         UPDATE connector
         SET prune_freq = 86400
         WHERE prune_freq = 2592000
-        """
-    )
+        """)

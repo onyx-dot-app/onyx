@@ -138,11 +138,11 @@ export default function RawOutputBlock({
     >
       {highlightedHtml ? (
         <pre
-          className="whitespace-pre-wrap break-words m-0 hljs"
+          className="whitespace-pre-wrap wrap-break-word m-0 hljs"
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <pre className="whitespace-pre-wrap break-words m-0">{content}</pre>
+        <pre className="whitespace-pre-wrap wrap-break-word m-0">{content}</pre>
       )}
     </div>
   );

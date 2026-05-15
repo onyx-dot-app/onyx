@@ -7,8 +7,9 @@ import type { RichStr, WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-interface DisabledProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface DisabledProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   ref?: React.Ref<HTMLDivElement>;
 
   /**

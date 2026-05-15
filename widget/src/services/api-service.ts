@@ -15,7 +15,7 @@ export class ApiService {
 
   constructor(
     private backendUrl: string,
-    private apiKey: string,
+    private apiKey: string
   ) {}
 
   /**
@@ -33,7 +33,7 @@ export class ApiService {
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify(request),
-      },
+      }
     );
 
     if (!response.ok) {
@@ -79,7 +79,7 @@ export class ApiService {
         headers: this.getHeaders(),
         body: JSON.stringify(request),
         signal: params.signal,
-      },
+      }
     );
 
     if (!response.ok) {
@@ -104,7 +104,7 @@ export class ApiService {
    * Backend returns newline-delimited JSON packets
    */
   private async *parseSSEStream(
-    response: Response,
+    response: Response
   ): AsyncGenerator<Packet, void, unknown> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -145,7 +145,7 @@ export class ApiService {
             } catch (e) {
               // Fail fast on malformed packets - don't hide backend issues
               throw new Error(
-                `Failed to parse SSE packet: ${line}. Error: ${e}`,
+                `Failed to parse SSE packet: ${line}. Error: ${e}`
               );
             }
           }
@@ -172,7 +172,7 @@ export class ApiService {
         } catch (e) {
           // Fail fast on malformed final buffer packets
           throw new Error(
-            `Failed to parse final packet: ${buffer}. Error: ${e}`,
+            `Failed to parse final packet: ${buffer}. Error: ${e}`
           );
         }
       }
@@ -187,7 +187,7 @@ export class ApiService {
   private async fetchWithRetry(
     url: string,
     options: RequestInit,
-    retries = 0,
+    retries = 0
   ): Promise<Response> {
     try {
       const response = await fetch(url, options);

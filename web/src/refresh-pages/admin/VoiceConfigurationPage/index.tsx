@@ -167,7 +167,9 @@ function ModelCard({
       <setupModal.Provider>
         <VoiceProviderSetupModal
           providerType={model.providerType}
-          existingProvider={status !== "disconnected" ? provider ?? null : null}
+          existingProvider={
+            status !== "disconnected" ? (provider ?? null) : null
+          }
           mode={mode}
           defaultModelId={model.id}
           onSuccess={handleSetupSuccess}

@@ -26,7 +26,6 @@ def load_everything_from_checkpoint_connector(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[SingleConnectorCallOutput[CT]]:
-
     checkpoint = connector.build_dummy_checkpoint()
     return load_everything_from_checkpoint_connector_from_checkpoint(
         connector, start, end, checkpoint

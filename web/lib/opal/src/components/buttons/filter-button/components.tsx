@@ -13,8 +13,10 @@ import { ChevronIcon } from "@opal/components/buttons/chevron";
 // Types
 // ---------------------------------------------------------------------------
 
-interface FilterButtonProps
-  extends Omit<InteractiveStatefulProps, "variant" | "state" | "children"> {
+interface FilterButtonProps extends Omit<
+  InteractiveStatefulProps,
+  "variant" | "state" | "children"
+> {
   /** Left icon — always visible. */
   icon: IconFunctionComponent;
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/cli/internal/embedded"
 	"github.com/onyx-dot-app/onyx/cli/internal/fsutil"
+	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/spf13/cobra"
 )
 
@@ -22,11 +23,11 @@ const (
 	skillName    = "onyx-cli"
 )
 
-func newInstallSkillCmd() *cobra.Command {
+func newInstallSkillCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
-		global    bool
-		copyMode  bool
-		agents    []string
+		global   bool
+		copyMode bool
+		agents   []string
 	)
 
 	cmd := &cobra.Command{
@@ -65,13 +66,13 @@ Use --agent to target specific agents (can be repeated).`,
 			}
 			switch status {
 			case fsutil.StatusUpToDate:
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Up to date %s\n", dest)
+				fmt.Fprintf(ios.Out, "Up to date %s\n", dest)
 			case fsutil.StatusDiffers:
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: overwriting modified %s\n", dest)
+				fmt.Fprintf(ios.ErrOut, "Warning: overwriting modified %s\n", dest)
 				if err := os.WriteFile(dest, content, 0o644); err != nil {
 					return fmt.Errorf("could not write skill file: %w", err)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)
+				fmt.Fprintf(ios.Out, "Installed %s\n", dest)
 			default: // statusMissing
 				if err := os.MkdirAll(canonicalSkillDir, 0o755); err != nil {
 					return fmt.Errorf("could not create directory: %w", err)
@@ -79,7 +80,7 @@ Use --agent to target specific agents (can be repeated).`,
 				if err := os.WriteFile(dest, content, 0o644); err != nil {
 					return fmt.Errorf("could not write skill file: %w", err)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)
+				fmt.Fprintf(ios.Out, "Installed %s\n", dest)
 			}
 
 			// Determine which agents to link.
@@ -89,11 +90,11 @@ Use --agent to target specific agents (can be repeated).`,
 				for _, a := range agents {
 					dir, ok := agentSkillDirs[a]
 					if !ok {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Unknown agent %q (skipped) — known agents:", a)
+						fmt.Fprintf(ios.ErrOut, "Unknown agent %q (skipped) — known agents:", a)
 						for name := range agentSkillDirs {
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), " %s", name)
+							fmt.Fprintf(ios.ErrOut, " %s", name)
 						}
-						_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+						fmt.Fprintln(ios.ErrOut)
 						continue
 					}
 					targets[a] = dir
@@ -115,7 +116,7 @@ Use --agent to target specific agents (can be repeated).`,
 					if err := os.WriteFile(copyDest, []byte(embedded.SkillMD), 0o644); err != nil {
 						return fmt.Errorf("could not write %s skill file: %w", name, err)
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s\n", copyDest)
+					fmt.Fprintf(ios.Out, "Copied  %s\n", copyDest)
 					continue
 				}
 
@@ -142,10 +143,10 @@ Use --agent to target specific agents (can be repeated).`,
 					if wErr := os.WriteFile(copyDest, []byte(embedded.SkillMD), 0o644); wErr != nil {
 						return fmt.Errorf("could not write %s skill file: %w", name, wErr)
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Copied  %s (symlink failed)\n", copyDest)
+					fmt.Fprintf(ios.Out, "Copied  %s (symlink failed)\n", copyDest)
 					continue
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked  %s -> %s\n", agentSkillDir, rel)
+				fmt.Fprintf(ios.Out, "Linked  %s -> %s\n", agentSkillDir, rel)
 			}
 
 			return nil
@@ -173,4 +174,3 @@ func installBase(global bool) (string, error) {
 	}
 	return cwd, nil
 }
-

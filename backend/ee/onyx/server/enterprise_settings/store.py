@@ -101,7 +101,7 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
     content: IO[Any]
 
     if isinstance(file, str):
-        logger.notice(f"Uploading logo from local path {file}")
+        logger.notice("Uploading logo from local path %s", file)
         if not os.path.isfile(file) or not is_valid_file_type(file):
             logger.error(
                 "Invalid file type- only .png, .jpg, and .jpeg files are allowed"

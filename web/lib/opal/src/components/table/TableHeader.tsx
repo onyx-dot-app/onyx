@@ -1,7 +1,8 @@
 import type { WithoutStyles } from "@opal/types";
 
-interface TableHeaderProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLTableSectionElement>> {
+interface TableHeaderProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLTableSectionElement>
+> {
   ref?: React.Ref<HTMLTableSectionElement>;
 }
 

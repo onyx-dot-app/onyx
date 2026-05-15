@@ -23,8 +23,7 @@ class PersonaManager:
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
-        llm_model_provider_override: str | None = None,
-        llm_model_version_override: str | None = None,
+        default_model_configuration_id: int | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
@@ -46,8 +45,7 @@ class PersonaManager:
             is_public=is_public,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
-            llm_model_provider_override=llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override,
+            default_model_configuration_id=default_model_configuration_id,
             users=[UUID(user) for user in (users or [])],
             groups=groups or [],
             label_ids=label_ids or [],
@@ -74,8 +72,7 @@ class PersonaManager:
             datetime_aware=datetime_aware,
             document_set_ids=document_set_ids or [],
             tool_ids=tool_ids or [],
-            llm_model_provider_override=llm_model_provider_override,
-            llm_model_version_override=llm_model_version_override,
+            default_model_configuration_id=default_model_configuration_id,
             users=users or [],
             groups=groups or [],
             label_ids=label_ids or [],
@@ -94,8 +91,7 @@ class PersonaManager:
         datetime_aware: bool = False,
         document_set_ids: list[int] | None = None,
         tool_ids: list[int] | None = None,
-        llm_model_provider_override: str | None = None,
-        llm_model_version_override: str | None = None,
+        default_model_configuration_id: int | None = None,
         users: list[str] | None = None,
         groups: list[int] | None = None,
         label_ids: list[int] | None = None,
@@ -113,11 +109,8 @@ class PersonaManager:
             is_public=persona.is_public if is_public is None else is_public,
             document_set_ids=document_set_ids or persona.document_set_ids,
             tool_ids=tool_ids or persona.tool_ids,
-            llm_model_provider_override=(
-                llm_model_provider_override or persona.llm_model_provider_override
-            ),
-            llm_model_version_override=(
-                llm_model_version_override or persona.llm_model_version_override
+            default_model_configuration_id=(
+                default_model_configuration_id or persona.default_model_configuration_id
             ),
             users=[UUID(user) for user in (users or persona.users)],
             groups=groups or persona.groups,
@@ -143,12 +136,9 @@ class PersonaManager:
             datetime_aware=datetime_aware,
             document_set_ids=[ds["id"] for ds in updated_persona_data["document_sets"]],
             tool_ids=[t["id"] for t in updated_persona_data["tools"]],
-            llm_model_provider_override=updated_persona_data[
-                "llm_model_provider_override"
-            ],
-            llm_model_version_override=updated_persona_data[
-                "llm_model_version_override"
-            ],
+            default_model_configuration_id=updated_persona_data.get(
+                "default_model_configuration_id"
+            ),
             users=[user["email"] for user in updated_persona_data["users"]],
             groups=updated_persona_data["groups"],
             label_ids=[label["id"] for label in updated_persona_data["labels"]],
@@ -214,25 +204,14 @@ class PersonaManager:
                         )
                     )
                 if (
-                    fetched_persona.llm_model_provider_override
-                    != persona.llm_model_provider_override
+                    fetched_persona.default_model_configuration_id
+                    != persona.default_model_configuration_id
                 ):
                     mismatches.append(
                         (
-                            "llm_model_provider_override",
-                            persona.llm_model_provider_override,
-                            fetched_persona.llm_model_provider_override,
-                        )
-                    )
-                if (
-                    fetched_persona.llm_model_version_override
-                    != persona.llm_model_version_override
-                ):
-                    mismatches.append(
-                        (
-                            "llm_model_version_override",
-                            persona.llm_model_version_override,
-                            fetched_persona.llm_model_version_override,
+                            "default_model_configuration_id",
+                            persona.default_model_configuration_id,
+                            fetched_persona.default_model_configuration_id,
                         )
                     )
                 if fetched_persona.system_prompt != persona.system_prompt:

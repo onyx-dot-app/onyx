@@ -19,7 +19,7 @@ import {
 } from "@/app/admin/discord-bot/types";
 import { SvgHash, SvgBubbleText, SvgLock } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 function getChannelIcon(
   channelType: DiscordChannelType,
@@ -40,7 +40,7 @@ function getChannelIcon(
 
 interface Props {
   channels: DiscordChannelConfig[];
-  personas: Persona[];
+  personas: Agent[];
   onChannelUpdate: (
     channelId: number,
     field:

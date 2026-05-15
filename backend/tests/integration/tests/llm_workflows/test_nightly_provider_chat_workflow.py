@@ -239,9 +239,9 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
 
 
 def _assert_integration_mode_enabled() -> None:
-    assert (
-        app_configs.INTEGRATION_TESTS_MODE is True
-    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+    assert app_configs.INTEGRATION_TESTS_MODE is True, (
+        "Integration tests require INTEGRATION_TESTS_MODE=true."
+    )
 
 
 def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:
@@ -308,12 +308,12 @@ def _ensure_provider_is_default(
     list_response.raise_for_status()
     default_text = list_response.json().get("default_text")
     assert default_text is not None, "Expected a default provider after setting default"
-    assert (
-        default_text.get("provider_id") == provider_id
-    ), f"Expected provider {provider_id} to be default, found {default_text.get('provider_id')}"
-    assert (
-        default_text.get("model_name") == model_name
-    ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
+    assert default_text.get("provider_id") == provider_id, (
+        f"Expected provider {provider_id} to be default, found {default_text.get('provider_id')}"
+    )
+    assert default_text.get("model_name") == model_name, (
+        f"Expected default model {model_name}, found {default_text.get('model_name')}"
+    )
 
 
 def _run_chat_assertions(

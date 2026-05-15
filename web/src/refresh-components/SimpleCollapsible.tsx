@@ -100,8 +100,9 @@ function useSimpleCollapsible() {
  * </SimpleCollapsible>
  * ```
  */
-interface SimpleCollapsibleRootProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface SimpleCollapsibleRootProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   /** Controlled open state - when provided, component becomes controlled */
   open?: boolean;
   /** Default open state for uncontrolled mode (defaults to true) */
@@ -179,8 +180,9 @@ Root.displayName = "SimpleCollapsible";
  * </SimpleCollapsible>
  * ```
  */
-interface SimpleCollapsibleHeaderProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface SimpleCollapsibleHeaderProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   /** The main heading text displayed in emphasized style */
   title: string;
   /** Optional secondary description text displayed below the title */

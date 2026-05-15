@@ -132,8 +132,9 @@ def upsert_external_groups(
             user_id = email_id_map.get(user_email.lower())
             if user_id is None:
                 logger.warning(
-                    f"User in group {external_group.id}"
-                    f" with email {user_email} not found"
+                    "User in group %s with email %s not found",
+                    external_group.id,
+                    user_email,
                 )
                 continue
 

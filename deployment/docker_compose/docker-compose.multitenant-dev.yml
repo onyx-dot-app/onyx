@@ -433,7 +433,7 @@ services:
         max-file: "6"
 
   opensearch:
-    image: opensearchproject/opensearch:3.4.0
+    image: opensearchproject/opensearch:3.6.0
     restart: unless-stopped
     # Controls whether this service runs. In order to enable it, add
     # opensearch-enabled to COMPOSE_PROFILES in the environment for this

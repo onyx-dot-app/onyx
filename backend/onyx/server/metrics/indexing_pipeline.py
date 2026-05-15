@@ -125,12 +125,14 @@ class _CachedCollector(Collector):
                 return result
             except concurrent.futures.TimeoutError:
                 logger.warning(
-                    f"{type(self).__name__}._collect_fresh() timed out after {self._collect_timeout}s, returning stale cache"
+                    "%s._collect_fresh() timed out after %ss, returning stale cache",
+                    type(self).__name__,
+                    self._collect_timeout,
                 )
                 return self._cached_result if self._cached_result is not None else []
             except Exception:
                 self._inflight = None
-                logger.exception(f"Error in {type(self).__name__}.collect()")
+                logger.exception("Error in %s.collect()", type(self).__name__)
                 # Return stale cache on error rather than nothing — avoids
                 # metrics disappearing during transient failures.
                 return self._cached_result if self._cached_result is not None else []
@@ -208,9 +210,7 @@ class QueueDepthCollector(_CachedCollector):
         inaccurate, which is the safest behavior for alerting.
         """
         try:
-            raw: bytes | str | None = redis_client.lindex(
-                queue_name, -1
-            )  # ty: ignore[invalid-assignment]
+            raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # ty: ignore[invalid-assignment]
             if raw is None:
                 return None
             msg = json.loads(raw)
