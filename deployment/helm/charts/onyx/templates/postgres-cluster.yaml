@@ -1,9 +1,9 @@
 {{- /*
-CNPG Cluster CR. Name must differ from the operator Deployment name
-(`<release>-<nameOverride>`) to avoid a ServiceAccount collision that
-prevents the initdb Job from starting. POSTGRES_HOST in configmap.yaml
-must stay in sync: `<cluster-name>-rw`. Applied as a post-install hook
-because the CNPG CRDs ship in templates/ (not crds/).
+CNPG Cluster CR. The CRDs live in crds/cnpg-crds.yaml (copied from the
+subchart) so Helm pre-installs them before templates — no hook needed.
+Name must differ from the operator Deployment (`<release>-<nameOverride>`)
+to avoid a ServiceAccount collision. POSTGRES_HOST in configmap.yaml must
+stay in sync: `<cluster-name>-rw`.
 */}}
 {{- if .Values.postgresql.enabled }}
 {{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
@@ -13,10 +13,6 @@ metadata:
   name: {{ .Release.Name }}-pg
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
-    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   instances: {{ .Values.postgresql.cluster.instances | default 1 }}
   storage:

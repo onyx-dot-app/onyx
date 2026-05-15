@@ -94,6 +94,12 @@ jobs:
           helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
+      - name: Verify CNPG CRDs are in sync
+        if: steps.list-changed.outputs.changed == 'true'
+        run: |
+          helm dependency build deployment/helm/charts/onyx
+          deployment/helm/charts/onyx/scripts/check-cnpg-crds.sh
+
       - name: Pre-pull required images
         if: steps.list-changed.outputs.changed == 'true'
         run: |
