@@ -94,19 +94,11 @@ jobs:
           helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
-      - name: Verify CNPG CRDs are in sync and install required operators
+      - name: Verify CNPG CRDs are in sync
         if: steps.list-changed.outputs.changed == 'true'
         run: |
           helm dependency build deployment/helm/charts/onyx
           deployment/helm/charts/onyx/scripts/check-cnpg-crds.sh
-
-          echo "=== Installing redis-operator CRDs ==="
-          # Pinned so an upstream release can't silently break CI. Bump
-          # deliberately after verifying compatibility with the ot-helm/redis
-          # subchart version in deployment/helm/charts/onyx/Chart.yaml.
-          helm upgrade --install redis-operator ot-container-kit/redis-operator \
-            --version 0.24.0 \
-            --namespace redis-operator --create-namespace --wait --timeout 300s
 
       - name: Pre-pull required images
         if: steps.list-changed.outputs.changed == 'true'
