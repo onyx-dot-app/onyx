@@ -72,7 +72,7 @@ def _detect_source_type(url: str) -> DocumentSource | None:
 
     if "docs.google.com" in netloc or "drive.google.com" in netloc:
         return DocumentSource.GOOGLE_DRIVE
-    if "notion.so" in netloc or "notion.site" in netloc:
+    if "notion.so" in netloc or "notion.site" in netloc or "app.notion.com" in netloc:
         return DocumentSource.NOTION
     if "atlassian.net" in netloc:
         # Check path for Jira indicators (more specific than netloc)

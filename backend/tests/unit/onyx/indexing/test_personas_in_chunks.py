@@ -159,6 +159,7 @@ def _run_adapter_build(
             context=context,
             tenant_id="test_tenant",
             chunks=[chunk],
+            db_session=MagicMock(),
         )
         return [enricher.enrich_chunk(chunk, 1.0)]
 

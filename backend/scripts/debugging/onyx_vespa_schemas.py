@@ -46,7 +46,7 @@ def write_schema(
     with open(index_filename, "w", encoding="utf-8") as f:
         f.write(schema)
 
-    logger.info(f"Wrote {index_filename}")
+    logger.info("Wrote %s", index_filename)
 
 
 def generate_document_entries() -> str:
@@ -85,7 +85,7 @@ def write_cloud_services(cloud_services_template_path: str, output_path: Path) -
     with open(services_file, "w", encoding="utf-8") as f:
         f.write(services_xml)
 
-    logger.info(f"Wrote {services_file}")
+    logger.info("Wrote %s", services_file)
 
 
 def main() -> None:
@@ -138,7 +138,7 @@ def main() -> None:
         )
         num_indexes += 2
 
-    logger.info(f"Wrote {num_indexes} indexes.")
+    logger.info("Wrote %s indexes.", num_indexes)
 
     # Generate cloud services configuration if template is provided
     if args.cloud_services_template:
@@ -146,7 +146,7 @@ def main() -> None:
             write_cloud_services(args.cloud_services_template, output_path)
         else:
             logger.error(
-                f"Cloud services template not found: {args.cloud_services_template}"
+                "Cloud services template not found: %s", args.cloud_services_template
             )
 
 

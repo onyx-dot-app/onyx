@@ -193,7 +193,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
   });
 
@@ -295,7 +299,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
 
     test("after setting name, shows confirmation then no onboarding UI", async ({

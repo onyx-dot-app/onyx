@@ -1,43 +1,14 @@
 "use client";
 
 import Text from "@/refresh-components/texts/Text";
-import {
-  WorkArea,
-  Level,
-  getPersonaInfo,
-  getPositionText,
-} from "@/app/craft/onboarding/constants";
 
 interface OnboardingInfoPagesProps {
   step: "page1" | "page2";
-  workArea: WorkArea | undefined;
-  level: Level | undefined;
 }
 
 export default function OnboardingInfoPages({
   step,
-  workArea,
-  level,
 }: OnboardingInfoPagesProps) {
-  // Get persona info from mapping (only if both are valid enum values)
-  const personaInfo =
-    workArea && level ? getPersonaInfo(workArea, level) : undefined;
-
-  // Helper function to determine article (a/an) based on first letter
-  const getArticle = (word: string | undefined): string => {
-    if (!word || word.length === 0) return "a";
-    const firstLetter = word.toLowerCase()[0];
-    if (!firstLetter) return "a";
-    const vowels = ["a", "e", "i", "o", "u"];
-    return vowels.includes(firstLetter) ? "an" : "a";
-  };
-
-  // Get position text using shared helper (only if workArea is valid enum)
-  const positionText = workArea ? getPositionText(workArea, level) : "Not set";
-
-  // Determine article based on position text
-  const article = getArticle(positionText);
-
   if (step === "page1") {
     return (
       <div className="flex-1 flex flex-col gap-6 items-center justify-center">

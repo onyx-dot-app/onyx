@@ -62,7 +62,7 @@ async def set_anonymous_user_path_api(
                 detail="The anonymous user path is already in use. Please choose a different path.",
             )
         except Exception as e:
-            logger.exception(f"Failed to modify anonymous user path: {str(e)}")
+            logger.exception("Failed to modify anonymous user path: %s", str(e))
             raise HTTPException(
                 status_code=500,
                 detail="An unexpected error occurred while modifying the anonymous user path",

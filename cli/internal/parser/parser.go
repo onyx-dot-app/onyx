@@ -82,7 +82,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 	return models.UnknownEvent{RawData: data}
 }
 
-func parsePlacement(raw interface{}) *models.Placement {
+func parsePlacement(raw any) *models.Placement {
 	m, ok := raw.(map[string]any)
 	if !ok {
 		return nil

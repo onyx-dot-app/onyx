@@ -15,6 +15,7 @@ PYTHON_TOOL_ID = "PythonTool"
 OPEN_URL_TOOL_ID = "OpenURLTool"
 FILE_READER_TOOL_ID = "FileReaderTool"
 MEMORY_TOOL_ID = "MemoryTool"
+CODING_AGENT_TOOL_ID = "CodingAgentTool"
 
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"

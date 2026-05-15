@@ -38,11 +38,11 @@ def scrape_url_content(
         context = browser.new_context()
         page = context.new_page()
 
-        logger.info(f"Navigating to URL: {url}")
+        logger.info("Navigating to URL: %s", url)
         try:
             page.goto(url, timeout=timeout_ms)
         except Exception as e:
-            logger.error(f"Failed to navigate to {url}: {str(e)}")
+            logger.error("Failed to navigate to %s: %s", url, str(e))
             return None
 
         if scroll_before_scraping:
@@ -54,7 +54,7 @@ def scrape_url_content(
                 try:
                     page.wait_for_load_state("networkidle", timeout=timeout_ms)
                 except Exception as e:
-                    logger.warning(f"Network idle wait timed out: {str(e)}")
+                    logger.warning("Network idle wait timed out: %s", str(e))
                     break
 
                 new_height = page.evaluate("document.body.scrollHeight")
@@ -83,12 +83,12 @@ def scrape_url_content(
                     else:
                         parsed_html.cleaned_text += "\n" + iframe_content
             except Exception as e:
-                logger.warning(f"Error processing iframes: {str(e)}")
+                logger.warning("Error processing iframes: %s", str(e))
 
         return parsed_html.cleaned_text
 
     except Exception as e:
-        logger.error(f"Error scraping URL {url}: {str(e)}")
+        logger.error("Error scraping URL %s: %s", url, str(e))
         return None
 
     finally:
@@ -96,12 +96,12 @@ def scrape_url_content(
             try:
                 browser.close()
             except Exception as e:
-                logger.debug(f"Error closing browser: {str(e)}")
+                logger.debug("Error closing browser: %s", str(e))
         if playwright:
             try:
                 playwright.stop()
             except Exception as e:
-                logger.debug(f"Error stopping playwright: {str(e)}")
+                logger.debug("Error stopping playwright: %s", str(e))
 
 
 def validate_url(url: str) -> None:

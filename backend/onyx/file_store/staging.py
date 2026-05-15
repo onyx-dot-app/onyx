@@ -85,11 +85,12 @@ def delete_files_best_effort(
             deleted += 1
         except Exception:
             logger.exception(
-                f"[{context}] Failed to delete file_id={file_id}; will be "
-                "retried on next sweep."
+                "[%s] Failed to delete file_id=%s; will be retried on next sweep.",
+                context,
+                file_id,
             )
     if deleted:
-        logger.info(f"[{context}] reaped {deleted} file(s)")
+        logger.info("[%s] reaped %s file(s)", context, deleted)
     return deleted
 
 

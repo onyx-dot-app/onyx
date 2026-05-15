@@ -96,14 +96,18 @@ def _execute_with_retry(request: Any) -> Any:
                         )
                     else:
                         logger.error(
-                            f"No Retry-After header or timestamp found in error message: {error}"
+                            "No Retry-After header or timestamp found in error message: %s",
+                            error,
                         )
                         sleep_time = 60
 
                 sleep_time += 3  # Add a buffer to be safe
 
                 logger.info(
-                    f"Rate limit exceeded. Attempt {attempt}/{max_attempts}. Sleeping for {sleep_time} seconds."
+                    "Rate limit exceeded. Attempt %s/%s. Sleeping for %s seconds.",
+                    attempt,
+                    max_attempts,
+                    sleep_time,
                 )
                 time.sleep(sleep_time)
 
@@ -146,7 +150,8 @@ def _execute_single_retrieval(
                 and "pageToken" in str(e)
             ):
                 logger.warning(
-                    f"Invalid page token: {request_kwargs['pageToken']}, retrying from start of request"
+                    "Invalid page token: %s, retrying from start of request",
+                    request_kwargs["pageToken"],
                 )
                 request_kwargs.pop("pageToken")
                 return _execute_single_retrieval(
@@ -154,13 +159,13 @@ def _execute_single_retrieval(
                     continue_on_404_or_403,
                     **request_kwargs,
                 )
-            logger.error(f"Error executing request: {e}")
+            logger.error("Error executing request: %s", e)
             raise e
         elif _is_rate_limit_error(e):
             results = _execute_with_retry(retrieval_function(**request_kwargs))
         elif e.resp.status == 404 or e.resp.status == 403:
             if continue_on_404_or_403:
-                logger.debug(f"Error executing request: {e}")
+                logger.debug("Error executing request: %s", e)
                 results = {}
             else:
                 raise e

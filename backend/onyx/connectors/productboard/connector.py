@@ -218,7 +218,7 @@ class ProductboardConnector(PollConnector):
             ):
                 return True
         else:
-            logger.debug(f"Unable to find updated_at for document '{document.id}'")
+            logger.debug("Unable to find updated_at for document '%s'", document.id)
 
         return False
 

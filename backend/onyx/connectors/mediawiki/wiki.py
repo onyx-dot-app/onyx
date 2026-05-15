@@ -200,7 +200,7 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         )
         for page in all_pages:
             logger.info(
-                f"MediaWikiConnector: title='{page.title()}' url={page.full_url()}"
+                "MediaWikiConnector: title='%s' url=%s", page.title(), page.full_url()
             )
             doc_batch.append(
                 get_doc_from_page(page, self.site, self.document_source_type)

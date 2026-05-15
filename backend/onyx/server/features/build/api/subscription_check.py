@@ -45,7 +45,7 @@ def is_user_subscribed(user: User, db_session: Session) -> bool:  # noqa: ARG001
             # Subscribed = NOT on trial
             return not on_trial
         except Exception as e:
-            logger.warning(f"Subscription check failed for tenant {tenant_id}: {e}")
+            logger.warning("Subscription check failed for tenant %s: %s", tenant_id, e)
             # Default to non-subscribed (safer/more restrictive)
             return False
 

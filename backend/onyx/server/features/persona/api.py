@@ -55,7 +55,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.manage.llm.api import get_valid_model_names_for_persona
+from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -531,15 +531,14 @@ def get_persona(
         is_for_edit=False,
     )
 
-    # Validate and fix default model if it's no longer valid for this persona's restrictions
-    if persona.llm_model_version_override:
-        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
-
-        # If current default model is not in the valid list, update to first valid or None
-        if persona.llm_model_version_override not in valid_models:
-            persona.llm_model_version_override = (
-                valid_models[0] if valid_models else None
-            )
+    # Validate and clear the model override if the referenced model is no longer
+    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    if persona.default_model_configuration_id:
+        valid_ids = get_valid_model_configuration_ids_for_persona(
+            persona, user, db_session
+        )
+        if persona.default_model_configuration_id not in valid_ids:
+            persona.default_model_configuration_id = None
             db_session.commit()
 
     return FullPersonaSnapshot.from_model(persona)
@@ -574,14 +573,17 @@ def get_persona_avatar(
     file_record = get_filerecord_by_file_id_optional(file_id, db_session)
     if not file_record:
         logger.warning(
-            f"Persona {persona_id} references avatar file {file_id} with no "
-            f"matching FileRecord; rejecting."
+            "Persona %s references avatar file %s with no matching FileRecord; rejecting.",
+            persona_id,
+            file_id,
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
     if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
         logger.warning(
-            f"Persona {persona_id} avatar references file {file_id} with "
-            f"unexpected origin {file_record.file_origin}; rejecting."
+            "Persona %s avatar references file %s with unexpected origin %s; rejecting.",
+            persona_id,
+            file_id,
+            file_record.file_origin,
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 

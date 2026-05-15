@@ -4,7 +4,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache playwright cache
-      uses: runs-on/cache@50350ad4242587b6c8c2baa2e740b1bc11285ff4 # ratchet:runs-on/cache@v4
+      uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
       with:
         path: ~/.cache/ms-playwright
         key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ hashFiles('backend/requirements/default.txt') }}

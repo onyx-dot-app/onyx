@@ -22,7 +22,7 @@ export function WebResultIcon({
   return (
     <>
       {hostname.includes("onyx.app") ? (
-        <SvgOnyxLogo size={size} className="dark:text-[#fff] text-[#000]" />
+        <SvgOnyxLogo size={size} className="dark:text-white text-black" />
       ) : hostname === "github.com" || hostname.endsWith(".github.com") ? (
         <SvgGithub size={size} />
       ) : !error ? (

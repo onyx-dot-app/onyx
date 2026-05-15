@@ -145,9 +145,9 @@ def assert_scim_error(result: object, expected_status: int) -> None:
 
 def parse_scim_user(result: object, *, status: int = 200) -> ScimUserResource:
     """Assert *result* is a ScimJSONResponse and parse as ScimUserResource."""
-    assert isinstance(
-        result, ScimJSONResponse
-    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert isinstance(result, ScimJSONResponse), (
+        f"Expected ScimJSONResponse, got {type(result).__name__}"
+    )
     assert result.status_code == status
     return ScimUserResource.model_validate(
         json.loads(result.body)  # ty: ignore[invalid-argument-type]
@@ -156,9 +156,9 @@ def parse_scim_user(result: object, *, status: int = 200) -> ScimUserResource:
 
 def parse_scim_group(result: object, *, status: int = 200) -> ScimGroupResource:
     """Assert *result* is a ScimJSONResponse and parse as ScimGroupResource."""
-    assert isinstance(
-        result, ScimJSONResponse
-    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert isinstance(result, ScimJSONResponse), (
+        f"Expected ScimJSONResponse, got {type(result).__name__}"
+    )
     assert result.status_code == status
     return ScimGroupResource.model_validate(
         json.loads(result.body)  # ty: ignore[invalid-argument-type]
@@ -167,9 +167,9 @@ def parse_scim_group(result: object, *, status: int = 200) -> ScimGroupResource:
 
 def parse_scim_list(result: object) -> ScimListResponse:
     """Assert *result* is a ScimJSONResponse and parse as ScimListResponse."""
-    assert isinstance(
-        result, ScimJSONResponse
-    ), f"Expected ScimJSONResponse, got {type(result).__name__}"
+    assert isinstance(result, ScimJSONResponse), (
+        f"Expected ScimJSONResponse, got {type(result).__name__}"
+    )
     assert result.status_code == 200
     return ScimListResponse.model_validate(
         json.loads(result.body)  # ty: ignore[invalid-argument-type]

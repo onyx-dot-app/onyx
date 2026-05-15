@@ -64,14 +64,12 @@ def set_is_list_for_known_tags() -> None:
     bind = op.get_bind()
     for source, key in LIST_METADATA:
         bind.execute(
-            sa.text(
-                f"""
+            sa.text(f"""
                 UPDATE tag
                 SET is_list = true
                 WHERE tag_key = '{key}'
                 AND source = '{source}'
-                """
-            )
+                """)
         )
 
 
@@ -83,8 +81,7 @@ def set_is_list_for_list_tags() -> None:
     """
     bind = op.get_bind()
     bind.execute(
-        sa.text(
-            """
+        sa.text("""
             UPDATE tag
             SET is_list = true
             FROM (
@@ -96,22 +93,19 @@ def set_is_list_for_list_tags() -> None:
             ) AS list_tags
             WHERE tag.tag_key = list_tags.tag_key
             AND tag.source = list_tags.source
-            """
-        )
+            """)
     )
 
 
 def log_list_tags() -> None:
     bind = op.get_bind()
     result = bind.execute(
-        sa.text(
-            """
+        sa.text("""
             SELECT DISTINCT source, tag_key
             FROM tag
             WHERE is_list
             ORDER BY source, tag_key
-            """
-        )
+            """)
     ).fetchall()
     logger.info(
         "List tags:\n" + "\n".join(f"  {source}: {key}" for source, key in result)
@@ -156,25 +150,21 @@ def remove_old_tags() -> None:
             # delete old document__tags
             bind = op.get_bind()
             result = bind.execute(
-                sa.text(
-                    f"""
+                sa.text(f"""
                     DELETE FROM document__tag
                     WHERE document_id = '{document_id}'
                     AND tag_id IN ({",".join(to_delete)})
-                    """
-                )
+                    """)
             )
             n_deleted += result.rowcount
-        logger.info(f"Processed {len(batch)} documents and deleted {n_deleted} tags")
+        logger.info("Processed %s documents and deleted %s tags", len(batch), n_deleted)
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
     result = op.get_bind().execute(
-        sa.text(
-            """
+        sa.text("""
         SELECT * FROM search_settings WHERE status = 'PRESENT' ORDER BY id DESC LIMIT 1
-        """
-        )
+        """)
     )
     search_settings_fetch = result.fetchall()
     search_settings = (
@@ -184,11 +174,9 @@ def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
     )
 
     result2 = op.get_bind().execute(
-        sa.text(
-            """
+        sa.text("""
         SELECT * FROM search_settings WHERE status = 'FUTURE' ORDER BY id DESC LIMIT 1
-        """
-        )
+        """)
     )
     search_settings_future_fetch = result2.fetchall()
     search_settings_future = (
@@ -225,8 +213,7 @@ def _get_batch_documents_with_multiple_tags(
 
     while True:
         batch = bind.execute(
-            sa.text(
-                f"""
+            sa.text(f"""
                 SELECT DISTINCT document__tag.document_id
                 FROM tag
                 JOIN document__tag ON tag.id = document__tag.tag_id
@@ -234,8 +221,7 @@ def _get_batch_documents_with_multiple_tags(
                 HAVING count(*) > 1 {offset_clause}
                 ORDER BY document__tag.document_id
                 LIMIT {batch_size}
-                """
-            )
+                """)
         ).fetchall()
         if not batch:
             break
@@ -276,14 +262,12 @@ def _get_vespa_metadata(
 def _get_document_tags(document_id: str) -> list[tuple[int, str, str]]:
     bind = op.get_bind()
     result = bind.execute(
-        sa.text(
-            f"""
+        sa.text(f"""
             SELECT tag.id, tag.tag_key, tag.tag_value
             FROM tag
             JOIN document__tag ON tag.id = document__tag.tag_id
             WHERE document__tag.document_id = '{document_id}'
-            """
-        )
+            """)
     ).fetchall()
     return cast(list[tuple[int, str, str]], result)
 

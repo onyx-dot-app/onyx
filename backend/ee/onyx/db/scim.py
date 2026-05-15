@@ -294,7 +294,9 @@ class ScimDAL(DAL):
                 # arg-type: fastapi-users types User.email as str, not a column expression
                 # assignment: union return type widens but query is still Select[tuple[User]]
                 query = _apply_scim_string_op(
-                    query, User.email, scim_filter  # ty: ignore[invalid-argument-type]
+                    query,
+                    User.email,  # ty: ignore[invalid-argument-type]
+                    scim_filter,
                 )
             elif attr == "active":
                 query = query.where(

@@ -84,7 +84,10 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
     run_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     logger.info(
-        f"Starting scheduled eval pipeline for project '{project_name}' with {len(dataset_names)} dataset(s): {dataset_names}"
+        "Starting scheduled eval pipeline for project '%s' with %s dataset(s): %s",
+        project_name,
+        len(dataset_names),
+        dataset_names,
     )
 
     pipeline_start = datetime.now(timezone.utc)
@@ -100,7 +103,9 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
 
         try:
             logger.info(
-                f"Running scheduled eval for dataset: {dataset_name} (project: {project_name})"
+                "Running scheduled eval for dataset: %s (project: %s)",
+                dataset_name,
+                project_name,
             )
 
             configuration = EvalConfigurationOptions(
@@ -116,10 +121,10 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
                 remote_dataset_name=dataset_name,
             )
             success = result.success
-            logger.info(f"Completed eval for {dataset_name}: success={success}")
+            logger.info("Completed eval for %s: success=%s", dataset_name, success)
 
         except Exception as e:
-            logger.exception(f"Failed to run scheduled eval for {dataset_name}")
+            logger.exception("Failed to run scheduled eval for %s", dataset_name)
             error_message = str(e)
             success = False
 
@@ -140,5 +145,8 @@ def scheduled_eval_task(self: Task, **kwargs: Any) -> None:  # noqa: ARG001
 
     passed_count = sum(1 for r in results if r["success"])
     logger.info(
-        f"Scheduled eval pipeline completed: {passed_count}/{len(results)} passed in {total_duration:.1f}s"
+        "Scheduled eval pipeline completed: %s/%s passed in %ss",
+        passed_count,
+        len(results),
+        format(total_duration, ".1f"),
     )

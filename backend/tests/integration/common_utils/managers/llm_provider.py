@@ -73,6 +73,11 @@ class LLMProviderManager:
             personas=response_data.get("personas", []),
             api_base=response_data["api_base"],
             api_version=response_data["api_version"],
+            model_configuration_ids=[
+                mc["id"]
+                for mc in response_data.get("model_configurations", [])
+                if mc.get("id") is not None
+            ],
         )
 
         if set_as_default:

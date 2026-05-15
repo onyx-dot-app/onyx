@@ -100,7 +100,7 @@ export const VerticalDisabled: Story = {
 export const HorizontalNoLabel: Story = {
   name: "Horizontal — no label (button child)",
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <Horizontal
         title="Delete This Item"
         description="This action cannot be undone."
@@ -117,7 +117,7 @@ export const HorizontalNoLabel: Story = {
 export const HorizontalWithLabel: Story = {
   name: "Horizontal — implicit label (switch)",
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <Horizontal
         withLabel
         title="Enable Notifications"
@@ -132,7 +132,7 @@ export const HorizontalWithLabel: Story = {
 export const HorizontalCentered: Story = {
   name: "Horizontal — centered",
   render: () => (
-    <div className="w-[32rem]">
+    <div className="w-128">
       <Horizontal
         withLabel
         title="Dark Mode"
@@ -192,7 +192,7 @@ export const ErrorTextStory: Story = {
 export const Comparison: Story = {
   name: "Comparison — all variants",
   render: () => (
-    <div className="flex flex-col gap-6 w-[32rem]">
+    <div className="flex flex-col gap-6 w-128">
       <div className="flex flex-col gap-1">
         <span className="text-xs font-medium">No label (button)</span>
         <Horizontal title="Delete Account" description="Permanent action.">

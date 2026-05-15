@@ -51,9 +51,9 @@ def test_password_signup_upgrade(
 
     # Verify user was removed from Basic group after downgrade
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
-    assert (
-        test_email not in basic_emails
-    ), f"{target_role.value} should not be in Basic default group"
+    assert test_email not in basic_emails, (
+        f"{target_role.value} should not be in Basic default group"
+    )
 
     # Re-register with the same email — triggers the password signup upgrade
     upgraded_user = UserManager.create(email=test_email)
@@ -69,15 +69,15 @@ def test_password_signup_upgrade(
         (u for u in paginated.items if str(u.id) == upgraded_user.id), None
     )
     assert user_snapshot is not None
-    assert (
-        user_snapshot.account_type == AccountType.STANDARD
-    ), f"Expected STANDARD, got {user_snapshot.account_type}"
+    assert user_snapshot.account_type == AccountType.STANDARD, (
+        f"Expected STANDARD, got {user_snapshot.account_type}"
+    )
 
     # Verify user is now in the Basic default group
     basic_emails = _get_default_group_member_emails(admin_user, "Basic")
-    assert (
-        test_email in basic_emails
-    ), f"Upgraded user '{test_email}' not found in Basic default group"
+    assert test_email in basic_emails, (
+        f"Upgraded user '{test_email}' not found in Basic default group"
+    )
 
 
 def test_password_signup_upgrade_propagates_permissions(
@@ -108,9 +108,9 @@ def test_password_signup_upgrade_propagates_permissions(
     assert upgraded.role == UserRole.BASIC
 
     perms = UserManager.get_permissions(upgraded)
-    assert (
-        "basic" in perms
-    ), f"Upgraded EXT_PERM_USER should have 'basic' permission, got: {perms}"
+    assert "basic" in perms, (
+        f"Upgraded EXT_PERM_USER should have 'basic' permission, got: {perms}"
+    )
 
     # --- SLACK_USER path ---
     slack_email = "slack_perms_check@example.com"
@@ -130,6 +130,6 @@ def test_password_signup_upgrade_propagates_permissions(
     assert upgraded.role == UserRole.BASIC
 
     perms = UserManager.get_permissions(upgraded)
-    assert (
-        "basic" in perms
-    ), f"Upgraded SLACK_USER should have 'basic' permission, got: {perms}"
+    assert "basic" in perms, (
+        f"Upgraded SLACK_USER should have 'basic' permission, got: {perms}"
+    )

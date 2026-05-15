@@ -59,7 +59,7 @@ def _trigger_user_file_project_sync(
         from onyx.background.task_utils import drain_project_sync_loop
 
         background_tasks.add_task(drain_project_sync_loop, tenant_id)
-        logger.info(f"Queued in-process project sync for user_file_id={user_file_id}")
+        logger.info("Queued in-process project sync for user_file_id=%s", user_file_id)
         return
 
     from onyx.background.celery.tasks.user_file_processing.tasks import (
@@ -74,9 +74,10 @@ def _trigger_user_file_project_sync(
     queue_depth = get_user_file_project_sync_queue_depth(client_app)
     if queue_depth > USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH:
         logger.warning(
-            f"Skipping immediate project sync for user_file_id={user_file_id} due to "
-            f"queue depth {queue_depth}>{USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH}. "
-            "It will be picked up by beat later."
+            "Skipping immediate project sync for user_file_id=%s due to queue depth %s>%s. It will be picked up by beat later.",
+            user_file_id,
+            queue_depth,
+            USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
         )
         return
 
@@ -90,11 +91,11 @@ def _trigger_user_file_project_sync(
     )
     if not enqueued:
         logger.info(
-            f"Skipped duplicate project sync enqueue for user_file_id={user_file_id}"
+            "Skipped duplicate project sync enqueue for user_file_id=%s", user_file_id
         )
         return
 
-    logger.info(f"Triggered project sync for user_file_id={user_file_id}")
+    logger.info("Triggered project sync for user_file_id=%s", user_file_id)
 
 
 @router.get("", tags=PUBLIC_API_TAGS)
@@ -159,7 +160,7 @@ def upload_user_files(
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
-        logger.exception(f"Error uploading files - {type(e).__name__}: {str(e)}")
+        logger.exception("Error uploading files - %s: %s", type(e).__name__, str(e))
         raise HTTPException(
             status_code=500,
             detail="Failed to upload files. Please try again or contact support if the issue persists.",
@@ -480,7 +481,7 @@ def delete_user_file(
         from onyx.background.task_utils import drain_delete_loop
 
         bg_tasks.add_task(drain_delete_loop, tenant_id)
-        logger.info(f"Queued in-process delete for user_file_id={user_file.id}")
+        logger.info("Queued in-process delete for user_file_id=%s", user_file.id)
     else:
         from onyx.background.celery.versioned_apps.client import app as client_app
 
@@ -491,7 +492,9 @@ def delete_user_file(
             priority=OnyxCeleryPriority.HIGH,
         )
         logger.info(
-            f"Triggered delete for user_file_id={user_file.id} with task_id={task.id}"
+            "Triggered delete for user_file_id=%s with task_id=%s",
+            user_file.id,
+            task.id,
         )
 
     return UserFileDeleteResult(

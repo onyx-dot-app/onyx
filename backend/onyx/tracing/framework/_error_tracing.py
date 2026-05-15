@@ -18,4 +18,4 @@ def attach_error_to_current_span(error: SpanError) -> None:
     if span:
         attach_error_to_span(span, error)
     else:
-        logger.warning(f"No span to add error {error} to")
+        logger.warning("No span to add error %s to", error)

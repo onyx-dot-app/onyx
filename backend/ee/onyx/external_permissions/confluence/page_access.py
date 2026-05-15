@@ -42,16 +42,16 @@ def _extract_read_access_restrictions(
                 read_access_user_emails.append(email)
             else:
                 logger.warning(
-                    f"Email for user {user['username']} not found in Confluence"
+                    "Email for user %s not found in Confluence", user["username"]
                 )
         else:
             if user.get("email") is not None:
-                logger.warning(f"Cant find email for user {user.get('displayName')}")
+                logger.warning("Cant find email for user %s", user.get("displayName"))
                 logger.warning(
                     "This user needs to make their email accessible in Confluence Settings"
                 )
 
-            logger.warning(f"no user email or username for {user}")
+            logger.warning("no user email or username for %s", user)
 
     # Extract the groups with read access
     read_access_group = read_access_restrictions.get("group", {})
@@ -135,8 +135,11 @@ def get_page_restrictions(
             # should be applied (the reason why we'd traverse more than one ancestor is if
             # the ancestor also is in "inherit" mode.)
             logger.debug(
-                f"Found user restrictions {ancestor_user_emails} and group restrictions {ancestor_group_names}"
-                f"for document {page_id} based on ancestor {ancestor}"
+                "Found user restrictions %s and group restrictions %sfor document %s based on ancestor %s",
+                ancestor_user_emails,
+                ancestor_group_names,
+                page_id,
+                ancestor,
             )
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,

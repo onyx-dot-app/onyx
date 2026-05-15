@@ -33,5 +33,5 @@ def get_standard_answer(
         )
         return StandardAnswerResponse(standard_answers=standard_answers)
     except Exception as e:
-        logger.error(f"Error in get_standard_answer: {str(e)}", exc_info=True)
+        logger.error("Error in get_standard_answer: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")

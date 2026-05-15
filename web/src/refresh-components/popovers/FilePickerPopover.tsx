@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/components/modals/UserFilesModal";
@@ -73,7 +73,7 @@ function FileLineItem({
             : SvgFileText
       }
       rightChildren={
-        <div className="h-[1rem] flex flex-col justify-center">
+        <div className="h-4 flex flex-col justify-center">
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <IconButton
             icon={SvgExternalLink}

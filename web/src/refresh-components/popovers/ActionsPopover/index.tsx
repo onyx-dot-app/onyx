@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
@@ -8,11 +9,11 @@ import {
   WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/tools/interfaces";
 import { computeInitialForcedToolIds } from "@/lib/hooks/computeInitialForcedToolIds";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { getSourceMetadata } from "@/lib/sources";
@@ -30,7 +31,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
@@ -68,6 +69,8 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
   [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
   [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
   [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
+  [CODING_AGENT_TOOL_ID]:
+    "Investigate a GitHub repository and answer questions about its code.",
 };
 
 const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
@@ -149,7 +152,7 @@ type SecondaryViewState =
   | { type: "mcp"; serverId: number };
 
 export interface ActionsPopoverProps {
-  selectedAgent: MinimalPersonaSnapshot;
+  selectedAgent: MinimalAgent;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
   disabled?: boolean;

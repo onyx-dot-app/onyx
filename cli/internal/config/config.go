@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
 	EnvServerURL      = "ONYX_SERVER_URL"
-	EnvAPIKey         = "ONYX_API_KEY"
+	EnvAPIKey         = "ONYX_PAT"
 	EnvAgentID        = "ONYX_PERSONA_ID"
 	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
 	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
@@ -50,9 +51,23 @@ func (f Features) StreamMarkdownEnabled() bool {
 	return true
 }
 
-// IsConfigured returns true if the config has an API key.
+// IsConfigured returns true if the config has a personal access token (PAT).
 func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
+}
+
+// APIURL appends the API prefix (default "/api") to the server origin.
+// Set ONYX_API_PREFIX="" for direct backend access without the proxy prefix.
+func APIURL(serverURL string) string {
+	prefix := "/api"
+	if v, ok := os.LookupEnv("ONYX_API_PREFIX"); ok {
+		prefix = v
+	}
+	u := strings.TrimRight(serverURL, "/")
+	if prefix == "" {
+		return u
+	}
+	return u + "/" + strings.Trim(prefix, "/")
 }
 
 // ConfigDir returns ~/.config/onyx-cli

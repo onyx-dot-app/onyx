@@ -21,7 +21,7 @@ def main(key: str, program: str, conf: str) -> None:
     consecutive number of times and the last successful lookup is more
     than a threshold time, the specified program will be restarted.
     """
-    logger.info(f"supervisord_watchdog starting: program={program} conf={conf}")
+    logger.info("supervisord_watchdog starting: program=%s conf=%s", program, conf)
 
     r = get_redis_client()
 
@@ -39,13 +39,13 @@ def main(key: str, program: str, conf: str) -> None:
                 heartbeat = r.exists(key)
             except Exception:
                 logger.exception(
-                    f"Exception checking for celery beat heartbeat: key={key}."
+                    "Exception checking for celery beat heartbeat: key=%s.", key
                 )
                 continue
 
             # happy path ... just continue
             if heartbeat:
-                logger.debug(f"Key lookup succeeded: key={key}")
+                logger.debug("Key lookup succeeded: key=%s", key)
                 last_heartbeat = time.monotonic()
                 num_lookup_failures = 0
                 continue
@@ -54,9 +54,10 @@ def main(key: str, program: str, conf: str) -> None:
             num_lookup_failures += 1
             if num_lookup_failures <= MAX_LOOKUP_FAILURES:
                 logger.warning(
-                    f"Key lookup failed: key={key} "
-                    f"lookup_failures={num_lookup_failures} "
-                    f"max_lookup_failures={MAX_LOOKUP_FAILURES}"
+                    "Key lookup failed: key=%s lookup_failures=%s max_lookup_failures=%s",
+                    key,
+                    num_lookup_failures,
+                    MAX_LOOKUP_FAILURES,
                 )
                 continue
 
@@ -64,22 +65,24 @@ def main(key: str, program: str, conf: str) -> None:
             elapsed = now - last_heartbeat
             if elapsed <= MAX_AGE_SECONDS:
                 logger.warning(
-                    f"Key lookup failed: key={key} "
-                    f"lookup_failures={num_lookup_failures} "
-                    f"max_lookup_failures={MAX_LOOKUP_FAILURES} "
-                    f"elapsed={elapsed:.2f} "
-                    f"elapsed_threshold={MAX_AGE_SECONDS}"
+                    "Key lookup failed: key=%s lookup_failures=%s max_lookup_failures=%s elapsed=%s elapsed_threshold=%s",
+                    key,
+                    num_lookup_failures,
+                    MAX_LOOKUP_FAILURES,
+                    format(elapsed, ".2f"),
+                    MAX_AGE_SECONDS,
                 )
                 continue
 
             # all conditions have been exceeded ... restart the process
             logger.warning(
-                f"Key lookup failure thresholds exceeded - restarting {program}: "
-                f"key={key} "
-                f"lookup_failures={num_lookup_failures} "
-                f"max_lookup_failures={MAX_LOOKUP_FAILURES} "
-                f"elapsed={elapsed:.2f} "
-                f"elapsed_threshold={MAX_AGE_SECONDS}"
+                "Key lookup failure thresholds exceeded - restarting %s: key=%s lookup_failures=%s max_lookup_failures=%s elapsed=%s elapsed_threshold=%s",
+                program,
+                key,
+                num_lookup_failures,
+                MAX_LOOKUP_FAILURES,
+                format(elapsed, ".2f"),
+                MAX_AGE_SECONDS,
             )
 
             subprocess.call(["supervisorctl", "-c", conf, "restart", program])

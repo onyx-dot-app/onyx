@@ -109,7 +109,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       {memoryText ? (
         <div className={cn("w-full flex")}>
           <div className="flex-1 min-w-0">
-            <Text as="p" text02 className="text-sm break-words">
+            <Text as="p" text02 className="text-sm wrap-break-word">
               {memoryText}
             </Text>
           </div>

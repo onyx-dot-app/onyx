@@ -147,8 +147,7 @@ def test_private_persona_avatar_is_denied_to_other_users(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
     response = requests.get(
-        f"{API_SERVER_URL}/persona/"
-        f"{persona_avatar_setup.private_persona_id}/avatar",
+        f"{API_SERVER_URL}/persona/{persona_avatar_setup.private_persona_id}/avatar",
         headers=persona_avatar_setup.other_user.headers,
     )
     assert response.status_code == 404, (
@@ -162,8 +161,7 @@ def test_persona_avatar_returns_404_when_no_avatar_configured(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
     response = requests.get(
-        f"{API_SERVER_URL}/persona/"
-        f"{persona_avatar_setup.no_avatar_persona_id}/avatar",
+        f"{API_SERVER_URL}/persona/{persona_avatar_setup.no_avatar_persona_id}/avatar",
         headers=persona_avatar_setup.owner.headers,
     )
     assert response.status_code == 404, response.text

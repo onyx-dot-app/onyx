@@ -6,8 +6,10 @@ import InputSelect, {
 } from "@/refresh-components/inputs/InputSelect";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
-export interface InputSelectFieldProps
-  extends Omit<InputSelectRootProps, "value"> {
+export interface InputSelectFieldProps extends Omit<
+  InputSelectRootProps,
+  "value"
+> {
   name: string;
 }
 

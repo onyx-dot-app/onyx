@@ -27,10 +27,10 @@ class OnyxStaticFileManager:
                 if matches:
                     mime_type = cast(str, matches[0].mime_type)
         except (OSError, FileNotFoundError, PermissionError) as e:
-            logger.error(f"Failed to read file {filename}: {e}")
+            logger.error("Failed to read file %s: %s", filename, e)
             return None
         except Exception as e:
-            logger.error(f"Unexpected exception reading file {filename}: {e}")
+            logger.error("Unexpected exception reading file %s: %s", filename, e)
             return None
 
         return FileWithMimeType(data=file_content, mime_type=mime_type)

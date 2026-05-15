@@ -18,6 +18,7 @@ Dependencies:
     backend/shared_configs/configs.py
     backend/onyx/document_index/opensearch/client.py
 """
+
 import argparse
 import json
 import os
