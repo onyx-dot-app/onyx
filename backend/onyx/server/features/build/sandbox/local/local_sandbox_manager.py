@@ -8,6 +8,7 @@ All database operations should be handled by the caller (SessionManager, Celery 
 """
 
 import mimetypes
+import os
 import re
 import shutil
 import subprocess
@@ -33,6 +34,8 @@ from onyx.server.features.build.sandbox.manager.directory_manager import (
     DirectoryManager,
 )
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
@@ -1169,6 +1172,58 @@ class LocalSandboxManager(SandboxManager):
 
         return file_count, total_size
 
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: str,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Write files atomically via temp dir + symlink swap."""
+        sandbox_path = self._get_sandbox_path(sandbox_id)
+        if not sandbox_path.exists():
+            raise FatalWriteError(f"Sandbox directory does not exist: {sandbox_path}")
+
+        relative_mount = mount_path.lstrip("/")
+        if relative_mount.startswith("workspace/"):
+            relative_mount = relative_mount[len("workspace/") :]
+
+        target = sandbox_path / relative_mount
+        if not target.resolve().is_relative_to(sandbox_path.resolve()):
+            raise FatalWriteError(f"mount_path escapes sandbox: {mount_path}")
+
+        versions_dir = target.parent / ".versions"
+        version_name = f"{os.getpid()}-{os.urandom(4).hex()}"
+        version_dir = versions_dir / version_name
+
+        try:
+            version_dir.mkdir(parents=True)
+
+            for name, data in files.items():
+                file_path = version_dir / name
+                if not file_path.resolve().is_relative_to(version_dir.resolve()):
+                    raise FatalWriteError(f"File name escapes version dir: {name}")
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_bytes(data)
+
+            if target.exists() and not target.is_symlink():
+                shutil.rmtree(target)
+
+            tmp_link = target.parent / f"{target.name}.tmp.{os.urandom(4).hex()}"
+            tmp_link.symlink_to(version_dir)
+            os.rename(str(tmp_link), str(target))
+
+            for old in versions_dir.iterdir():
+                if old != version_dir and old.is_dir():
+                    shutil.rmtree(old, ignore_errors=True)
+
+        except FatalWriteError:
+            shutil.rmtree(version_dir, ignore_errors=True)
+            raise
+        except OSError as e:
+            shutil.rmtree(version_dir, ignore_errors=True)
+            raise FatalWriteError(f"Failed to write files: {e}") from e
+
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:  # noqa: ARG002
         """Get the webapp URL for a session's Next.js server.
 
@@ -1224,8 +1279,6 @@ class LocalSandboxManager(SandboxManager):
 
         # Convert PPTX -> PDF using soffice
         try:
-            import os
-
             env = os.environ.copy()
             env["SAL_USE_VCLPLUGIN"] = "svp"
             subprocess.run(

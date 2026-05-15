@@ -7,13 +7,15 @@ Shared primitive for writing files from api_server into running sandbox pods. Co
 One callable for any feature to land files in running sandboxes — exposed as a method on the existing `SandboxManager`:
 
 ```python
-get_sandbox_manager().push_to_users(
+sandbox_ids = get_active_sandbox_ids_for_users(affected_user_ids, db_session)
+sandbox_files = {sid: build_skills_files_for_user(user, db_session) for sid, user in ...}
+get_sandbox_manager().push_to_sandboxes(
     mount_path="/workspace/managed/skills",
-    user_files={user_id: {"pptx/SKILL.md": b"...", ...}, ...},
+    sandbox_files=sandbox_files,
 )
 ```
 
-The feature owns *what* and *when*. `SandboxManager` handles tenant resolution (via `CURRENT_TENANT_ID_CONTEXTVAR`), target lookup, parallel fan-out, atomic swap, retry, and (on k8s) auth.
+The feature owns *what*, *when*, and *which sandboxes*. The caller queries the DB for affected users' sandbox_ids, builds the sandbox_id-to-files mapping, and calls `push_to_sandboxes`. `SandboxManager` handles parallel fan-out, atomic swap, retry, and (on k8s) auth.
 
 ## 2. Non-goals
 
@@ -32,12 +34,10 @@ The feature owns *what* and *when*. `SandboxManager` handles tenant resolution (
         │  feature mutation handler         │
         │       │                           │
         │       ▼                           │
-        │  SandboxManager.push_to_users     │
-        │   1. find_sandboxes_for_users     │
-        │      (backend-specific lookup)    │
-        │   2. ThreadPoolExecutor:          │
-        │      parallel write_files_to_     │
-        │      sandbox per target           │
+        │  SandboxManager.push_to_sandboxes  │
+        │   1. ThreadPoolExecutor:          │
+        │      parallel push_to_sandbox     │
+        │      per sandbox_id               │
         └───────┬──────────┬──────────┬─────┘
                 │          │          │
                 ▼          ▼          ▼
@@ -54,21 +54,16 @@ The feature owns *what* and *when*. `SandboxManager` handles tenant resolution (
 
 Three pieces:
 
-1. **`SandboxManager` push API** — `push_to_users` and `push_to_sandbox` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own target resolution, parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s, local, or future docker-compose.
-2. **Two new abstract methods on `SandboxManager`** — `find_sandboxes_for_users(tenant_id, user_ids)` and `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement these. Kubernetes does tar.gz + HTTP to the in-pod daemon; local writes to the sandbox directory directly via `shutil`.
+1. **`SandboxManager` push API** — `push_to_sandbox` and `push_to_sandboxes` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s, local, or future docker-compose. Callers own user-to-sandbox resolution (DB queries) and pass sandbox_id-keyed mappings.
+2. **One new abstract method on `SandboxManager`** — `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement this. Kubernetes does tar.gz + HTTP to the in-pod daemon; local writes to the sandbox directory directly via `shutil`.
 3. **In-pod push daemon (k8s only)** — small FastAPI/uvicorn process running alongside opencode in each sandbox pod's main container. One endpoint: `POST /push`. Not present in local or docker-compose backends.
 
 ## 3.1 Backends
 
-The push API lives on `SandboxManager` (`backend/onyx/server/features/build/sandbox/base.py`), selected at runtime via `SANDBOX_BACKEND`. Two methods are concrete on the base class (`push_to_users`, `push_to_sandbox`) and shared across all backends. Two new abstract methods carry the per-backend work:
+The push API lives on `SandboxManager` (`backend/onyx/server/features/build/sandbox/base.py`), selected at runtime via `SANDBOX_BACKEND`. Two methods are concrete on the base class (`push_to_sandbox`, `push_to_sandboxes`) and shared across all backends. One new abstract method carries the per-backend work:
 
 ```python
 class SandboxManager(ABC):
-    @abstractmethod
-    def find_sandboxes_for_users(
-        self, tenant_id: str, user_ids: list[UUID],
-    ) -> list[SandboxTarget]: ...        # (user_id, sandbox_id) pairs for active sandboxes
-
     @abstractmethod
     def write_files_to_sandbox(
         self, *, sandbox_id: str, mount_path: str, files: dict[str, bytes],
@@ -97,18 +92,13 @@ Section applicability:
 
 ## 4. Push API on `SandboxManager`
 
-The push API is **synchronous**, matching Onyx's codebase conventions (sync FastAPI routes, sync `httpx.Client` via `HttpxPool`, sync `kubernetes` Python SDK). Per-target parallelism uses `concurrent.futures.ThreadPoolExecutor`. The two `push_*` methods are **concrete on the ABC** — the same default implementation runs for every backend. Subclasses implement only the two new abstract primitives (`find_sandboxes_for_users`, `write_files_to_sandbox`).
+The push API is **synchronous**, matching Onyx's codebase conventions (sync FastAPI routes, sync `httpx.Client` via `HttpxPool`, sync `kubernetes` Python SDK). Per-target parallelism uses `concurrent.futures.ThreadPoolExecutor`. The two concrete `push_*` methods are **on the ABC** — the same default implementation runs for every backend. Subclasses implement only the abstract primitive `write_files_to_sandbox`.
 
 ```python
-# backend/onyx/sandbox_files/models.py
-
-class SandboxTarget(BaseModel):
-    sandbox_id: str
-    user_id: UUID | None         # None when targeting by sandbox_id directly
+# backend/onyx/server/features/build/sandbox/models.py
 
 class PushFailure(BaseModel):
     sandbox_id: str
-    user_id: UUID | None         # None when push_to_sandbox is used
     reason: str                  # "timeout" | "write_error" | "not_found"
     detail: str | None = None
 
@@ -129,19 +119,6 @@ class FatalWriteError(Exception):
 
 class SandboxManager(ABC):
     # ---- Concrete defaults; shared across backends ----
-    def push_to_users(
-        self, *,
-        mount_path: str,
-        user_files: dict[UUID, dict[str, bytes]],
-        timeout_s: float = 30.0,
-    ) -> PushResult:
-        """Resolve tenant from CURRENT_TENANT_ID_CONTEXTVAR, look up targets,
-        fan out parallel writes, retry transient errors, aggregate result.
-
-        Raises if the contextvar is unset — the push API never targets
-        sandboxes with an inferred-empty tenant.
-        """
-
     def push_to_sandbox(
         self, *,
         sandbox_id: str,
@@ -149,15 +126,19 @@ class SandboxManager(ABC):
         files: dict[str, bytes],
         timeout_s: float = 30.0,
     ) -> PushResult:
-        """Single-target wrapper around the same retry loop. `sandbox_id`
-        already identifies a single tenant's pod."""
+        """Single-target push with retry. Wraps write_files_to_sandbox
+        with exponential backoff for RetriableWriteError."""
 
-    # ---- Backend-specific; one new abstract method per concern ----
-    @abstractmethod
-    def find_sandboxes_for_users(
-        self, tenant_id: str, user_ids: list[UUID],
-    ) -> list[SandboxTarget]: ...
+    def push_to_sandboxes(
+        self, *,
+        mount_path: str,
+        sandbox_files: dict[str, dict[str, bytes]],
+        timeout_s: float = 30.0,
+    ) -> PushResult:
+        """Parallel fan-out over push_to_sandbox. Takes a sandbox_id → files
+        mapping. Caller owns user → sandbox resolution (DB queries)."""
 
+    # ---- Backend-specific; one abstract method ----
     @abstractmethod
     def write_files_to_sandbox(
         self, *, sandbox_id: str, mount_path: str, files: dict[str, bytes],
@@ -169,11 +150,9 @@ class SandboxManager(ABC):
 Semantics:
 
 - **`SandboxManager` owns parallelism and retry.** Callers never loop over targets.
-- **Tenant**: `push_to_users` reads `CURRENT_TENANT_ID_CONTEXTVAR` (from `backend/shared_configs/contextvars.py`), which the request middleware and Celery task middleware already set. Callers don't pass tenant. It raises if the contextvar is unset rather than guessing.
-- `push_to_users` calls `find_sandboxes_for_users(tenant_id, user_ids)` once, then `ThreadPoolExecutor`-maps `write_files_to_sandbox` across the resolved targets, each getting *that user's* files. One entry in `user_files` = single user update; many entries = org-wide fan-out.
-  - Users without an active sandbox are silently skipped — not an error.
-  - Users with multiple active sandboxes get a write to each.
-- `push_to_sandbox` skips the `find_sandboxes_for_users` step and writes directly. Used for session-scoped content (e.g. AGENTS.md).
+- **Caller owns sandbox resolution.** The caller (skills API, session setup, etc.) queries the DB for affected users' sandbox_ids, builds the `sandbox_id → files` mapping, and passes it to `push_to_sandboxes`. `SandboxManager` never needs to know about users or tenants for push purposes.
+- `push_to_sandboxes` `ThreadPoolExecutor`-maps `push_to_sandbox` across the entries in `sandbox_files`. Each sandbox_id gets its own file set. One entry = single sandbox update; many entries = fan-out.
+- `push_to_sandbox` wraps `write_files_to_sandbox` with retry. Used directly for session-scoped content (e.g. AGENTS.md) or called internally by `push_to_sandboxes`.
 - Files at `mount_path` are **replaced as a unit**. Anything not in the `files` dict disappears at that path on the target.
 - Targets that raise `RetriableWriteError` are retried in-process with exponential backoff up to ~30 s, then recorded in `failures` and logged. `FatalWriteError` skips retry. **No background task system in v1** — every push is a full snapshot of `mount_path`, so the next mutation (or cold-start/wakeup hydration) re-converges any target that missed one.
 - v1 caps total bundle size at 100 MiB summed across all entries. All foreseeable v1 consumers (skills bundles, user_library uploads in the low-MB range, AGENTS.md / opencode.json) fit comfortably under this cap.
@@ -251,7 +230,7 @@ trap 'kill 0 2>/dev/null; exit' SIGTERM SIGINT
 
 start_daemon() {
   while true; do
-    /workspace/.venv/bin/python -m onyx.sandbox_files.daemon.server
+    /workspace/.venv/bin/python -m push_daemon.server
     sleep 1
   done
 }
@@ -345,7 +324,7 @@ Rotation: update the Secret and roll api_server + sandbox pods. v1 does not hot-
 
 ### 9.3 Safe extract (load-bearing security boundary)
 
-`safe_extract_then_atomic_swap` is the only thing standing between a credentialed attacker (or a buggy feature) and arbitrary filesystem writes inside the pod. Lives in `backend/onyx/sandbox_files/daemon/extract.py` and must reject:
+`safe_extract_then_atomic_swap` is the only thing standing between a credentialed attacker (or a buggy feature) and arbitrary filesystem writes inside the pod. Lives in `backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon/extract.py` and must reject:
 
 - **Path traversal**: any entry whose normalized path escapes the bundle root, including `..` components and absolute paths.
 - **Symlinks and hard links**: bundles ship regular files only (reject `TarInfo.issym() or TarInfo.islnk()`).
@@ -354,7 +333,7 @@ Rotation: update the Secret and roll api_server + sandbox pods. v1 does not hot-
 - **Per-entry size > `MAX_FILE_BYTES` (25 MiB)** and **total uncompressed size > `MAX_BUNDLE_BYTES` (100 MiB)**.
 - **Non-UTF-8 path names** (defensive; avoids surprises with shell tooling that reads the dir).
 
-`backend/onyx/skills/bundle.py` is currently an empty stub (no shared helper to reuse). The safe-extract logic ships fresh in `sandbox_files/daemon/extract.py`; if validation needs surface elsewhere later, factor out then.
+`backend/onyx/skills/bundle.py` is currently an empty stub (no shared helper to reuse). The safe-extract logic ships fresh in `kubernetes/docker/daemon/extract.py`; if validation needs surface elsewhere later, factor out then.
 
 ### 9.4 Why not per-pod JWTs in v1
 
@@ -362,33 +341,35 @@ The specific threat per-pod JWTs defend against is lateral movement — a compro
 
 ## 10. Multi-tenancy
 
-1. `push_to_users` resolves `tenant_id` from `CURRENT_TENANT_ID_CONTEXTVAR` (`backend/shared_configs/contextvars.py`), which is already set by the request middleware for HTTP handlers and by the Celery task middleware for background tasks. Callers never pass tenant. If the contextvar is unset, the call raises rather than targeting an empty/wrong tenant — when a future caller needs to push from outside a tenant context, the kwarg can be added then.
-2. `find_sandboxes_for_users` filters by the resolved `tenant_id` (k8s: label selector; local: in-memory or DB filter). The push API cannot target sandboxes outside that tenant.
-3. **Trust boundary**: the k8s daemon trusts any api_server-authenticated caller's tenant resolution. Cross-tenant misrouting is prevented by the contextvar middleware and code review of `find_sandboxes_for_users` and the calling features, not by daemon-side validation.
+1. **Tenant isolation is the caller's responsibility.** The push API (`push_to_sandbox`, `push_to_sandboxes`) accepts sandbox_ids directly and has no concept of tenants. Callers query tenant-scoped DB tables (which the existing schema/middleware ensure are tenant-isolated) to resolve sandbox_ids, then pass them to the push API. The push API cannot accidentally target sandboxes outside the caller's tenant because the DB queries never return them.
+2. **Trust boundary**: the k8s daemon trusts any api_server-authenticated caller. Cross-tenant misrouting is prevented by the caller's tenant-scoped DB queries and code review of the calling features, not by daemon-side validation or push-API-level tenant checks.
 
 ## 11. Feature integration
 
 ### Skills
 
-Single-user grant change (`push_to_users` with a one-entry dict). Called from an admin route, so `tenant_id` is read from the contextvar:
+Single-user grant change. The caller queries for sandbox_ids, builds the mapping, and calls `push_to_sandboxes`:
 
 ```python
-get_sandbox_manager().push_to_users(
+sandbox_ids = get_active_sandbox_ids_for_users([user.id], db_session)
+sandbox_files = {sid: build_skills_files_for_user(user, db_session) for sid in sandbox_ids}
+get_sandbox_manager().push_to_sandboxes(
     mount_path="/workspace/managed/skills",
-    user_files={user.id: build_skills_files_for_user(user, db_session)},
+    sandbox_files=sandbox_files,
 )
 ```
 
 Org-wide change (`is_public=True` upload, public-skill edit, builtin availability flip):
 
 ```python
-user_files = {
-    user.id: build_skills_files_for_user(user, db_session)
-    for user in users_in_tenant_with_active_sandbox(db_session)
+user_sandbox_map = get_active_sandboxes_for_tenant_users(db_session)
+sandbox_files = {
+    sid: build_skills_files_for_user(user, db_session)
+    for sid, user in user_sandbox_map.items()
 }
-get_sandbox_manager().push_to_users(
+get_sandbox_manager().push_to_sandboxes(
     mount_path="/workspace/managed/skills",
-    user_files=user_files,
+    sandbox_files=sandbox_files,
 )
 ```
 
@@ -403,32 +384,25 @@ get_sandbox_manager().push_to_users(
 
 ### New code
 
-```
-backend/onyx/sandbox_files/
-├── __init__.py
-├── models.py           # PushResult, PushFailure, SandboxTarget,
-│                       #   RetriableWriteError, FatalWriteError
-├── tarball.py          # build_targz_from_dict(files) -> bytes + sha256  (used by k8s manager)
-├── auth.py             # ONYX_SANDBOX_PUSH_SECRET helpers  (used by k8s manager + daemon)
-└── daemon/             # in-pod daemon — k8s sandbox image only
-    ├── __init__.py
-    ├── server.py       # FastAPI app on :8731
-    ├── extract.py      # safe_extract_then_atomic_swap + reject-list checks
-    └── auth.py         # hmac.compare_digest verification
-```
-
-No `pusher.py` module — `push_to_users` and `push_to_sandbox` are concrete methods on `SandboxManager`'s base class (§4). The `sandbox_files/` package holds shared types and k8s-specific helpers; it does not export a top-level pusher.
-
-Per-backend `write_files_to_sandbox` and `find_sandboxes_for_users` implementations live with their managers, not under `sandbox_files/`:
+Co-located with the sandbox feature under `backend/onyx/server/features/build/sandbox/`:
 
 ```
 backend/onyx/server/features/build/sandbox/
-├── base.py                              # MODIFY: add the two abstract methods
-├── kubernetes/kubernetes_sandbox_manager.py  # MODIFY: implement write+find with tarball+HTTP
-└── local/local_sandbox_manager.py            # MODIFY: implement write+find with shutil
+├── models.py           # PushResult, PushFailure, FileSet,
+│                       #   RetriableWriteError, FatalWriteError
+│                       #   (merged with existing SandboxInfo, LLMProviderConfig, etc.)
+├── base.py             # push_to_sandbox + push_to_sandboxes (concrete) + 1 abstract method
+├── kubernetes/
+│   ├── kubernetes_sandbox_manager.py  # write+find via tarball+HTTP;
+│   │                                  #   _build_targz, _build_push_auth_header (private)
+│   └── docker/
+│       └── daemon/     # in-pod push daemon — self-contained, no onyx.* imports,
+│           ├── server.py   # FastAPI app on :8731  (invoked as `python -m push_daemon.server`)
+│           └── extract.py  # safe_extract_then_atomic_swap + reject-list checks
+└── local/local_sandbox_manager.py     # write+find via shutil
 ```
 
-The k8s implementation imports `sandbox_files.tarball` + `sandbox_files.auth` to talk to the in-pod daemon. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
+No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `kubernetes/docker/daemon/` with no `onyx.*` imports; it is copied to `/workspace/push_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
 
 ### Per-feature push helpers
 
@@ -451,22 +425,21 @@ backend/onyx/server/features/build/sandbox/kubernetes/docker/
 
 Dockerfile changes:
 - Add `fastapi` and `uvicorn[standard]` to `initial-requirements.txt`.
-- Copy daemon code into the image (or pip-install the `onyx.sandbox_files.daemon` package from the same wheel as the api_server).
+- Copy the `daemon/` directory into the image at `/workspace/push_daemon/` (self-contained; no `onyx.*` imports needed).
 - `mkdir /workspace/managed` at build time, chowned to the sandbox user.
 - Replace `CMD ["sleep", "infinity"]` with `ENTRYPOINT ["/workspace/entrypoint.sh"]`.
 
 ### Sandbox managers
 
-**`base.py`** — add two abstract methods:
-- `find_sandboxes_for_users(tenant_id, user_ids) -> list[SandboxTarget]`
+**`base.py`** — add one abstract method:
 - `write_files_to_sandbox(*, sandbox_id, mount_path, files) -> None`
 
 **`kubernetes_sandbox_manager.py`**:
-- Implement the two methods using `CoreV1Api` + tar.gz + HTTP to the in-pod daemon.
+- Implement `write_files_to_sandbox` using `CoreV1Api` + tar.gz + HTTP to the in-pod daemon.
 - Modifications in `_create_sandbox_pod`: add labels (§6), add `ONYX_SANDBOX_PUSH_SECRET` env var via `V1EnvVarSource.secret_key_ref`, expose container port 8731.
 
 **`local_sandbox_manager.py`**:
-- Implement the two methods using `shutil` writes and `os.rename` for atomic swap. `find_sandboxes_for_users` queries whatever local state tracks active sandboxes (DB or in-memory registry — match what `provision`/`terminate` already use).
+- Implement `write_files_to_sandbox` using `shutil` writes and `os.rename` for atomic swap.
 
 **Both managers** — modifications in `setup_session_workspace`:
 - Call each feature's `push_to_pod(...)` instead of writing AGENTS.md / opencode.json / skills via the existing bash heredoc (k8s) or direct file writes (local).
@@ -502,42 +475,38 @@ auth:
 ### Tests
 
 ```
-backend/tests/unit/sandbox_files/
-├── test_safe_extract.py        # path traversal, symlinks, special files, size caps
-├── test_auth.py                # hmac.compare_digest, missing/empty/wrong header
-└── test_tarball.py             # build → extract round-trips, deterministic sha
 backend/tests/unit/sandbox/
-└── test_push_orchestration.py  # SandboxManager.push_to_users default impl:
+├── test_safe_extract.py        # path traversal, symlinks, special files, size caps
+├── test_tarball.py             # build → extract round-trips, deterministic sha
+└── test_push_orchestration.py  # SandboxManager.push_to_sandboxes default impl:
                                 #   fan-out, retry on RetriableWriteError,
                                 #   FatalWriteError short-circuits, result aggregation
                                 #   (uses a stub SandboxManager subclass — no real backend)
 backend/tests/external_dependency_unit/sandbox/
-└── test_kubernetes_push.py     # KubernetesSandboxManager.find_sandboxes_for_users +
-                                #   write_files_to_sandbox against a fake k8s client
-backend/tests/integration/tests/sandbox_files/
+└── test_kubernetes_push.py     # KubernetesSandboxManager.write_files_to_sandbox
+                                #   against a fake k8s client
+backend/tests/integration/tests/sandbox/
 └── test_push_e2e.py            # real sandbox via real SandboxManager; push, verify
 ```
 
 ## 13. Tests
 
-### Unit (`backend/tests/unit/sandbox_files/`)
+### Unit (`backend/tests/unit/sandbox/`)
 - Safe-extract rejects path traversal, symlinks, hard links, special files, oversized entries, writes outside `/workspace/managed/`.
 - Atomic swap survives a write that fails midway (old symlink intact, new versioned dir orphaned).
-- Shared-secret check uses `hmac.compare_digest` and rejects missing / empty / wrong values.
 - Tarball builder produces deterministic byte output given the same input (for cache-friendliness in §14).
 
 ### Orchestration unit (`backend/tests/unit/sandbox/test_push_orchestration.py`)
-- `push_to_users` fans out across multiple targets, aggregates result correctly.
+- `push_to_sandboxes` fans out across multiple targets, aggregates result correctly.
 - `RetriableWriteError` triggers retry; `FatalWriteError` does not.
 - Timeout budget exhaustion records a `timeout` failure.
 - Users without active sandboxes are skipped silently.
 
 ### External-dependency unit (`backend/tests/external_dependency_unit/sandbox/`)
-- `KubernetesSandboxManager.find_sandboxes_for_users` returns the expected pods for a given selector (fakes for the k8s client).
 - `KubernetesSandboxManager.write_files_to_sandbox` produces a well-formed tar.gz with the right sha256 header.
 - `LocalSandboxManager.write_files_to_sandbox` writes to the expected path and performs the atomic swap.
 
-### Integration (`backend/tests/integration/tests/sandbox_files/`)
+### Integration (`backend/tests/integration/tests/sandbox/`)
 - Bring up a real sandbox, `push_to_sandbox` a small file set, verify files at the expected path inside the sandbox.
 - Replace files at the same `mount_path`; confirm old files are gone (replace-as-unit semantics).
 - Two parallel pushes to the same sandbox at different `mount_path`s — both succeed.
@@ -551,7 +520,7 @@ Each can slot in behind the same caller-facing API without breaking changes.
 - **Manual refresh endpoint**: `POST /api/admin/sandbox/{sandbox_id}/refresh-files` reuses the per-feature `push_to_pod` helpers to force re-hydration of a stuck sandbox. Operational safety valve for "this sandbox is behind, kick it." Cheap to add — same code path as cold-start/wakeup, just triggered on demand.
 - **`If-Modified-Since` short-circuit**: per-pod last-pushed timestamp per `(pod, mount_path)`; skip unchanged pushes.
 - **Celery decoupling + background retry**: if admin upload latency or the snapshot-self-heal property becomes insufficient, move per-pod fan-out and retry into a Celery task. Same API; async to the caller.
-- **Redis write-through cache**: for large fan-out (tenant of 200+ users), cache materialized per-user file bytes at the `push_to_users` entry point so we don't rematerialize per call.
+- **Redis write-through cache**: for large fan-out (tenant of 200+ users), cache materialized per-sandbox file bytes at the `push_to_sandboxes` entry point so we don't rematerialize per call.
 - **Tarball-pull (daemon initiates)**: daemon pulls from an api_server endpoint instead of receiving pushes. Supports `304 Not Modified`. Same atomic-swap on the pod side.
 - **Streaming for large files**: `push_to_user_stream(..., files: Iterator[tuple[str, Iterator[bytes]]])` if any future consumer needs to push beyond the 100 MiB cap. Not required for any v1 consumer.
 - **Content-addressed store**: upload each unique file by SHA once; pods fetch by digest. Wins when the same bytes ship to many pods.

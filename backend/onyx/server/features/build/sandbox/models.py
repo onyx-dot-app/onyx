@@ -1,11 +1,14 @@
 """Pydantic models for sandbox module communication."""
 
 from datetime import datetime
+from typing import TypeAlias
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.db.enums import SandboxStatus
+
+FileSet: TypeAlias = dict[str, bytes]
 
 
 class LLMProviderConfig(BaseModel):
@@ -68,3 +71,23 @@ class FilesystemEntry(BaseModel):
     is_directory: bool
     size: int | None = None  # File size in bytes (None for directories)
     mime_type: str | None = None  # MIME type (None for directories)
+
+
+class PushFailure(BaseModel):
+    sandbox_id: str
+    reason: str
+    detail: str | None = None
+
+
+class PushResult(BaseModel):
+    targets: int
+    succeeded: int
+    failures: list[PushFailure]
+
+
+class RetriableWriteError(Exception):
+    """Transient failure in write_files_to_sandbox (timeout, pod not-ready)."""
+
+
+class FatalWriteError(Exception):
+    """Permanent failure in write_files_to_sandbox (validation, auth)."""

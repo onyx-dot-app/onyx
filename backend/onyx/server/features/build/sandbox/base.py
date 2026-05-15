@@ -15,16 +15,23 @@ Architecture Note (User-Shared Sandbox Model):
 """
 
 import threading
+import time
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import UUID
 
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import PushFailure
+from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.utils.logger import setup_logger
@@ -412,6 +419,127 @@ class SandboxManager(ABC):
             Tuple of (file_count, total_size_bytes)
         """
         ...
+
+    @abstractmethod
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: str,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Write files atomically to a sandbox. Raise RetriableWriteError for
+        transients, FatalWriteError for permanent failures."""
+        ...
+
+    def push_to_sandbox(
+        self,
+        *,
+        sandbox_id: str,
+        mount_path: str,
+        files: FileSet,
+        timeout_s: float = 30.0,
+    ) -> PushResult:
+        """Push files to a single sandbox with retry."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.write_files_to_sandbox(
+                    sandbox_id=sandbox_id,
+                    mount_path=mount_path,
+                    files=files,
+                )
+                return PushResult(targets=1, succeeded=1, failures=[])
+            except FatalWriteError as e:
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="write_error",
+                            detail=str(e),
+                        )
+                    ],
+                )
+            except RetriableWriteError:
+                if attempt < max_retries - 1:
+                    time.sleep(min(2**attempt, timeout_s / max_retries))
+                    continue
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="timeout",
+                            detail=f"Failed after {max_retries} retries",
+                        )
+                    ],
+                )
+            except Exception as e:
+                logger.warning(
+                    "Unexpected error pushing to sandbox %s: %s",
+                    sandbox_id,
+                    e,
+                )
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="write_error",
+                            detail=str(e),
+                        )
+                    ],
+                )
+        raise AssertionError("unreachable: all retries should return")
+
+    def push_to_sandboxes(
+        self,
+        *,
+        mount_path: str,
+        sandbox_files: dict[str, FileSet],
+        timeout_s: float = 30.0,
+    ) -> PushResult:
+        """Push files to multiple sandboxes in parallel.
+
+        Caller owns user→sandbox resolution (via DB). This method only handles
+        parallelism and result aggregation over push_to_sandbox.
+        """
+        if not sandbox_files:
+            return PushResult(targets=0, succeeded=0, failures=[])
+
+        all_failures: list[PushFailure] = []
+        pushed = 0
+
+        def _push_one(sandbox_id: str) -> PushResult:
+            return self.push_to_sandbox(
+                sandbox_id=sandbox_id,
+                mount_path=mount_path,
+                files=sandbox_files[sandbox_id],
+                timeout_s=timeout_s,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(len(sandbox_files), 10)) as pool:
+            for result in pool.map(_push_one, sandbox_files):
+                pushed += result.succeeded
+                all_failures.extend(result.failures)
+
+        if all_failures:
+            logger.warning(
+                "push_to_sandboxes: %d/%d targets failed for mount_path=%s",
+                len(all_failures),
+                len(sandbox_files),
+                mount_path,
+            )
+
+        return PushResult(
+            targets=len(sandbox_files),
+            succeeded=pushed,
+            failures=all_failures,
+        )
 
     @abstractmethod
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:

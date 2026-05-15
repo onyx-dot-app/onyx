@@ -35,6 +35,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 
 import base64
 import binascii
+import hashlib
 import io
 import json
 import mimetypes
@@ -49,6 +50,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 from acp.schema import PromptResponse
 from kubernetes import client
 from kubernetes import config
@@ -72,8 +74,11 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,
 )
+from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -105,6 +110,7 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
 AGENT_PORT = 8081
+PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 120
 POD_READY_POLL_INTERVAL_SECONDS = 2
 
@@ -112,6 +118,31 @@ POD_READY_POLL_INTERVAL_SECONDS = 2
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
+_PUSH_SECRET_ENV = "ONYX_SANDBOX_PUSH_SECRET"
+
+
+def _build_push_auth_header() -> str:
+    secret = os.environ.get(_PUSH_SECRET_ENV, "")
+    if not secret:
+        raise RuntimeError(f"{_PUSH_SECRET_ENV} is not set")
+    return f"Bearer {secret}"
+
+
+def _build_targz(files: FileSet) -> tuple[bytes, str]:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tar:
+        for name in sorted(files):
+            data = files[name]
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            info.mtime = 0
+            info.uid = 0
+            info.gid = 0
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+    raw = buf.getvalue()
+    return raw, hashlib.sha256(raw).hexdigest()
 
 
 def _build_nextjs_start_script(
@@ -289,6 +320,7 @@ class KubernetesSandboxManager(SandboxManager):
         # We declare all ports for documentation, tooling, and network policies.
         container_ports = [
             client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
+            client.V1ContainerPort(name="push-daemon", container_port=PUSH_DAEMON_PORT),
         ]
         # Add ports for session Next.js servers (one port per potential session)
         for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
@@ -302,6 +334,15 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_env_vars = [
             client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
             client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+            client.V1EnvVar(
+                name=_PUSH_SECRET_ENV,
+                value_from=client.V1EnvVarSource(
+                    secret_key_ref=client.V1SecretKeySelector(
+                        name="onyx-sandbox-push-secret",
+                        key="shared_secret",
+                    ),
+                ),
+            ),
         ]
 
         sandbox_container = client.V1Container(
@@ -2393,3 +2434,52 @@ fi
         except ApiException as e:
             logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
+
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: str,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Build tar.gz, POST to in-pod daemon."""
+        pod_name = self._get_pod_name(sandbox_id)
+
+        try:
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
+            )
+        except ApiException as e:
+            if e.status == 404:
+                raise FatalWriteError(f"Pod {pod_name} not found") from e
+            raise RetriableWriteError(f"Failed to read pod {pod_name}: {e}") from e
+
+        pod_ip = pod.status.pod_ip
+        if not pod_ip:
+            raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
+
+        tar_bytes, sha256_hex = _build_targz(files)
+
+        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/push"
+        try:
+            with httpx.Client(timeout=30.0) as http_client:
+                resp = http_client.post(
+                    url,
+                    params={"mount_path": mount_path},
+                    content=tar_bytes,
+                    headers={
+                        "Authorization": _build_push_auth_header(),
+                        "Content-Type": "application/gzip",
+                        "X-Bundle-Sha256": sha256_hex,
+                    },
+                )
+        except (httpx.TimeoutException, httpx.NetworkError) as e:
+            raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
+
+        if resp.status_code == 200:
+            return
+        err = f"{pod_name}: {resp.status_code} {resp.text}"
+        if resp.status_code >= 500:
+            raise RetriableWriteError(err)
+        raise FatalWriteError(err)

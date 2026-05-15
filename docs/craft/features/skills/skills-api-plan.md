@@ -8,11 +8,11 @@ Companion docs:
 
 ## 1. Goal
 
-Add `/admin/skills` (admin CRUD) and `/skills` (user read) HTTP endpoints, backed by the existing DB module (`backend/onyx/db/skill.py`), built-in registry (`backend/onyx/skills/registry.py`), and bundle validator (`backend/onyx/skills/bundle.py`). Mutations push bundle bytes into running sandbox pods via `SandboxManager.push_to_users` (see `docs/craft/features/sandbox-file-push.md`); the FileStore blob is still written for persistence and cold-start hydration.
+Add `/admin/skills` (admin CRUD) and `/skills` (user read) HTTP endpoints, backed by the existing DB module (`backend/onyx/db/skill.py`), built-in registry (`backend/onyx/skills/registry.py`), and bundle validator (`backend/onyx/skills/bundle.py`). Mutations push bundle bytes into running sandbox pods via `SandboxManager.push_to_sandboxes` (see `docs/craft/features/sandbox-file-push.md`); the FileStore blob is still written for persistence and cold-start hydration.
 
 ## 2. Out of Scope
 
-- Extending `SandboxManager` with the push API and per-backend `write_files_to_sandbox` / `find_sandboxes_for_users` implementations (separate workstream — see `sandbox-file-push.md`).
+- Extending `SandboxManager` with the push API and per-backend `write_files_to_sandbox` implementation (separate workstream — see `sandbox-file-push.md`).
 - Built-in skill source files / registrations (registry exists; registering specific built-ins is a separate workstream).
 - Cold-start hydration plumbing in `setup_session_workspace` (owned by the push-primitive workstream).
 - Orphan-blob sweep job.
@@ -36,7 +36,7 @@ backend/onyx/skills/push.py  # build_skills_files_for_user(user, db),
                              # push_to_pod(sandbox_id, user, db)
 ```
 
-`build_skills_files_for_user` returns the flat path-to-bytes dict `SandboxManager.push_to_users` expects; `push_to_pod` is the cold-start single-pod helper called from `setup_session_workspace`, internally calling `get_sandbox_manager().push_to_sandbox(...)` (see sandbox-file-push.md §11 and §12). Depends on `SandboxManager` gaining the push methods, but `backend/onyx/skills/push.py` itself does not change shape.
+`build_skills_files_for_user` returns the flat path-to-bytes dict used as values in the `sandbox_files` mapping passed to `SandboxManager.push_to_sandboxes`; `push_to_pod` is the cold-start single-pod helper called from `setup_session_workspace`, internally calling `get_sandbox_manager().push_to_sandbox(...)` (see sandbox-file-push.md §11 and §12). Depends on `SandboxManager` gaining the push methods, but `backend/onyx/skills/push.py` itself does not change shape.
 
 Modified files:
 - `backend/onyx/main.py` — register the two routers.
@@ -183,7 +183,7 @@ A single-skill GET is **optional** in V1 — only add if a concrete UI need exis
 
 ## 6. Endpoint Implementation Sketches
 
-Every mutation follows the same shape: validate → write to DB + FileStore → commit → compute the set of affected users → push each affected user's full skill set via `get_sandbox_manager().push_to_users(...)` (imported from `onyx.server.features.build.sandbox.base`). "Push" is a snapshot of the user's `mount_path`, so removing a skill = pushing the user's new file dict without that skill. There is no separate "unpush" call.
+Every mutation follows the same shape: validate → write to DB + FileStore → commit → compute the set of affected users → query DB for their sandbox_ids → build the sandbox_id-to-files mapping → push via `get_sandbox_manager().push_to_sandboxes(...)` (imported from `onyx.server.features.build.sandbox.base`). "Push" is a snapshot of the user's `mount_path`, so removing a skill = pushing the user's new file dict without that skill. There is no separate "unpush" call.
 
 `affected_users_for_skill(skill, db_session)` (helper in `backend/onyx/skills/push.py`) returns the set of users with an active sandbox who should have this skill in their bundle — the uploader, plus all tenant users if `is_public`, plus members of granted groups. For visibility/grant transitions, the caller takes the union of the before-and-after sets so users who lost access also get re-pushed (without the skill).
 
@@ -214,9 +214,11 @@ def create_custom_skill(...) -> CustomSkillSnapshot:
     db_session.commit()
 
     affected = affected_users_for_skill(skill, db_session)
-    get_sandbox_manager().push_to_users(
+    sandbox_ids = get_active_sandbox_ids_for_users([u.id for u in affected], db_session)
+    sandbox_files = {sid: build_skills_files_for_user(u, db_session) for sid, u in sandbox_ids.items()}
+    get_sandbox_manager().push_to_sandboxes(
         mount_path="/workspace/managed/skills",
-        user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
+        sandbox_files=sandbox_files,
     )
     return CustomSkillSnapshot.from_model(<refetch with grants>, include_grants=True)
 ```
@@ -234,9 +236,11 @@ def patch_custom_skill(...) -> CustomSkillSnapshot:
     if visibility_or_enabled_changed(before, updated):
         after_affected = affected_users_for_skill(updated, db_session)
         users = before_affected | after_affected
-        get_sandbox_manager().push_to_users(
+        sandbox_ids = get_active_sandbox_ids_for_users([u.id for u in users], db_session)
+        sandbox_files = {sid: build_skills_files_for_user(u, db_session) for sid, u in sandbox_ids.items()}
+        get_sandbox_manager().push_to_sandboxes(
             mount_path="/workspace/managed/skills",
-            user_files={u.id: build_skills_files_for_user(u, db_session) for u in users},
+            sandbox_files=sandbox_files,
         )
     return CustomSkillSnapshot.from_model(updated, include_grants=True)
 ```
@@ -257,9 +261,11 @@ def replace_custom_skill_bundle(...) -> CustomSkillSnapshot:
     db_session.commit()
 
     affected = affected_users_for_skill(updated, db_session)
-    get_sandbox_manager().push_to_users(
+    sandbox_ids = get_active_sandbox_ids_for_users([u.id for u in affected], db_session)
+    sandbox_files = {sid: build_skills_files_for_user(u, db_session) for sid, u in sandbox_ids.items()}
+    get_sandbox_manager().push_to_sandboxes(
         mount_path="/workspace/managed/skills",
-        user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
+        sandbox_files=sandbox_files,
     )
     return CustomSkillSnapshot.from_model(updated, include_grants=True)
 ```
@@ -277,9 +283,11 @@ def replace_custom_skill_grants(...) -> CustomSkillSnapshot:
     updated = fetch_skill_for_admin(skill_id, db_session)
     after_affected = affected_users_for_skill(updated, db_session)
     users = before_affected | after_affected   # gainers get the skill, losers get it removed
-    get_sandbox_manager().push_to_users(
+    sandbox_ids = get_active_sandbox_ids_for_users([u.id for u in users], db_session)
+    sandbox_files = {sid: build_skills_files_for_user(u, db_session) for sid, u in sandbox_ids.items()}
+    get_sandbox_manager().push_to_sandboxes(
         mount_path="/workspace/managed/skills",
-        user_files={u.id: build_skills_files_for_user(u, db_session) for u in users},
+        sandbox_files=sandbox_files,
     )
     return CustomSkillSnapshot.from_model(updated, include_grants=True)
 ```
@@ -297,9 +305,11 @@ def delete_custom_skill(...) -> None:
     db_session.commit()
 
     # Push each previously-affected user their new (skill-free) file dict.
-    get_sandbox_manager().push_to_users(
+    sandbox_ids = get_active_sandbox_ids_for_users([u.id for u in affected], db_session)
+    sandbox_files = {sid: build_skills_files_for_user(u, db_session) for sid, u in sandbox_ids.items()}
+    get_sandbox_manager().push_to_sandboxes(
         mount_path="/workspace/managed/skills",
-        user_files={u.id: build_skills_files_for_user(u, db_session) for u in affected},
+        sandbox_files=sandbox_files,
     )
 ```
 
@@ -377,7 +387,7 @@ Cover the admin happy paths plus the load-bearing error cases:
 
 ## 9. Suggested Subagent Decomposition
 
-**Hard dependency**: this work depends on `SandboxManager` having `push_to_users` / `push_to_sandbox` methods landed (see sandbox-file-push.md workstream); can be stubbed for testing in the meantime. Under test, swap in a `SandboxManager` subclass that records `push_to_users` calls and asserts on the recorded calls.
+**Hard dependency**: this work depends on `SandboxManager` having `push_to_sandbox` / `push_to_sandboxes` methods landed (see sandbox-file-push.md workstream); can be stubbed for testing in the meantime. Under test, swap in a `SandboxManager` subclass that records `push_to_sandboxes` calls and asserts on the recorded calls.
 
 Stage 1 (sequential — establishes the contract):
 - **A. Models + skeleton router** — write `models.py`, `api.py` with route signatures returning `NotImplementedError`, and register them in `main.py`. Output: typecheck-clean skeleton.
@@ -402,6 +412,6 @@ For any subagent touching this code:
 - Do **not** use `response_model=` on endpoint decorators; rely on return-type annotations.
 - DB ops live in `backend/onyx/db/skill.py` — endpoints must not run SQL directly.
 - Commit transactions at the endpoint boundary; DB-layer functions only flush.
-- `get_sandbox_manager().push_to_users(...)` runs **after** `db_session.commit()`. Push failures are logged inside `SandboxManager` and recorded in the returned `PushResult` (from `backend/onyx/sandbox_files/models.py`) — they don't surface as request errors, and the request still returns success on partial pod-level failure (the next mutation or cold-start hydration re-converges).
+- `get_sandbox_manager().push_to_sandboxes(...)` runs **after** `db_session.commit()`. Push failures are logged inside `SandboxManager` and recorded in the returned `PushResult` (from `backend/onyx/server/features/build/sandbox/models.py`) — they don't surface as request errors, and the request still returns success on partial pod-level failure (the next mutation or cold-start hydration re-converges).
 - Strict typing — no `Any` unless unavoidable; same on the TS side if any client work follows.
 - Use existing fixtures (`admin_user`, `basic_user`, `reset`) for integration tests; don't construct users manually.

@@ -1297,6 +1297,14 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  sandboxPushSecret:
+    enabled: true
+    secretName: 'onyx-sandbox-push-secret'
+    existingSecret: ""
+    secretKeys:
+      ONYX_SANDBOX_PUSH_SECRET: shared_secret
+    values:
+      shared_secret: ""
 
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this

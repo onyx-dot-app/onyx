@@ -58,7 +58,7 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     fi
 
 # Create workspace directories
-RUN mkdir -p /workspace/sessions /workspace/templates && \
+RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed && \
     chown -R sandbox:sandbox /workspace
 
 # Copy outputs template (web app scaffold, without node_modules)
@@ -75,6 +75,7 @@ RUN python3 -m venv /workspace/.venv && \
 
 # Add venv to PATH so python/pip use it by default
 ENV PATH="/workspace/.venv/bin:${PATH}"
+ENV PYTHONPATH="/workspace:${PYTHONPATH}"
 
 # Install pptxgenjs globally for creating presentations from scratch
 RUN npm install -g pptxgenjs && \
@@ -92,6 +93,9 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 # Copy agent skills (symlinked into each session's .opencode/skills/ at setup time)
 COPY --exclude=__pycache__ skills/ /workspace/skills/
 
+COPY --exclude=__pycache__ daemon/ /workspace/push_daemon/
+COPY entrypoint.sh /workspace/entrypoint.sh
+
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
 
@@ -106,7 +110,8 @@ WORKDIR /workspace
 # Expose ports
 # - 3000: Next.js dev server (started per-session if needed)
 # - 8081: OpenCode ACP HTTP server (started via exec)
-EXPOSE 3000 8081
+# - 8731: Push daemon (receives tar.gz files from sandbox manager)
+EXPOSE 3000 8081 8731
 
-# Keep container alive - all work done via kubectl exec
-CMD ["sleep", "infinity"]
+# Entrypoint runs push daemon + keeps container alive
+ENTRYPOINT ["/workspace/entrypoint.sh"]
