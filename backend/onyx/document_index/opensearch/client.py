@@ -32,6 +32,11 @@ from onyx.utils.timing import log_function_time
 CLIENT_THRESHOLD_TO_LOG_SLOW_SEARCH_MS = 2000
 DEFAULT_INDEX_SETTINGS_TIMEOUT_S = 15
 
+_RETRYABLE_UPDATE_ERROR_TYPES = (
+    "already_closed_exception",
+    "search_phase_execution_exception",
+)
+
 
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
@@ -84,6 +89,26 @@ class IndexInfo(BaseModel):
     created_at: str
     total_size: str
     primary_shards_size: str
+
+
+class OpenSearchUpdateError(Exception):
+    """
+    An error occurred when updating one or more OpenSearch document chunks which
+    was caught by OpenSearchIndexClient. This exception is not exhaustive of all
+    exceptions update calls can raise.
+    """
+
+    pass
+
+
+class OpenSearchIndexError(Exception):
+    """
+    An error occurred when indexing one or more OpenSearch document chunks which
+    was caught by OpenSearchIndexClient. This exception is not exhaustive of all
+    exceptions index calls can raise.
+    """
+
+    pass
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -728,6 +753,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             BulkIndexError: There was an error during the bulk index. This is a
                 known specific error type that is raised by the opensearchpy
                 library's bulk function.
+            OpenSearchIndexError: The number of successful operations reported
+                by OpenSearch does not match the number of documents.
         """
         if not documents:
             return
@@ -754,15 +781,19 @@ class OpenSearchIndexClient(OpenSearchClient):
             }
             data.append(data_for_document)
         # max_retries is the number of times to retry a request if we get a 429.
-        success, errors = bulk(self._client, data, max_retries=3)
-        if errors:
-            raise RuntimeError(
-                f"Failed to bulk index documents for index {self._index_name}. Errors: {errors}"
-            )
-        if success != len(documents):
-            raise RuntimeError(
+        # Explicitly raise on error and exception; we will not attempt retries.
+        successes, _ = bulk(
+            self._client,
+            data,
+            max_retries=3,
+            raise_on_error=True,
+            raise_on_exception=True,
+        )
+        if successes != len(documents):
+            raise OpenSearchIndexError(
                 "OpenSearch reported no errors during bulk index but the number of successful "
-                f"operations ({success}) does not match the number of documents ({len(documents)})."
+                f"operations ({successes}) does not match the number of documents "
+                f"({len(documents)})."
             )
         logger.debug("Successfully bulk indexed %s documents.", len(documents))
 
@@ -946,6 +977,16 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+
+        Raises:
+            Exception: There was an error during the bulk update.
+            BulkIndexError: There was an error during the bulk update. This is a
+                known specific error type that is raised by the opensearchpy
+                library's bulk function.
+            OpenSearchUpdateError: The number of successful operations reported
+                by OpenSearch does not match the number of document chunks to
+                update, or there was at least one other kind of fatal error for
+                a particular document chunk.
         """
         if not document_chunk_ids:
             return
@@ -965,16 +1006,76 @@ class OpenSearchIndexClient(OpenSearchClient):
                 }
             )
         # max_retries is the number of times to retry a request if we get a 429.
-        success, errors = bulk(self._client, data, max_retries=3)
+        # We do not raise on error (the default behavior of ``bulk`` is to
+        # raise) because we want to attempt to retry certain failed chunks in
+        # this function.
+        successes, errors = bulk(
+            self._client, data, max_retries=3, raise_on_error=False
+        )
+
         if errors:
-            raise RuntimeError(
-                f"Failed to bulk update document chunks for index {self._index_name}. Errors: "
-                f"{errors}"
+            retryable_ids = []
+            fatal_errors = []
+            for error in errors:
+                # error is {"update": {...}} since we only issue updates in this
+                # function.
+                info = error.get("update")
+                if info is None:
+                    raise RuntimeError("OpenSearch returned a malformed error.")
+                status = info.get("status", 0)
+                err_obj = info.get("error", {})
+                err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
+
+                if status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
+                    # We have seen a bug in OpenSearch version 3.4.0 when using
+                    # the knn plugin and when derived_source is enabled (the
+                    # default), when OpenSearch is under load sometimes updates
+                    # fail transiently with these errors. This is retryable, and
+                    # we do so once here. This should be fixed in OpenSearch
+                    # 3.6.0. See
+                    # https://github.com/opensearch-project/k-NN/issues/3191
+                    logger.warning(
+                        "OpenSearch returned a retryable error when trying to bulk update "
+                        "document chunks for index %s. Error: %s. Retrying once.",
+                        self._index_name,
+                        error,
+                    )
+                    retryable_ids.append(info["_id"])
+                else:
+                    fatal_errors.append(error)
+
+            if fatal_errors:
+                raise OpenSearchUpdateError(
+                    f"Failed to bulk update document chunks for index {self._index_name}. At least one fatal error occurred: {fatal_errors[0]}"
+                )
+
+            data = []
+            for document_chunk_id in retryable_ids:
+                data.append(
+                    {
+                        "_index": self._index_name,
+                        "_id": document_chunk_id,
+                        "_op_type": "update",
+                        "doc": properties_to_update,
+                    }
+                )
+            # max_retries is the number of times to retry a request if we get a
+            # 429.
+            # Explicitly raise on error and exception, we will no longer attempt
+            # retries.
+            new_successes, _ = bulk(
+                self._client,
+                data,
+                max_retries=3,
+                raise_on_error=True,
+                raise_on_exception=True,
             )
-        if success != len(document_chunk_ids):
-            raise RuntimeError(
+            successes += new_successes
+
+        if successes != len(document_chunk_ids):
+            raise OpenSearchUpdateError(
                 f"OpenSearch reported no errors during bulk update but the number of successful "
-                f"operations ({success}) does not match the number of document chunks "
+                f"operations ({successes}) does not match the number of document chunks "
                 f"({len(document_chunk_ids)})."
             )
         logger.debug(
