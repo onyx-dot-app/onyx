@@ -30,32 +30,19 @@ If you are upgrading from an earlier 0.4.x release, note:
 
 # Prerequisites
 
-## Redis operator (CRDs)
+## Redis operator (automatic with bundled Redis)
 
-When `redis.enabled: true` (the chart default), the bundled `ot-helm/redis`
-subchart renders a `kind: Redis` custom resource. The CRDs **and** the
-reconciling controller live in a separate chart, `ot-helm/redis-operator`,
-which the chart does **not** install for you. Install it once per cluster
-before `helm install`:
+When `redis.enabled: true` (the chart default), the chart bundles and automatically
+installs the `redis-operator` subchart alongside the `redis` subchart. The operator
+provides the CRD that the Redis CR binds to, so `helm install` works on a clean
+cluster without manual preparation.
 
-```bash
-helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
-helm repo update
-helm upgrade --install redis-operator ot-container-kit/redis-operator \
-  --version 0.24.0 \
-  --namespace redis-operator --create-namespace --wait --timeout 300s
-```
+**No separate pre-install step is needed** — the chart handles the redis-operator
+CRD and controller automatically as part of `helm install onyx onyx/onyx`.
 
-If you skip this step you will see install errors like:
-
-```
-no matches for kind "Redis" in version "redis.redis.opstreelabs.in/v1beta2"
-```
-
-If you don't want the bundled Redis (recommended for AWS GovCloud and other
-regulated environments where you'd rather use a managed Redis like
-ElastiCache), see [Using an external Redis](#using-an-external-redis) below
-and you can skip installing the operator entirely.
+If you don't want the bundled Redis (recommended for production environments using
+managed Redis like AWS ElastiCache), see [Using an external Redis](#using-an-external-redis)
+below and set `redis.enabled: false` to skip the operator entirely.
 
 ## Using an external Redis
 
