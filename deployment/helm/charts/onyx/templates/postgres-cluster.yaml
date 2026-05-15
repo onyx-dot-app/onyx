@@ -1,9 +1,10 @@
 {{- /*
-CNPG Cluster CR — the `postgresql` subchart only installs the operator, so
-without this no postgres pod is created. Name MUST be
-`<release>-<postgresql.nameOverride>` to match POSTGRES_HOST in configmap.yaml.
+CNPG Cluster CR — the `postgresql` subchart only installs the operator.
+Name must be `<release>-<postgresql.nameOverride>` to match POSTGRES_HOST
+in configmap.yaml.
 */}}
 {{- if .Values.postgresql.enabled }}
+{{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -17,15 +18,19 @@ spec:
     {{- with .Values.postgresql.cluster.storage.storageClass }}
     storageClass: {{ . | quote }}
     {{- end }}
-  enableSuperuserAccess: {{ .Values.postgresql.cluster.enableSuperuserAccess | default true }}
+  {{- if hasKey .Values.postgresql.cluster "enableSuperuserAccess" }}
+  enableSuperuserAccess: {{ .Values.postgresql.cluster.enableSuperuserAccess }}
+  {{- else }}
+  enableSuperuserAccess: true
+  {{- end }}
   superuserSecret:
-    name: {{ .Values.postgresql.cluster.superuserSecret.name | default .Values.auth.postgresql.secretName }}
+    name: {{ $pgSecretName }}
   bootstrap:
     initdb:
       database: postgres
       owner: postgres
       secret:
-        name: {{ .Values.postgresql.cluster.superuserSecret.name | default .Values.auth.postgresql.secretName }}
+        name: {{ $pgSecretName }}
   {{- with .Values.postgresql.cluster.resources }}
   resources:
     {{- toYaml . | nindent 4 }}
