@@ -14,8 +14,8 @@ from onyx.db.enums import LLMModelFlowType
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationView
 
-
 # ModelConfigurationView.from_model — dynamic provider branch
+
 
 class TestModelConfigurationViewFromModelDynamic:
     """Tests for the dynamic/custom-config branch of ModelConfigurationView.from_model."""
@@ -79,6 +79,7 @@ class TestModelConfigurationViewFromModelDynamic:
 
 
 # ModelConfigurationView.from_model — static provider branch
+
 
 class TestModelConfigurationViewFromModelStatic:
     """Tests for the static provider branch of ModelConfigurationView.from_model."""
@@ -164,6 +165,7 @@ class TestModelConfigurationViewFromModelStatic:
 
 # ModelConfigurationUpsertRequest.from_model
 
+
 class TestModelConfigurationUpsertRequestFromModel:
     """Tests for ModelConfigurationUpsertRequest.from_model."""
 
@@ -206,5 +208,7 @@ def _make_model_config(
     mc.max_input_tokens = max_input_tokens
     mc.is_visible = is_visible
     mc.supports_image_input = supports_image_input
-    mc.llm_model_flow_types = flow_types if flow_types is not None else [LLMModelFlowType.CHAT]
+    mc.llm_model_flow_types = (
+        flow_types if flow_types is not None else [LLMModelFlowType.CHAT]
+    )
     return mc

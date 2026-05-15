@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import sync_model_configurations
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import SyncModelEntry
