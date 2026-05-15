@@ -169,8 +169,9 @@ DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
 
 
 async def async_return_default_schema(
-    *args: Any, **kwargs: Any  # noqa: ARG001
-) -> str:  # noqa: ARG001
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
+) -> str:
     return POSTGRES_DEFAULT_SCHEMA
 
 

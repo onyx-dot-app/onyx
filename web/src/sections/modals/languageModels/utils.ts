@@ -43,7 +43,9 @@ export function useInitialValues(
 
   return {
     provider: existingLlmProvider?.provider ?? providerName,
-    name: isOnboarding ? providerName : existingLlmProvider?.name ?? undefined,
+    name: isOnboarding
+      ? providerName
+      : (existingLlmProvider?.name ?? undefined),
     api_key: existingLlmProvider?.api_key ?? undefined,
     api_base: existingLlmProvider?.api_base ?? undefined,
     is_public: existingLlmProvider?.is_public ?? true,

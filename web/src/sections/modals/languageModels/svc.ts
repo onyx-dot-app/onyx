@@ -1,8 +1,5 @@
 import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
-import {
-  LLM_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/languageModels/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import isEqual from "lodash/isEqual";
 import { parseAzureTargetUri } from "@/lib/azureTargetUri";
@@ -202,7 +199,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
 
   // ── Create/update provider ──────────────────────────────────────────
   const response = await fetch(
-    `${LLM_PROVIDERS_ADMIN_URL}${
+    `${SWR_KEYS.adminLlmProviders}${
       existingLlmProvider ? "" : "?is_creation=true"
     }`,
     {
@@ -231,7 +228,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
     try {
       const newLlmProvider = await response.json();
       if (newLlmProvider?.id != null) {
-        const setDefaultResponse = await fetch(`${LLM_ADMIN_URL}/default`, {
+        const setDefaultResponse = await fetch("/api/admin/llm/default", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

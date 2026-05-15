@@ -35,7 +35,6 @@ const nextConfig = {
     unoptimized: true, // Disable image optimization to avoid requiring Sharp
   },
   async headers() {
-    const isDev = process.env.NODE_ENV === "development";
     return [
       {
         source: "/(.*)",
@@ -60,18 +59,6 @@ const nextConfig = {
             key: "Permissions-Policy",
             value:
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(self), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
-          },
-        ],
-      },
-      {
-        // Cache static assets (images, icons, fonts, etc.) to prevent refetching and re-renders
-        source: "/_next/static/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: isDev
-              ? "no-cache, must-revalidate" // Dev: always check if fresh
-              : "public, max-age=2592000, immutable", // Prod: cache for 30 days
           },
         ],
       },

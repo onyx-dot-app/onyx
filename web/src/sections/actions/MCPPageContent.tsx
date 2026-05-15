@@ -486,7 +486,7 @@ export default function MCPPageContent() {
         />
       )}
 
-      <div className="flex-shrink-0 mb-4">
+      <div className="shrink-0 mb-4">
         <AdminListHeader
           hasItems={isLoading || mcpServers.length > 0}
           searchQuery={searchQuery}

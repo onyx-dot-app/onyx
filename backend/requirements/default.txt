@@ -230,9 +230,9 @@ attrs==25.4.0 \
     #   jsonschema
     #   referencing
     #   zeep
-authlib==1.6.11 \
-    --hash=sha256:64db35b9b01aeccb4715a6c9a6613a06f2bd7be2ab9d2eb89edd1dfc7580a38f \
-    --hash=sha256:c8687a9a26451c51a34a06fa17bb97cb15bba46a6a626755e2d7f50da8bff3e3
+authlib==1.6.12 \
+    --hash=sha256:0656d8482f28fc8221929d5f35b2bde5d13e10555ebc06b4561b0d622e83b1bd \
+    --hash=sha256:e9229ad7fde610b139dd12f5edbe97eab9ee78bfb85691247e767727850b99ab
     # via fastmcp
 azure-cognitiveservices-speech==1.38.0 \
     --hash=sha256:16a530e6c646eb49ea0bc05cb45a9d28b99e4b67613f6c3a6c54e26e6bf65241 \
@@ -646,6 +646,12 @@ courlan==1.3.2 \
     --hash=sha256:0b66f4db3a9c39a6e22dd247c72cfaa57d68ea660e94bb2c84ec7db8712af190 \
     --hash=sha256:d0dab52cf5b5b1000ee2839fbc2837e93b2514d3cb5bb61ae158a55b7a04c6be
     # via trafilatura
+cron-descriptor==2.0.8 \
+    --hash=sha256:21fae0e6e0e28b19fd6a08e032c700077fe759e9bc1deb1ebe32f277fbc8ba6c \
+    --hash=sha256:7e487efe14a99a3c1c23bb5302bb75c8bf5d54bca82931bf71f5ae2855939772
+croniter==6.2.2 \
+    --hash=sha256:a5d17b1060974d36251ea4faf388233eca8acf0d09cbd92d35f4c4ac8f279960 \
+    --hash=sha256:ba60832a5ec8e12e51b8691c3309a113d1cf6526bdf1a48150ce8ec7a532d0ab
 cryptography==46.0.7 \
     --hash=sha256:04959522f938493042d595a736e7dbdff6eb6cc2339c11465b3ff89343b65f65 \
     --hash=sha256:128c5edfe5e5938b86b03941e94fac9ee793a94452ad1365c9fc3f4f62216832 \
@@ -1546,9 +1552,9 @@ langdetect==1.0.9 \
 langfuse==3.10.0 \
     --hash=sha256:7a9254103da50cabcf46a7e7ae9d2cf1f8267f09b6036abdb4a9c6f2f3d15104 \
     --hash=sha256:c7c10607c6fe560990d0973566afd3c5513f7ff97cc31691af72711ad5441d8c
-langsmith==0.7.32 \
-    --hash=sha256:b59b8e106d0e4c4842e158229296086e2aa7c561e3f602acda73d3ad0062e915 \
-    --hash=sha256:e1fde928990c4c52f47dc5132708cec674355d9101723d564183e965f383bf5f
+langsmith==0.8.0 \
+    --hash=sha256:12cc4bc5622b835a6d841964d6034df3617bdb912dae0c1381fd0a68a9b3a3ef \
+    --hash=sha256:59fe5b2a56bbbe14a08aa76691f84b49e8675dd21e11b57d80c6db8c08bac2e3
     # via langchain-core
 lazy-imports==1.0.1 \
     --hash=sha256:7d3e4b1547cb574ec7ef3c47a074673e2612330b2b50bf7eec939f2c393fc261 \
@@ -1686,9 +1692,9 @@ makefun==1.16.0 \
     --hash=sha256:43baa4c3e7ae2b17de9ceac20b669e9a67ceeadff31581007cca20a07bbe42c4 \
     --hash=sha256:e14601831570bff1f6d7e68828bcd30d2f5856f24bad5de0ccb22921ceebc947
     # via fastapi-users
-mako==1.3.11 \
-    --hash=sha256:071eb4ab4c5010443152255d77db7faa6ce5916f35226eb02dc34479b6858069 \
-    --hash=sha256:e372c6e333cf004aa736a15f425087ec977e1fcbd2966aae7f17c8dc1da27a77
+mako==1.3.12 \
+    --hash=sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9 \
+    --hash=sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a
     # via alembic
 mammoth==1.11.0 \
     --hash=sha256:a0f59e442f34d5b6447f4b0999306cbf3e67aaabfa8cb516f878fb1456744637 \
@@ -2859,6 +2865,7 @@ python-dateutil==2.9.0.post0 \
     #   asana
     #   botocore
     #   celery
+    #   croniter
     #   dateparser
     #   google-cloud-bigquery
     #   htmldate
@@ -3611,6 +3618,7 @@ typing-extensions==4.15.0 \
     #   boto3-stubs
     #   braintrust
     #   cohere
+    #   cron-descriptor
     #   exa-py
     #   exceptiongroup
     #   fastapi

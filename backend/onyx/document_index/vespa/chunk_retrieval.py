@@ -540,7 +540,7 @@ def query_vespa(
         # Log each detail on its own line so log collectors capture them
         # as separate entries rather than truncating a single multiline msg
         logger.error(
-            "Failed to query Vespa | " "status=%s | " "yql_length=%s | " "exception=%s",
+            "Failed to query Vespa | status=%s | yql_length=%s | exception=%s",
             status_code,
             yql_length,
             str(e),
@@ -551,7 +551,7 @@ def query_vespa(
 
         # Re-raise with diagnostics so callers see what actually went wrong
         raise httpx.HTTPError(
-            f"Failed to query Vespa (status={status_code}, " f"yql_length={yql_length})"
+            f"Failed to query Vespa (status={status_code}, yql_length={yql_length})"
         ) from e
 
     response_json: dict[str, Any] = response.json()

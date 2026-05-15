@@ -1089,9 +1089,12 @@ def test_jsonrpc_websudo_html_response_raises_validation_error(
 # ---------------------------------------------------------------------------
 
 
-def _serverinfo_payload(version: str) -> dict[str, Any]:
-    """Minimal /rest/api/serverInfo payload; we only consume `version`."""
-    return {"version": version, "buildNumber": "0"}
+def _server_information_payload(version: str) -> dict[str, Any]:
+    """Minimal /rest/api/server-information payload; we only consume
+    `version`. Schema documented in the Confluence DC REST API reference
+    under the "Server Information" group.
+    """
+    return {"version": version, "buildNumber": 0}
 
 
 def test_supports_rest_space_permissions_true_for_dc_91_plus(
@@ -1099,25 +1102,30 @@ def test_supports_rest_space_permissions_true_for_dc_91_plus(
 ) -> None:
     """DC 10.2.10 (the customer's actual deployed version) should report
     support for the REST API. Cached after first probe, so a subsequent
-    call must not hit /rest/api/serverInfo a second time.
+    call must not hit /rest/api/server-information a second time.
     """
-    serverinfo_mock = mock.Mock(return_value=_serverinfo_payload("10.2.10"))
+    server_info_mock = mock.Mock(return_value=_server_information_payload("10.2.10"))
     confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        serverinfo_mock
+        server_info_mock
     )
 
     assert confluence_server_client.supports_rest_space_permissions() is True
     assert confluence_server_client.get_server_version() == (10, 2)
     assert confluence_server_client.supports_rest_space_permissions() is True
-    assert serverinfo_mock.call_count == 1
+    assert server_info_mock.call_count == 1
+    # Regression-guard the path itself: the Jira-style /rest/api/serverInfo
+    # 404s on Confluence DC 10.x; the documented Confluence path is the
+    # hyphenated /rest/api/server-information.
+    (called_path, *_), _ = server_info_mock.call_args
+    assert called_path == "rest/api/server-information"
 
 
 def test_supports_rest_space_permissions_false_for_dc_pre_91(
     confluence_server_client: OnyxConfluence,
 ) -> None:
-    serverinfo_mock = mock.Mock(return_value=_serverinfo_payload("8.9.1"))
+    server_info_mock = mock.Mock(return_value=_server_information_payload("8.9.1"))
     confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        serverinfo_mock
+        server_info_mock
     )
 
     assert confluence_server_client.supports_rest_space_permissions() is False
@@ -1127,18 +1135,20 @@ def test_supports_rest_space_permissions_false_for_dc_pre_91(
 def test_supports_rest_space_permissions_false_when_probe_fails(
     confluence_server_client: OnyxConfluence,
 ) -> None:
-    """Negative probe is cached: a flaky serverInfo call doesn't make us
-    re-probe on every space-permissions sync.
+    """Negative probe is cached: a flaky server-information call doesn't
+    make us re-probe on every space-permissions sync. Also pins the
+    "version=None -> JSON-RPC fallback" contract that downstream
+    dispatchers rely on.
     """
-    serverinfo_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
+    server_info_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
     confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
-        serverinfo_mock
+        server_info_mock
     )
 
     assert confluence_server_client.supports_rest_space_permissions() is False
     assert confluence_server_client.get_server_version() is None
     confluence_server_client.supports_rest_space_permissions()
-    assert serverinfo_mock.call_count == 1
+    assert server_info_mock.call_count == 1
 
 
 def test_get_all_space_permissions_server_rest_404_raises_unavailable(

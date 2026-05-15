@@ -17,7 +17,34 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      db: ${{ steps.filter.outputs.db || 'true' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            db:
+              - 'backend/**'
+              - 'tools/ods/**'
+              - 'pyproject.toml'
+              - 'deployment/docker_compose/docker-compose.yml'
+              - 'deployment/docker_compose/docker-compose.dev.yml'
+              - '.github/workflows/pr-database-tests.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+
   database-tests:
+    needs: changes
+    if: needs.changes.outputs.db == 'true'
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64

@@ -179,7 +179,7 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
               <SvgChevronDown
                 className={cn(
                   "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
-                  !isOpen && "rotate-[-90deg]"
+                  !isOpen && "-rotate-90"
                 )}
               />
             </div>

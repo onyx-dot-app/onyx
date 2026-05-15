@@ -45,9 +45,9 @@ def test_force_tool_use(
         tool.tool_name == ToolName.IMAGE_GENERATION
         for tool in analyzed_response.used_tools
     )
-    assert (
-        image_generation_tool_used
-    ), "Image generation tool should have been forced to run"
+    assert image_generation_tool_used, (
+        "Image generation tool should have been forced to run"
+    )
 
 
 if __name__ == "__main__":

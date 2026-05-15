@@ -1,5 +1,7 @@
+@reference "#reference.css";
+
 /* Imports shared timing tokens (--interactive-duration, --interactive-easing) */
-@import "@opal/core/interactive/shared.css";
+@import "../../core/interactive/shared.css";
 
 /* ---------------------------------------------------------------------------
  * Table primitives — data-attribute driven styling

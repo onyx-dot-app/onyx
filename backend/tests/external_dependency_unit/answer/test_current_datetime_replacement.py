@@ -65,9 +65,9 @@ def test_stream_chat_current_date_response(
             break
 
     assert not had_error, "Should not error when answering current date"
-    assert any(
-        isinstance(p, MessageResponseIDInfo) for p in raw
-    ), "Should yield a message ID"
+    assert any(isinstance(p, MessageResponseIDInfo) for p in raw), (
+        "Should yield a message ID"
+    )
     assert len(content) > 0, "Should stream some assistant content"
 
     # Validate the response contains a properly formatted current date string
@@ -78,12 +78,12 @@ def test_stream_chat_current_date_response(
     timestamp_dt = datetime.strptime(timestamp_str, "%A %B %d, %Y")
     now = datetime.now()
 
-    assert timestamp_dt.strftime("%A") == now.strftime(
-        "%A"
-    ), f"Expected weekday {now.strftime('%A')}, got {timestamp_dt.strftime('%A')}"
-    assert timestamp_dt.strftime("%B") == now.strftime(
-        "%B"
-    ), f"Expected month {now.strftime('%B')}, got {timestamp_dt.strftime('%B')}"
+    assert timestamp_dt.strftime("%A") == now.strftime("%A"), (
+        f"Expected weekday {now.strftime('%A')}, got {timestamp_dt.strftime('%A')}"
+    )
+    assert timestamp_dt.strftime("%B") == now.strftime("%B"), (
+        f"Expected month {now.strftime('%B')}, got {timestamp_dt.strftime('%B')}"
+    )
     assert timestamp_dt.day == now.day and timestamp_dt.year == now.year, (
         f"Expected day {now.strftime('%d')} and year {now.strftime('%Y')}, "
         f"got {timestamp_dt.strftime('%d')} {timestamp_dt.strftime('%Y')}"

@@ -347,7 +347,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       <TimelineContainer
         agent={chatState.agent}
         headerContent={
-          <div className="flex w-full h-full items-center pl-[var(--timeline-header-padding-left)] pr-[var(--timeline-header-padding-right)]">
+          <div className="flex w-full h-full items-center pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)">
             <Text as="p" mainUiAction text03 className="shimmer-text">
               {headerText}
             </Text>

@@ -7,7 +7,7 @@ export type Variants =
 
 type ClassNamesMap = Record<Variants, string | null>;
 
-export const MIN_WIDTH_CLASS = "min-w-[14rem]";
+export const MIN_WIDTH_CLASS = "min-w-56";
 
 export const wrapperClasses: ClassNamesMap = {
   primary: "input-normal",

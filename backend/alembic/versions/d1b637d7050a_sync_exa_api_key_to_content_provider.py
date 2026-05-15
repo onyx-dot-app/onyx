@@ -23,11 +23,13 @@ def upgrade() -> None:
     connection = op.get_bind()
 
     # Check if Exa search provider exists with an API key
-    result = connection.execute(text("""
+    result = connection.execute(
+        text("""
             SELECT api_key FROM internet_search_provider
             WHERE provider_type = 'exa' AND api_key IS NOT NULL
             LIMIT 1
-            """))
+            """)
+    )
     row = result.fetchone()
 
     if row:
@@ -47,7 +49,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Remove the Exa content provider that was created by this migration
     connection = op.get_bind()
-    connection.execute(text("""
+    connection.execute(
+        text("""
             DELETE FROM internet_content_provider
             WHERE provider_type = 'exa'
-            """))
+            """)
+    )

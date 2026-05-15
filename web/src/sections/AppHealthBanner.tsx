@@ -220,7 +220,7 @@ export default function AppHealthBanner() {
     return null;
   } else {
     return (
-      <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
+      <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
         <Content
           icon={SvgAlertTriangle}
           title="The backend is currently unavailable"

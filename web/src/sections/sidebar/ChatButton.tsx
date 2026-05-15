@@ -41,7 +41,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
-import { useAgents, usePinnedAgents } from "@/hooks/useAgents";
+import { useAgents, usePinnedAgents } from "@/lib/agents/hooks";
 
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;

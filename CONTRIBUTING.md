@@ -145,7 +145,7 @@ npm i
 
 #### Backend
 
-Set up pre-commit hooks (black / reorder-python-imports):
+Set up pre-commit hooks (`ruff` / `ruff format`):
 
 ```bash
 uv run pre-commit install
@@ -159,13 +159,13 @@ uv run ty check
 
 #### Frontend
 
-We use `prettier` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
+We use `oxfmt` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
 
 ```bash
-npx prettier --write .  # from onyx/web
+npx oxfmt .  # from onyx/web
 ```
 
-Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
+Pre-commit will also run oxfmt automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
 
 ---
 
@@ -195,7 +195,9 @@ Before starting, make sure the Docker Daemon is running.
 
 **Features:**
 
-- Hot reload is enabled for the web server and API servers
+- Hot reload is enabled for the web server, API server, and celery workers
+  (celery is wrapped in `backend/scripts/dev_celery_reload.py` so breakpoints
+  survive reloads — debugpy follows the watchfiles fork via `subProcess: true`)
 - Python debugging is configured with debugpy
 - Environment variables are loaded from `.vscode/.env`
 - Console output is organized in the integrated terminal with labeled tabs
@@ -277,6 +279,10 @@ You should now have 4 servers running:
 Now, visit http://localhost:3000 in your browser. You should see the Onyx onboarding wizard where you can connect your external LLM provider to Onyx.
 
 You've successfully set up a local Onyx instance!
+
+### Running on a Local Kubernetes Cluster
+
+For Onyx Craft development with `SANDBOX_BACKEND=kubernetes`, see [Local Kubernetes Development](/docs/dev/local-kubernetes.md).
 
 ### Running in Docker
 

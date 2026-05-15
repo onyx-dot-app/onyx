@@ -221,7 +221,6 @@ def session_workspace(
         session_id=session_id,
         llm_config=llm_config,
         nextjs_port=nextjs_port,
-        file_system_path=SANDBOX_BASE_PATH,
     )
 
     yield sandbox_record, session_id

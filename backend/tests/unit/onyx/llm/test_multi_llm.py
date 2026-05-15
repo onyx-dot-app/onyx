@@ -100,9 +100,9 @@ def _accumulate_stream_to_assistant_message(
                     if tool_call_delta.function.name:
                         tool_calls_map[index]["name"] = tool_call_delta.function.name
                     if tool_call_delta.function.arguments:
-                        tool_calls_map[index][
-                            "arguments"
-                        ] += tool_call_delta.function.arguments
+                        tool_calls_map[index]["arguments"] += (
+                            tool_call_delta.function.arguments
+                        )
 
     # Convert accumulated tool calls to ToolCall list, sorted by index
     tool_calls = None
@@ -1504,9 +1504,9 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         default_multi_llm.invoke(messages, tools=None)
 
         _, kwargs = mock_completion.call_args
-        assert (
-            "tool_choice" not in kwargs
-        ), "tool_choice must not be sent to providers when no tools are provided"
+        assert "tool_choice" not in kwargs, (
+            "tool_choice must not be sent to providers when no tools are provided"
+        )
 
 
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:

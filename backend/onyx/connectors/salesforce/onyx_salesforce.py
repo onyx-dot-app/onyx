@@ -32,17 +32,17 @@ class OnyxSalesforce(Salesforce):
 
         self.parent_types: set[str] = set()
         self.child_types: set[str] = set()
-        self.parent_to_child_types: dict[str, set[str]] = (
-            {}
-        )  # map from parent to child types
-        self.child_to_parent_types: dict[str, set[str]] = (
-            {}
-        )  # map from child to parent types
+        self.parent_to_child_types: dict[
+            str, set[str]
+        ] = {}  # map from parent to child types
+        self.child_to_parent_types: dict[
+            str, set[str]
+        ] = {}  # map from child to parent types
         self.parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
         self.queryable_fields_by_type: dict[str, list[str]] = {}
-        self.prefix_to_type: dict[str, str] = (
-            {}
-        )  # infer the object type of an id immediately
+        self.prefix_to_type: dict[
+            str, str
+        ] = {}  # infer the object type of an id immediately
 
     def initialize(self) -> bool:
         """Eventually cache all first run client state with this method"""
@@ -332,7 +332,6 @@ class OnyxSalesforce(Salesforce):
     def _is_valid_child_object(
         self, child_relationship: dict[str, Any]
     ) -> tuple[bool, str]:
-
         if not child_relationship["childSObject"]:
             return False, "childSObject is None"
 

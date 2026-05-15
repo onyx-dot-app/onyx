@@ -430,8 +430,54 @@ class TestSeatLimitEnforcement:
     def test_seat_limit_only_enforced_for_self_hosted(self) -> None:
         from onyx.auth.users import enforce_seat_limit
 
-        with patch("onyx.auth.users.MULTI_TENANT", True):
+        # In MULTI_TENANT mode the local seat check is bypassed in favor of
+        # the cloud auto-bill helper. Patch fetch_ee_implementation_or_noop
+        # to the no-op default so the test does not depend on whether the
+        # real EE billing module has been imported by an earlier test.
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch(
+                "onyx.auth.users.fetch_ee_implementation_or_noop",
+                return_value=lambda **_kw: None,
+            ),
+        ):
             enforce_seat_limit(MagicMock())  # should not raise
+
+    def test_cloud_locked_variant_forwards_session_to_billing(self) -> None:
+        from onyx.auth.users import enforce_seat_limit_locked
+
+        captured: dict = {}
+
+        def fake_cloud_enforce(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def fake_acquire_lock(*_a: object, **_kw: object) -> None:
+            pass
+
+        def fake_fetch(_module: str, name: str, _default: object) -> object:
+            if name == "acquire_seat_lock":
+                return fake_acquire_lock
+            if name == "enforce_cloud_seat_limit":
+                return fake_cloud_enforce
+            return _default
+
+        db_session = MagicMock()
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch(
+                "onyx.auth.users.get_current_tenant_id",
+                return_value="tenant_xyz",
+            ),
+            patch(
+                "onyx.auth.users.fetch_ee_implementation_or_noop",
+                side_effect=fake_fetch,
+            ),
+        ):
+            enforce_seat_limit_locked(db_session, seats_needed=2)
+
+        assert captured["db_session"] is db_session
+        assert captured["tenant_id"] == "tenant_xyz"
+        assert captured["seats_needed"] == 2
 
 
 class TestCaseInsensitiveEmailMatching:

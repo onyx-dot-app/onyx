@@ -45,7 +45,7 @@ def slack_test_setup() -> Generator[tuple[ChannelType, ChannelType], None, None]
 
 
 @pytest.fixture()
-def slack_perm_sync_test_setup() -> (
-    Generator[tuple[ChannelType, ChannelType], None, None]
-):
+def slack_perm_sync_test_setup() -> Generator[
+    tuple[ChannelType, ChannelType], None, None
+]:
     yield from _provision_slack_channels(os.environ["SLACK_BOT_TOKEN_TEST_SPACE"])

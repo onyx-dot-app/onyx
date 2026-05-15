@@ -383,10 +383,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
           {/* macOS-style window controls - sticky on left */}
-          <div className="group flex items-center gap-2.5 pl-4 pr-2 py-3 flex-shrink-0">
+          <div className="group flex items-center gap-2.5 pl-4 pr-2 py-3 shrink-0">
             <button
               onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors flex-shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors shrink-0 flex items-center justify-center"
               aria-label="No action"
             >
               <SvgX
@@ -398,7 +398,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             </button>
             <button
               onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors flex-shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors shrink-0 flex items-center justify-center"
               aria-label="Close panel"
             >
               <SvgMinus
@@ -410,7 +410,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
             </button>
             <button
               onClick={handleMaximize}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors flex-shrink-0 flex items-center justify-center"
+              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors shrink-0 flex items-center justify-center"
               aria-label="Maximize panel"
             >
               <SvgMaximize2
@@ -464,7 +464,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   <Icon
                     size={16}
                     className={cn(
-                      "stroke-current flex-shrink-0",
+                      "stroke-current shrink-0",
                       isDisabled
                         ? "stroke-text-02"
                         : isActive
@@ -529,7 +529,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   <TabIcon
                     size={14}
                     className={cn(
-                      "stroke-current flex-shrink-0",
+                      "stroke-current shrink-0",
                       isActive ? "stroke-text-04" : "stroke-text-03"
                     )}
                   />
@@ -540,7 +540,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                   <button
                     onClick={(e) => handlePreviewTabClose(e, previewTab.path)}
                     className={cn(
-                      "flex-shrink-0 p-0.5 rounded hover:bg-background-tint-03 transition-colors",
+                      "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
                       isActive
                         ? "opacity-100"
                         : "opacity-0 group-hover:opacity-100"

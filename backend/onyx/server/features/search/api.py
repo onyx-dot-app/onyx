@@ -1,18 +1,16 @@
 """Search API endpoint (POST /api/search).
 
 Runs the full SearchTool.run() pipeline — the same multi-stage search that
-powers chat mode.  Returns ranked results without generating
-an LLM answer.
+powers chat mode. Returns ranked results without generating an LLM answer.
 
 Intended for programmatic consumers (onyx-cli, Craft sandbox, integrations).
 
 Not the same as the Onyx Search UI backend at /api/search/send-search-message
 (ee/onyx/server/query_and_chat/search_backend.py), which calls search_pipeline()
-directly — a lighter-weight flow with optional query expansion and streaming.
+directly — a lighter-weight flow with optional query expansion.
 """
 
-from datetime import datetime
-from datetime import timedelta
+import json
 from datetime import timezone
 from typing import cast
 
@@ -26,7 +24,6 @@ from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
@@ -42,9 +39,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import llm_from_provider
-from onyx.server.features.search.models import SearchAPIRequest
-from onyx.server.features.search.models import SearchAPIResponse
-from onyx.server.features.search.models import SearchAPIResult
+from onyx.server.features.search.models import SearchRequest
+from onyx.server.features.search.models import SearchResponse
+from onyx.server.features.search.models import SearchResult
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -58,42 +55,12 @@ from shared_configs.contextvars import get_current_tenant_id
 router = APIRouter(prefix="/search")
 
 
-def _build_results(
-    search_docs_response: SearchDocsResponse,
-) -> list[SearchAPIResult]:
-    docs = search_docs_response.displayed_docs or search_docs_response.search_docs
-    citation_mapping = search_docs_response.citation_mapping
-
-    doc_id_to_citation: dict[str, int] = {
-        doc_id: citation_id for citation_id, doc_id in citation_mapping.items()
-    }
-
-    results: list[SearchAPIResult] = []
-    for doc in docs:
-        citation_id = doc_id_to_citation.get(doc.document_id)
-        results.append(
-            SearchAPIResult(
-                citation_id=citation_id,
-                document_id=doc.document_id,
-                chunk_ind=doc.chunk_ind,
-                title=doc.semantic_identifier,
-                blurb=doc.blurb,
-                link=doc.link,
-                source_type=doc.source_type.value,
-                score=doc.score,
-                updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
-            )
-        )
-
-    return results
-
-
 @router.post("", dependencies=[Depends(require_vector_db)])
 def search(
-    request: SearchAPIRequest,
+    request: SearchRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> SearchAPIResponse:
+) -> SearchResponse:
     # 1. Load persona
     persona = None
     if request.persona_id is not None:
@@ -156,12 +123,12 @@ def search(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    # 3. Build filters
-    time_cutoff = None
-    if request.time_cutoff_days is not None:
-        time_cutoff = datetime.now(timezone.utc) - timedelta(
-            days=request.time_cutoff_days
-        )
+    # 3. Build filters. See SearchRequest.time_cutoff for the naive-→-UTC
+    # contract; we apply it here so downstream comparison against tz-aware
+    # document timestamps works.
+    time_cutoff = request.time_cutoff
+    if time_cutoff is not None and time_cutoff.tzinfo is None:
+        time_cutoff = time_cutoff.replace(tzinfo=timezone.utc)
 
     base_filters = BaseFilters(
         source_type=request.sources,
@@ -209,7 +176,7 @@ def search(
             starting_citation_num=1,
             original_query=request.query,
             skip_query_expansion=request.skip_query_expansion,
-            num_hits=request.num_results,
+            include_link=True,
             message_history=request.message_history
             or [
                 ChatMinimalTextMessage(
@@ -221,11 +188,19 @@ def search(
         queries=[request.query],
     )
 
-    # 8. Map output
-    search_docs_response = cast(SearchDocsResponse, tool_response.rich_response)
-
-    return SearchAPIResponse(
-        results=_build_results(search_docs_response),
-        llm_facing_text=tool_response.llm_facing_response,
-        citation_mapping=search_docs_response.citation_mapping,
+    # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).
+    llm_facing_text = tool_response.llm_facing_response
+    entries = json.loads(llm_facing_text)["results"] if llm_facing_text else []
+    return SearchResponse(
+        results=[
+            SearchResult(
+                citation_id=entry["document"],
+                title=entry["title"],
+                content=entry["content"],
+                link=entry.get("url"),
+                source_type=entry["source_type"],
+                updated_at=entry.get("updated_at"),
+            )
+            for entry in entries
+        ],
     )

@@ -63,7 +63,6 @@ def create_user_files(
     link_url: str | None = None,
     temp_id_map: dict[str, str] | None = None,
 ) -> CategorizedFilesResult:
-
     # Categorize the files
     categorized_files = categorize_uploaded_files(files, db_session)
     # NOTE: At the moment, zip metadata is not used for user files.

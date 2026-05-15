@@ -190,9 +190,9 @@ class TestGuildDataIsolation:
         guild1_id = guild1_data["id"]
         registration_key1 = guild1_data["registration_key"]
         tenant1_id = parse_discord_registration_key(registration_key1)
-        assert (
-            tenant1_id is not None
-        ), "Failed to parse tenant ID from registration key 1"
+        assert tenant1_id is not None, (
+            "Failed to parse tenant ID from registration key 1"
+        )
 
         # Create 1 guild in tenant 2
         response2 = requests.post(
@@ -204,14 +204,14 @@ class TestGuildDataIsolation:
         guild2_id = guild2_data["id"]
         registration_key2 = guild2_data["registration_key"]
         tenant2_id = parse_discord_registration_key(registration_key2)
-        assert (
-            tenant2_id is not None
-        ), "Failed to parse tenant ID from registration key 2"
+        assert tenant2_id is not None, (
+            "Failed to parse tenant ID from registration key 2"
+        )
 
         # Verify tenant IDs are different
-        assert (
-            tenant1_id != tenant2_id
-        ), "Tenant 1 and tenant 2 should have different tenant IDs"
+        assert tenant1_id != tenant2_id, (
+            "Tenant 1 and tenant 2 should have different tenant IDs"
+        )
 
         # Register guild 1 with tenant 1's context - populate with different data
         with get_session_with_tenant(tenant_id=tenant1_id) as db_session:
@@ -251,32 +251,32 @@ class TestGuildDataIsolation:
             tenant1_guilds = list_response1.json()
 
             # Tenant 1 should see exactly 1 guild
-            assert (
-                len(tenant1_guilds) == 1
-            ), f"Tenant 1 should see 1 guild, got {len(tenant1_guilds)}"
+            assert len(tenant1_guilds) == 1, (
+                f"Tenant 1 should see 1 guild, got {len(tenant1_guilds)}"
+            )
 
             # Verify tenant 1's guild has the correct data
             tenant1_guild = tenant1_guilds[0]
-            assert (
-                tenant1_guild["id"] == guild1_id
-            ), "Tenant 1 should see their own guild"
-            assert (
-                tenant1_guild["guild_id"] == 111111111111111111
-            ), f"Tenant 1's guild should have guild_id 111111111111111111, got {tenant1_guild['guild_id']}"
-            assert (
-                tenant1_guild["guild_name"] == "Tenant 1 Server"
-            ), f"Tenant 1's guild should have name 'Tenant 1 Server', got {tenant1_guild['guild_name']}"
-            assert (
-                tenant1_guild["registered_at"] is not None
-            ), "Tenant 1's guild should be registered"
+            assert tenant1_guild["id"] == guild1_id, (
+                "Tenant 1 should see their own guild"
+            )
+            assert tenant1_guild["guild_id"] == 111111111111111111, (
+                f"Tenant 1's guild should have guild_id 111111111111111111, got {tenant1_guild['guild_id']}"
+            )
+            assert tenant1_guild["guild_name"] == "Tenant 1 Server", (
+                f"Tenant 1's guild should have name 'Tenant 1 Server', got {tenant1_guild['guild_name']}"
+            )
+            assert tenant1_guild["registered_at"] is not None, (
+                "Tenant 1's guild should be registered"
+            )
 
             # Tenant 1 should NOT see tenant 2's guild
-            assert (
-                tenant1_guild["guild_id"] != 222222222222222222
-            ), "Tenant 1 should not see tenant 2's guild_id"
-            assert (
-                tenant1_guild["guild_name"] != "Tenant 2 Server"
-            ), "Tenant 1 should not see tenant 2's guild_name"
+            assert tenant1_guild["guild_id"] != 222222222222222222, (
+                "Tenant 1 should not see tenant 2's guild_id"
+            )
+            assert tenant1_guild["guild_name"] != "Tenant 2 Server", (
+                "Tenant 1 should not see tenant 2's guild_name"
+            )
 
             # Verify tenant 2 sees only their guild
             list_response2 = requests.get(
@@ -287,40 +287,40 @@ class TestGuildDataIsolation:
             tenant2_guilds = list_response2.json()
 
             # Tenant 2 should see exactly 1 guild
-            assert (
-                len(tenant2_guilds) == 1
-            ), f"Tenant 2 should see 1 guild, got {len(tenant2_guilds)}"
+            assert len(tenant2_guilds) == 1, (
+                f"Tenant 2 should see 1 guild, got {len(tenant2_guilds)}"
+            )
 
             # Verify tenant 2's guild has the correct data
             tenant2_guild = tenant2_guilds[0]
-            assert (
-                tenant2_guild["id"] == guild2_id
-            ), "Tenant 2 should see their own guild"
-            assert (
-                tenant2_guild["guild_id"] == 222222222222222222
-            ), f"Tenant 2's guild should have guild_id 222222222222222222, got {tenant2_guild['guild_id']}"
-            assert (
-                tenant2_guild["guild_name"] == "Tenant 2 Server"
-            ), f"Tenant 2's guild should have name 'Tenant 2 Server', got {tenant2_guild['guild_name']}"
-            assert (
-                tenant2_guild["registered_at"] is not None
-            ), "Tenant 2's guild should be registered"
+            assert tenant2_guild["id"] == guild2_id, (
+                "Tenant 2 should see their own guild"
+            )
+            assert tenant2_guild["guild_id"] == 222222222222222222, (
+                f"Tenant 2's guild should have guild_id 222222222222222222, got {tenant2_guild['guild_id']}"
+            )
+            assert tenant2_guild["guild_name"] == "Tenant 2 Server", (
+                f"Tenant 2's guild should have name 'Tenant 2 Server', got {tenant2_guild['guild_name']}"
+            )
+            assert tenant2_guild["registered_at"] is not None, (
+                "Tenant 2's guild should be registered"
+            )
 
             # Tenant 2 should NOT see tenant 1's guild
-            assert (
-                tenant2_guild["guild_id"] != 111111111111111111
-            ), "Tenant 2 should not see tenant 1's guild_id"
-            assert (
-                tenant2_guild["guild_name"] != "Tenant 1 Server"
-            ), "Tenant 2 should not see tenant 1's guild_name"
+            assert tenant2_guild["guild_id"] != 111111111111111111, (
+                "Tenant 2 should not see tenant 1's guild_id"
+            )
+            assert tenant2_guild["guild_name"] != "Tenant 1 Server", (
+                "Tenant 2 should not see tenant 1's guild_name"
+            )
 
             # Verify the guilds are different (different data)
-            assert (
-                tenant1_guild["guild_id"] != tenant2_guild["guild_id"]
-            ), "Guilds should have different Discord guild IDs"
-            assert (
-                tenant1_guild["guild_name"] != tenant2_guild["guild_name"]
-            ), "Guilds should have different names"
+            assert tenant1_guild["guild_id"] != tenant2_guild["guild_id"], (
+                "Guilds should have different Discord guild IDs"
+            )
+            assert tenant1_guild["guild_name"] != tenant2_guild["guild_name"], (
+                "Guilds should have different names"
+            )
 
         finally:
             # Cleanup

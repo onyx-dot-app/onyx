@@ -42,9 +42,9 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def _get_classification_extraction_instructions() -> (
-    dict[str | None, dict[str, KGEntityTypeInstructions]]
-):
+def _get_classification_extraction_instructions() -> dict[
+    str | None, dict[str, KGEntityTypeInstructions]
+]:
     """
     Prepare the classification instructions for the given source.
     """
