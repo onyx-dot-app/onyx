@@ -22,10 +22,15 @@ function findCss(dir) {
   return out;
 }
 
+const colorsCss = join(srcDir, "colors.css");
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
 const allCss = findCss(srcDir).sort();
-const leafCss = allCss.filter((p) => p !== referenceCss && p !== rootCss);
+// colors.css is a standalone artifact (dist/colors.css) — exclude from the main bundle.
+// _reference.css and root.css have fixed positions in the bundle (first and second).
+const leafCss = allCss.filter(
+  (p) => p !== referenceCss && p !== rootCss && p !== colorsCss
+);
 // _reference.css carries `@import "tailwindcss"` + `@config` and must come
 // first. root.css follows so design tokens are defined before any rule that
 // consumes them. The remaining files are concatenated alphabetically.
@@ -53,3 +58,10 @@ writeFileSync(join(distDir, "styles.css"), bundled);
 console.log(
   `bundled ${order.length} css file(s) -> dist/styles.css (${bundled.length} bytes)`
 );
+
+// colors.css is a standalone design-token file — copy it verbatim to dist/.
+// Consumers import it separately so they can override with their own theme.
+const colorsRaw = readFileSync(colorsCss, "utf8");
+writeFileSync(join(distDir, "colors.css"), colorsRaw);
+
+console.log(`copied colors.css -> dist/colors.css (${colorsRaw.length} bytes)`);
