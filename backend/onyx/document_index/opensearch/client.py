@@ -1061,7 +1061,8 @@ class OpenSearchIndexClient(OpenSearchClient):
 
             if fatal_errors:
                 raise OpenSearchUpdateError(
-                    f"Failed to bulk update document chunks for index {self._index_name}. At least one fatal error occurred: {fatal_errors[0]}"
+                    f"Failed to bulk update document chunks for index {self._index_name}. At least "
+                    f"one fatal error occurred: {fatal_errors[0]}"
                 )
 
             data = []
