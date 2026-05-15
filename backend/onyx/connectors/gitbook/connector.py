@@ -235,9 +235,10 @@ class GitbookConnector(LoadConnector, PollConnector):
             pages: list[dict[str, Any]] = content.get("pages", [])
             current_batch: list[Document | HierarchyNode] = []
 
-            logger.info(f"Found {len(pages)} root pages.")
+            logger.info("Found %s root pages.", len(pages))
             logger.info(
-                f"First 20 Page Ids: {[page.get('id', 'Unknown') for page in pages[:20]]}"
+                "First 20 Page Ids: %s",
+                [page.get("id", "Unknown") for page in pages[:20]],
             )
 
             while pages:
@@ -268,7 +269,7 @@ class GitbookConnector(LoadConnector, PollConnector):
                 yield current_batch
 
         except requests.RequestException as e:
-            logger.error(f"Error fetching GitBook content: {str(e)}")
+            logger.error("Error fetching GitBook content: %s", str(e))
             raise
 
     def load_from_state(self) -> GenerateDocumentsOutput:

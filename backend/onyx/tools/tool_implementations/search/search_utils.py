@@ -178,7 +178,7 @@ def _retrieve_adjacent_chunks(
             # Sort by chunk_id to ensure correct order
             chunks_above.sort(key=lambda c: c.chunk_id)
         except Exception as e:
-            logger.warning(f"Failed to retrieve chunks above section: {e}")
+            logger.warning("Failed to retrieve chunks above section: %s", e)
 
     # Retrieve chunks below (if any)
     if num_chunks_below > 0:
@@ -200,7 +200,7 @@ def _retrieve_adjacent_chunks(
             # Sort by chunk_id to ensure correct order
             chunks_below.sort(key=lambda c: c.chunk_id)
         except Exception as e:
-            logger.warning(f"Failed to retrieve chunks below section: {e}")
+            logger.warning("Failed to retrieve chunks below section: %s", e)
 
     return chunks_above, chunks_below
 
@@ -415,21 +415,24 @@ def expand_section_with_context(
     if classification == ContextExpansionType.NOT_RELEVANT:
         # Filter out this section
         logger.debug(
-            f"LLM classified section as NOT_RELEVANT: {section.center_chunk.semantic_identifier}"
+            "LLM classified section as NOT_RELEVANT: %s",
+            section.center_chunk.semantic_identifier,
         )
         return None
 
     elif classification == ContextExpansionType.MAIN_SECTION_ONLY:
         # Return original section unchanged
         logger.debug(
-            f"LLM classified section as MAIN_SECTION_ONLY: {section.center_chunk.semantic_identifier}"
+            "LLM classified section as MAIN_SECTION_ONLY: %s",
+            section.center_chunk.semantic_identifier,
         )
         return section
 
     elif classification == ContextExpansionType.INCLUDE_ADJACENT_SECTIONS:
         # Use the 2 chunks we already retrieved for the prompt
         logger.debug(
-            f"LLM classified section as INCLUDE_ADJACENT_SECTIONS: {section.center_chunk.semantic_identifier}"
+            "LLM classified section as INCLUDE_ADJACENT_SECTIONS: %s",
+            section.center_chunk.semantic_identifier,
         )
 
         all_chunks = chunks_above_for_prompt + section.chunks + chunks_below_for_prompt
@@ -448,11 +451,13 @@ def expand_section_with_context(
         # Fetch 5 chunks above and below (optimal single retrieval)
         if expand_override:
             logger.debug(
-                f"Section marked for FULL_DOCUMENT expansion (override): {section.center_chunk.semantic_identifier}"
+                "Section marked for FULL_DOCUMENT expansion (override): %s",
+                section.center_chunk.semantic_identifier,
             )
         else:
             logger.debug(
-                f"LLM classified section as FULL_DOCUMENT: {section.center_chunk.semantic_identifier}"
+                "LLM classified section as FULL_DOCUMENT: %s",
+                section.center_chunk.semantic_identifier,
             )
 
         chunks_above_full, chunks_below_full = _retrieve_adjacent_chunks(
@@ -467,7 +472,8 @@ def expand_section_with_context(
 
         if not all_chunks:
             logger.warning(
-                f"No chunks found for full document context expansion: {section.center_chunk.semantic_identifier}"
+                "No chunks found for full document context expansion: %s",
+                section.center_chunk.semantic_identifier,
             )
             return section
 
@@ -482,6 +488,7 @@ def expand_section_with_context(
     else:
         # Unknown classification - default to returning original section
         logger.warning(
-            f"Unknown context classification {classification}, returning original section"
+            "Unknown context classification %s, returning original section",
+            classification,
         )
         return section

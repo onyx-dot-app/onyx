@@ -30,7 +30,7 @@ async def request_invite(
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(
-            f"Failed to invite self to tenant {invite_request.tenant_id}: {e}"
+            "Failed to invite self to tenant %s: %s", invite_request.tenant_id, e
         )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -63,7 +63,7 @@ async def accept_invite(
     try:
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
-        logger.exception(f"Failed to accept invite: {str(e)}")
+        logger.exception("Failed to accept invite: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to accept invitation")
 
 
@@ -78,5 +78,5 @@ async def deny_invite(
     try:
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
-        logger.exception(f"Failed to deny invite: {str(e)}")
+        logger.exception("Failed to deny invite: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to deny invitation")

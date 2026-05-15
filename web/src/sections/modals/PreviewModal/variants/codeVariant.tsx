@@ -1,4 +1,4 @@
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { getCodeLanguage } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
@@ -27,8 +27,8 @@ export const codeVariant: PreviewVariant = {
   ),
 
   renderFooterLeft: (ctx) => (
-    <Text text03 mainUiBody className="select-none">
-      {ctx.lineCount} {ctx.lineCount === 1 ? "line" : "lines"}
+    <Text font="main-ui-body" color="text-03">
+      {`${ctx.lineCount} ${ctx.lineCount === 1 ? "line" : "lines"}`}
     </Text>
   ),
 

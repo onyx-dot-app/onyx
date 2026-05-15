@@ -6,8 +6,10 @@ import InputDatePicker, {
 } from "@/refresh-components/inputs/InputDatePicker";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
-interface InputDatePickerFieldProps
-  extends Omit<InputDatePickerProps, "selectedDate" | "setSelectedDate"> {
+interface InputDatePickerFieldProps extends Omit<
+  InputDatePickerProps,
+  "selectedDate" | "setSelectedDate"
+> {
   name: string;
   setSelectedDate?: (date: Date | null) => void;
 }

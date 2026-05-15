@@ -173,7 +173,9 @@ def search_chunks(
 
     if not top_chunks:
         logger.debug(
-            f"Search returned no results for query: {query_request.query} with filters: {query_request.filters}."
+            "Search returned no results for query: %s with filters: %s.",
+            query_request.query,
+            query_request.filters,
         )
 
     return top_chunks

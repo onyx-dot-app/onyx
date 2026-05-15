@@ -91,7 +91,7 @@ export function Citation({
             <span
               className="flex items-center justify-center p-1 h-4 max-w-[200px]
                          bg-background-tint-03 rounded-04
-                         hover:bg-background-tint-04 shadow-sm"
+                         hover:bg-background-tint-04 shadow-xs"
               style={{ transform: "translateY(-10%)", lineHeight: "1" }}
             >
               <Text figureSmallValue className="truncate">

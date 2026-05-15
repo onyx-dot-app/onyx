@@ -61,7 +61,7 @@ class LLMProviderDescriptor(BaseModel):
     non-admin users. Used when giving a list of available LLMs."""
 
     id: int
-    name: str
+    name: str | None
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
@@ -91,7 +91,7 @@ class LLMProviderDescriptor(BaseModel):
 
 
 class LLMProvider(BaseModel):
-    name: str
+    name: str | None = None
     provider: str
     api_key: str | None = None
     api_base: str | None = None
@@ -190,6 +190,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
 
 
 class ModelConfigurationView(BaseModel):
+    id: int | None = None
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
@@ -219,6 +220,7 @@ class ModelConfigurationView(BaseModel):
             )
 
             return cls(
+                id=model_configuration_model.id,
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
@@ -256,6 +258,7 @@ class ModelConfigurationView(BaseModel):
         )
 
         return cls(
+            id=model_configuration_model.id,
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
@@ -292,7 +295,7 @@ class VisionProviderResponse(LLMProviderView):
 
 
 class LLMCost(BaseModel):
-    provider: str
+    provider_name: str
     model_name: str
     cost: float
 

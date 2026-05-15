@@ -5,16 +5,14 @@ import {
   forwardRef,
   useImperativeHandle,
   useCallback,
-  useEffect,
   useRef,
-  useState,
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -22,12 +20,8 @@ import {
   BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
-import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
-import { Button } from "@opal/components";
-import { Tooltip } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
@@ -36,11 +30,10 @@ import {
   SvgLoader,
   SvgX,
   SvgPaperclip,
-  SvgOrganization,
   SvgAlertCircle,
 } from "@opal/icons";
-
-const MAX_INPUT_HEIGHT = 200;
+import { useContentEditable } from "@/hooks/useContentEditable";
+import { useUser } from "@/providers/UserProvider";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -49,20 +42,12 @@ export interface InputBarHandle {
 }
 
 export interface InputBarProps {
-  onSubmit: (
-    message: string,
-    files: BuildFile[],
-    demoDataEnabled: boolean
-  ) => void;
+  onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
-  /** When true, removes bottom rounding to allow seamless connection with components below */
   noBottomRounding?: boolean;
-  /** Whether this is the welcome page (no existing session in URL). Used for Demo Data pill. */
-  isWelcomePage?: boolean;
 }
 
 /**
@@ -110,7 +95,7 @@ function BuildFileCard({
       </span>
       <button
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded"
+        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
       >
         <SvgX className="h-3 w-3 text-text-03" />
       </button>
@@ -160,15 +145,34 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
-        isWelcomePage = false,
       },
       ref
     ) => {
-      const router = useRouter();
-      const demoDataEnabled = useDemoDataEnabled();
-      const [message, setMessage] = useState("");
+      const { user } = useUser();
+      const inputWrapperRef = useRef<HTMLDivElement>(null);
+      const {
+        ref: inputRef,
+        message,
+        setMessage,
+        clearMessage,
+        handleInput: onInput,
+        handleCompositionStart,
+        handleCompositionEnd,
+        pasteText,
+        handleCopy,
+        handleCut,
+        setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
+      } = useContentEditable({
+        wrapperRef: inputWrapperRef,
+        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
+      });
 
-      const textAreaRef = useRef<HTMLTextAreaElement>(null);
       const containerRef = useRef<HTMLDivElement>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -180,44 +184,19 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
-      // Expose reset, focus, and setMessage methods to parent via ref
       useImperativeHandle(ref, () => ({
         reset: () => {
-          setMessage("");
+          clearMessage();
           clearFiles();
         },
         focus: () => {
-          textAreaRef.current?.focus();
+          inputRef.current?.focus();
+          setCursorToEnd();
         },
         setMessage: (msg: string) => {
           setMessage(msg);
-          // Move cursor to end after setting message
-          setTimeout(() => {
-            const textarea = textAreaRef.current;
-            if (textarea) {
-              textarea.focus();
-              textarea.setSelectionRange(msg.length, msg.length);
-            }
-          }, 0);
         },
       }));
-
-      // Auto-resize textarea based on content
-      useEffect(() => {
-        const textarea = textAreaRef.current;
-        if (textarea) {
-          textarea.style.height = "0px";
-          textarea.style.height = `${Math.min(
-            textarea.scrollHeight,
-            MAX_INPUT_HEIGHT
-          )}px`;
-        }
-      }, [message]);
-
-      // Auto-focus on mount
-      useEffect(() => {
-        textAreaRef.current?.focus();
-      }, []);
 
       const handleFileSelect = useCallback(
         async (e: ChangeEvent<HTMLInputElement>) => {
@@ -232,21 +211,21 @@ const InputBar = memo(
 
       const handlePaste = useCallback(
         (event: ClipboardEvent) => {
+          if (disabled) return;
           const pastedFiles = getPastedFilesIfNoText(event.clipboardData);
           if (pastedFiles.length > 0) {
             event.preventDefault();
-            // Context handles session binding internally
             uploadFiles(pastedFiles);
+            return;
           }
-        },
-        [uploadFiles]
-      );
 
-      const handleInputChange = useCallback(
-        (event: ChangeEvent<HTMLTextAreaElement>) => {
-          setMessage(event.target.value);
+          event.preventDefault();
+          const text = event.clipboardData.getData("text/plain");
+          if (!text) return;
+
+          pasteText(text);
         },
-        []
+        [disabled, uploadFiles, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -257,12 +236,10 @@ const InputBar = memo(
         const hasFiles = currentMessageFiles.length > 0;
 
         if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
-          setMessage("");
+          onSubmit(message.trim(), currentMessageFiles);
+          clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
-          // User hit Enter with only files attached: remove files from input bar
-          // (File stays in session; no way to delete from session for now)
           clearFiles({ suppressRefetch: true });
         }
       }, [
@@ -274,11 +251,14 @@ const InputBar = memo(
         onSubmit,
         currentMessageFiles,
         clearFiles,
-        demoDataEnabled,
+        clearMessage,
       ]);
 
       const handleKeyDown = useCallback(
-        (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        (event: KeyboardEvent<HTMLDivElement>) => {
+          if (handleTileKeyDown(event)) return;
+
+          // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
             !event.shiftKey &&
@@ -288,7 +268,7 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit]
+        [handleSubmit, handleTileKeyDown]
       );
 
       const canSubmit =
@@ -331,34 +311,48 @@ const InputBar = memo(
             )}
 
             {/* Input area */}
-            <textarea
-              onPaste={handlePaste}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              ref={textAreaRef}
-              className={cn(
-                "w-full",
-                "h-[44px]",
-                "outline-none",
-                "bg-transparent",
-                "resize-none",
-                "placeholder:text-text-03",
-                "whitespace-pre-wrap",
-                "break-word",
-                "overscroll-contain",
-                "overflow-y-auto",
-                "px-3",
-                "pb-2",
-                "pt-3"
-              )}
-              autoFocus
-              style={{ scrollbarWidth: "thin" }}
-              role="textarea"
-              aria-multiline
-              placeholder={placeholder}
-              value={message}
-              disabled={disabled}
-            />
+            <div ref={inputWrapperRef} className="flex-1 overflow-hidden">
+              <div
+                ref={inputRef}
+                contentEditable={!disabled}
+                suppressContentEditableWarning
+                onPaste={handlePaste}
+                onInput={onInput}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onKeyDown={handleKeyDown}
+                className={cn(
+                  "w-full",
+                  "h-full",
+                  "min-h-[44px]",
+                  "outline-hidden",
+                  "bg-transparent",
+                  "whitespace-pre-wrap",
+                  "wrap-break-word",
+                  "overscroll-contain",
+                  "overflow-y-auto",
+                  "px-3",
+                  "pb-2",
+                  "pt-3"
+                )}
+                tabIndex={disabled ? -1 : 0}
+                style={{
+                  scrollbarWidth: "thin",
+                  scrollbarColor: "var(--border-02) transparent",
+                }}
+                role="textbox"
+                aria-label="Message input"
+                aria-multiline={true}
+                aria-disabled={disabled}
+                aria-placeholder={placeholder}
+                data-placeholder={placeholder}
+                data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
+              />
+            </div>
 
             {/* Bottom controls */}
             <div className="flex justify-between items-center w-full p-1 min-h-[40px]">
@@ -372,27 +366,6 @@ const InputBar = memo(
                   prominence="tertiary"
                   onClick={() => fileInputRef.current?.click()}
                 />
-                {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-                {demoDataEnabled && isWelcomePage && (
-                  <Tooltip
-                    tooltip="Switch to your data in the Configure panel!"
-                    side="top"
-                  >
-                    <span>
-                      <SelectButton
-                        disabled={disabled}
-                        leftIcon={SvgOrganization}
-                        engaged={demoDataEnabled}
-                        action
-                        folded
-                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                        className="bg-action-link-01"
-                      >
-                        Demo Data Active
-                      </SelectButton>
-                    </span>
-                  </Tooltip>
-                )}
               </div>
 
               {/* Bottom right controls */}
@@ -413,6 +386,14 @@ const InputBar = memo(
               </div>
             </div>
           </div>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
         </Disabled>
       );
     }

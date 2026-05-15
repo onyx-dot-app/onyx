@@ -92,8 +92,8 @@ async function sendMessageWithMockResponse(
     });
   });
 
-  await page.locator("#onyx-chat-input-textarea").click();
-  await page.locator("#onyx-chat-input-textarea").fill(userMessage);
+  await page.locator("#onyx-chat-input-textbox").click();
+  await page.locator("#onyx-chat-input-textbox").fill(userMessage);
   await page.locator("#onyx-chat-input-send-button").click();
 
   // Wait for the AI message to appear

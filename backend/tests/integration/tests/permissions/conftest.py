@@ -76,6 +76,7 @@ def bot_user_headers(
             name="bot_test_pat",
             expiration_days=None,
         )
+        db_session.commit()
     return {"Authorization": f"Bearer {raw_token}"}
 
 
@@ -98,4 +99,5 @@ def ext_perm_user_headers(
             name="ext_perm_test_pat",
             expiration_days=None,
         )
+        db_session.commit()
     return {"Authorization": f"Bearer {raw_token}"}

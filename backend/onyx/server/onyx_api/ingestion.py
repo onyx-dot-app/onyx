@@ -119,7 +119,6 @@ def upsert_ingestion_doc(
 
     # Build adapter for primary indexing
     adapter = DocumentIndexingBatchAdapter(
-        db_session=db_session,
         connector_id=cc_pair.connector_id,
         credential_id=cc_pair.credential_id,
         tenant_id=tenant_id,

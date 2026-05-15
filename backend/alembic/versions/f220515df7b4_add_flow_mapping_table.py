@@ -10,7 +10,6 @@ from onyx.db.enums import LLMModelFlowType
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "f220515df7b4"
 down_revision = "9d1543a37106"

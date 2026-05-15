@@ -35,11 +35,12 @@ export function buildLlmOptions(
         seenKeys.add(key);
 
         options.push({
-          name: llmProvider.name,
+          name: llmProvider.name ?? "",
           provider: llmProvider.provider,
           providerDisplayName:
             llmProvider.provider_display_name || llmProvider.provider,
           modelName: modelConfiguration.name,
+          modelConfigurationId: modelConfiguration.id ?? null,
           displayName:
             modelConfiguration.display_name || modelConfiguration.name,
           vendor: modelConfiguration.vendor || null,

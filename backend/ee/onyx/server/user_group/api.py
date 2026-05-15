@@ -236,7 +236,7 @@ def set_user_curator(
             user_making_change=user,
         )
     except ValueError as e:
-        logger.error(f"Error setting user curator: {e}")
+        logger.error("Error setting user curator: %s", e)
         raise HTTPException(status_code=404, detail=str(e))
 
 

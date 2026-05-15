@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -145,8 +146,7 @@ def get_all_users(
         User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
     )
     stmt = stmt.where(
-        User.email
-        != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+        User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
     )
 
     if not include_external:
@@ -339,17 +339,32 @@ def _generate_slack_user(email: str) -> User:
     )
 
 
-def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
+def add_slack_user_if_not_exists(
+    db_session: Session,
+    email: str,
+    enforce_seat_check: Callable[[Session, int], None] | None = None,
+) -> User:
+    """Look up or create the Slack-bot user for ``email``.
+
+    ``enforce_seat_check`` (optional): invoked inside this function's
+    transaction whenever the call would consume a seat — i.e. on
+    brand-new BOT creation OR on EXT_PERM_USER (uncounted) -> BOT
+    (counted) promotion. Must raise on overage.
+    """
     email = email.lower()
     user = get_user_by_email(email, db_session)
     if user is not None:
         # If the user is an external permissioned user, we update it to a slack user
         if user.account_type == AccountType.EXT_PERM_USER:
+            if enforce_seat_check is not None:
+                enforce_seat_check(db_session, 1)
             user.role = UserRole.SLACK_USER
             user.account_type = AccountType.BOT
             db_session.commit()
         return user
 
+    if enforce_seat_check is not None:
+        enforce_seat_check(db_session, 1)
     user = _generate_slack_user(email=email)
     db_session.add(user)
     db_session.commit()
@@ -487,7 +502,9 @@ def assign_user_to_default_groups__no_commit(
 
     recompute_user_permissions__no_commit(user.id, db_session)
 
-    logger.info(f"Assigned user {user.email} to default group '{default_group.name}'")
+    logger.info(
+        "Assigned user %s to default group '%s'", user.email, default_group.name
+    )
 
 
 def delete_user_from_db(
@@ -561,3 +578,23 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def get_active_admin_users(db_session: Session) -> list[User]:
+    """Active human admins, excluding API-key dummy users and system placeholders.
+
+    Mirrors `_add_live_user_count_where_clause(only_admin_users=True)` in
+    `onyx/db/auth.py` so callers that email or surface UI to admins reuse
+    the same filter set.
+    """
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+
+    stmt = select(User).where(
+        is_active_col.is_(True),
+        User.role == UserRole.ADMIN,
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    )
+    return list(db_session.execute(stmt).unique().scalars().all())

@@ -52,8 +52,8 @@ const FadingEdgeContainer: React.FC<FadingEdgeContainerProps> = ({
         className={cn(
           "absolute inset-x-0 h-8 pointer-events-none z-10",
           isTop
-            ? "top-0 bg-gradient-to-b from-background to-transparent"
-            : "bottom-0 bg-gradient-to-t from-background to-transparent",
+            ? "top-0 bg-linear-to-b from-background to-transparent"
+            : "bottom-0 bg-linear-to-t from-background to-transparent",
           fadeClassName
         )}
       />

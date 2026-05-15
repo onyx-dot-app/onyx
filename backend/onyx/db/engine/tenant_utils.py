@@ -42,8 +42,7 @@ def get_schemas_needing_migration(
         )
 
         conn.execute(
-            text(
-                """
+            text("""
                 DO $$
                 DECLARE
                     s        text;
@@ -77,8 +76,7 @@ def get_schemas_needing_migration(
                     END LOOP;
                 END;
                 $$
-                """
-            )
+                """)
         )
 
         rows = conn.execute(

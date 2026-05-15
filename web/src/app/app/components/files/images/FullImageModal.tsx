@@ -28,9 +28,9 @@ export function FullImageModal({
         <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-80 z-50 backdrop-blur-xl" />
         <Dialog.Content
           className={cn(
-            "fixed inset-0 flex items-center justify-center p-4 z-[100]",
-            "max-w-screen-lg h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4",
-            "focus:outline-none"
+            "fixed inset-0 flex items-center justify-center p-4 z-100",
+            "max-w-(--breakpoint-lg) h-fit top-1/2 left-1/2 -translate-y-2/4 -translate-x-2/4",
+            "focus:outline-hidden"
           )}
         >
           <img

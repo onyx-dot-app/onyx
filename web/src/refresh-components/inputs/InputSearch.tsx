@@ -30,8 +30,10 @@ import InputTypeIn, {
  * />
  * ```
  */
-export interface InputSearchProps
-  extends Omit<InputTypeInProps, "variant" | "leftSearchIcon"> {
+export interface InputSearchProps extends Omit<
+  InputTypeInProps,
+  "variant" | "leftSearchIcon"
+> {
   /**
    * Ref to the underlying input element.
    */

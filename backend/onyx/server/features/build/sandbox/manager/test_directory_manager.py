@@ -615,11 +615,13 @@ class TestSandboxDirectoryStructure:
         session_id = "test_complete_sandbox"
         sandbox_path = directory_manager.create_sandbox_directory(session_id)
 
-        # Setup all components
+        # Setup all components (these methods use sandbox_path as session path — legacy naming)
         directory_manager.setup_outputs_directory(sandbox_path)
         directory_manager.setup_venv(sandbox_path)
         directory_manager.setup_agent_instructions(sandbox_path)
-        directory_manager.setup_skills(sandbox_path)
+        directory_manager.setup_skills(
+            sandbox_path, skills_target=directory_manager.skills_source_path
+        )
         directory_manager.setup_attachments_directory(sandbox_path)
         directory_manager.setup_opencode_config(
             sandbox_path=sandbox_path,
@@ -643,38 +645,32 @@ class TestSandboxDirectoryStructure:
         ]
         assert model_options["thinking"]["type"] == "enabled"
 
-    def test_setup_skills_copies_and_overwrites(
+    def test_setup_skills_symlinks_to_target(
         self,
         directory_manager: DirectoryManager,
         temp_base_path: Path,  # noqa: ARG002
         temp_templates: dict[str, Path],
     ) -> None:
-        """Test that setup_skills copies skills and overwrites existing ones."""
-        session_id = "test_skills_setup"
-        sandbox_path = directory_manager.create_sandbox_directory(session_id)
-        skills_dest = sandbox_path / ".opencode" / "skills"
+        """Test that setup_skills creates a symlink to the target directory."""
+        sandbox_path = directory_manager.create_sandbox_directory("test_skills")
+        session_path = directory_manager.create_session_directory(sandbox_path, "sess1")
+        skills_dest = session_path / ".opencode" / "skills"
+        skills_target = temp_templates["skills"]
 
-        # Create a test skill in the source directory
-        test_skill_dir = temp_templates["skills"] / "test-skill"
+        test_skill_dir = skills_target / "test-skill"
         test_skill_dir.mkdir()
-        test_skill_file = test_skill_dir / "SKILL.md"
-        test_skill_file.write_text("# Test Skill\nOriginal content")
+        (test_skill_dir / "SKILL.md").write_text("# Test Skill")
 
-        # First call - should copy skills
-        directory_manager.setup_skills(sandbox_path)
-        assert skills_dest.exists()
-        assert (skills_dest / "test-skill" / "SKILL.md").exists()
-        assert (
-            skills_dest / "test-skill" / "SKILL.md"
-        ).read_text() == "# Test Skill\nOriginal content"
+        directory_manager.setup_skills(session_path, skills_target=skills_target)
 
-        # Update the source skill
-        test_skill_file.write_text("# Test Skill\nUpdated content")
+        assert skills_dest.is_symlink()
+        assert skills_dest.resolve() == skills_target.resolve()
+        assert (skills_dest / "test-skill" / "SKILL.md").read_text() == "# Test Skill"
 
-        # Second call - should overwrite existing skills
-        directory_manager.setup_skills(sandbox_path)
-        assert skills_dest.exists()
-        assert (skills_dest / "test-skill" / "SKILL.md").exists()
-        assert (
-            skills_dest / "test-skill" / "SKILL.md"
-        ).read_text() == "# Test Skill\nUpdated content"
+        # Updating the source is visible through the symlink
+        (test_skill_dir / "SKILL.md").write_text("# Updated")
+        assert (skills_dest / "test-skill" / "SKILL.md").read_text() == "# Updated"
+
+        # Calling again replaces the symlink cleanly
+        directory_manager.setup_skills(session_path, skills_target=skills_target)
+        assert skills_dest.is_symlink()

@@ -10,7 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-
 # revision identifiers, used by Alembic.
 revision = "b7bcc991d722"
 down_revision = "03d085c5c38d"

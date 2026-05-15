@@ -5,7 +5,6 @@ from typing import Any
 from typing import cast
 from typing import NamedTuple
 
-import redis
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
@@ -15,6 +14,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.perm_sync_metrics import (
     observe_doc_perm_sync_db_update_duration,
 )
@@ -67,7 +67,7 @@ class RedisConnectorPermissionSync:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT * 2
 
-    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+    def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
@@ -90,8 +90,7 @@ class RedisConnectorPermissionSync:
         self.redis.delete(self.generator_complete_key)
 
     def get_remaining(self) -> int:
-        remaining = cast(int, self.redis.scard(self.taskset_key))
-        return remaining
+        return self.redis.scard(self.taskset_key)
 
     def get_active_task_count(self) -> int:
         """Count of active permission sync tasks"""
@@ -216,10 +215,14 @@ class RedisConnectorPermissionSync:
                         else permissions.raw_node_id
                     )
                     task_logger.warning(
-                        f"Permissions length exceeded, skipping...: "
-                        f"{element_id} "
-                        f"{num_users=} {num_groups=} "
-                        f"{permissions.external_access.MAX_NUM_ENTRIES=}"
+                        "Permissions length exceeded, skipping...: "
+                        "%s "
+                        "num_users=%s num_groups=%s "
+                        "permissions.external_access.MAX_NUM_ENTRIES=%s",
+                        element_id,
+                        num_users,
+                        num_groups,
+                        permissions.external_access.MAX_NUM_ENTRIES,
                     )
                 continue
 
@@ -233,7 +236,6 @@ class RedisConnectorPermissionSync:
             # Catch exceptions per-element to avoid breaking the entire sync
             db_start = time.monotonic()
             try:
-
                 element_update_permissions_fn(
                     self.tenant_id,
                     permissions,
@@ -251,7 +253,7 @@ class RedisConnectorPermissionSync:
                         else permissions.raw_node_id
                     )
                     task_logger.exception(
-                        f"Failed to update permissions for element {element_id}"
+                        "Failed to update permissions for element %s", element_id
                     )
             finally:
                 cumulative_db_update_time += time.monotonic() - db_start
@@ -270,13 +272,13 @@ class RedisConnectorPermissionSync:
         self.redis.delete(self.fence_key)
 
     @staticmethod
-    def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:
+    def remove_from_taskset(id: int, task_id: str, r: TenantRedisClient) -> None:
         taskset_key = f"{RedisConnectorPermissionSync.TASKSET_PREFIX}_{id}"
         r.srem(taskset_key, task_id)
         return
 
     @staticmethod
-    def reset_all(r: redis.Redis) -> None:
+    def reset_all(r: TenantRedisClient) -> None:
         """Deletes all redis values for all connectors"""
         for key in r.scan_iter(RedisConnectorPermissionSync.ACTIVE_PREFIX + "*"):
             r.delete(key)

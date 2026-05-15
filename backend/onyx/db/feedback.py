@@ -91,12 +91,9 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
         where_clause &= User__UG.is_curator == True  # noqa: E712
     if get_editable:
         user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        where_clause &= (
-            ~exists()
-            .where(UG__CCpair.cc_pair_id == CCPair.id)
-            .where(~UG__CCpair.user_group_id.in_(user_groups))
-            .correlate(CCPair)
-        )
+        where_clause &= ~exists().where(UG__CCpair.cc_pair_id == CCPair.id).where(
+            ~UG__CCpair.user_group_id.in_(user_groups)
+        ).correlate(CCPair)
     else:
         where_clause |= CCPair.access_type == AccessType.PUBLIC
 

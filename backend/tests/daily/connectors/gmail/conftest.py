@@ -1,6 +1,6 @@
 import json
-import os
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -19,44 +19,32 @@ from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
 from tests.load_env_vars import load_env_vars
+from tests.utils.secret_names import TestSecret
 
 # Load environment variables at the module level
 load_env_vars()
 
 
-def parse_credentials(env_str: str) -> dict:
-    """
-    Parse a double-escaped JSON string from environment variables into a Python dictionary.
-
-    Args:
-        env_str (str): The double-escaped JSON string from environment variables
-
-    Returns:
-        dict: Parsed OAuth credentials
-    """
-    # first try normally
+def parse_credentials(env_str: str) -> dict[str, Any]:
+    """Parse a (potentially double-escaped) JSON string into a dict."""
     try:
         return json.loads(env_str)
     except Exception:
-        # First, try remove extra escaping backslashes
-        unescaped = env_str.replace('\\"', '"')
-
-        # remove leading / trailing quotes
-        unescaped = unescaped.strip('"')
-
-        # Now parse the JSON
+        unescaped = env_str.replace('\\"', '"').strip('"')
         return json.loads(unescaped)
 
 
 @pytest.fixture
-def google_gmail_oauth_connector_factory() -> Callable[..., GmailConnector]:
+def google_gmail_oauth_connector_factory(
+    test_secrets: dict[TestSecret, str],
+) -> Callable[..., GmailConnector]:
     def _connector_factory(
         primary_admin_email: str = "admin@onyx-test.com",
     ) -> GmailConnector:
         print("Creating GmailConnector with OAuth credentials")
         connector = GmailConnector()
 
-        json_string = os.environ["GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR"]
+        json_string = test_secrets[TestSecret.GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR]
         refried_json_string = json.dumps(parse_credentials(json_string))
 
         credentials_json = {
@@ -71,17 +59,18 @@ def google_gmail_oauth_connector_factory() -> Callable[..., GmailConnector]:
 
 
 @pytest.fixture
-def google_gmail_service_acct_connector_factory() -> Callable[..., GmailConnector]:
+def google_gmail_service_acct_connector_factory(
+    test_secrets: dict[TestSecret, str],
+) -> Callable[..., GmailConnector]:
     def _connector_factory(
         primary_admin_email: str = "admin@onyx-test.com",
     ) -> GmailConnector:
         print("Creating GmailConnector with service account credentials")
         connector = GmailConnector()
 
-        json_string = os.environ["GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR"]
+        json_string = test_secrets[TestSecret.GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR]
         refried_json_string = json.dumps(parse_credentials(json_string))
 
-        # Load Service Account Credentials
         connector.load_credentials(
             {
                 DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: refried_json_string,

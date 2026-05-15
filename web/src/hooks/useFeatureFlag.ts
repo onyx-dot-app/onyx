@@ -24,10 +24,6 @@ import { IS_DEV } from "@/lib/constants";
  *   when PostHog is unavailable).
  *
  * @example
- * // On in dev, off in prod-without-PostHog, otherwise PostHog-driven.
- * const showMetrics = useFeatureFlag(FEATURE_FLAGS.INDEX_ATTEMPT_METRICS);
- *
- * @example
  * // Force `true` as the fallback regardless of environment.
  * const animationDisabled = useFeatureFlag(
  *   FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED,

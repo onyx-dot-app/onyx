@@ -8,11 +8,10 @@ import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgPaperclip } from "@opal/icons";
 
-export interface InputFileProps
-  extends Omit<
-    InputTypeInProps,
-    "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
-  > {
+export interface InputFileProps extends Omit<
+  InputTypeInProps,
+  "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
+> {
   /**
    * Whether the input is disabled.
    */

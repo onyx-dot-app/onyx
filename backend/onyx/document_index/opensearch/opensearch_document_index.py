@@ -84,6 +84,15 @@ VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
 
+# Per-process cache of indices we've already verified/created/applied the
+# mapping for. Used for the multi-tenant cloud codepath, which attempts to
+# verify or create an index on DocumentIndex init since that deployment mode
+# does not run setup on application start. This attempt can be expensive, and it
+# only needs to happen at most once per process lifetime, since any changes to
+# an index should always be correlated with a redeploy.
+_verified_index_names_for_current_process: set[str] = set()
+
+
 class ChunkCountNotFoundError(ValueError):
     """Raised when a document has no chunk count."""
 
@@ -353,9 +362,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
                 raise ValueError(
                     "Bug: Secondary index embedding dimension and precision are not set."
                 )
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             self._secondary_real_index.verify_and_create_index_if_necessary(
                 secondary_index_embedding_dim, secondary_index_embedding_precision
             )
@@ -409,9 +418,9 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         """
         total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
         if self.secondary_index_name:
-            assert (
-                self._secondary_real_index is not None
-            ), "Bug: Secondary index is not initialized."
+            assert self._secondary_real_index is not None, (
+                "Bug: Secondary index is not initialized."
+            )
             total_chunks_deleted += self._secondary_real_index.delete(
                 doc_id, chunk_count
             )
@@ -433,7 +442,8 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         """
         if fields is None and user_fields is None:
             logger.warning(
-                f"Tried to update document {doc_id} with no updated fields or user fields."
+                "Tried to update document %s with no updated fields or user fields.",
+                doc_id,
             )
             return
 
@@ -466,26 +476,25 @@ class OpenSearchOldDocumentIndex(OldDocumentIndex):
         try:
             self._real_index.update([update_request])
             if self.secondary_index_name:
-                assert (
-                    self._secondary_real_index is not None
-                ), "Bug: Secondary index is not initialized."
+                assert self._secondary_real_index is not None, (
+                    "Bug: Secondary index is not initialized."
+                )
                 self._secondary_real_index.update([update_request])
         except NotFoundError:
             logger.exception(
-                f"Tried to update document {doc_id} but at least one of its chunks was not found in OpenSearch. "
-                "This is likely due to it not having been indexed yet. Skipping update for now..."
+                "Tried to update document %s but at least one of its chunks was not found in OpenSearch. This is likely due to it not having been indexed yet. Skipping update for now...",
+                doc_id,
             )
             return
         except ChunkCountNotFoundError:
             logger.warning(
-                f"Tried to update document {doc_id} but its chunk count is not known. We tolerate this for now "
-                "but this will not be an acceptable state once OpenSearch is the primary document index and the "
-                "indexing/updating race condition is fixed."
+                "Tried to update document %s but its chunk count is not known. We tolerate this for now but this will not be an acceptable state once OpenSearch is the primary document index and the indexing/updating race condition is fixed.",
+                doc_id,
             )
             return
         except ChunkCountZeroError:
             logger.warning(
-                f"Tried to update document {doc_id} but its chunk count was 0."
+                "Tried to update document %s but its chunk count was 0.", doc_id
             )
             return
 
@@ -600,10 +609,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._tenant_state: TenantState = tenant_state
         self._client = OpenSearchIndexClient(index_name=self._index_name)
 
-        if self._tenant_state.multitenant and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT:
+        if (
+            self._tenant_state.multitenant
+            and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
+            and index_name not in _verified_index_names_for_current_process
+        ):
             self.verify_and_create_index_if_necessary(
                 embedding_dim=embedding_dim, embedding_precision=embedding_precision
             )
+            _verified_index_names_for_current_process.add(index_name)
 
     def verify_and_create_index_if_necessary(
         self,
@@ -633,8 +647,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search pipelines.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Verifying and creating index {self._index_name} if "
-            f"necessary, with embedding dimension {embedding_dim}."
+            "[OpenSearchDocumentIndex] Verifying and creating index %s if necessary, with embedding dimension %s.",
+            self._index_name,
+            embedding_dim,
         )
 
         with redis_shared_lock(
@@ -664,8 +679,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     self._client.put_mapping(expected_mappings)
                 except Exception as e:
                     logger.error(
-                        f"Failed to update mappings for index {self._index_name}. This likely means a "
-                        f"field type was changed which requires reindexing. Error: {e}"
+                        "Failed to update mappings for index %s. This likely means a field type was changed which requires reindexing. Error: %s",
+                        self._index_name,
+                        e,
                     )
                     raise
 
@@ -702,8 +718,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             for cc in indexing_metadata.doc_id_to_chunk_cnt_diff.values()
         )
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {total_chunks} chunks from {len(indexing_metadata.doc_id_to_chunk_cnt_diff)} "
-            f"documents for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Indexing %s chunks from %s documents for index %s.",
+            total_chunks,
+            len(indexing_metadata.doc_id_to_chunk_cnt_diff),
+            self._index_name,
         )
 
         document_indexing_results: list[DocumentInsertionRecord] = []
@@ -764,7 +782,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 # Refresh the index and try one more time. We do not refresh
                 # after every delete because this may become expensive.
                 logger.warning(
-                    f"Failed to bulk index documents: {e}. Refreshing index and trying again."
+                    "Failed to bulk index documents: %s. Refreshing index and trying again.",
+                    e,
                 )
                 self._client.refresh_index()
                 self._client.bulk_index_documents(
@@ -820,7 +839,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             The number of chunks successfully deleted.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Deleting document {document_id} from index {self._index_name}."
+            "[OpenSearchDocumentIndex] Deleting document %s from index %s.",
+            document_id,
+            self._index_name,
         )
         query_body = DocumentQuery.delete_from_document_id_query(
             document_id=document_id,
@@ -856,13 +877,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 specified documents.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Updating {len(update_requests)} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Processing %s chunk requests for index %s.",
+            len(update_requests),
+            self._index_name,
         )
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
-            # TODO(andrei): Nit but consider if we can use DocumentChunk
-            # here so we don't have to think about passing in the
-            # appropriate types into this dict.
+            # TODO(andrei): Nit but consider if we can use DocumentChunk here so
+            # we don't have to think about passing in the appropriate types into
+            # this dict.
             if update_request.access is not None:
                 properties_to_update[ACCESS_CONTROL_LIST_FIELD_NAME] = (
                     generate_opensearch_filtered_access_control_list(
@@ -894,11 +917,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 else:
                     update_string = f"document {update_request.document_ids[0]}"
                 logger.warning(
-                    f"[OpenSearchDocumentIndex] Tried to update {update_string} "
-                    "with no specified update fields. This will be a no-op."
+                    "[OpenSearchDocumentIndex] Tried to update %s with no specified update fields. This will be a no-op.",
+                    update_string,
                 )
                 continue
 
+            doc_chunk_ids_to_update: list[str] = []
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
@@ -929,10 +953,12 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         document_id=doc_id,
                         chunk_index=chunk_index,
                     )
-                    self._client.update_document(
-                        document_chunk_id=document_chunk_id,
-                        properties_to_update=properties_to_update,
-                    )
+                    doc_chunk_ids_to_update.append(document_chunk_id)
+
+            self._client.bulk_update_documents(
+                document_chunk_ids=doc_chunk_ids_to_update,
+                properties_to_update=properties_to_update,
+            )
 
     def id_based_retrieval(
         self,
@@ -948,7 +974,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         chunk IDs vs querying for matching document chunks.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Retrieving {len(chunk_requests)} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Retrieving %s chunks for index %s.",
+            len(chunk_requests),
+            self._index_name,
         )
         results: list[InferenceChunk] = []
         for chunk_request in chunk_requests:
@@ -998,7 +1026,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
         logger.debug(
-            f"[OpenSearchDocumentIndex] Hybrid retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Hybrid retrieving %s chunks for index %s.",
+            num_to_retrieve,
+            self._index_name,
         )
         # TODO(andrei): This could be better, the caller should just make this
         # decision when passing in the query param. See the above comment in the
@@ -1048,7 +1078,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
         logger.debug(
-            f"[OpenSearchDocumentIndex] Keyword retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Keyword retrieving %s chunks for index %s.",
+            num_to_retrieve,
+            self._index_name,
         )
         query_body = DocumentQuery.get_keyword_search_query(
             query_text=query,
@@ -1090,7 +1122,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
         logger.debug(
-            f"[OpenSearchDocumentIndex] Semantic retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Semantic retrieving %s chunks for index %s.",
+            num_to_retrieve,
+            self._index_name,
         )
         query_body = DocumentQuery.get_semantic_search_query(
             query_embedding=query_embedding,
@@ -1130,7 +1164,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         dirty: bool | None = None,  # noqa: ARG002
     ) -> list[InferenceChunk]:
         logger.debug(
-            f"[OpenSearchDocumentIndex] Randomly retrieving {num_to_retrieve} chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Randomly retrieving %s chunks for index %s.",
+            num_to_retrieve,
+            self._index_name,
         )
         query_body = DocumentQuery.get_random_search_query(
             tenant_state=self._tenant_state,
@@ -1161,7 +1197,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         complete.
         """
         logger.debug(
-            f"[OpenSearchDocumentIndex] Indexing {len(chunks)} raw chunks for index {self._index_name}."
+            "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
+            len(chunks),
+            self._index_name,
         )
         # Do not raise if the document already exists, just update. This is
         # because the document may already have been indexed during the

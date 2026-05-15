@@ -132,7 +132,7 @@ async def _reserve_token_or_raise(token: str) -> None:
     except CaptchaVerificationError:
         raise
     except Exception as e:
-        logger.error(f"Captcha replay cache error (failing open): {e}")
+        logger.error("Captcha replay cache error (failing open): %s", e)
 
 
 async def _release_token(token: str) -> None:
@@ -143,7 +143,7 @@ async def _release_token(token: str) -> None:
         redis = await get_async_redis_connection()
         await redis.delete(_replay_cache_key(token))
     except Exception as e:
-        logger.error(f"Captcha replay cache release error (ignored): {e}")
+        logger.error("Captcha replay cache release error (ignored): %s", e)
 
 
 def _check_token_freshness(create_time: str | None) -> None:
@@ -154,13 +154,13 @@ def _check_token_freshness(create_time: str | None) -> None:
     try:
         ts = datetime.fromisoformat(create_time.replace("Z", "+00:00"))
     except ValueError:
-        logger.warning(f"Captcha createTime unparseable: {create_time!r}")
+        logger.warning("Captcha createTime unparseable: %r", create_time)
         raise CaptchaVerificationError(
             "Captcha verification failed: malformed createTime"
         )
     age_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
     if age_seconds > _TOKEN_MAX_AGE_SECONDS:
-        logger.warning(f"Captcha token stale: age={age_seconds:.1f}s")
+        logger.warning("Captcha token stale: age=%ss", format(age_seconds, ".1f"))
         raise CaptchaVerificationError("Captcha verification failed: token expired")
 
 
@@ -172,40 +172,49 @@ def _evaluate_assessment(
 
     if not tp.valid:
         reason = tp.invalid_reason or "INVALID"
-        logger.warning(f"Captcha token invalid: reason={reason}")
+        logger.warning("Captcha token invalid: reason=%s", reason)
         raise CaptchaVerificationError(f"Captcha verification failed: {reason}")
 
     if RECAPTCHA_HOSTNAME_ALLOWLIST and (
         tp.hostname is None or tp.hostname not in RECAPTCHA_HOSTNAME_ALLOWLIST
     ):
-        logger.warning(f"Captcha hostname mismatch: {tp.hostname!r}")
+        logger.warning("Captcha hostname mismatch: %r", tp.hostname)
         raise CaptchaVerificationError("Captcha verification failed: hostname mismatch")
 
     _check_token_freshness(tp.create_time)
 
     if tp.action != action.value:
         logger.warning(
-            f"Captcha action mismatch: got={tp.action!r} expected={action.value!r}"
+            "Captcha action mismatch: got=%r expected=%r", tp.action, action.value
         )
         raise CaptchaVerificationError("Captcha verification failed: action mismatch")
 
     hard = _HARD_REJECT_REASONS.intersection(ra.reasons)
     if hard:
-        logger.warning(f"Captcha hard reject: reasons={sorted(hard)} score={ra.score}")
+        logger.warning(
+            "Captcha hard reject: reasons=%s score=%s", sorted(hard), ra.score
+        )
         raise CaptchaVerificationError(
             f"Captcha verification failed: {', '.join(sorted(hard))}"
         )
 
     if ra.score < RECAPTCHA_SCORE_THRESHOLD:
         logger.warning(
-            f"Captcha score below threshold: {ra.score} < {RECAPTCHA_SCORE_THRESHOLD} reasons={ra.reasons}"
+            "Captcha score below threshold: %s < %s reasons=%s",
+            ra.score,
+            RECAPTCHA_SCORE_THRESHOLD,
+            ra.reasons,
         )
         raise CaptchaVerificationError(
             "Captcha verification failed: suspicious activity detected"
         )
 
     logger.info(
-        f"Captcha verification passed: action={tp.action} score={ra.score} reasons={ra.reasons} hostname={tp.hostname}"
+        "Captcha verification passed: action=%s score=%s reasons=%s hostname=%s",
+        tp.action,
+        ra.score,
+        ra.reasons,
+        tp.hostname,
     )
 
 
@@ -246,7 +255,7 @@ async def verify_captcha_token(token: str, action: CaptchaAction) -> None:
     except CaptchaVerificationError:
         raise
     except Exception as e:
-        logger.error(f"Captcha verification failed unexpectedly: {e}")
+        logger.error("Captcha verification failed unexpectedly: %s", e)
         await _release_token(token)
         raise CaptchaVerificationError("Captcha verification service unavailable")
 

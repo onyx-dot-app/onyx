@@ -64,11 +64,16 @@ To manually regenerate:
 
 ```bash
 uv lock
-uv export --no-emit-project --no-default-groups --no-hashes --group backend -o backend/requirements/default.txt
-uv export --no-emit-project --no-default-groups --no-hashes --group dev -o backend/requirements/dev.txt
-uv export --no-emit-project --no-default-groups --no-hashes --group ee -o backend/requirements/ee.txt
-uv export --no-emit-project --no-default-groups --no-hashes --group model_server -o backend/requirements/model_server.txt
+uv export --no-emit-project --no-default-groups --group backend -o backend/requirements/default.txt
+uv export --no-emit-project --no-default-groups --group dev -o backend/requirements/dev.txt
+uv export --no-emit-project --no-default-groups --group ee -o backend/requirements/ee.txt
+uv export --no-emit-project --no-default-groups --group model_server -o backend/requirements/model_server.txt
 ```
+
+The exported files include `--hash=sha256:...` entries for every pinned
+artifact. Docker builds and CI install with `uv pip install --require-hashes`,
+which refuses to install any package whose version or artifact hash is not
+listed — so installs can only land on versions resolved into `uv.lock`.
 
 ### 4. Installing Dependencies
 

@@ -66,7 +66,7 @@ import {
           type: WEB_MESSAGE.PAGE_CHANGE,
           url: pageUrl,
         },
-        getIframeOrigin(),
+        getIframeOrigin()
       );
       currentUrl = pageUrl;
     }
@@ -104,7 +104,7 @@ import {
       if (iframe.contentWindow) {
         iframe.contentWindow.postMessage(
           { type: "PANEL_READY" },
-          getIframeOrigin(),
+          getIframeOrigin()
         );
       }
     } else if (event.data.type === CHROME_MESSAGE.AUTH_REQUIRED) {
@@ -131,7 +131,7 @@ import {
     if (response && response[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]) {
       setIframeSrc(
         response[CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN] + SIDE_PANEL_PATH,
-        "",
+        ""
       );
     } else {
       console.warn("Onyx domain not found, using default");
@@ -149,7 +149,7 @@ import {
       if (iframe.contentWindow) {
         iframe.contentWindow.postMessage(
           { type: CHROME_MESSAGE.TAB_URL_UPDATED, url: request.url },
-          getIframeOrigin(),
+          getIframeOrigin()
         );
       }
     }

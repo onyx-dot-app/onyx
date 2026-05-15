@@ -67,7 +67,7 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
             if i == _NUM_RETRIES - 1:
                 raise e
 
-            logger.warning(f"A Linear GraphQL error occurred: {e}. Retrying...")
+            logger.warning("A Linear GraphQL error occurred: %s. Retrying...", e)
 
     raise RuntimeError(
         "Unexpected execution when querying Linear. This should never happen."
@@ -306,11 +306,11 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                     "after": endCursor,
                 },
             }
-            logger.debug(f"Requesting issues from Linear with query: {graphql_query}")
+            logger.debug("Requesting issues from Linear with query: %s", graphql_query)
 
             response = _make_query(graphql_query, self.linear_api_key)
             response_json = response.json()
-            logger.debug(f"Raw response from Linear: {response_json}")
+            logger.debug("Raw response from Linear: %s", response_json)
             edges = response_json["data"]["issues"]["edges"]
 
             documents: list[Document | HierarchyNode] = []

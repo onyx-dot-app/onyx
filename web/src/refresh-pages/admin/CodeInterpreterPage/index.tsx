@@ -59,8 +59,8 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
   const label = healthy ? "Connected" : "Connection Lost";
   const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
   const iconColor = healthy
-    ? "!text-status-success-05"
-    : "!text-status-error-05";
+    ? "text-status-success-05!"
+    : "text-status-error-05!";
 
   return (
     <div className="p-2">

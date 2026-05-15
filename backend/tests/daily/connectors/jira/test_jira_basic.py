@@ -1,4 +1,3 @@
-import os
 import time
 from unittest.mock import patch
 
@@ -8,9 +7,19 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_from_connector
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(
+    TestSecret.JIRA_USER_EMAIL,
+    TestSecret.JIRA_API_TOKEN,
+    TestSecret.JIRA_API_TOKEN_SCOPED,
+)
 
 
-def _make_connector(scoped_token: bool = False) -> JiraConnector:
+def _make_connector(
+    test_secrets: dict[TestSecret, str],
+    scoped_token: bool = False,
+) -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
         project_key="AS",
@@ -19,11 +28,11 @@ def _make_connector(scoped_token: bool = False) -> JiraConnector:
     )
     connector.load_credentials(
         {
-            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
+            "jira_user_email": test_secrets[TestSecret.JIRA_USER_EMAIL],
             "jira_api_token": (
-                os.environ["JIRA_API_TOKEN_SCOPED"]
+                test_secrets[TestSecret.JIRA_API_TOKEN_SCOPED]
                 if scoped_token
-                else os.environ["JIRA_API_TOKEN"]
+                else test_secrets[TestSecret.JIRA_API_TOKEN]
             ),
         }
     )
@@ -31,17 +40,23 @@ def _make_connector(scoped_token: bool = False) -> JiraConnector:
 
 
 @pytest.fixture
-def jira_connector() -> JiraConnector:
-    return _make_connector()
+def jira_connector(
+    test_secrets: dict[TestSecret, str],
+) -> JiraConnector:
+    return _make_connector(test_secrets)
 
 
 @pytest.fixture
-def jira_connector_scoped() -> JiraConnector:
-    return _make_connector(scoped_token=True)
+def jira_connector_scoped(
+    test_secrets: dict[TestSecret, str],
+) -> JiraConnector:
+    return _make_connector(test_secrets, scoped_token=True)
 
 
 @pytest.fixture
-def jira_connector_with_jql() -> JiraConnector:
+def jira_connector_with_jql(
+    test_secrets: dict[TestSecret, str],
+) -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
         jql_query="project = 'AS' AND issuetype = Story",
@@ -49,8 +64,8 @@ def jira_connector_with_jql() -> JiraConnector:
     )
     connector.load_credentials(
         {
-            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
-            "jira_api_token": os.environ["JIRA_API_TOKEN"],
+            "jira_user_email": test_secrets[TestSecret.JIRA_USER_EMAIL],
+            "jira_api_token": test_secrets[TestSecret.JIRA_API_TOKEN],
         }
     )
     connector.validate_connector_settings()

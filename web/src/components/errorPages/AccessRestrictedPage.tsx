@@ -92,7 +92,7 @@ export default function AccessRestricted() {
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
         <Text headingH2>Access Restricted</Text>
-        <SvgLock className="stroke-status-error-05 w-[1.5rem] h-[1.5rem]" />
+        <SvgLock className="stroke-status-error-05 w-6 h-6" />
       </div>
 
       <Text text03>{initialModalMessage}</Text>

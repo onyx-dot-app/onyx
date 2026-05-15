@@ -18,7 +18,6 @@ from onyx.db.models import (
     IndexAttempt,
 )
 
-
 # revision identifiers, used by Alembic.
 revision = "949b4a92a401"
 down_revision = "1b10e1fda030"

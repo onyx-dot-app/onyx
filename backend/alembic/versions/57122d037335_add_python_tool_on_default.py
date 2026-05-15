@@ -9,7 +9,6 @@ Create Date: 2026-02-27 10:10:40.124925
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "57122d037335"
 down_revision = "c0c937d5c9e5"
@@ -36,13 +35,11 @@ def upgrade() -> None:
 
     # Attach to the default persona (id=0) if not already attached
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             INSERT INTO persona__tool (persona_id, tool_id)
             VALUES (0, :tool_id)
             ON CONFLICT DO NOTHING
-            """
-        ),
+            """),
         {"tool_id": tool_id},
     )
 
@@ -59,11 +56,9 @@ def downgrade() -> None:
         return
 
     conn.execute(
-        sa.text(
-            """
+        sa.text("""
             DELETE FROM persona__tool
             WHERE persona_id = 0 AND tool_id = :tool_id
-            """
-        ),
+            """),
         {"tool_id": result[0]},
     )

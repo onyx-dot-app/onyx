@@ -42,20 +42,20 @@ def test_default_group_assignment_on_registration(reset: None) -> None:  # noqa:
     admin_group_user_ids = {str(u.id) for u in admin_group.users}
     basic_group_user_ids = {str(u.id) for u in basic_group.users}
 
-    assert (
-        admin_user.id in admin_group_user_ids
-    ), "First user should be in Admin default group"
-    assert (
-        admin_user.id not in basic_group_user_ids
-    ), "First user should NOT be in Basic default group"
+    assert admin_user.id in admin_group_user_ids, (
+        "First user should be in Admin default group"
+    )
+    assert admin_user.id not in basic_group_user_ids, (
+        "First user should NOT be in Basic default group"
+    )
 
     # Verify basic user is in Basic group and NOT in Admin group
-    assert (
-        basic_user.id in basic_group_user_ids
-    ), "Second user should be in Basic default group"
-    assert (
-        basic_user.id not in admin_group_user_ids
-    ), "Second user should NOT be in Admin default group"
+    assert basic_user.id in basic_group_user_ids, (
+        "Second user should be in Basic default group"
+    )
+    assert basic_user.id not in admin_group_user_ids, (
+        "Second user should NOT be in Admin default group"
+    )
 
     # Verify account_type is STANDARD for both users via user listing API
     paginated_result = UserManager.get_user_page(
@@ -70,9 +70,9 @@ def test_default_group_assignment_on_registration(reset: None) -> None:  # noqa:
     assert admin_snapshot is not None, "Admin user not found in user listing"
     assert basic_snapshot is not None, "Basic user not found in user listing"
 
-    assert (
-        admin_snapshot.account_type == AccountType.STANDARD
-    ), f"Admin user account_type should be STANDARD, got {admin_snapshot.account_type}"
-    assert (
-        basic_snapshot.account_type == AccountType.STANDARD
-    ), f"Basic user account_type should be STANDARD, got {basic_snapshot.account_type}"
+    assert admin_snapshot.account_type == AccountType.STANDARD, (
+        f"Admin user account_type should be STANDARD, got {admin_snapshot.account_type}"
+    )
+    assert basic_snapshot.account_type == AccountType.STANDARD, (
+        f"Basic user account_type should be STANDARD, got {basic_snapshot.account_type}"
+    )

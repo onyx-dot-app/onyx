@@ -6,7 +6,6 @@ import httpx
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from redis import Redis
 from tenacity import RetryError
 
 from onyx.access.access import get_access_for_document
@@ -276,7 +275,7 @@ def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG00
     An external observer can check this key to figure out if the celery beat is still running.
     """
     time_start = time.monotonic()
-    r: Redis = get_redis_client()
+    r = get_redis_client()
     r.set(ONYX_CELERY_BEAT_HEARTBEAT_KEY, 1, ex=600)
     time_elapsed = time.monotonic() - time_start
     task_logger.info(f"celery_beat_heartbeat finished: elapsed={time_elapsed:.2f}")
