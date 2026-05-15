@@ -9,6 +9,15 @@ on:
     branches:
       - main
       - "release/**"
+    paths:
+      - "backend/**"
+      - "web/**"
+      - "deployment/docker_compose/**"
+      - "docker-bake.hcl"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-playwright-tests.yml"
+      - ".github/actions/setup-test-license/**"
   push:
     tags:
       - "v*.*.*"
