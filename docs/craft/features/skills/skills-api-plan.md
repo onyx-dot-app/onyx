@@ -33,7 +33,7 @@ backend/onyx/server/features/skill/
 Plus the skills-side push helpers, co-located with the skills module:
 
 ```
-backend/onyx/skills/push.py  # build_skills_files_for_user, push_to_pod, affected_users_for_skill
+backend/onyx/skills/push.py  # build_skills_files_for_user, push_to_pod
 ```
 
 Plus a new DB helper for sandbox-to-user resolution:
@@ -48,7 +48,8 @@ backend/onyx/db/sandbox.py   # get_sandbox_user_map(user_ids, db_session) -> dic
 
 Modified files:
 - `backend/onyx/main.py` — register the two routers.
-- `backend/onyx/db/skill.py` — extend `CustomSkill` with `author_user_id`, `created_at`, `updated_at` (see §4 notes).
+- `backend/onyx/skills/registry.py` — add `author_user_id`, `created_at`, `updated_at` fields to `CustomSkill`.
+- `backend/onyx/db/skill.py` — update `_custom_skill_from_model` to populate the new fields; refactor `patch_skill` to accept `SkillPatch`; add `affected_users_for_skill`.
 
 New test files:
 - `backend/tests/integration/common_utils/managers/skill.py` — `SkillManager`.
@@ -62,42 +63,43 @@ Keep them flat and explicit. No `response_model=` on endpoint decorators (per CL
 
 ### Response models
 
-```python
-class SkillSource(str, Enum):
-    BUILTIN = "builtin"
-    CUSTOM = "custom"
+Thin wrappers around the existing domain models in `backend/onyx/skills/registry.py`. The domain models (`Skill`, `BuiltinSkill`, `CustomSkill`) are the source of truth for field definitions. The response models handle two things the domain models can't: (1) `BuiltinSkill.is_available` is a `Callable` that can't serialize — the response evaluates it to a `bool`, and (2) `CustomSkill` doesn't carry group grants — the response adds `granted_group_ids`.
 
-class SkillSnapshot(BaseModel):
-    source: SkillSource
+```python
+class BuiltinSkillResponse(BaseModel):
+    """Thin wrapper — evaluates the is_available callable to a bool."""
+    source: Literal["builtin"] = "builtin"
     slug: str
     name: str
     description: str
-
-class BuiltinSkillSnapshot(SkillSnapshot):
-    source: Literal[SkillSource.BUILTIN] = SkillSource.BUILTIN
     is_available: bool
     unavailable_reason: str | None
 
-class CustomSkillSnapshot(SkillSnapshot):
-    source: Literal[SkillSource.CUSTOM] = SkillSource.CUSTOM
-    id: UUID
-    is_public: bool
-    enabled: bool
-    bundle_sha256: str
-    author_user_id: UUID | None
-    granted_group_ids: list[int]   # admin view; empty for user view
-    created_at: datetime
-    updated_at: datetime
+    @classmethod
+    def from_skill(cls, skill: BuiltinSkill, db_session: Session) -> "BuiltinSkillResponse":
+        return cls(
+            slug=skill.slug, name=skill.name, description=skill.description,
+            is_available=skill.is_available(db_session),
+            unavailable_reason=skill.unavailable_reason,
+        )
+
+class CustomSkillResponse(CustomSkill):
+    """Extends CustomSkill with granted_group_ids. Excludes bundle_file_id from serialization."""
+    bundle_file_id: str = Field(exclude=True)
+    granted_group_ids: list[int] = []
 
     @classmethod
-    def from_model(
-        cls, skill: CustomSkill, group_ids: list[int],
-    ) -> "CustomSkillSnapshot": ...
+    def from_skill(cls, skill: CustomSkill, group_ids: list[int]) -> "CustomSkillResponse":
+        return cls(**skill.model_dump(), granted_group_ids=group_ids)
 
 class SkillsList(BaseModel):
-    builtins: list[BuiltinSkillSnapshot]
-    customs: list[CustomSkillSnapshot]
+    builtins: list[BuiltinSkillResponse]
+    customs: list[CustomSkillResponse]
 ```
+
+`CustomSkillResponse` inherits all fields from `CustomSkill` (which inherits from `Skill`) — no field duplication. `bundle_file_id` is excluded from serialization via `Field(exclude=True)` on the response model.
+
+`BuiltinSkillResponse` can't extend `BuiltinSkill` because the `Callable` field and `source_dir`/`has_template` internals shouldn't leak. It duplicates the 4 base fields (`slug`, `name`, `description`, `source`) — acceptable for 4 fields.
 
 ### Request models
 
@@ -125,20 +127,22 @@ Lives in `backend/onyx/db/skill.py` alongside the existing `UNSET` sentinel:
 ```python
 @dataclass(frozen=True, kw_only=True)
 class SkillPatch:
-    slug: str | Unset = UNSET
-    name: str | Unset = UNSET
-    description: str | Unset = UNSET
-    is_public: bool | Unset = UNSET
-    enabled: bool | Unset = UNSET
+    slug: str | UnsetType = UNSET
+    name: str | UnsetType = UNSET
+    description: str | UnsetType = UNSET
+    is_public: bool | UnsetType = UNSET
+    enabled: bool | UnsetType = UNSET
 ```
 
 The endpoint receives `SkillPatchRequest` (Pydantic, `None` = not sent), calls `to_domain()` which uses `model_fields_set` to distinguish "sent" from "not sent", producing a `SkillPatch` (frozen dataclass, `UNSET` = not sent). `patch_skill` in the DB layer receives `SkillPatch` directly — no translation at the boundary.
+
+The existing `patch_skill` function in `db/skill.py` currently takes individual keyword arguments. It should be refactored to accept a `SkillPatch` directly, keeping the DB layer's interface clean.
 
 ### Notes on `CustomSkill` enrichment
 
 The DB layer's `CustomSkill` (in `backend/onyx/skills/registry.py`) currently lacks `author_user_id`, `created_at`, and `updated_at`. The `_custom_skill_from_model` helper in `db/skill.py` must be extended to populate these from the ORM `Skill` model. Group grant IDs are not on `CustomSkill` — they're fetched separately via the `skill.groups` ORM relationship. `from_model` takes `CustomSkill` + a pre-fetched `group_ids` list.
 
-Listing is non-paginated in V1 (skill counts will be tiny). If/when needed, add `PaginatedReturn[CustomSkillSnapshot]` per the persona pattern.
+Listing is non-paginated in V1 (skill counts will be tiny). If/when needed, add `PaginatedReturn[CustomSkillResponse]` per the persona pattern.
 
 ## 5. Routes (`api.py`)
 
@@ -166,7 +170,7 @@ def create_custom_skill(
     bundle: UploadFile = File(...),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> CustomSkillSnapshot: ...
+) -> CustomSkillResponse: ...
 
 @admin_router.patch("/custom/{skill_id}")
 def patch_custom_skill(
@@ -174,7 +178,7 @@ def patch_custom_skill(
     patch: SkillPatchRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> CustomSkillSnapshot: ...
+) -> CustomSkillResponse: ...
 
 @admin_router.put("/custom/{skill_id}/bundle")
 def replace_custom_skill_bundle(
@@ -182,7 +186,7 @@ def replace_custom_skill_bundle(
     bundle: UploadFile = File(...),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> CustomSkillSnapshot: ...
+) -> CustomSkillResponse: ...
 
 @admin_router.put("/custom/{skill_id}/grants")
 def replace_custom_skill_grants(
@@ -190,7 +194,7 @@ def replace_custom_skill_grants(
     body: GrantsReplace,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> CustomSkillSnapshot: ...
+) -> CustomSkillResponse: ...
 
 @admin_router.delete("/custom/{skill_id}")
 def delete_custom_skill(
@@ -201,6 +205,8 @@ def delete_custom_skill(
 ```
 
 Note: `group_ids` in the create endpoint is a JSON-encoded string (`"[1, 2, 3]"`) parsed server-side, avoiding FastAPI's awkward repeated-form-field semantics for list-typed `Form()` params.
+
+Note: create uses multipart (bundle file upload requires it); patch and grants use JSON bodies.
 
 ### User endpoints
 
@@ -216,16 +222,19 @@ def list_skills_for_current_user(
 
 Every mutation follows the same shape: validate → write to DB + FileStore → commit → compute affected users → resolve sandbox_ids via `get_sandbox_user_map` → build per-sandbox file sets → push via `push_to_sandboxes`. "Push" is a full snapshot of the user's `mount_path`, so removing a skill = pushing the user's new file dict without that skill.
 
-`affected_users_for_skill(skill, db_session)` (helper in `backend/onyx/skills/push.py`) returns the set of users with an active sandbox who should have this skill in their bundle. For visibility/grant transitions, the caller takes the union of the before-and-after sets so users who lost access also get re-pushed (without the skill).
+`affected_users_for_skill(skill, db_session)` (helper in `backend/onyx/db/skill.py` — it queries users and user-group relationships, which per CLAUDE.md must live under `backend/onyx/db/`) returns the set of users with an active sandbox who should have this skill in their bundle. For visibility/grant transitions, the caller takes the union of the before-and-after sets so users who lost access also get re-pushed (without the skill).
 
 ### `POST /admin/skills/custom`
 
 ```python
-def create_custom_skill(...) -> CustomSkillSnapshot:
+def create_custom_skill(...) -> CustomSkillResponse:
     bundle_bytes = bundle.file.read()
     validate_custom_bundle(bundle_bytes, slug=slug)    # checks size, format, reserved slugs
     sha = compute_bundle_sha256(bundle_bytes)
-    parsed_group_ids = json.loads(group_ids)
+    try:
+        parsed_group_ids: list[int] = json.loads(group_ids)
+    except (json.JSONDecodeError, TypeError):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "group_ids must be a JSON array of integers")
 
     bundle_file_id = filestore.write(bundle_bytes)
 
@@ -240,13 +249,15 @@ def create_custom_skill(...) -> CustomSkillSnapshot:
     db_session.commit()
 
     _push_skill_to_affected_sandboxes(skill, db_session)
-    return CustomSkillSnapshot.from_model(skill, group_ids=parsed_group_ids)
+    return CustomSkillResponse.from_skill(skill, group_ids=parsed_group_ids)
 ```
 
 ### `PATCH /admin/skills/custom/{id}`
 
+PATCH is the one mutation that conditionally pushes — only when visibility or enabled status changed. Slug/name/description changes don't affect which users see the skill, so no push is needed.
+
 ```python
-def patch_custom_skill(...) -> CustomSkillSnapshot:
+def patch_custom_skill(...) -> CustomSkillResponse:
     domain_patch = patch.to_domain()
 
     before = fetch_skill_for_admin(skill_id, db_session)
@@ -262,17 +273,26 @@ def patch_custom_skill(...) -> CustomSkillSnapshot:
     updated = patch_skill(skill_id, patch=domain_patch, db_session=db_session)
     db_session.commit()
 
-    if visibility_or_enabled_changed(before, updated):
+    if _visibility_changed(before, updated):
         after_affected = affected_users_for_skill(updated, db_session)
         _push_skills_to_sandboxes(before_affected | after_affected, db_session)
 
-    return CustomSkillSnapshot.from_model(updated, group_ids=_get_group_ids(skill_id, db_session))
+    return CustomSkillResponse.from_skill(updated, group_ids=_get_group_ids(skill_id, db_session))
+```
+
+`_visibility_changed` is a local helper in `api.py`:
+
+```python
+def _visibility_changed(before: CustomSkill, after: CustomSkill) -> bool:
+    return (before.is_public != after.is_public
+            or before.enabled != after.enabled
+            or before.slug != after.slug)
 ```
 
 ### `PUT /admin/skills/custom/{id}/bundle`
 
 ```python
-def replace_custom_skill_bundle(...) -> CustomSkillSnapshot:
+def replace_custom_skill_bundle(...) -> CustomSkillResponse:
     bundle_bytes = bundle.file.read()
     skill = fetch_skill_for_admin(skill_id, db_session)
     validate_custom_bundle(bundle_bytes, slug=skill.slug)
@@ -287,13 +307,13 @@ def replace_custom_skill_bundle(...) -> CustomSkillSnapshot:
     # old_file_id captured but not deleted inline (deferred to orphan-blob sweep)
 
     _push_skill_to_affected_sandboxes(updated, db_session)
-    return CustomSkillSnapshot.from_model(updated, group_ids=_get_group_ids(skill_id, db_session))
+    return CustomSkillResponse.from_skill(updated, group_ids=_get_group_ids(skill_id, db_session))
 ```
 
 ### `PUT /admin/skills/custom/{id}/grants`
 
 ```python
-def replace_custom_skill_grants(...) -> CustomSkillSnapshot:
+def replace_custom_skill_grants(...) -> CustomSkillResponse:
     before = fetch_skill_for_admin(skill_id, db_session)
     before_affected = affected_users_for_skill(before, db_session)
 
@@ -304,7 +324,7 @@ def replace_custom_skill_grants(...) -> CustomSkillSnapshot:
     after_affected = affected_users_for_skill(updated, db_session)
     _push_skills_to_sandboxes(before_affected | after_affected, db_session)
 
-    return CustomSkillSnapshot.from_model(updated, group_ids=body.group_ids)
+    return CustomSkillResponse.from_skill(updated, group_ids=body.group_ids)
 ```
 
 ### `DELETE /admin/skills/custom/{id}`
@@ -329,20 +349,37 @@ def delete_custom_skill(...) -> None:
 def list_skills_for_current_user(...) -> SkillsList:
     registry = BuiltinSkillRegistry.instance()
     builtins = [
-        BuiltinSkillSnapshot(slug=b.slug, name=b.name, description=b.description,
-                             is_available=True, unavailable_reason=None)
+        BuiltinSkillResponse.from_skill(b, db_session)
         for b in registry.list_available(db_session)
     ]
     customs = list_skills_for_user(user=user, db_session=db_session)
     return SkillsList(
         builtins=builtins,
-        customs=[CustomSkillSnapshot.from_model(c, group_ids=[]) for c in customs],
+        # Users don't see grant details — group_ids always empty in user view
+        customs=[CustomSkillResponse.from_skill(c, group_ids=[]) for c in customs],
     )
 ```
 
 ### `GET /admin/skills`
 
 Like the user list but uses `registry.list_all()` (not `list_available`) and computes `is_available` / `unavailable_reason` per-skill by calling `skill.is_available(db_session)`. Custom skills returned via `list_skills_for_admin` include disabled ones. Group grants fetched per-skill.
+
+```python
+def list_skills_admin(...) -> SkillsList:
+    registry = BuiltinSkillRegistry.instance()
+    builtins = [
+        BuiltinSkillResponse.from_skill(b, db_session)
+        for b in registry.list_all()
+    ]
+    customs = list_skills_for_admin(db_session=db_session)
+    return SkillsList(
+        builtins=builtins,
+        customs=[
+            CustomSkillResponse.from_skill(c, group_ids=_get_group_ids(c.id, db_session))
+            for c in customs
+        ],
+    )
+```
 
 ### Shared push helper
 
@@ -426,7 +463,7 @@ Stage 1 (sequential — establishes the contract):
 - **A. Models + skeleton router** — write `models.py`, `api.py` with route signatures returning `NotImplementedError`, and register them in `main.py`. Extend `CustomSkill` in `registry.py` with `author_user_id`, `created_at`, `updated_at`. Add `SkillPatch` dataclass to `db/skill.py`. Add `get_sandbox_user_map` to `db/sandbox.py`. Output: typecheck-clean skeleton.
 
 Stage 2 (parallel — independent feature slices, all consume Stage 1 output):
-- **B. Admin write endpoints** — `POST/PATCH/PUT/DELETE` on `/admin/skills/custom*`. Owns the create / patch / replace-bundle / grants / delete code paths. Owns `backend/onyx/skills/push.py` (`build_skills_files_for_user`, `affected_users_for_skill`, `push_to_pod`). Consumes the `SandboxManager` push API.
+- **B. Admin write endpoints** — `POST/PATCH/PUT/DELETE` on `/admin/skills/custom*`. Owns the create / patch / replace-bundle / grants / delete code paths. Owns `backend/onyx/skills/push.py` (`build_skills_files_for_user`, `push_to_pod`) and `affected_users_for_skill` in `backend/onyx/db/skill.py`. Consumes the `SandboxManager` push API.
 - **C. Read endpoints (admin + user)** — `GET /admin/skills` and `GET /skills`. Owns the built-in/custom merge logic and the `from_model` factories. Must not import from `push.py`.
 - **D. Test scaffolding** — `SkillManager`, `DATestSkill`, the zip-builder helper, and the directory `backend/tests/integration/tests/skills/`. Stubs out one happy-path test per file to lock the manager API.
 
