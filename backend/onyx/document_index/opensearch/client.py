@@ -353,7 +353,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         response_index = response.get("index", "")
         if response_index != self._index_name:
             raise RuntimeError(
-                f"OpenSearch responded with index name {response_index} when creating index {self._index_name}."
+                f"OpenSearch responded with index name {response_index} when creating index "
+                f"{self._index_name}."
             )
         logger.debug("Index %s created successfully.", self._index_name)
 
@@ -678,8 +679,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             case "updated":
                 if not update_if_exists:
                     raise RuntimeError(
-                        f'The OpenSearch client returned result "updated" for indexing document chunk "{document_chunk_id}". '
-                        "This indicates that a document chunk with that ID already exists, which is not expected."
+                        f'The OpenSearch client returned result "updated" for indexing document '
+                        f'chunk "{document_chunk_id}". This indicates that a document chunk with '
+                        "that ID already exists, which is not expected."
                     )
             case _:
                 raise RuntimeError(
@@ -759,8 +761,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         if success != len(documents):
             raise RuntimeError(
-                f"OpenSearch reported no errors during bulk index but the number of successful operations "
-                f"({success}) does not match the number of documents ({len(documents)})."
+                "OpenSearch reported no errors during bulk index but the number of successful "
+                f"operations ({success}) does not match the number of documents ({len(documents)})."
             )
         logger.debug("Successfully bulk indexed %s documents.", len(documents))
 
@@ -849,7 +851,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         if num_deleted != num_processed:
             raise RuntimeError(
                 f"Failed to delete some or all of the documents for index {self._index_name}. "
-                f"{num_deleted} documents were deleted out of {num_processed} documents that were processed."
+                f"{num_deleted} documents were deleted out of {num_processed} documents that were "
+                "processed."
             )
 
         logger.debug(
@@ -918,9 +921,65 @@ class OpenSearchIndexClient(OpenSearchClient):
                 return
             case _:
                 raise RuntimeError(
-                    f'The OpenSearch client returned result "{result_string}" for updating document chunk "{document_chunk_id}". '
-                    "This is unexpected."
+                    f'The OpenSearch client returned result "{result_string}" for updating '
+                    f'document chunk "{document_chunk_id}". This is unexpected.'
                 )
+
+    @log_function_time(
+        print_only=True,
+        debug_only=True,
+        include_args_subset={
+            "document_chunk_ids": len,
+            "properties_to_update": lambda x: x.keys(),
+        },
+    )
+    def bulk_update_documents(
+        self, document_chunk_ids: list[str], properties_to_update: dict[str, Any]
+    ) -> None:
+        """Bulk updates OpenSearch document chunks' properties.
+
+        The ``properties_to_update`` is applied to all the document chunks with
+        the given IDs.
+
+        Args:
+            document_chunk_ids: The OpenSearch IDs of the document chunks to
+                update.
+            properties_to_update: The properties of the document to update. Each
+                property should exist in the schema.
+        """
+        if not document_chunk_ids:
+            return
+        logger.debug(
+            "Bulk updating %s document chunks for index %s.",
+            len(document_chunk_ids),
+            self._index_name,
+        )
+        data = []
+        for document_chunk_id in document_chunk_ids:
+            data.append(
+                {
+                    "_index": self._index_name,
+                    "_id": document_chunk_id,
+                    "_op_type": "update",
+                    "doc": properties_to_update,
+                }
+            )
+        # max_retries is the number of times to retry a request if we get a 429.
+        success, errors = bulk(self._client, data, max_retries=3)
+        if errors:
+            raise RuntimeError(
+                f"Failed to bulk update document chunks for index {self._index_name}. Errors: "
+                f"{errors}"
+            )
+        if success != len(document_chunk_ids):
+            raise RuntimeError(
+                f"OpenSearch reported no errors during bulk update but the number of successful "
+                f"operations ({success}) does not match the number of document chunks "
+                f"({len(document_chunk_ids)})."
+            )
+        logger.debug(
+            "Successfully bulk updated %s document chunks.", len(document_chunk_ids)
+        )
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def get_document(self, document_chunk_id: str) -> DocumentChunk:
@@ -1096,8 +1155,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         if "_source" not in body or body["_source"] is not False:
             logger.warning(
-                "The body of the search request for document chunk IDs is missing the key, value pair of "
-                '"_source": False. This query will therefore be inefficient.'
+                "The body of the search request for document chunk IDs is missing the key, "
+                'value pair of "_source": False. This query will therefore be inefficient.'
             )
 
         params = {"phase_took": "true"}
@@ -1127,8 +1186,9 @@ class OpenSearchIndexClient(OpenSearchClient):
         # can return arbitrarily-many IDs.
         if len(hits) == DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW:
             logger.warning(
-                "The search request for document chunk IDs returned the maximum number of results. "
-                "It is extremely likely that there are more hits in OpenSearch than the returned results."
+                "The search request for document chunk IDs returned the maximum number of "
+                "results. It is extremely likely that there are more hits in OpenSearch than the "
+                "returned results."
             )
 
         # Extract only the _id field from each hit.
@@ -1284,7 +1344,8 @@ def wait_for_opensearch_with_timeout(
             time_elapsed = time.monotonic() - time_start
             if time_elapsed > wait_limit_s:
                 logger.info(
-                    "[OpenSearch] Readiness probe did not succeed within the timeout (%s seconds).",
+                    "[OpenSearch] Readiness probe did not succeed within the timeout "
+                    "(%s seconds).",
                     wait_limit_s,
                 )
                 return False

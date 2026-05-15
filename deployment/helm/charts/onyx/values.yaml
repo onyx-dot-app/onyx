@@ -16,6 +16,11 @@ postgresql:
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
+  # CRDs are shipped in our chart's crds/ directory (pre-installed before
+  # templates). Disable the subchart's own CRD template to avoid ownership
+  # conflicts between the two copies.
+  crds:
+    create: false
   cluster:
     instances: 1
     storage:
