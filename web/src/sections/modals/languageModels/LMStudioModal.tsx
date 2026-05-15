@@ -19,6 +19,7 @@ import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   APIBaseField,
+  CONTAINERIZED_HOST_INFO_TOOLTIP,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -46,6 +47,7 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
+  const { settings } = useSettingsContext();
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -75,6 +77,11 @@ function LMStudioModalInternals({
       <APIBaseField
         subDescription="The base URL for your LM Studio server."
         placeholder="Your LM Studio API base URL"
+        info={
+          settings.is_containerized
+            ? CONTAINERIZED_HOST_INFO_TOOLTIP
+            : undefined
+        }
       />
 
       <APIKeyField

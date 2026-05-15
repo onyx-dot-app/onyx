@@ -20,6 +20,8 @@ import {
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
+  APIBaseFieldWithInfo,
+  CONTAINERIZED_HOST_INFO_TOOLTIP,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -60,6 +62,7 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
+  const { settings } = useSettingsContext();
 
   const isFetchDisabled = useMemo(
     () =>
@@ -103,16 +106,24 @@ function OllamaModalInternals({
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
-            <InputVertical
-              withLabel="api_base"
-              title="API Base URL"
-              subDescription="The base URL for your Ollama instance."
-            >
-              <InputTypeInField
-                name="api_base"
+            {settings.is_containerized ? (
+              <APIBaseFieldWithInfo
+                subDescription="The base URL for your Ollama instance."
                 placeholder="Your Ollama API base URL"
+                info={CONTAINERIZED_HOST_INFO_TOOLTIP}
               />
-            </InputVertical>
+            ) : (
+              <InputVertical
+                withLabel="api_base"
+                title="API Base URL"
+                subDescription="The base URL for your Ollama instance."
+              >
+                <InputTypeInField
+                  name="api_base"
+                  placeholder="Your Ollama API base URL"
+                />
+              </InputVertical>
+            )}
           </Tabs.Content>
 
           <Tabs.Content value={Tab.TAB_CLOUD}>
