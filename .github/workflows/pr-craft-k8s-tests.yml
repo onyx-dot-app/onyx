@@ -14,7 +14,6 @@ on:
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
-      - "deployment/kind/**"
 
 permissions:
   contents: read
@@ -102,8 +101,23 @@ jobs:
       - name: Load sandbox image into kind
         run: kind load docker-image onyx-sandbox:ci --name onyx-craft-ci
 
+      # Namespace + ServiceAccount that KubernetesSandboxManager expects.
+      # In production these come from the helm chart (sandbox-namespace.yaml,
+      # gated on ENABLE_CRAFT) plus an out-of-band SA in the internal repo.
       - name: Apply sandbox namespace + ServiceAccount
-        run: kubectl apply -f deployment/kind/sandbox-rbac.yaml
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: onyx-sandboxes
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: sandbox-file-sync
+            namespace: onyx-sandboxes
+          EOF
 
       - name: Create .env for Docker Compose
         run: |
