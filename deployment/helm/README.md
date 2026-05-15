@@ -85,7 +85,7 @@ Helm `configMap:` and let the chart fill them in:
 
 | Key | Don't set to (docker-compose) | Chart-computed default |
 | --- | --- | --- |
-| `REDIS_HOST` | `cache` | `{redis.redisStandalone.name | default <release>}-master` |
+| `REDIS_HOST` | `cache` | `redis.redisStandalone.name | default <release>` |
 | `INTERNAL_URL` | `http://api_server:8080` | `http://<release>-api-service:8080` |
 | `API_SERVER_HOST` | `api_server` | computed |
 | `MODEL_SERVER_HOST` | `inference_model_server` | `<release>-inference-model-service` |
