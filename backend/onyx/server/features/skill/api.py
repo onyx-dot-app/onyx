@@ -1,5 +1,6 @@
 import io
 import json
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -7,6 +8,7 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import Form
 from fastapi import UploadFile
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import Permission
@@ -19,6 +21,8 @@ from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import create_skill
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill_for_admin
+from onyx.db.skill import fetch_skill_for_user
+from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import get_group_ids_for_skill
 from onyx.db.skill import list_skills_for_admin
 from onyx.db.skill import list_skills_for_user
@@ -261,6 +265,37 @@ def list_skills_for_current_user(
         builtins=builtins,
         customs=[CustomSkillResponse.from_model(c, group_ids=[]) for c in customs],
     )
+
+
+@user_router.get("/{slug_or_id}")
+def fetch_skill_for_current_user(
+    slug_or_id: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Annotated[
+    BuiltinSkillResponse | CustomSkillResponse, Field(discriminator="source")
+]:
+    try:
+        skill_id: UUID | None = UUID(slug_or_id)
+    except ValueError:
+        skill_id = None
+
+    if skill_id is not None:
+        custom = fetch_skill_for_user(skill_id, user, db_session)
+        if custom is not None:
+            return CustomSkillResponse.from_model(custom, group_ids=[])
+        # Fall through: a UUID-shaped string may also be a valid slug
+        # (regex allows it), so don't 404 yet — try the slug path.
+
+    registry = BuiltinSkillRegistry.instance()
+    builtin = registry.get(slug_or_id)
+    if builtin is not None and builtin.is_available(db_session):
+        return BuiltinSkillResponse.from_builtin(builtin, db_session)
+
+    custom = fetch_skill_for_user_by_slug(slug_or_id, user, db_session)
+    if custom is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return CustomSkillResponse.from_model(custom, group_ids=[])
 
 
 def _parse_group_ids(raw: str) -> list[int]:

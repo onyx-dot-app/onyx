@@ -91,6 +91,14 @@ def fetch_skill_for_user(
     return db_session.scalars(stmt).one_or_none()
 
 
+def fetch_skill_for_user_by_slug(
+    slug: str, user: User, db_session: Session
+) -> Skill | None:
+    stmt = select(Skill).where(Skill.slug == slug).where(Skill.enabled.is_(True))
+    stmt = _add_user_visibility_filter(stmt, user)
+    return db_session.scalars(stmt).one_or_none()
+
+
 def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
     stmt = select(Skill).where(Skill.id == skill_id)
     return db_session.scalars(stmt).one_or_none()
