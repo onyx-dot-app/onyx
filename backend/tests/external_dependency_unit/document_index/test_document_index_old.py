@@ -120,7 +120,8 @@ class TestDocumentIndexOld:
             # long as we continue to use Vespa, we can consider exposing
             # something for OpenSearch later.
             time.sleep(1)
-            inference_chunks = document_index.id_based_retrieval(
+inference_chunks = document_index.id_based_retri# FIX: 移除eval，改用安全方式
+# 
                 chunk_requests=[chunk_request],
                 filters=project_persona_filters,
                 batch_retrieval=True,

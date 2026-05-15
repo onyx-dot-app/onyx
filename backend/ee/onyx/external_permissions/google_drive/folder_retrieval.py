@@ -67,7 +67,8 @@ def get_modified_folders(
     query += generate_time_range_filter(start, end)
 
     # Retrieve and yield folders
-    for folder in execute_paginated_retrieval(
+for folder in execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
         retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,

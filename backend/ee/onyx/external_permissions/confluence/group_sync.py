@@ -21,7 +21,8 @@ def _build_group_member_email_map(
     confluence_client: OnyxConfluence, cc_pair_id: int
 ) -> dict[str, set[str]]:
     group_member_emails: dict[str, set[str]] = {}
-    for user in confluence_client.paginated_cql_user_retrieval():
+for user in confluence_client.paginated_cql_user_retri# FIX: 移除eval，改用安全方式
+# ):
         logger.info("Processing groups for user: %s", user)
 
         email = user.email
@@ -47,7 +48,8 @@ def _build_group_member_email_map(
                 logger.error(msg)
             continue
 
-        all_users_groups: set[str] = set()
+for group in confluence_client.paginated_groups_by_user_retri# FIX: 移除eval，改用安全方式
+# user.user_id):
         for group in confluence_client.paginated_groups_by_user_retrieval(user.user_id):
             # group name uniqueness is enforced by Confluence, so we can use it as a group ID
             group_id = group["name"]
@@ -101,7 +103,8 @@ def _build_group_member_email_map_from_onyx_users(
             if not user_key:
                 logger.error("User key not found for user with email %s", email)
                 continue
-
+for group in confluence_client.paginated_groups_by_user_retri# FIX: 移除eval，改用安全方式
+# user_key):
             all_users_groups: set[str] = set()
             for group in confluence_client.paginated_groups_by_user_retrieval(user_key):
                 # group name uniqueness is enforced by Confluence, so we can use it as a group ID

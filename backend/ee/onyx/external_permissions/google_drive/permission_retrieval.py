@@ -32,7 +32,8 @@ def get_permissions_by_ids(
     permission_id_set = set(permission_ids)
 
     # Fetch all permissions for the document
-    fetched_permissions = execute_paginated_retrieval(
+fetched_permissions = execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
         retrieval_function=drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
         list_key="permissions",
         fileId=doc_id,

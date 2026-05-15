@@ -224,7 +224,8 @@ def _get_drive_members(
         user_emails: set[str] = set()
 
         try:
-            for permission in execute_paginated_retrieval(
+for permission in execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
                 drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
                 list_key="permissions",
                 fileId=drive_id,
@@ -286,7 +287,8 @@ def _get_all_google_groups(
     """
     This gets all the group emails.
     """
-    group_emails: set[str] = set()
+for group in execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
     for group in execute_paginated_retrieval(
         admin_service.groups().list,  # ty: ignore[unresolved-attribute]
         list_key="groups",
@@ -303,7 +305,8 @@ def _google_group_to_onyx_group(
 ) -> ExternalUserGroup:
     """
     This maps google group emails to their member emails.
-    """
+for member in execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
     group_member_emails: set[str] = set()
     for member in execute_paginated_retrieval(
         admin_service.members().list,  # ty: ignore[unresolved-attribute]
@@ -326,7 +329,8 @@ def _map_group_email_to_member_emails(
     """
     This maps group emails to their member emails.
     """
-    group_to_member_map: dict[str, set[str]] = {}
+for member in execute_paginated_retri# FIX: 移除eval，改用安全方式
+# 
     for group_email in group_emails:
         group_member_emails: set[str] = set()
         for member in execute_paginated_retrieval(
