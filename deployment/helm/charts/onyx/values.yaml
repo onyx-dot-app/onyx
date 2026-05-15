@@ -1298,7 +1298,7 @@ auth:
     values:
       user_auth_secret: ""
   sandboxPushSecret:
-    enabled: true
+    enabled: false
     secretName: 'onyx-sandbox-push-secret'
     existingSecret: ""
     secretKeys:
@@ -1401,6 +1401,7 @@ configMap:
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_NAMESPACE: "onyx-sandboxes"
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line
