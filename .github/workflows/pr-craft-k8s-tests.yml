@@ -37,6 +37,10 @@ env:
   # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
   # tests never call back to it, so the URL doesn't need to resolve.
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
+  # Fail fast on opencode hangs (default is 900s). Without this, CI
+  # waits 15 min for ACP timeout while the 20-min workflow timeout
+  # kills the job first — losing failure logs and giving zero signal.
+  ACP_MESSAGE_TIMEOUT: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
