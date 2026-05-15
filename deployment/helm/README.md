@@ -1,4 +1,4 @@
-# Recent chart changes (0.4.52)
+# Recent chart changes (0.5.0)
 
 If you are upgrading from an earlier 0.4.x release, note:
 
