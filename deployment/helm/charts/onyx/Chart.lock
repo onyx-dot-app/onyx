@@ -7,7 +7,7 @@ dependencies:
   version: 0.2.25
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts
-  version: 3.4.0
+  version: 3.6.0
 - name: ingress-nginx
   repository: https://kubernetes.github.io/ingress-nginx
   version: 4.13.3
@@ -20,5 +20,5 @@ dependencies:
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
   version: 0.3.3
-digest: sha256:a57f29088b1624a72f6c70e4c3ccc2f2aad675e4624278c4e9be92083d6d5dad
-generated: "2026-04-08T16:47:29.33368-07:00"
+digest: sha256:2f421c8019317298b14a35a2c5102c89fe296ca89721638375435e1e99d8f330
+generated: "2026-05-14T18:27:07.905046-07:00"
