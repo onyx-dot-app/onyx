@@ -1,0 +1,170 @@
+name: Craft Kubernetes Sandbox Tests
+concurrency:
+  group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  merge_group:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/onyx/server/features/build/sandbox/**"
+      - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
+      - ".github/workflows/pr-craft-k8s-tests.yml"
+      - ".github/actions/setup-python-and-install-dependencies/**"
+      - "deployment/docker_compose/docker-compose.yml"
+      - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/kind/**"
+
+permissions:
+  contents: read
+
+env:
+  # MinIO (matches pr-external-dependency-unit-tests.yml)
+  S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_AWS_ACCESS_KEY_ID: "minioadmin"
+  S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
+
+  # Sandbox configuration — points the manager at the kind cluster
+  # and the locally-built image instead of the published Docker Hub tag.
+  SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_NAMESPACE: "onyx-sandboxes"
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
+  SANDBOX_CONTAINER_IMAGE: "onyx-sandbox:ci"
+  SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+
+  # LLM keys (some tests provision pods with an LLM config; values can be
+  # placeholders for tests that don't actually call the model)
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+jobs:
+  craft-k8s-tests:
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
+      - extras=s3-cache
+    timeout-minutes: 20
+
+    env:
+      PYTHONPATH: ./backend
+      MODEL_SERVER_HOST: "disabled"
+      DISABLE_TELEMETRY: "true"
+
+    steps:
+      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/ee.txt
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+
+      # Build the sandbox image from the current tree so PRs that modify
+      # the Dockerfile / sandbox sources are tested against their own image,
+      # not the published Docker Hub tag.
+      #
+      # GHA layer cache (type=gha) lets unchanged layers be reused across
+      # runs. Worst case (Dockerfile base or initial-requirements.txt change)
+      # is a full ~8-15 min rebuild; the common case is <1 min.
+      - name: Build sandbox image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        with:
+          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
+          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          platforms: linux/amd64
+          tags: onyx-sandbox:ci
+          load: true
+          cache-from: type=gha,scope=craft-sandbox
+          cache-to: type=gha,scope=craft-sandbox,mode=max
+
+      - name: Create kind cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
+        with:
+          cluster_name: onyx-craft-ci
+
+      - name: Load sandbox image into kind
+        run: kind load docker-image onyx-sandbox:ci --name onyx-craft-ci
+
+      - name: Apply sandbox namespace + ServiceAccount
+        run: kubectl apply -f deployment/kind/sandbox-rbac.yaml
+
+      - name: Create .env for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          DISABLE_TELEMETRY=true
+          EOF
+
+      - name: Start Postgres, Redis, MinIO
+        run: |
+          cd deployment/docker_compose
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            up -d \
+            minio \
+            relational_db \
+            cache
+
+      - name: Run migrations
+        run: |
+          cd backend
+          alembic upgrade head
+          alembic heads --verbose
+
+      - name: Run Craft K8s tests
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            -m "not nightly" \
+            backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
+
+      - name: Collect kind logs on failure
+        if: failure()
+        run: |
+          mkdir -p kind-logs
+          kind export logs ./kind-logs --name onyx-craft-ci || true
+          kubectl get pods -A -o wide > kind-logs/pods.txt 2>&1 || true
+          kubectl describe pods -n onyx-sandboxes > kind-logs/sandbox-pods-describe.txt 2>&1 || true
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p docker-logs
+          cd deployment/docker_compose
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+          for container in $containers; do
+            name=$(docker inspect --format='{{.Name}}' "$container" | sed 's/^\///')
+            docker logs "$container" > "../../docker-logs/${name}.log" 2>&1
+          done
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: craft-k8s-logs
+          path: |
+            kind-logs/
+            docker-logs/
+          retention-days: 7
