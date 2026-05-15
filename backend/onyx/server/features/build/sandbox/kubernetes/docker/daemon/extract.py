@@ -65,33 +65,39 @@ def safe_extract_then_atomic_swap(tar_gz_bytes: bytes, mount_path: str) -> None:
 
     os.makedirs(dest, exist_ok=True)
 
-    total_size = 0
-    with tarfile.open(fileobj=io.BytesIO(tar_gz_bytes), mode="r:gz") as tar:
-        for member in tar.getmembers():
-            _validate_member(member, str(dest))
+    try:
+        total_size = 0
+        with tarfile.open(fileobj=io.BytesIO(tar_gz_bytes), mode="r:gz") as tar:
+            for member in tar.getmembers():
+                _validate_member(member, str(dest))
 
-            if member.isreg():
-                total_size += member.size
-                if total_size > MAX_BUNDLE_BYTES:
-                    raise ValueError(
-                        f"Total uncompressed size exceeds {MAX_BUNDLE_BYTES}"
-                    )
+                if member.isreg():
+                    total_size += member.size
+                    if total_size > MAX_BUNDLE_BYTES:
+                        raise ValueError(
+                            f"Total uncompressed size exceeds {MAX_BUNDLE_BYTES}"
+                        )
 
-            final_path = Path(os.path.normpath(os.path.join(str(dest), member.name)))
-            if not str(final_path).startswith(ALLOWED_PREFIX):
-                raise ValueError(f"Extracted path escapes allow-list: {final_path}")
+                final_path = Path(
+                    os.path.normpath(os.path.join(str(dest), member.name))
+                )
+                if not str(final_path).startswith(ALLOWED_PREFIX):
+                    raise ValueError(f"Extracted path escapes allow-list: {final_path}")
 
-            if member.isdir():
-                os.makedirs(final_path, exist_ok=True)
-            elif member.isreg():
-                os.makedirs(str(final_path.parent), exist_ok=True)
-                src = tar.extractfile(member)
-                if src is None:
-                    raise ValueError(f"Cannot read entry: {member.name}")
-                with open(final_path, "wb") as f:
-                    f.write(src.read())
-                # 0o755 mask strips setuid (4000), setgid (2000), sticky (1000), and group/other write (022)
-                os.chmod(final_path, (member.mode or 0o644) & 0o755)
+                if member.isdir():
+                    os.makedirs(final_path, exist_ok=True)
+                elif member.isreg():
+                    os.makedirs(str(final_path.parent), exist_ok=True)
+                    src = tar.extractfile(member)
+                    if src is None:
+                        raise ValueError(f"Cannot read entry: {member.name}")
+                    with open(final_path, "wb") as f:
+                        f.write(src.read())
+                    # 0o755 mask strips setuid (4000), setgid (2000), sticky (1000), and group/other write (022)
+                    os.chmod(final_path, (member.mode or 0o644) & 0o755)
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
 
     old_target: str | None = None
     if mount.is_symlink():

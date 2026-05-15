@@ -1213,8 +1213,16 @@ class LocalSandboxManager(SandboxManager):
             tmp_link.symlink_to(version_dir)
             os.rename(str(tmp_link), str(target))
 
+            live_target: Path | None = None
+            if target.is_symlink():
+                link_dst = os.readlink(str(target))
+                live_target = (
+                    Path(link_dst)
+                    if os.path.isabs(link_dst)
+                    else (target.parent / link_dst).resolve()
+                )
             for old in versions_dir.iterdir():
-                if old != version_dir and old.is_dir():
+                if old != version_dir and old != live_target and old.is_dir():
                     shutil.rmtree(old, ignore_errors=True)
 
         except FatalWriteError:

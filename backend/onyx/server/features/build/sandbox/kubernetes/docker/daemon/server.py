@@ -44,12 +44,22 @@ async def push(
     if not mount_path.startswith("/"):
         raise HTTPException(status_code=400, detail="mount_path must be absolute")
 
-    body = await request.body()
-
-    if len(body) > MAX_BUNDLE_BYTES:
+    content_length = request.headers.get("content-length")
+    if content_length is not None and int(content_length) > MAX_BUNDLE_BYTES:
         raise HTTPException(
             status_code=413, detail=f"Bundle exceeds {MAX_BUNDLE_BYTES} byte limit"
         )
+
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_BUNDLE_BYTES:
+            raise HTTPException(
+                status_code=413, detail=f"Bundle exceeds {MAX_BUNDLE_BYTES} byte limit"
+            )
+        chunks.append(chunk)
+    body = b"".join(chunks)
 
     actual_sha = hashlib.sha256(body).hexdigest()
     if actual_sha != x_bundle_sha256.lower():

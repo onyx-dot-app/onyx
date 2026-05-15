@@ -129,7 +129,15 @@ def _build_push_auth_header() -> str:
     return f"Bearer {secret}"
 
 
+_MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
+
+
 def _build_targz(files: FileSet) -> tuple[bytes, str]:
+    total = sum(len(v) for v in files.values())
+    if total > _MAX_BUNDLE_BYTES:
+        raise FatalWriteError(
+            f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
+        )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tar:
         for name in sorted(files):
