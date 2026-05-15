@@ -13,7 +13,7 @@
  * Strip sandbox/session path prefixes to produce a session-relative path.
  *
  * Returns the path relative to the session root (the directory that
- * contains outputs/, files/, etc.)
+ * contains outputs/, user_library/, etc.)
  */
 export function stripSessionPrefix(fullPath: string): string {
   if (!fullPath) return "";

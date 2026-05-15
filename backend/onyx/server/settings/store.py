@@ -32,10 +32,10 @@ def load_settings() -> Settings:
         )
     except KvKeyNotFoundError:
         # Default to empty settings if no settings have been set yet
-        logger.debug(f"No settings found in KV store for key: {KV_SETTINGS_KEY}")
+        logger.debug("No settings found in KV store for key: %s", KV_SETTINGS_KEY)
         settings = Settings()
     except Exception as e:
-        logger.error(f"Error loading settings from KV store: {str(e)}")
+        logger.error("Error loading settings from KV store: %s", str(e))
         settings = Settings()
 
     cache = get_cache_backend()
@@ -48,7 +48,7 @@ def load_settings() -> Settings:
             anonymous_user_enabled = False
             cache.set(OnyxRedisLocks.ANONYMOUS_USER_ENABLED, "0", ex=SETTINGS_TTL)
     except Exception as e:
-        logger.error(f"Error loading anonymous user setting from cache: {str(e)}")
+        logger.error("Error loading anonymous user setting from cache: %s", str(e))
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled

@@ -160,7 +160,8 @@ def _resolve_connector(cc_pair_id: int, tenant_id: str) -> ConnectorInfo:
             return info
     except Exception:
         logger.debug(
-            f"Failed to resolve connector info for cc_pair_id={cc_pair_id}",
+            "Failed to resolve connector info for cc_pair_id=%s",
+            cc_pair_id,
             exc_info=True,
         )
         return _UNKNOWN_CONNECTOR

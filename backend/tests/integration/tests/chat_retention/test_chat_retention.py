@@ -58,9 +58,9 @@ def test_chat_retention(
         message="This message should be deleted soon",
         user_performing_action=admin_user,
     )
-    assert (
-        response.error is None
-    ), f"Chat response should not have an error: {response.error}"
+    assert response.error is None, (
+        f"Chat response should not have an error: {response.error}"
+    )
 
     chat_history = ChatSessionManager.get_chat_history(
         chat_session=chat_session,

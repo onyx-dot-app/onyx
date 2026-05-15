@@ -55,6 +55,14 @@ def test_google_drive_normalization(url: str, expected: str) -> None:
             "https://notion.so/page?p=1234567890abcdef1234567890abcdef",
             "12345678-90ab-cdef-1234-567890abcdef",
         ),
+        (
+            "https://app.notion.com/p/Page-1234567890abcdef1234567890abcdef",
+            "12345678-90ab-cdef-1234-567890abcdef",
+        ),
+        (
+            "https://app.notion.com/p/Page-1234567890abcdef1234567890abcdef#fedcba0987654321fedcba0987654321",
+            "12345678-90ab-cdef-1234-567890abcdef",
+        ),
         # Edge case: URL with title prefix but valid UUID
         (
             "https://www.notion.so/My-Page-abc123def456ghi789jkl012mno345pq",
@@ -178,6 +186,10 @@ def test_sharepoint_normalization(url: str, expected: str) -> None:
         ("https://drive.google.com/file/d/123", DocumentSource.GOOGLE_DRIVE),
         ("https://www.notion.so/Page-abc123def456", DocumentSource.NOTION),
         ("https://notion.site/page", DocumentSource.NOTION),
+        (
+            "https://app.notion.com/p/Page-1234567890abcdef1234567890abcdef",
+            DocumentSource.NOTION,
+        ),
         (
             "https://example.atlassian.net/wiki/spaces/SPACE/pages/123",
             DocumentSource.CONFLUENCE,

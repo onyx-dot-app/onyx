@@ -48,11 +48,11 @@
 
     posX = Math.max(
       offset,
-      Math.min(posX, window.innerWidth - iconSize - offset),
+      Math.min(posX, window.innerWidth - iconSize - offset)
     );
     posY = Math.max(
       offset,
-      Math.min(posY, window.innerHeight - iconSize - offset),
+      Math.min(posY, window.innerHeight - iconSize - offset)
     );
 
     selectionIcon.style.left = `${posX}px`;
@@ -84,11 +84,11 @@
           if (chrome.runtime.lastError) {
             console.error(
               "[Onyx] Error sending message:",
-              chrome.runtime.lastError.message,
+              chrome.runtime.lastError.message
             );
           } else {
           }
-        },
+        }
       );
     }
 
@@ -133,7 +133,7 @@
     () => {
       hideIcon();
     },
-    true,
+    true
   );
 
   document.addEventListener("selectionchange", () => {

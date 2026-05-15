@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 .opal-content-action {
   @apply flex flex-row w-full gap-4 items-stretch;
 }

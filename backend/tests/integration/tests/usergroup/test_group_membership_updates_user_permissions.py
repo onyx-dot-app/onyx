@@ -52,12 +52,12 @@ def test_user_gets_permissions_when_added_to_group(
 
     # Verify the user gained the new permission (expanded includes read:agents)
     updated_permissions = UserManager.get_permissions(basic_user)
-    assert (
-        "add:agents" in updated_permissions
-    ), f"User should have 'add:agents' after group grant, got: {updated_permissions}"
-    assert (
-        "read:agents" in updated_permissions
-    ), f"User should have implied 'read:agents', got: {updated_permissions}"
+    assert "add:agents" in updated_permissions, (
+        f"User should have 'add:agents' after group grant, got: {updated_permissions}"
+    )
+    assert "read:agents" in updated_permissions, (
+        f"User should have implied 'read:agents', got: {updated_permissions}"
+    )
     assert "basic" in updated_permissions
 
 

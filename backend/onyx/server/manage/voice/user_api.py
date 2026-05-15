@@ -107,7 +107,7 @@ async def transcribe_audio(
             f"Speech-to-text not implemented for {provider_db.provider_type}.",
         ) from exc
     except Exception as exc:
-        logger.error(f"Transcription failed: {exc}")
+        logger.error("Transcription failed: %s", exc)
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Transcription failed. Please try again.",
@@ -154,7 +154,9 @@ async def synthesize_speech(
     text = body.text
     voice = body.voice
     speed = body.speed
-    logger.info(f"TTS request: text length={len(text)}, voice={voice}, speed={speed}")
+    logger.info(
+        "TTS request: text length=%s, voice=%s, speed=%s", len(text), voice, speed
+    )
 
     # Use short-lived session to fetch provider config, then release connection
     # before starting the long-running streaming response
@@ -188,13 +190,16 @@ async def synthesize_speech(
         )
 
         logger.info(
-            f"TTS using provider: {provider_db.provider_type}, voice: {final_voice}, speed: {final_speed}"
+            "TTS using provider: %s, voice: %s, speed: %s",
+            provider_db.provider_type,
+            final_voice,
+            final_speed,
         )
 
         try:
             provider = get_voice_provider(provider_db)
         except ValueError as exc:
-            logger.error(f"Failed to get voice provider: {exc}")
+            logger.error("Failed to get voice provider: %s", exc)
             raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, str(exc)) from exc
 
     # Pull the first chunk before returning the StreamingResponse. If the
@@ -218,7 +223,7 @@ async def synthesize_speech(
         async for chunk in stream_iter:
             chunk_count += 1
             yield chunk
-        logger.info(f"TTS streaming complete: {chunk_count} chunks sent")
+        logger.info("TTS streaming complete: %s chunks sent", chunk_count)
 
     return StreamingResponse(
         audio_stream(),

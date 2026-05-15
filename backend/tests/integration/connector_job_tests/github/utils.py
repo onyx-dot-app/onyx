@@ -52,7 +52,7 @@ class GitHubManager:
             # Check if we have admin permissions
             if not repo.permissions.admin:
                 logger.error(
-                    f"No admin permissions for repository {repo_owner}/{repo_name}"
+                    "No admin permissions for repository %s/%s", repo_owner, repo_name
                 )
                 return False
 
@@ -60,16 +60,19 @@ class GitHubManager:
             try:
                 repo.edit(visibility=visibility)
             except GithubException as e:
-                logger.warning(f"Could not set repository to {visibility}: {e}")
+                logger.warning("Could not set repository to %s: %s", visibility, e)
                 return False
 
             logger.info(
-                f"Successfully changed {repo_owner}/{repo_name} visibility to {visibility}"
+                "Successfully changed %s/%s visibility to %s",
+                repo_owner,
+                repo_name,
+                visibility,
             )
             return True
 
         except GithubException as e:
-            logger.error(f"Failed to change repository visibility: {e}")
+            logger.error("Failed to change repository visibility: %s", e)
             return False
 
     def add_team_to_repository(
@@ -108,12 +111,16 @@ class GitHubManager:
             team.set_repo_permission(repo, permission)
 
             logger.info(
-                f"Successfully added team {team_slug} to {repo_owner}/{repo_name} with {permission} permissions"
+                "Successfully added team %s to %s/%s with %s permissions",
+                team_slug,
+                repo_owner,
+                repo_name,
+                permission,
             )
             return True
 
         except GithubException as e:
-            logger.error(f"Failed to add team to repository: {e}")
+            logger.error("Failed to add team to repository: %s", e)
             return False
 
     def remove_team_from_repository(
@@ -142,12 +149,15 @@ class GitHubManager:
             team.remove_from_repos(repo)
 
             logger.info(
-                f"Successfully removed team {team_slug} from {repo_owner}/{repo_name}"
+                "Successfully removed team %s from %s/%s",
+                team_slug,
+                repo_owner,
+                repo_name,
             )
             return True
 
         except GithubException as e:
-            logger.error(f"Failed to remove team from repository: {e}")
+            logger.error("Failed to remove team from repository: %s", e)
             return False
 
     def get_repository_visibility(
@@ -173,5 +183,5 @@ class GitHubManager:
                 return "private" if repo.private else "public"
 
         except GithubException as e:
-            logger.error(f"Failed to get repository visibility: {e}")
+            logger.error("Failed to get repository visibility: %s", e)
             return None

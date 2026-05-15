@@ -22,6 +22,7 @@ Usage:
 
 import json
 import os
+import re
 import select
 import shutil
 import subprocess
@@ -44,6 +45,9 @@ from acp.schema import ToolCallStart
 from pydantic import ValidationError
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # ACP Protocol version
 ACP_PROTOCOL_VERSION = 1
@@ -58,6 +62,10 @@ DEFAULT_CLIENT_INFO = {
 SESSION_CREATION_TIMEOUT = 30.0  # 30 seconds
 TIMEOUT = 900.0  # 15 minutes
 SINGLE_READ_TIMEOUT = 10.0  # 10 seconds
+
+# Opencode emits OSC terminal-title escape sequences (ESC ] 0 ; ... BEL) on
+# stdout, which corrupt JSON-RPC lines.  Strip them before parsing.
+_OSC_RE = re.compile(r"\x1b\][^\x07]*\x07")
 
 
 # =============================================================================
@@ -225,13 +233,18 @@ class ACPAgentClient:
 
         self._cwd = cwd or os.getcwd()
 
-        # Start the opencode acp process
+        # Start the opencode acp process.
+        # cwd= is critical: without it the process inherits the API server's
+        # working directory, and opencode discovers that (e.g. the entire
+        # backend/) as its project root — leading to massive file indexing
+        # and session-creation timeouts.
         self._process = subprocess.Popen(
             [self._opencode_path, "acp", "--cwd", self._cwd],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            cwd=self._cwd,
         )
 
         try:
@@ -401,7 +414,7 @@ class ACPAgentClient:
             if not line:
                 return None
 
-            line = line.strip()
+            line = _OSC_RE.sub("", line).strip()
             if not line:
                 return None
 
@@ -583,6 +596,12 @@ class ACPAgentClient:
         }
 
         request_id = self._send_request("session/prompt", params)
+        logger.info(
+            "session/prompt written to stdin (request_id=%d, session=%s)",
+            request_id,
+            session_id,
+        )
+
         start_time = time.time()
         events_yielded = 0
 

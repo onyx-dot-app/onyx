@@ -140,11 +140,13 @@ def _paginate_until_error(
 
             if num_objs % CURSOR_LOG_FREQUENCY == 0:
                 logger.info(
-                    f"Retrieved {num_objs} objects with current cursor url: {get_nextUrl(pag_list, nextUrl_key)}"
+                    "Retrieved %s objects with current cursor url: %s",
+                    num_objs,
+                    get_nextUrl(pag_list, nextUrl_key),
                 )
 
     except Exception as e:
-        logger.exception(f"Error during cursor-based pagination: {e}")
+        logger.exception("Error during cursor-based pagination: %s", e)
         if num_objs - prev_num_objs > 0:
             raise
 
@@ -230,7 +232,7 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
         try:
             return cast(str | None, getattr(user, attr_name))
         except GithubException:
-            logger.debug(f"Error getting {attr_name} for user")
+            logger.debug("Error getting %s for user", attr_name)
             return None
 
     return {
@@ -504,7 +506,10 @@ class GithubConnector(
                         repos.append(repo)
                     except GithubException as e:
                         logger.warning(
-                            f"Could not fetch repo {self.repo_owner}/{repo_name}: {e}"
+                            "Could not fetch repo %s/%s: %s",
+                            self.repo_owner,
+                            repo_name,
+                            e,
                         )
 
             return repos
@@ -609,7 +614,7 @@ class GithubConnector(
                 repo, self.github_client
             )
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
-            logger.info(f"Fetching PRs for repo: {repo.name}")
+            logger.info("Fetching PRs for repo: %s", repo.name)
 
             pr_batch = _get_batch_rate_limited(
                 self._pull_requests_func(repo),
@@ -676,7 +681,7 @@ class GithubConnector(
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
             used_cursor = checkpoint.cursor_url is not None
-            logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
+            logger.info("Fetched %s PRs for repo: %s", num_prs, repo.name)
             if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
@@ -692,7 +697,7 @@ class GithubConnector(
         checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
-            logger.info(f"Fetching issues for repo: {repo.name}")
+            logger.info("Fetching issues for repo: %s", repo.name)
 
             issue_batch = list(
                 _get_batch_rate_limited(
@@ -704,7 +709,7 @@ class GithubConnector(
                     self.github_client,
                 )
             )
-            logger.info(f"Fetched {len(issue_batch)} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", len(issue_batch), repo.name)
             checkpoint.curr_page += 1
             done_with_issues = False
             num_issues = 0
@@ -753,7 +758,7 @@ class GithubConnector(
                         )
                         continue
 
-            logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", num_issues, repo.name)
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
@@ -778,7 +783,9 @@ class GithubConnector(
 
         if checkpoint.cached_repo_ids:
             logger.info(
-                f"{len(checkpoint.cached_repo_ids)} repos remaining (IDs: {checkpoint.cached_repo_ids})"
+                "%s repos remaining (IDs: %s)",
+                len(checkpoint.cached_repo_ids),
+                checkpoint.cached_repo_ids,
             )
         else:
             logger.info("No more repos remaining")
@@ -920,7 +927,9 @@ class GithubConnector(
                                 f"{self.repo_owner}/{repo_name}"
                             )
                             logger.info(
-                                f"Successfully accessed repository: {self.repo_owner}/{repo_name}"
+                                "Successfully accessed repository: %s/%s",
+                                self.repo_owner,
+                                repo_name,
                             )
                             test_repo.get_contents("")
                             valid_repos = True

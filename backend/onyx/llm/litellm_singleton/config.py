@@ -124,7 +124,9 @@ def load_model_metadata_enrichments() -> None:
     enrichments_path = Path(__file__).parent.parent / "model_metadata_enrichments.json"
 
     if not enrichments_path.exists():
-        logger.warning(f"Model metadata enrichments file not found: {enrichments_path}")
+        logger.warning(
+            "Model metadata enrichments file not found: %s", enrichments_path
+        )
         return
 
     try:
@@ -140,7 +142,7 @@ def load_model_metadata_enrichments() -> None:
                 # Model not in litellm.model_cost - add it with just our metadata
                 litellm.model_cost[model_key] = metadata
 
-        logger.info(f"Loaded model metadata enrichments for {len(enrichments)} models")
+        logger.info("Loaded model metadata enrichments for %s models", len(enrichments))
 
         # Clear the model name parser cache since enrichments are now loaded
         # This ensures any parsing done before enrichments were loaded gets refreshed
@@ -151,7 +153,7 @@ def load_model_metadata_enrichments() -> None:
         except ImportError:
             pass  # Parser not yet imported, no cache to clear
     except Exception as e:
-        logger.error(f"Failed to load model metadata enrichments: {e}")
+        logger.error("Failed to load model metadata enrichments: %s", e)
 
 
 def initialize_litellm() -> None:

@@ -12,6 +12,12 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.tasks.docprocessing.batch_counters import (
+    on_docprocessing_task_postrun,
+)
+from onyx.background.celery.tasks.docprocessing.batch_counters import (
+    on_docprocessing_task_prerun,
+)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
@@ -44,6 +50,7 @@ def on_task_prerun(
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
     on_celery_task_prerun(task_id, task)
     on_indexing_task_prerun(task_id, task, kwargs)
+    on_docprocessing_task_prerun(task_id, task, kwargs)
 
 
 @signals.task_postrun.connect
@@ -60,6 +67,7 @@ def on_task_postrun(
     app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
     on_celery_task_postrun(task_id, task, state)
     on_indexing_task_postrun(task_id, task, kwargs, state)
+    on_docprocessing_task_postrun(task_id, task, kwargs, state)
 
 
 @signals.task_retry.connect

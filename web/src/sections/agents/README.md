@@ -16,7 +16,7 @@ description, and quick actions (pin, share, edit, stats, try).
 ```tsx
 import AgentCard from "@/sections/agents/AgentCard";
 
-<AgentCard agent={agent} />
+<AgentCard agent={agent} />;
 ```
 
 **Props:**
@@ -63,7 +63,7 @@ function MyAgentsPage() {
 
 **Filters included:**
 
-| Filter | Default label | What it filters |
-|---|---|---|
-| Created By | "Everyone" | Agent creator (current user pinned to top) |
-| Actions | "All Actions" | System tools (individually), MCP servers (grouped), OpenAPI actions (individually) |
+| Filter     | Default label | What it filters                                                                    |
+| ---------- | ------------- | ---------------------------------------------------------------------------------- |
+| Created By | "Everyone"    | Agent creator (current user pinned to top)                                         |
+| Actions    | "All Actions" | System tools (individually), MCP servers (grouped), OpenAPI actions (individually) |

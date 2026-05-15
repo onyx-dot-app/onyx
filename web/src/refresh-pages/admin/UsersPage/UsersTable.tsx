@@ -62,7 +62,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
 function renderLastUpdatedColumn(value: string | null) {
   return (
     <Text as="span" secondaryBody text03>
-      {value ? timeAgo(value) ?? "\u2014" : "\u2014"}
+      {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
     </Text>
   );
 }

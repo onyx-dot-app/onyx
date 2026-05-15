@@ -37,7 +37,7 @@ def validate_tenant_id(tenant_id: str) -> bool:
 
 
 def run_alembic_migrations(schema_name: str) -> None:
-    logger.info(f"Starting Alembic migrations for schema: {schema_name}")
+    logger.info("Starting Alembic migrations for schema: %s", schema_name)
 
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,11 +65,13 @@ def run_alembic_migrations(schema_name: str) -> None:
 
         # Run migrations programmatically
         logger.info(
-            f"Alembic migrations completed successfully for schema: {schema_name}"
+            "Alembic migrations completed successfully for schema: %s", schema_name
         )
 
     except Exception as e:
-        logger.exception(f"Alembic migration failed for schema {schema_name}: {str(e)}")
+        logger.exception(
+            "Alembic migration failed for schema %s: %s", schema_name, str(e)
+        )
         raise
 
 

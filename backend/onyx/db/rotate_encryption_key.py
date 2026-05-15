@@ -128,7 +128,11 @@ def rotate_encryption_key(
             except (ValueError, UnicodeDecodeError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
-                    f"Could not decrypt/parse {table_name}.{col_name} row {pk_vals} — skipping: {e}"
+                    "Could not decrypt/parse %s.%s row %s — skipping: %s",
+                    table_name,
+                    col_name,
+                    pk_vals,
+                    e,
                 )
                 continue
 
@@ -152,7 +156,11 @@ def rotate_encryption_key(
         if reencrypted > 0:
             totals[f"{table_name}.{col_name}"] = reencrypted
             logger.info(
-                f"{'[DRY RUN] Would re-encrypt' if dry_run else 'Re-encrypted'} {reencrypted} value(s) in {table_name}.{col_name}"
+                "%s %s value(s) in %s.%s",
+                "[DRY RUN] Would re-encrypt" if dry_run else "Re-encrypted",
+                reencrypted,
+                table_name,
+                col_name,
             )
 
     return totals

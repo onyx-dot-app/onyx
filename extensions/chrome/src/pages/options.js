@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", function () {
         updateThemeIcon(currentTheme);
 
         document.body.className = currentTheme === "light" ? "light-theme" : "";
-      },
+      }
     );
   }
 
@@ -68,9 +68,9 @@ document.addEventListener("DOMContentLoaded", function () {
         showStatusMessage(
           useOnyxAsDefault
             ? "Settings updated. Open a new tab to test it out. Click on the extension icon to bring up Onyx from any page."
-            : "Settings updated.",
+            : "Settings updated."
         );
-      },
+      }
     );
   }
 

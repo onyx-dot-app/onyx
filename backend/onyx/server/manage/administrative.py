@@ -199,7 +199,8 @@ def create_deletion_attempt_for_connector_id(
     )
 
     logger.info(
-        f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: cc_pair={cc_pair.id}"
+        "create_deletion_attempt_for_connector_id - running check_for_connector_deletion: cc_pair=%s",
+        cc_pair.id,
     )
 
     if cc_pair.connector.source == DocumentSource.FILE:

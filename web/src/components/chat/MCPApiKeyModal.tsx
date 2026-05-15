@@ -73,8 +73,8 @@ export default function MCPApiKeyModal({
 
     if (isTemplateMode) {
       // Check all required fields are filled
-      const hasAllFields = authTemplate!.required_fields.every(
-        (field) => credentials[field]?.trim()
+      const hasAllFields = authTemplate!.required_fields.every((field) =>
+        credentials[field]?.trim()
       );
       if (!hasAllFields) return;
 
@@ -173,7 +173,7 @@ export default function MCPApiKeyModal({
 
           {error && (
             <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-              <SvgAlertCircle className="h-4 w-4 flex-shrink-0" />
+              <SvgAlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -207,6 +207,11 @@ export default function MCPApiKeyModal({
                         type="button"
                         onClick={() => toggleCredentialVisibility(field)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                        aria-label={
+                          showCredentials[field]
+                            ? "Hide credential"
+                            : "Show credential"
+                        }
                       >
                         {showCredentials[field] ? (
                           <SvgEyeClosed className="h-4 w-4" />
@@ -238,6 +243,7 @@ export default function MCPApiKeyModal({
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
                   >
                     {showApiKey ? (
                       <SvgEyeClosed className="h-4 w-4" />
@@ -261,8 +267,8 @@ export default function MCPApiKeyModal({
                 disabled={
                   isSubmitting ||
                   (isTemplateMode
-                    ? !authTemplate!.required_fields.every(
-                        (field) => credentials[field]?.trim()
+                    ? !authTemplate!.required_fields.every((field) =>
+                        credentials[field]?.trim()
                       )
                     : !apiKey.trim())
                 }

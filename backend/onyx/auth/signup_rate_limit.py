@@ -52,11 +52,11 @@ async def enforce_signup_rate_limit(request: Request) -> None:
         incr_result, _ = await pipe.execute()
         count = int(incr_result)
     except Exception as e:
-        logger.error(f"Signup rate-limit Redis error: {e}")
+        logger.error("Signup rate-limit Redis error: %s", e)
         return
 
     if count > _PER_IP_PER_HOUR:
-        logger.warning(f"Signup rate limit exceeded for ip={ip} count={count}")
+        logger.warning("Signup rate limit exceeded for ip=%s count=%s", ip, count)
         raise OnyxError(
             OnyxErrorCode.RATE_LIMITED,
             "Too many signup attempts from this network. Please wait before trying again.",

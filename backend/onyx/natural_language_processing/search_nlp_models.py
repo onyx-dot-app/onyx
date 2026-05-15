@@ -22,7 +22,12 @@ from httpx import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
-from retry import retry
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
+from tenacity import wait_fixed
+from tenacity import wait_random
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -44,6 +49,8 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.server.metrics.embedding import observe_embedding_client
 from onyx.server.metrics.embedding import track_embedding_in_progress
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
 from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -70,9 +77,12 @@ from shared_configs.utils import batch_list
 
 logger = setup_logger()
 
-# If we are not only indexing, dont want retry very long
-_RETRY_DELAY = 10 if INDEXING_ONLY else 0.1
-_RETRY_TRIES = 10 if INDEXING_ONLY else 2
+# If we are not only indexing, dont want retry very long.
+# Indexing path: wait_exponential(multiplier=1, max=60) gives waits of
+# 1, 2, 4, 8, 16, 32, 60s before the cap repeats. With 8 attempts (7 waits)
+# we hit the 60s cap exactly once, totaling ~123s before giving up.
+_RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
+_RETRY_TRIES = 8 if INDEXING_ONLY else 2
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
@@ -132,7 +142,9 @@ def cleanup_embedding_thread_locals() -> None:
                 pending = asyncio.all_tasks(loop)
                 if pending:
                     logger.debug(
-                        f"Cleaning up event loop with {len(pending)} pending tasks in thread {threading.current_thread().name}"
+                        "Cleaning up event loop with %s pending tasks in thread %s",
+                        len(pending),
+                        threading.current_thread().name,
                     )
                     for task in pending:
                         task.cancel()
@@ -142,12 +154,12 @@ def cleanup_embedding_thread_locals() -> None:
                     )
             except Exception as e:
                 # If gathering tasks fails, just close the loop
-                logger.debug(f"Error gathering tasks during cleanup: {e}")
+                logger.debug("Error gathering tasks during cleanup: %s", e)
 
             # Close the event loop
             loop.close()
             logger.debug(
-                f"Closed event loop in thread {threading.current_thread().name}"
+                "Closed event loop in thread %s", threading.current_thread().name
             )
 
         # Clear the thread-local reference
@@ -216,6 +228,40 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
+_GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
+
+# Gemini embedding-2 ignores task_type entirely; instead the documented way
+# to differentiate query vs. document is to wrap the input in Google's task
+# instruction format. The exact templates come from
+# https://ai.google.dev/gemini-api/docs/embeddings (Gemini Embedding 2 section).
+_GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
+    "RETRIEVAL_QUERY": "task: search result | query: {text}",
+    "RETRIEVAL_DOCUMENT": "title: none | text: {text}",
+}
+
+
+def _is_gemini_embedding_2_model(model: str) -> bool:
+    return (
+        model.split("/")[-1]
+        .strip()
+        .lower()
+        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
+    )
+
+
+def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
+    if not _is_gemini_embedding_2_model(model):
+        return text
+
+    template = _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES.get(embedding_type)
+    if template is None:
+        raise RuntimeError(
+            f"Unsupported Gemini embedding-2 task type: {embedding_type}"
+        )
+
+    return template.format(text=text)
+
+
 def format_embedding_error(
     error: Exception,
     service_name: str,
@@ -236,6 +282,25 @@ def format_embedding_error(
         f"API Key: {sanitized_api_key} "
         f"Exception: {error}"
     )
+
+
+def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
+    """Normalize Cohere's embed response across SDK versions.
+
+    v3 models return ``response.embeddings`` as a flat ``list[list[float]]``.
+    v4 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
+    the embeddings under ``float_`` (and possibly other per-type buckets when
+    ``embedding_types`` is set). We always read the float bucket here since
+    we never request alternate types.
+    """
+    if isinstance(response_embeddings, list):
+        return cast(list[Embedding], response_embeddings)
+
+    float_embeddings = getattr(response_embeddings, "float_", None)
+    if isinstance(float_embeddings, list):
+        return cast(list[Embedding], float_embeddings)
+
+    raise RuntimeError("Unsupported Cohere embedding response format.")
 
 
 # Custom exception for authentication errors
@@ -309,8 +374,12 @@ class CloudEmbedding:
                 model=model,
                 input_type=embedding_type,
                 truncate="END",
+                # Explicit float request — guarantees .float_ is populated
+                # on Cohere's typed v4 response and keeps the contract
+                # explicit on the older v3 endpoint too.
+                embedding_types=["float"],
             )
-            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+            final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
 
     async def _embed_voyage(
@@ -357,8 +426,7 @@ class CloudEmbedding:
         from google import genai
         from google.genai import types as genai_types
 
-        if not model:
-            model = DEFAULT_VERTEX_MODEL
+        resolved_model = model or DEFAULT_VERTEX_MODEL
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
@@ -379,19 +447,38 @@ class CloudEmbedding:
             credentials=credentials,
         )
 
-        embed_config = genai_types.EmbedContentConfig(
-            task_type=embedding_type,
-            output_dimensionality=reduced_dimension,
-            auto_truncate=True,
-        )
+        # gemini-embedding-2 rejects task_type; embedding intent is conveyed
+        # via the instruction-formatted text instead. Older models continue
+        # to use task_type.
+        if _is_gemini_embedding_2_model(resolved_model):
+            embed_config = genai_types.EmbedContentConfig(
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
+        else:
+            embed_config = genai_types.EmbedContentConfig(
+                task_type=embedding_type,
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
-                genai_types.Content(parts=[genai_types.Part(text=text)])
+                genai_types.Content(
+                    parts=[
+                        genai_types.Part(
+                            text=_format_vertex_embedding_text(
+                                text=text,
+                                model=resolved_model,
+                                embedding_type=embedding_type,
+                            )
+                        )
+                    ]
+                )
                 for text in batch_texts
             ]
             response = await client.aio.models.embed_content(
-                model=model,
+                model=resolved_model,
                 contents=content_requests,
                 config=embed_config,
             )
@@ -418,8 +505,10 @@ class CloudEmbedding:
         all_embeddings: list[Embedding] = []
 
         logger.debug(
-            f"VertexAI embedding: processing {len(texts)} texts in {len(batches)} batches "
-            f"(batch_size={VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE})"
+            "VertexAI embedding: processing %s texts in %s batches (batch_size=%s)",
+            len(texts),
+            len(batches),
+            VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
         )
 
         try:
@@ -430,11 +519,15 @@ class CloudEmbedding:
                 # Log progress for large batches to track memory usage patterns
                 if batch_idx % 10 == 0 and batch_idx > 0:
                     logger.debug(
-                        f"VertexAI embedding progress: batch {batch_idx}/{len(batches)}, total_embeddings={len(all_embeddings)}"
+                        "VertexAI embedding progress: batch %s/%s, total_embeddings=%s",
+                        batch_idx,
+                        len(batches),
+                        len(all_embeddings),
                     )
 
             logger.debug(
-                f"VertexAI embedding completed: {len(all_embeddings)} embeddings generated"
+                "VertexAI embedding completed: %s embeddings generated",
+                len(all_embeddings),
             )
             return all_embeddings
         finally:
@@ -444,7 +537,7 @@ class CloudEmbedding:
             except asyncio.TimeoutError:
                 logger.warning("Google GenAI client aclose() timed out after 5s")
             except Exception as e:
-                logger.warning(f"Error closing Google GenAI client: {e}")
+                logger.warning("Error closing Google GenAI client: %s", e)
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -471,7 +564,12 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
-    @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
+    @retry(
+        retry=retry_if_exception_type(RuntimeError),
+        stop=stop_after_attempt(_RETRY_TRIES),
+        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
+        reraise=True,
+    )
     async def embed(
         self,
         *,
@@ -522,7 +620,7 @@ class CloudEmbedding:
             # transient provider outages). The final failure surfaces via
             # the RuntimeError below and is logged by the caller.
             logger.warning(error_string)
-            logger.debug(f"Exception texts: {texts}")
+            logger.debug("Exception texts: %s", texts)
 
             raise RuntimeError(error_string)
         except Exception as e:
@@ -537,7 +635,7 @@ class CloudEmbedding:
                 sanitized_api_key=self.sanitized_api_key,
             )
             logger.warning(error_string)
-            logger.debug(f"Exception texts: {texts}")
+            logger.debug("Exception texts: %s", texts)
 
             raise RuntimeError(error_string)
 
@@ -548,7 +646,7 @@ class CloudEmbedding:
         api_url: str | None = None,
         api_version: str | None = None,
     ) -> "CloudEmbedding":
-        logger.debug(f"Creating Embedding instance for provider: {provider}")
+        logger.debug("Creating Embedding instance for provider: %s", provider)
         return CloudEmbedding(api_key, provider, api_url, api_version)
 
     async def aclose(self) -> None:
@@ -735,7 +833,10 @@ class EmbeddingModel:
         total_chars = sum(len(text) for text in embed_request.texts)
 
         logger.info(
-            f"Embedding {len(embed_request.texts)} texts with {total_chars} total characters with provider: {self.provider_type}"
+            "Embedding %s texts with %s total characters with provider: %s",
+            len(embed_request.texts),
+            total_chars,
+            self.provider_type,
         )
 
         async with CloudEmbedding(
@@ -761,11 +862,11 @@ class EmbeddingModel:
 
         elapsed = time.monotonic() - start_time
         logger.info(
-            f"event=embedding_provider "
-            f"texts={len(embed_request.texts)} "
-            f"chars={total_chars} "
-            f"provider={self.provider_type} "
-            f"elapsed={elapsed:.2f}"
+            "event=embedding_provider texts=%s chars=%s provider=%s elapsed=%s",
+            len(embed_request.texts),
+            total_chars,
+            self.provider_type,
+            format(elapsed, ".2f"),
         )
 
         return EmbedResponse(embeddings=embeddings)
@@ -808,13 +909,19 @@ class EmbeddingModel:
         # retries + handling for rate limiting
         if embed_request.text_type == EmbedTextType.PASSAGE:
             final_make_request_func = retry(
-                tries=3,
-                delay=5,
-                exceptions=(RequestException, ValueError, JSONDecodeError),
+                retry=retry_if_exception_type(
+                    (RequestException, ValueError, JSONDecodeError)
+                ),
+                stop=stop_after_attempt(3),
+                wait=wait_fixed(5),
+                reraise=True,
             )(final_make_request_func)
             # use 10 second delay as per Azure suggestion
             final_make_request_func = retry(
-                tries=10, delay=10, exceptions=ModelServerRateLimitError
+                retry=retry_if_exception_type(ModelServerRateLimitError),
+                stop=stop_after_attempt(10),
+                wait=wait_fixed(10),
+                reraise=True,
             )(final_make_request_func)
 
         response: Response | None = None
@@ -847,7 +954,7 @@ class EmbeddingModel:
         text_batches = batch_list(texts, batch_size)
         num_of_batches = len(text_batches)
 
-        logger.debug(f"Encoding {len(texts)} texts in {num_of_batches} batches.")
+        logger.debug("Encoding %s texts in %s batches.", len(texts), num_of_batches)
 
         embeddings: list[Embedding] = []
 
@@ -886,8 +993,28 @@ class EmbeddingModel:
             start_time = time.monotonic()
             response: EmbedResponse
             success = False
+            embed_flow = (
+                LLMFlow.EMBED_PASSAGE
+                if text_type == EmbedTextType.PASSAGE
+                else LLMFlow.EMBED_QUERY
+            )
             try:
-                with track_embedding_in_progress(self.provider_type, text_type):
+                with (
+                    traced_llm_call(
+                        flow=embed_flow,
+                        model=self.model_name or "",
+                        provider=(
+                            self.provider_type.value
+                            if self.provider_type
+                            else "model_server"
+                        ),
+                        extra_config={
+                            "num_texts": str(num_texts),
+                            "num_chars": str(num_chars),
+                        },
+                    ),
+                    track_embedding_in_progress(self.provider_type, text_type),
+                ):
                     # Route between direct API calls and model server calls.
                     if self.provider_type is not None:
                         # For API providers, make direct API call.
@@ -936,7 +1063,10 @@ class EmbeddingModel:
                 )
 
             logger.debug(
-                f"process_batch: Batch idx {batch_idx}, total num {num_of_batches}, processing time: {processing_time:.2f}s."
+                "process_batch: Batch idx %s, total num %s, processing time: %ss.",
+                batch_idx,
+                num_of_batches,
+                format(processing_time, ".2f"),
             )
 
             return batch_idx, response.embeddings
@@ -1134,39 +1264,47 @@ class RerankingModel:
             raise ValueError(f"Unsupported reranking provider: {self.provider_type}")
 
     def predict(self, query: str, passages: list[str]) -> list[float]:
-        # Route between direct API calls and model server calls
-        if self.provider_type is not None:
-            # For API providers, make direct API call
-            loop = asyncio.new_event_loop()
-            try:
-                asyncio.set_event_loop(loop)
-                return loop.run_until_complete(
-                    self._make_direct_rerank_call(query, passages)
+        with traced_llm_call(
+            flow=LLMFlow.RERANK,
+            model=self.model_name,
+            provider=(
+                self.provider_type.value if self.provider_type else "model_server"
+            ),
+            extra_config={"num_passages": str(len(passages))},
+        ):
+            # Route between direct API calls and model server calls
+            if self.provider_type is not None:
+                # For API providers, make direct API call
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    return loop.run_until_complete(
+                        self._make_direct_rerank_call(query, passages)
+                    )
+                finally:
+                    loop.close()
+            else:
+                # For local models, use model server
+                if self.rerank_server_endpoint is None:
+                    raise ValueError(
+                        "Rerank server endpoint is not configured for local models"
+                    )
+
+                rerank_request = RerankRequest(
+                    query=query,
+                    documents=passages,
+                    model_name=self.model_name,
+                    provider_type=self.provider_type,
+                    api_key=self.api_key,
+                    api_url=self.api_url,
                 )
-            finally:
-                loop.close()
-        else:
-            # For local models, use model server
-            if self.rerank_server_endpoint is None:
-                raise ValueError(
-                    "Rerank server endpoint is not configured for local models"
+
+                response = requests.post(
+                    self.rerank_server_endpoint, json=rerank_request.model_dump()
                 )
+                response.raise_for_status()
 
-            rerank_request = RerankRequest(
-                query=query,
-                documents=passages,
-                model_name=self.model_name,
-                provider_type=self.provider_type,
-                api_key=self.api_key,
-                api_url=self.api_url,
-            )
-
-            response = requests.post(
-                self.rerank_server_endpoint, json=rerank_request.model_dump()
-            )
-            response.raise_for_status()
-
-            return RerankResponse(**response.json()).scores
+                return RerankResponse(**response.json()).scores
 
 
 class QueryAnalysisModel:
@@ -1194,12 +1332,17 @@ class QueryAnalysisModel:
             semantic_percent_threshold=self.semantic_percent_threshold,
         )
 
-        response = requests.post(
-            self.intent_server_endpoint, json=intent_request.model_dump()
-        )
-        response.raise_for_status()
+        with traced_llm_call(
+            flow=LLMFlow.INTENT_CLASSIFICATION,
+            model="query-analysis",
+            provider="model_server",
+        ):
+            response = requests.post(
+                self.intent_server_endpoint, json=intent_request.model_dump()
+            )
+            response.raise_for_status()
 
-        response_model = IntentResponse(**response.json())
+            response_model = IntentResponse(**response.json())
 
         return response_model.is_keyword, response_model.keywords
 
@@ -1220,7 +1363,10 @@ def warm_up_retry(
             except Exception as e:
                 exceptions.append(e)
                 logger.info(
-                    f"Attempt {attempt + 1}/{tries} failed; retrying in {delay} seconds..."
+                    "Attempt %s/%s failed; retrying in %s seconds...",
+                    attempt + 1,
+                    tries,
+                    delay,
                 )
                 time.sleep(delay)
         raise Exception(f"All retries failed: {exceptions}")
@@ -1237,7 +1383,7 @@ def warm_up_bi_encoder(
 
     warm_up_str = " ".join(WARM_UP_STRINGS)
 
-    logger.debug(f"Warming up encoder model: {embedding_model.model_name}")
+    logger.debug("Warming up encoder model: %s", embedding_model.model_name)
     get_tokenizer(
         model_name=embedding_model.model_name,
         provider_type=embedding_model.provider_type,
@@ -1247,17 +1393,20 @@ def warm_up_bi_encoder(
         try:
             embedding_model.encode(texts=[warm_up_str], text_type=EmbedTextType.QUERY)
             logger.debug(
-                f"Warm-up complete for encoder model: {embedding_model.model_name}"
+                "Warm-up complete for encoder model: %s", embedding_model.model_name
             )
         except Exception as e:
             logger.warning(
-                f"Warm-up request failed for encoder model {embedding_model.model_name}: {e}"
+                "Warm-up request failed for encoder model %s: %s",
+                embedding_model.model_name,
+                e,
             )
 
     if non_blocking:
         threading.Thread(target=_warm_up, daemon=True).start()
         logger.debug(
-            f"Started non-blocking warm-up for encoder model: {embedding_model.model_name}"
+            "Started non-blocking warm-up for encoder model: %s",
+            embedding_model.model_name,
         )
     else:
         retry_encode = warm_up_retry(embedding_model.encode)
@@ -1272,7 +1421,7 @@ def warm_up_cross_encoder(
     if SKIP_WARM_UP:
         return
 
-    logger.debug(f"Warming up reranking model: {rerank_model_name}")
+    logger.debug("Warming up reranking model: %s", rerank_model_name)
 
     reranking_model = RerankingModel(
         model_name=rerank_model_name,
@@ -1284,16 +1433,18 @@ def warm_up_cross_encoder(
     def _warm_up() -> None:
         try:
             reranking_model.predict(WARM_UP_STRINGS[0], WARM_UP_STRINGS[1:])
-            logger.debug(f"Warm-up complete for reranking model: {rerank_model_name}")
+            logger.debug("Warm-up complete for reranking model: %s", rerank_model_name)
         except Exception as e:
             logger.warning(
-                f"Warm-up request failed for reranking model {rerank_model_name}: {e}"
+                "Warm-up request failed for reranking model %s: %s",
+                rerank_model_name,
+                e,
             )
 
     if non_blocking:
         threading.Thread(target=_warm_up, daemon=True).start()
         logger.debug(
-            f"Started non-blocking warm-up for reranking model: {rerank_model_name}"
+            "Started non-blocking warm-up for reranking model: %s", rerank_model_name
         )
     else:
         retry_rerank = warm_up_retry(reranking_model.predict)

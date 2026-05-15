@@ -97,6 +97,21 @@ function removeToast(id: string): void {
   notify();
 }
 
+function setAutoDismiss(id: string, duration: number): void {
+  const existing = timers.get(id);
+  if (existing) {
+    clearTimeout(existing);
+    timers.delete(id);
+  }
+  if (duration === Infinity) {
+    return;
+  }
+  const timer = setTimeout(() => {
+    removeToast(id);
+  }, duration);
+  timers.set(id, timer);
+}
+
 function markLeaving(id: string): void {
   toasts = toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t));
   notify();
@@ -144,6 +159,12 @@ interface ToastFn {
   ) => string;
   dismiss: (id: string) => void;
   clearAll: () => void;
+  /**
+   * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make the
+   * toast persistent. Used by ToastContainer when the user expands a truncated
+   * toast and needs more time to read it.
+   */
+  setAutoDismiss: (id: string, duration: number) => void;
   /** @internal – used by ToastContainer for exit animation */
   _markLeaving: (id: string) => void;
 }
@@ -163,6 +184,7 @@ export const toast: ToastFn = Object.assign(toastBase, {
     addToast({ ...opts, message, level: "info" }),
   dismiss: removeToast,
   clearAll,
+  setAutoDismiss,
   _markLeaving: markLeaving,
 });
 

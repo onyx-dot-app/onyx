@@ -17,7 +17,6 @@ from uuid import uuid4
 from celery import Celery
 from celery import shared_task
 from celery import Task
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -49,6 +48,7 @@ from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
 from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -105,7 +105,7 @@ def _try_creating_hierarchy_fetching_task(
     celery_app: Celery,
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     tenant_id: str,
 ) -> str | None:
     """Try to create a hierarchy fetching task for a connector.

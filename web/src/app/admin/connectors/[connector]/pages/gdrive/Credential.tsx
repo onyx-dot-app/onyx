@@ -253,8 +253,8 @@ export const DriveJsonUploadSection = ({
   if (!isAdmin) {
     return (
       <div>
-        <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded">
-          <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
+          <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
           <p className="text-sm">
             Curators are unable to set up the Google Drive credentials. To add a
             Google Drive connector, please contact an administrator.
@@ -458,11 +458,11 @@ export const DriveAuthSection = ({
     return (
       <div>
         <div className="mt-4">
-          <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded mb-4 flex items-start">
-            <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+          <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded-sm mb-4 flex items-start">
+            <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
             <div className="flex-1">
               <span className="font-medium block">Authentication Complete</span>
-              <p className="text-sm mt-1 text-text-500 dark:text-text-400 break-words">
+              <p className="text-sm mt-1 text-text-500 dark:text-text-400 wrap-break-word">
                 Your Google Drive credentials have been successfully uploaded
                 and authenticated.
               </p>
@@ -494,8 +494,8 @@ export const DriveAuthSection = ({
       <div>
         <SectionHeader>Google Drive Authentication</SectionHeader>
         <div className="mt-4">
-          <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded">
-            <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+          <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
+            <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
             <p className="text-sm">
               Please complete Step 1 by uploading either OAuth credentials or a
               Service Account key before proceeding with authentication.
@@ -578,7 +578,7 @@ export const DriveAuthSection = ({
   if (localAppCredentialData?.client_id) {
     return (
       <div>
-        <div className="bg-background-50/30 dark:bg-background-900/20 rounded mb-4">
+        <div className="bg-background-50/30 dark:bg-background-900/20 rounded-sm mb-4">
           <p className="text-sm">
             Next, you need to authenticate with Google Drive via OAuth. This
             gives us read access to the documents you have access to in your

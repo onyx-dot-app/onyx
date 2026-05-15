@@ -22,6 +22,12 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -137,7 +143,7 @@ def _safe_run_single_tool(
         except ToolCallException as e:
             # ToolCallException is an expected error from tool execution
             # Use llm_facing_message which is specifically designed for LLM consumption
-            logger.error(f"Tool call error for {tool.name}: {e}")
+            logger.error("Tool call error for %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(
@@ -160,7 +166,7 @@ def _safe_run_single_tool(
             )
         except ToolExecutionException as e:
             # Unexpected error during tool execution
-            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            logger.error("Unexpected error running tool %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
@@ -187,7 +193,7 @@ def _safe_run_single_tool(
                 )
         except Exception as e:
             # Unexpected error during tool execution
-            logger.error(f"Unexpected error running tool {tool.name}: {e}")
+            logger.error("Unexpected error running tool %s: %s", tool.name, e)
             tool_response = ToolResponse(
                 rich_response=None,
                 llm_facing_response=GENERIC_TOOL_ERROR_MESSAGE.format(error=str(e)),
@@ -293,7 +299,7 @@ def run_tool_calls(
     filtered_tool_calls: list[ToolCallKickoff] = []
     for tool_call in merged_tool_calls:
         if tool_call.tool_name not in tools_by_name:
-            logger.warning(f"Tool {tool_call.tool_name} not found in tools list")
+            logger.warning("Tool %s not found in tools list", tool_call.tool_name)
             continue
         filtered_tool_calls.append(tool_call)
 
@@ -341,6 +347,7 @@ def run_tool_calls(
             | OpenURLToolOverrideKwargs
             | PythonToolOverrideKwargs
             | MemoryToolOverrideKwargs
+            | CodingAgentToolOverrideKwargs
             | None
         ) = None
 
@@ -388,6 +395,8 @@ def run_tool_calls(
             override_kwargs = PythonToolOverrideKwargs(
                 chat_files=chat_files or [],
             )
+        elif isinstance(tool, CodingAgentTool):
+            override_kwargs = CodingAgentToolOverrideKwargs()
         elif isinstance(tool, MemoryTool):
             override_kwargs = MemoryToolOverrideKwargs(
                 user_name=(

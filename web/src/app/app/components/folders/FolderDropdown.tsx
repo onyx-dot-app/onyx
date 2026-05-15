@@ -34,14 +34,14 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
               "rounded-md",
               "p-1",
               "bg-background-sidebar",
-              "dark:bg-[#000]",
+              "dark:bg-black",
               "sticky",
               "top-0"
             )}
             style={{ zIndex: 10 - index }}
           >
             <button
-              className="flex overflow-hidden bg-background-sidebar dark:bg-[#000] items-center flex-grow"
+              className="flex overflow-hidden bg-background-sidebar dark:bg-black items-center grow"
               onClick={() => setIsOpen(!isOpen)}
             >
               <SvgChevronRight
@@ -49,7 +49,9 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                 className={cn("mr-1 transition-all", isOpen && "rotate-90")}
               />
               <div className="flex items-center">
-                <span className="text-sm font-[500]">{folder.folder_name}</span>
+                <span className="text-sm font-medium">
+                  {folder.folder_name}
+                </span>
               </div>
             </button>
           </div>

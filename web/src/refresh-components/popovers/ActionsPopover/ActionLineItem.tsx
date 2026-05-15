@@ -139,7 +139,7 @@ export default function ActionLineItem({
                 className={cn(
                   !disabled && "invisible group-hover/LineItem:visible",
                   // Hide when showing source count (it has its own hover behavior)
-                  shouldShowSourceCount && "!hidden"
+                  shouldShowSourceCount && "hidden!"
                 )}
                 tooltip={disabled ? "Enable" : "Disable"}
               />

@@ -33,16 +33,16 @@ export function ConnectorStaggeredSkeleton({
       {/* Connector Name */}
       <TableCell>
         <div className="flex items-center gap-2">
-          <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
-          <div className="lg:w-[180px] xl:w-[350px] h-5 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
+          <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
+          <div className="lg:w-[180px] xl:w-[350px] h-5 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
         </div>
       </TableCell>
 
       {/* Last Success */}
       <TableCell>
         <div className="flex flex-col gap-1">
-          <div className="h-3 w-20 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
-          <div className="h-4 w-16 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
+          <div className="h-3 w-20 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
+          <div className="h-4 w-16 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
         </div>
       </TableCell>
 
@@ -58,7 +58,7 @@ export function ConnectorStaggeredSkeleton({
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
           <div className="flex items-center gap-2">
-            <div className="h-4 w-4 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
+            <div className="h-4 w-4 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
             <div className="h-6 w-28 bg-neutral-200 dark:bg-neutral-700 rounded-full"></div>
           </div>
         </TableCell>
@@ -67,15 +67,15 @@ export function ConnectorStaggeredSkeleton({
       {/* Docs Indexed */}
       <TableCell>
         <div className="flex flex-col gap-1">
-          <div className="h-3 w-8 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
-          <div className="h-5 w-16 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
+          <div className="h-3 w-8 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
+          <div className="h-5 w-16 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
         </div>
       </TableCell>
 
       {/* Settings Icon */}
       <TableCell>
         <div className="flex items-center justify-center">
-          <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
+          <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>
         </div>
       </TableCell>
     </TableRow>

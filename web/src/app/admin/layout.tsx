@@ -1,4 +1,4 @@
-import Layout from "@/components/admin/Layout";
+import Layout from "@/layouts/admin/Layout";
 
 export interface AdminLayoutProps {
   children: React.ReactNode;

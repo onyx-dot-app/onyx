@@ -7,7 +7,8 @@ import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { Button } from "@opal/components";
+import { SvgPlusCircle } from "@opal/icons";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.SLACK_BOTS;
@@ -69,7 +70,13 @@ function Main() {
         found in the Onyx documentation to get started!
       </p>
 
-      <CreateButton href="/admin/bots/new">New Slack Bot</CreateButton>
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        href="/admin/bots/new"
+      >
+        New Slack Bot
+      </Button>
 
       <SlackBotTable slackBots={slackBots} />
     </div>

@@ -32,7 +32,6 @@ from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.engine.tenant_utils import get_schemas_needing_migration
 from shared_configs.configs import TENANT_ID_PREFIX
 
-
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------

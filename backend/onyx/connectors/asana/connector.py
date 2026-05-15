@@ -40,7 +40,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.continue_on_failure = continue_on_failure
         logger.info(
-            f"AsanaConnector initialized with workspace_id: {asana_workspace_id}"
+            "AsanaConnector initialized with workspace_id: %s", asana_workspace_id
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -59,7 +59,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         end: SecondsSinceUnixEpoch | None,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
         start_time = datetime.datetime.fromtimestamp(start).isoformat()
-        logger.info(f"Starting Asana poll from {start_time}")
+        logger.info("Starting Asana poll from %s", start_time)
         asana = asana_api.AsanaAPI(
             api_token=self.api_token,
             workspace_gid=self.workspace_id,
@@ -73,12 +73,12 @@ class AsanaConnector(LoadConnector, PollConnector):
             docs_batch.append(doc)
 
             if len(docs_batch) >= self.batch_size:
-                logger.info(f"Yielding batch of {len(docs_batch)} documents")
+                logger.info("Yielding batch of %s documents", len(docs_batch))
                 yield docs_batch
                 docs_batch = []
 
         if docs_batch:
-            logger.info(f"Yielding final batch of {len(docs_batch)} documents")
+            logger.info("Yielding final batch of %s documents", len(docs_batch))
             yield docs_batch
 
         logger.info("Asana poll completed")
@@ -88,7 +88,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         return self.poll_source(start=0, end=None)
 
     def _message_to_doc(self, task: asana_api.AsanaTask) -> Document:
-        logger.debug(f"Converting Asana task {task.id} to Document")
+        logger.debug("Converting Asana task %s to Document", task.id)
         return Document(
             id=task.id,
             sections=[TextSection(link=task.link, text=task.text)],

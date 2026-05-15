@@ -237,13 +237,13 @@ def handle_oauth_callback(
         )
 
     except ValueError as e:
-        logger.error(f"OAuth callback error: {e}")
+        logger.error("OAuth callback error: %s", e)
         return OAuthCallbackResponse(
             redirect_url="/chat",
             error=str(e),
         )
     except Exception as e:
-        logger.error(f"Unexpected OAuth callback error: {e}")
+        logger.error("Unexpected OAuth callback error: %s", e)
         return OAuthCallbackResponse(
             redirect_url="/chat",
             error="An unexpected error occurred during OAuth callback",

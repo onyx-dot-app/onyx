@@ -174,7 +174,8 @@ class LoginCaptchaMiddleware(BaseHTTPMiddleware):
         ):
             if _health_check_bypass_ok(request):
                 logger.info(
-                    f"Login captcha bypassed via health-check token client={_client_ip_for_log(request)}"
+                    "Login captcha bypassed via health-check token client=%s",
+                    _client_ip_for_log(request),
                 )
             else:
                 token = request.headers.get(LOGIN_CAPTCHA_HEADER, "")

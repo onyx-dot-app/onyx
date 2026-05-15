@@ -89,7 +89,7 @@ def get_effective_permissions(user: User) -> set[Permission]:
         try:
             granted.add(Permission(p))
         except ValueError:
-            logger.warning(f"Skipping unknown permission '{p}' for user {user.id}")
+            logger.warning("Skipping unknown permission '%s' for user %s", p, user.id)
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
     expanded = resolve_effective_permissions({p.value for p in granted})
