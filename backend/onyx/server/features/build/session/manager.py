@@ -75,6 +75,7 @@ from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     SSEKeepalive,
 )
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
@@ -82,7 +83,7 @@ from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
-from onyx.skills.push import build_skills_section_for_user
+from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
@@ -379,13 +380,11 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def _hydrate_skills(self, sandbox_id: UUID, user_id: UUID) -> None:
+    def _hydrate_skills(
+        self, sandbox_id: UUID, user: User, files: FileSet | None = None
+    ) -> None:
         try:
-            user = fetch_user_by_id(self._db_session, user_id)
-            if not user:
-                logger.warning("Cannot push skills: user %s not found", user_id)
-                return
-            hydrate_sandbox_skills(sandbox_id, user, self._db_session)
+            hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
         except Exception:
             logger.warning(
                 "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
@@ -578,7 +577,7 @@ class SessionManager:
         user_name = user.personal_name
         user_role = user.personal_role
 
-        skills_section = build_skills_section_for_user(user, self._db_session)
+        skills_section, skills_files = build_user_skills_payload(user, self._db_session)
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
@@ -592,7 +591,7 @@ class SessionManager:
             user_work_area=user_work_area,
             user_level=user_level,
         )
-        self._hydrate_skills(sandbox.id, user_id)
+        self._hydrate_skills(sandbox.id, user, files=skills_files)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -653,7 +652,11 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
-                    self._hydrate_skills(sandbox.id, user_id)
+                    user = fetch_user_by_id(self._db_session, user_id)
+                    if user is None:
+                        logger.warning("Cannot push skills: user %s not found", user_id)
+                    else:
+                        self._hydrate_skills(sandbox.id, user)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,

@@ -1,10 +1,4 @@
-"""Shared utilities for generating AGENTS.md content.
-
-This module provides functions for building dynamic agent instructions
-that are shared between local and kubernetes sandbox managers. Sandbox
-managers stay DB-agnostic — callers build the skills section from the
-registry + DB and pass it in as a string.
-"""
+"""Shared utilities for generating AGENTS.md content."""
 
 from collections.abc import Iterable
 from pathlib import Path
@@ -131,12 +125,7 @@ def build_skills_section_from_data(
     builtins: Iterable[BuiltinSkill],
     customs: Iterable[Skill],
 ) -> str:
-    """Render the AGENTS.md skills section from registry + DB rows.
-
-    Replaces the legacy filesystem-scan approach. Skills are listed
-    alphabetically by slug regardless of source so the agent sees a
-    single, consistent catalog.
-    """
+    """Render the AGENTS.md skills section from registry + DB rows."""
     entries: list[tuple[str, str]] = []
     for b in builtins:
         entries.append((b.slug, _truncate(b.description)))
@@ -165,9 +154,7 @@ def generate_agent_instructions(
 
     Args:
         template_path: Path to the AGENTS.template.md file
-        skills_section: Pre-rendered skills section (from
-            ``build_skills_section_from_data``) — sandbox managers don't
-            touch the DB, so the caller passes this in.
+        skills_section: Pre-rendered skills section
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server

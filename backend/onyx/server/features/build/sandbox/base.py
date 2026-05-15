@@ -57,14 +57,13 @@ class SandboxManager(ABC):
 
     Directory Structure:
         $SANDBOX_ROOT/
-        ├── managed/skills/            # Skills pushed via the skill-push system,
-        │                              # symlinked into each session
+        ├── managed/skills/            # Pushed skills, symlinked per session
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output for this session
             │   │   └── web/           # Next.js app
             │   ├── venv/              # Python virtual environment
-            │   ├── .opencode/skills   # Symlink → /workspace/managed/skills
+            │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -151,9 +150,7 @@ class SandboxManager(ABC):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
             nextjs_port: Port for the Next.js dev server, or None for headless.
-            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for
-                AGENTS.md. Callers build this from the registry+DB so the
-                manager stays DB-agnostic.
+            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md

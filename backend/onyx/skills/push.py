@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
 from uuid import UUID
 
@@ -32,16 +33,17 @@ _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
 def _is_excluded(path: Path, source_dir: Path) -> bool:
-    """True if any path component is excluded or starts with a dot."""
     rel = path.relative_to(source_dir)
     for part in rel.parts:
         if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
             return True
+    # Template sources are rendered separately; never ship them raw.
+    if path.suffix == ".template":
+        return True
     return False
 
 
 def _add_static_builtin(files: FileSet, skill: BuiltinSkill) -> None:
-    """Walk *skill.source_dir* and add every regular file under ``{slug}/``."""
     source_dir = skill.source_dir
     for path in source_dir.rglob("*"):
         if not path.is_file():
@@ -58,12 +60,9 @@ def _add_template_builtin(
     db_session: Session,
     user: User,
 ) -> None:
-    """Render *skill*'s template per-user and add it under ``{slug}/SKILL.md``.
+    # Static siblings first so the renderer's SKILL.md write wins.
+    _add_static_builtin(files, skill)
 
-    Only the ``company-search`` slug is currently template-driven. Adding new
-    template skills requires a branch here — premature to design a plugin
-    system for one skill.
-    """
     if skill.slug == "company-search":
         rendered = render_company_search_skill(
             db_session, user, skill.source_dir.parent
@@ -77,25 +76,20 @@ def _add_template_builtin(
     )
 
 
-def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see.
-
-    Built-in skills are read from disk (the API server image bakes the
-    template directory in); custom skills are extracted from their FileStore
-    bundle. Both land under a ``{slug}/`` prefix so the sandbox's symlink at
-    ``/workspace/managed/skills`` shows them as siblings.
-    """
+def _assemble_fileset(
+    builtins: Iterable[BuiltinSkill],
+    customs: Iterable[Skill],
+    user: User,
+    db_session: Session,
+) -> FileSet:
     files: FileSet = {}
 
-    # Built-ins are validated at boot (register_builtin_skills) — let any
-    # failure here propagate, since it means the image is broken.
-    for builtin in BuiltinSkillRegistry.instance().list_available(db_session):
+    for builtin in builtins:
         if builtin.has_template:
             _add_template_builtin(files, builtin, db_session, user)
         else:
             _add_static_builtin(files, builtin)
 
-    customs = list_skills_for_user(user=user, db_session=db_session)
     file_store = get_default_file_store()
     for skill in customs:
         try:
@@ -115,25 +109,31 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return files
 
 
-def build_skills_section_for_user(user: User, db_session: Session) -> str:
-    """Render the AGENTS.md ``{{AVAILABLE_SKILLS_SECTION}}`` for *user*.
-
-    Pulls visible built-ins from the registry + customs from the DB, then
-    formats them via ``build_skills_section_from_data``. Sandbox managers
-    receive the rendered string; they never touch the DB themselves.
-    """
+def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
+    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
     builtins = BuiltinSkillRegistry.instance().list_available(db_session)
     customs = list_skills_for_user(user=user, db_session=db_session)
-    return build_skills_section_from_data(builtins, customs)
+    return _assemble_fileset(builtins, customs, user, db_session)
+
+
+def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
+    """Return (skills_section, fileset) sharing one set of DB reads."""
+    builtins = BuiltinSkillRegistry.instance().list_available(db_session)
+    customs = list_skills_for_user(user=user, db_session=db_session)
+    section = build_skills_section_from_data(builtins, customs)
+    files = _assemble_fileset(builtins, customs, user, db_session)
+    return section, files
 
 
 def hydrate_sandbox_skills(
     sandbox_id: UUID,
     user: User,
     db_session: Session,
+    files: FileSet | None = None,
 ) -> PushResult:
     """Push all visible skills to a single sandbox (cold-start hydration)."""
-    files = build_skills_fileset_for_user(user, db_session)
+    if files is None:
+        files = build_skills_fileset_for_user(user, db_session)
     return get_sandbox_manager().push_to_sandbox(
         sandbox_id=sandbox_id,
         mount_path=SKILLS_MOUNT_PATH,

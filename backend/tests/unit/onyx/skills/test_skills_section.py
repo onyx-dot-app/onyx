@@ -1,9 +1,4 @@
-"""Tests for the AGENTS.md skills section formatter.
-
-Replaces the legacy filesystem-scan section builder. Sandbox managers are
-DB-agnostic, so the section is rendered from registry rows + DB rows and
-passed in as a string.
-"""
+"""Tests for the AGENTS.md skills section formatter."""
 
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -62,6 +57,5 @@ def test_long_descriptions_are_truncated() -> None:
     long = "x" * 200
     section = build_skills_section_from_data([_builtin("s", long)], [])
     line = section.splitlines()[0]
-    # 6 chars of prefix "- **s**: " + 120 chars of description max
     assert line.endswith("...")
     assert len(line) <= len("- **s**: ") + 120

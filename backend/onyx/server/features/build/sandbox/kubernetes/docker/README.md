@@ -7,10 +7,7 @@ This directory contains the Dockerfile and resources for building the Onyx Craft
 ```
 docker/
 ├── Dockerfile              # Main container image definition
-├── skills/                 # Built-in skill source files. Read by the API
-│                           # server at session-setup time and pushed into
-│                           # /workspace/managed/skills/ — NOT baked into
-│                           # the sandbox image.
+├── skills/                 # Built-in skill sources (pushed at session setup, not baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
@@ -88,9 +85,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 - **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
 - **AWS CLI**: For S3 snapshot operations
 
-Skills (built-in and custom) are **not** baked in. The API server pushes
-them to `/workspace/managed/skills/` at session-setup time via the
-skill-push system.
+Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 
 ## Runtime Directory Structure
 

@@ -31,8 +31,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 ```
 /workspace/                          # Sandbox root (in container)
-├── managed/skills/                  # Built-in + custom skills, pushed at
-│                                    # session setup by the API server
+├── managed/skills/                  # Skills pushed at session setup
 ├── outputs/                         # Working directory
 │   ├── web/                        # Lightweight Next.js app (shadcn/ui, Recharts)
 │   ├── slides/                     # Generated presentations

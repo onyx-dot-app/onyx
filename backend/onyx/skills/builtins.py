@@ -1,9 +1,8 @@
 """Register on-disk built-in skills with the in-memory registry at boot.
 
-Built-in skill source files live in the API server image at
-``SKILLS_TEMPLATE_PATH``. ``register_builtins()`` is idempotent for the lifetime
-of a process — the registry rejects duplicate slugs — so callers (lifespan,
-tests) should reset the registry before re-registering.
+``register_builtin_skills()`` must be called exactly once per process;
+tests that need to re-register should call
+``BuiltinSkillRegistry._reset_for_testing()`` first.
 """
 
 from pathlib import Path
@@ -19,14 +18,6 @@ BUILTIN_SLUGS: tuple[str, ...] = ("pptx", "image-generation", "company-search")
 
 
 def register_builtin_skills() -> None:
-    """Register every slug under ``BUILTIN_SLUGS`` with the registry.
-
-    Each skill's metadata is read from its on-disk ``SKILL.md`` /
-    ``SKILL.md.template`` frontmatter (see ``BuiltinSkillRegistry.register``).
-    All three skills are unconditionally available — the company-search
-    template handles the "no connected sources" case gracefully, so no
-    DB-driven gating is needed.
-    """
     registry = BuiltinSkillRegistry.instance()
     base = Path(SKILLS_TEMPLATE_PATH)
     for slug in BUILTIN_SLUGS:

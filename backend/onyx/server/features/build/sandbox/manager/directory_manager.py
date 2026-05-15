@@ -37,18 +37,15 @@ class DirectoryManager:
     - Copying templates (outputs, venv, AGENTS.md)
     - Cleaning up sandbox/session directories on termination
 
-    Skills are not handled here — they're delivered via the skill-push system
-    to ``managed/skills/`` and symlinked into each session by the caller.
-
     Directory Structure:
         $base_path/$sandbox_id/
-        ├── managed/skills/            # Pushed at session-setup time
+        ├── managed/skills/            # Pushed skills, symlinked per session
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output (from template or snapshot)
             │   │   └── web/           # Next.js app
             │   ├── .venv/             # Python virtual environment
-            │   ├── .opencode/skills   # Symlink → ../../managed/skills
+            │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -84,7 +81,6 @@ class DirectoryManager:
         └── sessions/                   # Container for per-session workspaces
 
         NOTE: This only creates the sandbox-level structure.
-        ``managed/skills/`` is created lazily when the first skills push lands.
         Call create_session_directory() to create per-session workspaces.
 
         Args:

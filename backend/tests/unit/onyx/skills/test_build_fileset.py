@@ -1,11 +1,4 @@
-"""Unit tests for ``build_skills_fileset_for_user``.
-
-Mocks the DB-shaped collaborators so the test stays in the unit tier:
-- ``BuiltinSkillRegistry.list_available`` returns synthetic builtins.
-- ``list_skills_for_user`` returns an empty list (no customs).
-- ``render_company_search_skill`` is replaced via monkeypatch so we can
-  assert template skills are dispatched correctly without hitting the DB.
-"""
+"""Unit tests for ``build_skills_fileset_for_user``."""
 
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -20,11 +13,6 @@ _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
 
 
 def _make_static_builtin(tmp_path: Path, slug: str, files: dict[str, str]) -> Path:
-    """Materialize a skill directory tree so the static-builtin path can walk it.
-
-    Ensures a frontmatter'd SKILL.md exists so ``registry.register`` accepts
-    the directory. Caller-provided ``files`` override the default SKILL.md.
-    """
     source_dir = tmp_path / slug
     source_dir.mkdir(parents=True)
     (source_dir / "SKILL.md").write_text(
@@ -52,7 +40,6 @@ def test_static_builtin_files_are_included_under_slug_prefix(
     user = MagicMock()
     files = build_skills_fileset_for_user(user, db_session=MagicMock())
 
-    # SKILL.md is the frontmatter blob written by the helper.
     assert b"name: pptx" in files["pptx/SKILL.md"]
     assert files["pptx/scripts/preview.py"] == b"print('hi')"
 
@@ -85,8 +72,6 @@ def test_template_builtin_is_rendered_per_user(
 ) -> None:
     BuiltinSkillRegistry._reset_for_testing()
 
-    # Lay out a directory with SKILL.md.template (no SKILL.md) — registry
-    # detects ``has_template=True`` from the on-disk layout naturally.
     source_dir = tmp_path / "company-search"
     source_dir.mkdir()
     (source_dir / "SKILL.md.template").write_text(
@@ -116,9 +101,39 @@ def test_template_builtin_is_rendered_per_user(
     called_db, called_user, called_dir = rendered_calls[0]
     assert called_db is db_session
     assert called_user is user
-    # The renderer expects the parent dir of the skill (it then appends
-    # "company-search/SKILL.md.template"), so make sure that's what we passed.
     assert called_dir == source_dir.parent
+
+
+def test_template_builtin_includes_static_siblings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    BuiltinSkillRegistry._reset_for_testing()
+
+    source_dir = tmp_path / "company-search"
+    source_dir.mkdir()
+    (source_dir / "SKILL.md.template").write_text(
+        _FRONTMATTER.format(slug="company-search"), encoding="utf-8"
+    )
+    (source_dir / "scripts").mkdir()
+    (source_dir / "scripts" / "search.py").write_text(
+        "print('search')", encoding="utf-8"
+    )
+
+    BuiltinSkillRegistry.instance().register(
+        slug="company-search", source_dir=source_dir
+    )
+
+    monkeypatch.setattr(
+        push_module, "render_company_search_skill", lambda *_, **__: "RENDERED"
+    )
+    monkeypatch.setattr(push_module, "list_skills_for_user", lambda *_, **__: [])
+
+    files = build_skills_fileset_for_user(MagicMock(), db_session=MagicMock())
+
+    assert files["company-search/SKILL.md"] == b"RENDERED"
+    assert files["company-search/scripts/search.py"] == b"print('search')"
+    assert "company-search/SKILL.md.template" not in files
 
 
 def test_custom_bundle_entries_are_added_under_their_slug(
