@@ -11,6 +11,7 @@ Run with:
         pytest backend/tests/integration/tests/build/test_kubernetes_sandbox_provision.py -v
 """
 
+import os
 import time
 from uuid import UUID
 from uuid import uuid4
@@ -93,7 +94,7 @@ def test_kubernetes_sandbox_provision() -> None:
     llm_config = LLMProviderConfig(
         provider="openai",
         model_name="gpt-4",
-        api_key="test-key",
+        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
 
@@ -315,7 +316,7 @@ def test_kubernetes_sandbox_send_message() -> None:
     llm_config = LLMProviderConfig(
         provider="openai",
         model_name="gpt-4",
-        api_key="test-key",
+        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
 
@@ -433,7 +434,7 @@ def test_kubernetes_sandbox_webapp_passthrough() -> None:
     llm_config = LLMProviderConfig(
         provider="openai",
         model_name="gpt-4",
-        api_key="test-key",
+        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
 
@@ -624,7 +625,7 @@ def test_health_check_returns_true_for_running_pod() -> None:
     llm_config = LLMProviderConfig(
         provider="openai",
         model_name="gpt-4",
-        api_key="test-key",
+        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
 
@@ -714,7 +715,7 @@ def test_health_check_returns_false_after_termination() -> None:
     llm_config = LLMProviderConfig(
         provider="openai",
         model_name="gpt-4",
-        api_key="test-key",
+        api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         api_base=None,
     )
 

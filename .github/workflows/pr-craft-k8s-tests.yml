@@ -34,6 +34,9 @@ env:
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+  # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
+  # tests never call back to it, so the URL doesn't need to resolve.
+  SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
