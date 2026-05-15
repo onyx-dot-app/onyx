@@ -24,6 +24,10 @@ from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
+from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES
+from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_COUNT
+from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_IDLE
+from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_INTERVAL
 from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
@@ -55,6 +59,39 @@ ASYNC_DB_API = "asyncpg"
 
 # why isn't this in configs?
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
+
+def psycopg2_keepalive_connect_args() -> dict[str, int]:
+    """libpq client-side TCP keepalive parameters for the sync engine.
+
+    Returns an empty dict when keepalives are disabled. See the docstring
+    on `POSTGRES_TCP_KEEPALIVES` in `app_configs.py` for the motivation.
+    """
+    if not POSTGRES_TCP_KEEPALIVES:
+        return {}
+    return {
+        "keepalives": 1,
+        "keepalives_idle": POSTGRES_TCP_KEEPALIVES_IDLE,
+        "keepalives_interval": POSTGRES_TCP_KEEPALIVES_INTERVAL,
+        "keepalives_count": POSTGRES_TCP_KEEPALIVES_COUNT,
+    }
+
+
+def _merge_psycopg2_connect_args(
+    extra_engine_kwargs: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build the final psycopg2 ``connect_args`` for engine init.
+
+    Pops any caller-supplied ``connect_args`` from ``extra_engine_kwargs``
+    so the subsequent ``.update()`` of engine kwargs doesn't overwrite the
+    merged value. Caller-supplied entries win on key conflicts.
+    """
+    caller_connect_args = extra_engine_kwargs.pop("connect_args", None) or {}
+    merged: dict[str, Any] = {
+        **psycopg2_keepalive_connect_args(),
+        **caller_connect_args,
+    }
+    return merged or None
 
 
 def build_connection_string(
@@ -189,6 +226,19 @@ class SqlEngine:
             # Start with base kwargs that are valid for all pool types
             final_engine_kwargs: dict[str, Any] = {}
 
+            # Seed psycopg2 client-side TCP keepalives so the kernel keeps
+            # the TCP path to PgBouncer warm and detects dead sockets
+            # before the next query — without this, a long inter-query gap
+            # (e.g. minutes of embedding + vector-db writes between
+            # docprocessing batches) lets the pooler reap the server-side
+            # connection and the next SELECT fails mid-flight.
+            # Only relevant for the sync psycopg2 engine; asyncpg doesn't
+            # accept libpq-style keepalive params.
+            if db_api == SYNC_DB_API:
+                merged_connect_args = _merge_psycopg2_connect_args(extra_engine_kwargs)
+                if merged_connect_args is not None:
+                    final_engine_kwargs["connect_args"] = merged_connect_args
+
             if POSTGRES_USE_NULL_POOL:
                 # if null pool is specified, then we need to make sure that
                 # we remove any passed in kwargs related to pool size that would
@@ -248,6 +298,12 @@ class SqlEngine:
 
             # Start with base kwargs that are valid for all pool types
             final_engine_kwargs: dict[str, Any] = {}
+
+            # Readonly engine is always sync psycopg2 — seed keepalives the
+            # same way as the primary sync engine. See `init_engine`.
+            merged_connect_args = _merge_psycopg2_connect_args(extra_engine_kwargs)
+            if merged_connect_args is not None:
+                final_engine_kwargs["connect_args"] = merged_connect_args
 
             if POSTGRES_USE_NULL_POOL:
                 # if null pool is specified, then we need to make sure that
