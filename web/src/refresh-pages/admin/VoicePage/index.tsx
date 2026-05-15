@@ -3,29 +3,24 @@
 import { useMemo } from "react";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
-import {
-  useVoiceProviders,
-  VoiceProviderView,
-} from "@/hooks/useVoiceProviders";
+import { useVoiceProviders } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,
   deactivateVoiceProvider,
-  deleteVoiceProvider,
 } from "@/lib/voice/svc";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { toast } from "@/hooks/useToast";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
-  getProviderIcon,
-  getProviderLabel,
   VoiceProviderSetupModal,
   VoiceDisconnectModal,
   type ProviderMode,
-} from "@/refresh-pages/admin/VoiceConfigurationPage/shared";
+} from "@/refresh-pages/admin/VoicePage/shared";
+import { getVoiceProviderDetail } from "@/lib/voice/utils";
+import { VoiceProviderView } from "@/lib/voice/types";
 
 interface ModelDetails {
   id: string;
@@ -117,6 +112,7 @@ interface ModelCardProps {
   mode: ProviderMode;
   provider: VoiceProviderView | undefined;
   status: "disconnected" | "connected" | "selected";
+  hasAlternatives: boolean;
   onSelect: () => void;
   onDeselect: () => void;
   onMutate: () => void;
@@ -127,40 +123,13 @@ function ModelCard({
   mode,
   provider,
   status,
+  hasAlternatives,
   onSelect,
   onDeselect,
   onMutate,
 }: ModelCardProps) {
   const setupModal = useCreateModal();
   const disconnectModal = useCreateModal();
-
-  const handleDisconnect = async () => {
-    if (!provider) return;
-    try {
-      const response = await deleteVoiceProvider(provider.id);
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        throw new Error(
-          typeof errorBody?.detail === "string"
-            ? errorBody.detail
-            : "Failed to disconnect provider."
-        );
-      }
-      toast.success(`${getProviderLabel(model.providerType)} disconnected`);
-      onMutate();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Unexpected error occurred."
-      );
-    } finally {
-      disconnectModal.toggle(false);
-    }
-  };
-
-  const handleSetupSuccess = () => {
-    onMutate();
-    setupModal.toggle(false);
-  };
 
   return (
     <>
@@ -172,7 +141,10 @@ function ModelCard({
           }
           mode={mode}
           defaultModelId={model.id}
-          onSuccess={handleSetupSuccess}
+          onSuccess={() => {
+            onMutate();
+            setupModal.toggle(false);
+          }}
         />
       </setupModal.Provider>
 
@@ -180,17 +152,17 @@ function ModelCard({
         <VoiceDisconnectModal
           disconnectTarget={{
             providerId: provider?.id ?? 0,
-            providerLabel: getProviderLabel(model.providerType),
+            providerLabel: getVoiceProviderDetail(model.providerType).label,
             providerType: model.providerType,
           }}
-          providers={[]}
-          onDisconnect={() => void handleDisconnect()}
+          hasAlternatives={hasAlternatives}
+          onSuccess={() => onMutate()}
         />
       </disconnectModal.Provider>
 
       <ProviderCard
         aria-label={`voice-${mode}-${model.id}`}
-        icon={getProviderIcon(model.providerType)}
+        icon={getVoiceProviderDetail(model.providerType).icon}
         title={model.label}
         description={model.subtitle}
         status={status}
@@ -209,7 +181,7 @@ function ModelCard({
   );
 }
 
-export default function VoiceConfigurationPage() {
+export default function VoicePage() {
   const { providers, isLoading, refresh: mutate } = useVoiceProviders();
 
   const providersByType = useMemo(() => {
@@ -242,7 +214,7 @@ export default function VoiceConfigurationPage() {
     mode: ProviderMode
   ): "disconnected" | "connected" | "selected" => {
     const provider = providersByType.get(model.providerType);
-    if (!provider || !provider.has_api_key) return "disconnected";
+    if (!provider || !provider.api_key) return "disconnected";
 
     const isActive =
       mode === "stt"
@@ -286,6 +258,12 @@ export default function VoiceConfigurationPage() {
                   mode="stt"
                   provider={providersByType.get(model.providerType)}
                   status={getModelStatus(model, "stt")}
+                  hasAlternatives={
+                    (providers ?? []).filter(
+                      (p) =>
+                        p.provider_type !== model.providerType && !!p.api_key
+                    ).length > 0
+                  }
                   onSelect={() => {
                     const p = providersByType.get(model.providerType);
                     if (p?.id)
@@ -335,6 +313,13 @@ export default function VoiceConfigurationPage() {
                       mode="tts"
                       provider={providersByType.get(model.providerType)}
                       status={getModelStatus(model, "tts")}
+                      hasAlternatives={
+                        (providers ?? []).filter(
+                          (p) =>
+                            p.provider_type !== model.providerType &&
+                            !!p.api_key
+                        ).length > 0
+                      }
                       onSelect={() => {
                         const p = providersByType.get(model.providerType);
                         if (p?.id)

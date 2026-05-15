@@ -50,11 +50,11 @@ export type ProviderModalState =
       provider: WebContentProviderView | null;
     };
 
-export interface WebProviderSetupModalProps {
+export interface WebSearchSetupModalProps {
   state: ProviderModalState;
 }
 
-export function WebProviderSetupModal({ state }: WebProviderSetupModalProps) {
+export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   const onClose = useModalClose();
   const { category, providerType, provider } = state;
   const {
