@@ -81,12 +81,12 @@ class TestTenantProvisioningRollback:
 
         # Verify that the schema was created and then cleaned up
         assert created_tenant_id is not None, "Schema should have been created"
-        assert created_tenant_id.startswith(
-            TENANT_ID_PREFIX
-        ), f"Should have tenant prefix: {created_tenant_id}"
-        assert not _schema_exists(
-            created_tenant_id
-        ), f"Schema {created_tenant_id} should have been rolled back"
+        assert created_tenant_id.startswith(TENANT_ID_PREFIX), (
+            f"Should have tenant prefix: {created_tenant_id}"
+        )
+        assert not _schema_exists(created_tenant_id), (
+            f"Schema {created_tenant_id} should have been rolled back"
+        )
 
     def test_drop_schema_works_with_uuid_tenant_id(self) -> None:
         """

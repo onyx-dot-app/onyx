@@ -40,7 +40,7 @@ func printVersion(ios *iostreams.IOStreams, cmd *cobra.Command) {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 	defer cancel()
 
-	log.Debug("fetching backend version from /api/version")
+	log.Debug("fetching backend version")
 	backendVersion, err := client.GetBackendVersion(ctx)
 	if err != nil {
 		log.WithError(err).Debug("could not fetch backend version")

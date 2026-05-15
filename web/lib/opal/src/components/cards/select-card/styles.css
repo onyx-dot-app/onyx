@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* SelectCard — structural styles; colors handled by Interactive.Stateful */
 
 .opal-select-card {

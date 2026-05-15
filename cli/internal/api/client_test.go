@@ -34,14 +34,12 @@ func TestSearch_Success(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"results": [{"citation_id": 1, "document_id": "doc-1", "chunk_ind": 0, "title": "Test", "blurb": "blurb", "link": null, "source_type": "web", "score": 0.95, "updated_at": null}],
-			"llm_facing_text": "{\"results\": []}",
-			"citation_mapping": {"1": "doc-1"}
+			"results": [{"citation_id": 1, "title": "Test", "content": "full chunk text", "link": null, "source_type": "web", "updated_at": null}]
 		}`))
 	}))
 	defer srv.Close()
 
-	client := testutil.NewClient(srv.URL + "/api")
+	client := testutil.NewClient(srv.URL)
 	resp, err := client.Search(t.Context(), models.SearchRequest{Query: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -49,11 +47,8 @@ func TestSearch_Success(t *testing.T) {
 	if len(resp.Results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(resp.Results))
 	}
-	if resp.Results[0].DocumentID != "doc-1" {
-		t.Errorf("document_id = %q, want %q", resp.Results[0].DocumentID, "doc-1")
-	}
-	if resp.LLMFacingText == "" {
-		t.Error("llm_facing_text is empty")
+	if resp.Results[0].Content != "full chunk text" {
+		t.Errorf("content = %q, want %q", resp.Results[0].Content, "full chunk text")
 	}
 }
 

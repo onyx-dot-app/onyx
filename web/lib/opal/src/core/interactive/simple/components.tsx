@@ -7,11 +7,10 @@ import { guardPortalClick } from "@opal/core/interactive/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-interface InteractiveSimpleProps
-  extends Omit<
-    React.HTMLAttributes<HTMLElement>,
-    "className" | "style" | "color"
-  > {
+interface InteractiveSimpleProps extends Omit<
+  React.HTMLAttributes<HTMLElement>,
+  "className" | "style" | "color"
+> {
   ref?: React.Ref<HTMLElement>;
 
   /**
@@ -71,7 +70,7 @@ function InteractiveSimple({
   const classes = cn(
     "cursor-pointer select-none",
     isDisabled && "cursor-not-allowed",
-    !props.onClick && !href && "!cursor-default !select-auto",
+    !props.onClick && !href && "cursor-default! select-auto!",
     group
   );
 

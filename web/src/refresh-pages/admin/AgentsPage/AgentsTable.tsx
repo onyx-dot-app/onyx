@@ -29,7 +29,7 @@ function renderCreatedByColumn(_value: MinimalUserSnapshot | null, row: Agent) {
       sizePreset="main-ui"
       variant="section"
       icon={SvgUser}
-      title={row.builtin_persona ? "System" : row.owner?.email ?? "—"}
+      title={row.builtin_persona ? "System" : (row.owner?.email ?? "—")}
     />
   );
 }

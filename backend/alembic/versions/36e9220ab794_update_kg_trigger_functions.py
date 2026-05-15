@@ -28,7 +28,6 @@ def _get_tenant_contextvar(session: Session) -> str:
 
 
 def upgrade() -> None:
-
     bind = op.get_bind()
     session = Session(bind=bind)
 
@@ -37,7 +36,8 @@ def upgrade() -> None:
     alphanum_pattern = r"[^a-z0-9]+"
     truncate_length = 1000
     function = "update_kg_entity_name"
-    op.execute(text(f"""
+    op.execute(
+        text(f"""
             CREATE OR REPLACE FUNCTION "{tenant_id}".{function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -68,7 +68,8 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """))
+            """)
+    )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".kg_entity')
     op.execute(f"""
@@ -81,7 +82,8 @@ def upgrade() -> None:
 
     # Create kg_entity trigger to update kg_entity.name and its trigrams
     function = "update_kg_entity_name_from_doc"
-    op.execute(text(f"""
+    op.execute(
+        text(f"""
             CREATE OR REPLACE FUNCTION "{tenant_id}".{function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -108,7 +110,8 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """))
+            """)
+    )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".document')
     op.execute(f"""

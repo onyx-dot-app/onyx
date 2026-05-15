@@ -80,9 +80,9 @@ def test_zendesk_connector_basic(
             print(f"target_doc {target_doc}")
 
     assert len(all_docs) > 0, "No documents were retrieved from the connector"
-    assert (
-        target_doc is not None
-    ), "Target document was not found in the retrieved documents"
+    assert target_doc is not None, (
+        "Target document was not found in the retrieved documents"
+    )
     assert target_doc.source == DocumentSource.ZENDESK, "Document source is not ZENDESK"
 
     if connector.content_type == "articles":
@@ -134,6 +134,6 @@ def test_zendesk_connector_slim(zendesk_article_connector: ZendeskConnector) -> 
         )
 
     # Full docs should be subset of slim docs
-    assert all_full_doc_ids.issubset(
-        all_slim_doc_ids
-    ), f"Full doc IDs {all_full_doc_ids} not subset of slim doc IDs {all_slim_doc_ids}"
+    assert all_full_doc_ids.issubset(all_slim_doc_ids), (
+        f"Full doc IDs {all_full_doc_ids} not subset of slim doc IDs {all_slim_doc_ids}"
+    )

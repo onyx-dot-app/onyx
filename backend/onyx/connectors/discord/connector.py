@@ -54,9 +54,7 @@ def _convert_message_to_document(
         channel_name := message.channel.name
     ):
         metadata["Channel"] = channel_name  # ty: ignore[possibly-unresolved-reference]
-        semantic_substring += (
-            f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
-        )
+        semantic_substring += f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
 
     # Single messages dont have a title
     title = ""

@@ -25,6 +25,6 @@ def test_new_group_gets_basic_permission(reset: None) -> None:  # noqa: ARG001
         user_performing_action=admin_user,
     )
 
-    assert (
-        "basic" in permissions
-    ), f"New group should have 'basic' permission, got: {permissions}"
+    assert "basic" in permissions, (
+        f"New group should have 'basic' permission, got: {permissions}"
+    )

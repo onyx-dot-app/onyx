@@ -23,7 +23,7 @@ class TestImageGenerationRequest(BaseModel):
     2. From existing provider: Provide source_llm_provider_id (backend fetches API key)
     """
 
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
 
     # Option 1: Direct API key
     provider: str | None = None  # e.g., "openai", "azure"
@@ -55,7 +55,7 @@ class ImageGenerationConfigCreate(BaseModel):
 
     # Required for both modes
     image_provider_id: str  # Static unique key (e.g., "openai_gpt_image_1")
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
 
     # Option 1: Clone mode - use credentials from existing provider
     source_llm_provider_id: int | None = None
@@ -79,7 +79,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     """
 
     # Required
-    model_name: str  # e.g., "gpt-image-1", "dall-e-3"
+    model_name: str  # e.g., "gpt-image-1"
     # Note: image_provider_id cannot be changed during update
 
     # Option 1: Clone mode - use credentials from existing provider

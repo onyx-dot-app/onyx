@@ -97,11 +97,10 @@ def _add_user_filters(
             user_groups = user_groups.where(
                 User__UserGroup.is_curator == True  # noqa: E712
             )
-        where_clause &= (
-            ~exists()
-            .where(Credential__UserGroup.credential_id == Credential.id)
-            .where(~Credential__UserGroup.user_group_id.in_(user_groups))
-            .correlate(Credential)
+        where_clause &= ~exists().where(
+            Credential__UserGroup.credential_id == Credential.id
+        ).where(~Credential__UserGroup.user_group_id.in_(user_groups)).correlate(
+            Credential
         )
     else:
         where_clause |= Credential.curator_public == True  # noqa: E712

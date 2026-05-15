@@ -5,11 +5,11 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 const IMAGE_GENERATION_URL = "/admin/configuration/image-generation";
 
 const FAKE_CONNECTED_CONFIG = {
-  image_provider_id: "openai_dalle_3",
+  image_provider_id: "openai_gpt_image_1_5",
   model_configuration_id: 100,
-  model_name: "dall-e-3",
+  model_name: "gpt-image-1.5",
   llm_provider_id: 100,
-  llm_provider_name: "openai-dalle3",
+  llm_provider_name: "openai-gpt-image-1-5",
   is_default: false,
 };
 
@@ -71,7 +71,7 @@ test.describe("Image Generation Provider Disconnect", () => {
       timeout: 20000,
     });
 
-    const card = getProviderCard(page, "openai_dalle_3");
+    const card = getProviderCard(page, "openai_gpt_image_1_5");
     await card.waitFor({ state: "visible", timeout: 10000 });
 
     await expectElementScreenshot(mainContainer(page), {
@@ -81,14 +81,14 @@ test.describe("Image Generation Provider Disconnect", () => {
     // Hover to reveal disconnect button, then verify
     await card.hover();
     const disconnectButton = card.getByRole("button", {
-      name: "Disconnect DALL-E 3",
+      name: "Disconnect GPT Image 1.5",
     });
     await expect(disconnectButton).toBeVisible();
     await expect(disconnectButton).toBeEnabled();
 
     // Mock the DELETE to succeed and update the config list
     await page.route(
-      "**/api/admin/image-generation/config/openai_dalle_3",
+      "**/api/admin/image-generation/config/openai_gpt_image_1_5",
       async (route) => {
         if (route.request().method() === "DELETE") {
           // Update the GET mock to return only the default config
@@ -119,7 +119,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     // Verify confirmation modal appears
     const confirmDialog = page.getByRole("dialog");
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-    await expect(confirmDialog).toContainText("Disconnect DALL-E 3");
+    await expect(confirmDialog).toContainText("Disconnect GPT Image 1.5");
 
     await expectElementScreenshot(confirmDialog, {
       name: "image-gen-disconnect-non-default-modal",
@@ -233,12 +233,12 @@ test.describe("Image Generation Provider Disconnect", () => {
       timeout: 20000,
     });
 
-    // DALL-E 3 is not configured — should not have a disconnect button
-    const card = getProviderCard(page, "openai_dalle_3");
+    // GPT Image 1.5 is not configured — should not have a disconnect button
+    const card = getProviderCard(page, "openai_gpt_image_1_5");
     await card.waitFor({ state: "visible", timeout: 10000 });
 
     const disconnectButton = card.getByRole("button", {
-      name: "Disconnect DALL-E 3",
+      name: "Disconnect GPT Image 1.5",
     });
     await expect(disconnectButton).not.toBeVisible();
 

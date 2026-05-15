@@ -29,6 +29,7 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { toast } from "@/hooks/useToast";
 import InputBar, { InputBarHandle } from "@/app/craft/components/InputBar";
+import ScheduledRunBanner from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import SuggestionBubbles from "@/app/craft/components/SuggestionBubbles";
@@ -247,7 +248,7 @@ export default function BuildChatPanel({
   }, [isRunning, session?.messages]);
 
   const handleSubmit = useCallback(
-    async (message: string, files: BuildFile[], demoDataEnabled: boolean) => {
+    async (message: string, files: BuildFile[]) => {
       if (limits?.isLimited) {
         setShowUpgradeModal(true);
         return;
@@ -383,6 +384,10 @@ export default function BuildChatPanel({
           outputPanelOpen ? "w-1/2 pl-4" : "w-full"
         )}
       >
+        {/* Banner shown only when the session was started by a scheduled task. */}
+        <ScheduledRunBanner
+          sessionId={sessionId ?? existingSessionId ?? null}
+        />
         {/* Chat header */}
         <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
           <div className="flex flex-row items-center gap-2 max-w-[75%]">
@@ -405,12 +410,12 @@ export default function BuildChatPanel({
               onClick={toggleOutputPanel}
               tooltip="Open output panel"
               tertiary
-              className="!bg-background-tint-00 border rounded-full"
-              iconClassName="!stroke-text-04"
+              className="bg-background-tint-00! border rounded-full"
+              iconClassName="stroke-text-04!"
             />
           )}
           {/* Soft fade border at bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+          <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
         </div>
 
         {/* Main content area */}
@@ -435,11 +440,11 @@ export default function BuildChatPanel({
           )}
         </div>
 
-        {/* Input bar at bottom when session exists */}
+        {/* Input bar at bottom when session exists. */}
         {(hasSession || existingSessionId) && (
           <div className="px-4 pb-8 pt-4 relative">
             {/* Soft fade border at top */}
-            <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+            <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
             <div className="max-w-2xl mx-auto">
               {/* Scroll to bottom button - shown when user has scrolled away */}
               {showScrollButton && (

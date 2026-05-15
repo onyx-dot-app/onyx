@@ -28,7 +28,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1">
+    <div className="max-w-(--app-page-main-content-width) flex flex-col w-full p-1">
       {currentAgent.starter_messages.map(({ message }, index) => (
         <Interactive.Stateless
           key={index}

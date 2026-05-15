@@ -140,7 +140,7 @@ Non-interactive mode output must be optimized for LLM consumption:
 - `--json` flag switches to structured JSON (for programmatic consumers)
 - `--quiet` flag suppresses progress/status output (already exists on `ask`)
 - Progress and status information goes to stderr; results go to stdout (clean pipe separation)
-- Non-TTY output is truncated to 4096 bytes with the full response saved to a temp file. This is intentional — coding agents have tool call output limits, and the temp file path lets the agent read more if needed. The `--max-output` flag provides an override.
+- Non-TTY output is truncated to 50000 bytes with the full response saved to a temp file. This is intentional — coding agents have tool call output limits, and the temp file path lets the agent read more if needed. The `--max-output` flag provides an override.
 
 #### R1.3: Configuration isolation
 
@@ -195,6 +195,8 @@ The CLI's `install-skill` command installs a `SKILL.md` for agent harnesses (Cla
 > - **Integration tests** — `backend/tests/integration/tests/search/test_search_api.py`.
 > - **`message_history` support** — Added beyond the original plan. Callers with conversation context can pass it in for better query expansion (resolves pronouns, follow-ups, etc.).
 > - **Field naming** — LLM override fields use `provider`/`model`, consistent with the rest of the API surface.
+>
+> ⚠️ **The request/response examples in the Part 2 subsections below describe the original design and are stale.** The shipped contract dropped `num_results`, `time_cutoff_days`, `chunk_ind`, `blurb`, `score`, `llm_facing_text`, and `citation_mapping`; `content` (full chunk for LLM-selected docs, blurb fallback) is the single content field; only LLM-selected docs are returned. See `backend/onyx/server/features/search/models.py` for the authoritative shapes.
 
 ### Objective
 
@@ -326,9 +328,9 @@ The search endpoint lives under `/api/search` (not `/api/build/...` or `/api/cha
 
 > **Status: Implemented.** Key implementation details for Part 4:
 > - **Two commands** — Resolved as separate `search` and `ask` commands. `search` returns retrieved documents with citations; `ask` returns LLM-generated answers. Different backends, different output shapes and cost profiles.
-> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff), `--limit` (max results), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of `llm_facing_text`).
-> - **Default output** — `onyx-cli search` prints `llm_facing_text` (the citation-rich JSON string from `SearchTool`) to stdout. Non-TTY output is truncated to 4096 bytes with a temp file for overflow.
-> - **5-minute timeout** — `doJSONLong()` helper uses a 5-minute HTTP timeout since `SearchTool.run()` includes multiple LLM calls.
+> - **Flags** — `--source` (comma-separated source filter), `--days` (recency cutoff, converted to an ISO timestamp client-side and sent as `time_cutoff`), `--agent-id` (persona/agent scoping), `--no-query-expansion` (skip LLM expansion), `--raw` (full API response instead of the lean projection). No per-call result-count knob; `/api/search` runs the chat-flow-equivalent pool (50 hits → ≤25 chunks).
+> - **Default output** — `onyx-cli search` prints a lean projection — `{"results": [{title, url, source_type, content, updated_at}, ...]}` — to stdout. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each (the server populates `content` directly on each `SearchResult`, so consumers never fall back). Non-TTY output is truncated to 50000 bytes with a temp file for overflow.
+> - **60s timeout** — `Client.Search` uses a dedicated `searchHTTPClient` with a 60s timeout. The search path runs LLM query expansion + relevance selection but does not generate a full answer, so it doesn't need the 5-minute long-timeout client; 60s is the right middle ground for two short LLM calls.
 
 ### Objective
 
@@ -387,6 +389,8 @@ Persona scoping is exposed as `--agent-id` on the `search` command. When specifi
 
 Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync entirely. This requires: provisioning per-user PATs with encrypted-at-rest storage, bundling the CLI binary, creating a CLI skill with the user's available sources, and tearing down the file sync infrastructure.
 
+> **Architecture summary.** Dynamic skill content (the rendered `company-search` SKILL.md) is written to the pod via a `write_sandbox_file()` / `render_company_search_skill()` pattern that is decoupled from the sandbox manager interface. Content is rendered in `sandbox/skills/rendering.py`, written to `/workspace/skills/` at the pod level (shared across sessions via existing symlinks), and orchestrated by `SessionManager.push_dynamic_skills()`. This avoids threading new parameters through the manager abstraction and provides a clean extension point for future skill bundles.
+
 ### Requirements
 
 #### R4.1: Per-user PAT lifecycle
@@ -415,11 +419,11 @@ The onyx-cli binary must be available inside the sandbox:
 
 #### R4.3: CLI skill creation
 
-The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills.md`). The skill consists of:
+The search tool is exposed to the agent as a skill (following the existing skills system described in `docs/craft/features/skills/skills.md`). The skill consists of:
 
 - **`SKILL.md.template`**: A template that describes how to use onyx-cli search, rendered at session setup with the user's available sources. This is a built-in skill registered with the `BuiltinSkillRegistry`.
 - **Skill name**: `company-search` (consistent with `search-requirements.md` — reads naturally, brand-neutral).
-- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a per-session SKILL.md that tells the agent:
+- **Rendered `SKILL.md`**: At session setup, the backend queries the user's accessible connectors and renders a SKILL.md that tells the agent:
   - What the search tool is and what it does
   - What sources are available (specific to this user's permissions)
   - Usage examples with the CLI flags
@@ -427,6 +431,18 @@ The search tool is exposed to the agent as a skill (following the existing skill
   - What to do when a source they expect isn't listed
 
 The skill does NOT include a shell script wrapper. The agent calls onyx-cli directly — the CLI is the tool, not a wrapper around curl.
+
+> **Implementation note.** The rendered SKILL.md is written to the **pod-level** `/workspace/skills/` directory, not per-session. The pod is per-user, so all sessions share the same rendered skills via existing symlinks (K8s) or symlinks (local). No migration is needed — the existing delivery mechanism works as-is.
+>
+> The rendering and writing are decoupled from the session manager interface:
+>
+> - **`render_company_search_skill(db_session, user, skills_dir) -> RenderedSkillFile`** in `sandbox/skills/rendering.py` renders the company-search skill template and returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing. `skills_dir` comes from the `SKILLS_TEMPLATE_PATH` config constant.
+> - **`write_sandbox_file(sandbox_id, path, content)`** on `SandboxManager` writes to `/workspace/{path}` on the pod. Generic method for pushing any dynamic content. K8s implementation uses `kubectl exec` + `printf`; local uses `Path.write_text`.
+> - **`SessionManager.push_dynamic_skills()`** orchestrates: calls `render_company_search_skill()` then `write_sandbox_file()` with the result. Catches all exceptions and logs a warning so skill rendering failures don't block session setup. Called after `setup_session_workspace()` in both `create_session__no_commit()` and the restore path in `sessions_api.py`.
+>
+> This means `company_search_skill_md` is NOT passed through `setup_session_workspace()` or `restore_snapshot()`. The rendering is fully decoupled from the manager interface — no parameter threading through the sandbox manager abstraction.
+>
+> **Future direction:** The current push-based `write_sandbox_file()` approach is a stepping stone. Eventually a full skill system will handle multi-file skill bundles. `render_company_search_skill()` handles the company-search template today; adding new skills would mean adding new rendering functions or generalizing the pattern.
 
 #### R4.4: Available sources injection
 
@@ -438,30 +454,35 @@ The skill's source list is populated from the user's actual connector access:
 - The list is a snapshot at session creation — not refreshed mid-session. Connector changes take effect on the next session.
 - If the user has no connected sources, the skill still renders but the source list says so explicitly. The agent should not hallucinate sources.
 
+> **Implementation note.** Source descriptions reuse the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording where needed) rather than defining a duplicate `SOURCE_DESCRIPTIONS` dict. This keeps source descriptions in one place across the codebase.
+
 #### R4.5: Decommission file sync and rework user library delivery
 
 Remove the legacy `files/` corpus sync infrastructure (search replaces it) and replace the file-sync sidecar with a lightweight user library sync mechanism.
 
 > **Design decision.** See [4-craft-search-proposal.md](4-craft-search-proposal.md) §3 for the full rationale on user library delivery after sidecar removal.
 
-**File sync removal:**
+> **Implementation note.** This is split across two PRs. **PR 3 is removal-only** (~1500 lines deleted) — it deletes the old file sync infrastructure after PR 2 (search tool wiring) is verified end-to-end. PR 2 is purely additive — the old file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section()`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling, `generate_agents_md.py`) stays as dead code in PR 2. PR 3 removes it. **PR 4 is the user library rework** — net new code adding the shared volume, kubectl exec sync, and Celery task for user library delivery. This split keeps PR 3 a clean deletion pass and isolates the new functionality in PR 4.
+
+**File sync removal (PR 3 — pure deletion):**
 - Remove the `files/` directory from sandbox workspace setup — no more symlink to persistent document storage or demo data.
-- Remove the S3 file-sync sidecar container (`s5cmd sync` at pod start). Search replaces connector document access entirely.
+- Remove the S3 file-sync sidecar container (`aws s3 sync` at pod start). Search replaces connector document access entirely.
 - Remove `build_knowledge_sources_section()`, the `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder from `AGENTS.template.md`, `generate_agents_md.py` from the sandbox image, and the `CONNECTOR_INFO` dict.
 - Remove `/workspace/files` and `/workspace/demo_data` allowlist rules from `opencode_config.py`.
+- Remove `sync_files()` methods, `sync_sandbox_files` Celery task, `_get_disabled_user_library_paths()`, file symlink helpers, demo data, and the connector document write path from `PersistentDocumentWriter`.
 - Update `AGENTS.template.md` to point the agent at the `company-search` skill as the only path to company knowledge. Remove references to `files/`, `find`, `grep` over company data, JSON document format, etc.
 
-**User library rework:**
+**User library rework (PR 4 — net new code):**
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They still need direct file access.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at:
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
 - **Session setup/resume** — populates the directory, catching files uploaded while the pod was sleeping.
 - **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately.
 
-Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`s5cmd sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
+Sessions access files at `/workspace/user_library/` directly — it's a pod-level shared directory, no per-session symlink needed. The sync is idempotent (`aws s3 sync` compares checksums). If the pod is evicted mid-sync, the next sync recovers cleanly.
 
-**PersistentDocumentWriter:** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
+**PersistentDocumentWriter (PR 3):** Remove the connector document write path (`write_documents()`, `serialize_document()`, path builder helpers). Keep `write_raw_file()`, `delete_raw_file()`, and the `get_persistent_document_writer()` factory — these are still used for raw user library file writes to S3. `SANDBOX_S3_BUCKET` stays for the same reason.
 
 - **Preserve `attachments/`** — user-uploaded session files are still read via normal file operations and are not part of this removal.
 
@@ -479,10 +500,11 @@ The `files/` infrastructure is the only delivery mechanism for demo data. Removi
 
 ### Key Challenges
 
-- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_ONYX_SERVER_URL` config.
-- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. This data may not exist today and may need to be added to connector metadata or crafted per source type.
+- **Internal network URL**: The sandbox must reach the Onyx backend via the internal Kube service URL, not the public nginx URL. `ONYX_SERVER_URL` must be set to an address reachable from inside the sandbox via `SANDBOX_API_SERVER_URL` config.
+- **Source list quality**: The one-line descriptions of what's in each source are critical for agent search quality. If the agent doesn't know that "google_drive" contains "engineering specs and product docs," it can't formulate good queries. Resolved by reusing the existing `DocumentSourceDescription` dict in `configs/constants.py` (with improved wording) — no new source metadata system needed.
 - **User library sync for non-K8s**: The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups needs resolution before Craft ships on non-K8s infrastructure.
-- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) provides both paths before PR 3 (file sync removal) removes the old one.
+- **Transition from file sync**: Existing Craft sessions (if any are active during deploy) will lose access to `files/`. Backwards compatibility is not a constraint — breaking active sessions is acceptable. The implementation uses stacked PRs where PR 2 (search tool wiring) is purely additive — no old code removed. The legacy file-based knowledge code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder handling) stays as dead code in PR 2, cleaned up in PR 3 (pure deletion). PR 4 adds the new user library delivery mechanism (shared volume + kubectl exec sync).
+- **Decoupled rendering**: The dynamic skill rendering (`render_company_search_skill()` + `write_sandbox_file()`) is deliberately decoupled from the sandbox manager interface. This avoids threading new parameters through `setup_session_workspace()` and `restore_snapshot()`, keeping the manager abstraction clean. The orchestration lives in `SessionManager.push_dynamic_skills()`, which catches all exceptions and logs a warning so failures don't block session setup.
 
 ---
 

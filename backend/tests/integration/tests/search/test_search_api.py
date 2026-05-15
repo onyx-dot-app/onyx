@@ -42,22 +42,19 @@ def test_basic_search_returns_results(
 ) -> None:
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     doc_content = "search api integration test unique document"
-    doc = DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
 
     resp = _search(doc_content, admin_user)
     assert resp.status_code == 200
 
+    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
+    # so the API must return exactly one result that contains it.
     data = resp.json()
-    assert len(data["results"]) > 0
-    assert isinstance(data["llm_facing_text"], str)
-    assert len(data["llm_facing_text"]) > 0
-    assert isinstance(data["citation_mapping"], dict)
-
+    assert len(data["results"]) == 1
     result = data["results"][0]
-    assert result["document_id"] == doc.id
+    assert doc_content in result["content"]
     assert result["citation_id"] is not None
-    assert result["source_type"] is not None
-    assert result["blurb"] is not None
+    assert result["source_type"]
 
 
 def test_document_set_filtering(
@@ -70,16 +67,13 @@ def test_document_set_filtering(
     cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     shared_phrase = "docset-filter-unique-phrase"
-    doc_in = DocumentManager.seed_doc_with_content(
-        cc_pair_in,
-        f"{shared_phrase} included",
-        api_key,
-    )
-    doc_out = DocumentManager.seed_doc_with_content(
-        cc_pair_out,
-        f"{shared_phrase} excluded",
-        api_key,
-    )
+    # The two contents share ``shared_phrase`` but the unique suffixes
+    # ("included" / "excluded") must not be substrings of each other —
+    # otherwise the negative assertion below silently becomes vacuous.
+    included_content = f"{shared_phrase} included"
+    excluded_content = f"{shared_phrase} excluded"
+    DocumentManager.seed_doc_with_content(cc_pair_in, included_content, api_key)
+    DocumentManager.seed_doc_with_content(cc_pair_out, excluded_content, api_key)
 
     doc_set = DocumentSetManager.create(
         cc_pair_ids=[cc_pair_in.id],
@@ -93,9 +87,9 @@ def test_document_set_filtering(
     resp = _search(shared_phrase, admin_user, document_sets=[doc_set.name])
     assert resp.status_code == 200
 
-    result_doc_ids = {r["document_id"] for r in resp.json()["results"]}
-    assert doc_in.id in result_doc_ids
-    assert doc_out.id not in result_doc_ids
+    contents = [r["content"] for r in resp.json()["results"]]
+    assert any(included_content in c for c in contents)
+    assert not any(excluded_content in c for c in contents)
 
 
 @pytest.mark.skipif(
@@ -127,14 +121,12 @@ def test_acl_enforcement(
     )
 
     doc_content = "restricted acl search document"
-    doc = DocumentManager.seed_doc_with_content(
-        restricted_cc_pair, doc_content, api_key
-    )
+    DocumentManager.seed_doc_with_content(restricted_cc_pair, doc_content, api_key)
 
     allowed_resp = _search(doc_content, privileged_user)
     assert allowed_resp.status_code == 200
-    allowed_doc_ids = {r["document_id"] for r in allowed_resp.json()["results"]}
-    assert doc.id in allowed_doc_ids
+    allowed_contents = [r["content"] for r in allowed_resp.json()["results"]]
+    assert any(doc_content in c for c in allowed_contents)
 
     blocked_resp = _search(doc_content, blocked_user)
     assert blocked_resp.status_code == 200
@@ -151,16 +143,12 @@ def test_persona_scoped_search(
     cc_pair_out = CCPairManager.create_from_scratch(user_performing_action=admin_user)
 
     shared_phrase = "persona-scope-unique-phrase"
-    doc_in = DocumentManager.seed_doc_with_content(
-        cc_pair_in,
-        f"{shared_phrase} in scope",
-        api_key,
-    )
-    doc_out = DocumentManager.seed_doc_with_content(
-        cc_pair_out,
-        f"{shared_phrase} out of scope",
-        api_key,
-    )
+    # Suffixes ("in scope" / "out of scope") must not be substrings of each
+    # other so the negative assertion below stays meaningful.
+    included_content = f"{shared_phrase} in scope"
+    excluded_content = f"{shared_phrase} out of scope"
+    DocumentManager.seed_doc_with_content(cc_pair_in, included_content, api_key)
+    DocumentManager.seed_doc_with_content(cc_pair_out, excluded_content, api_key)
 
     doc_set = DocumentSetManager.create(
         cc_pair_ids=[cc_pair_in.id],
@@ -180,9 +168,9 @@ def test_persona_scoped_search(
     resp = _search(shared_phrase, admin_user, persona_id=persona.id)
     assert resp.status_code == 200
 
-    result_doc_ids = {r["document_id"] for r in resp.json()["results"]}
-    assert doc_in.id in result_doc_ids
-    assert doc_out.id not in result_doc_ids
+    contents = [r["content"] for r in resp.json()["results"]]
+    assert any(included_content in c for c in contents)
+    assert not any(excluded_content in c for c in contents)
 
 
 def test_invalid_persona_returns_404(

@@ -369,8 +369,9 @@ export default function useChatSessionController({
       updateCurrentSelectedNodeForDocDisplay(nodeId);
       const currentMessageTree = useChatSessionStore
         .getState()
-        .sessions.get(useChatSessionStore.getState().currentSessionId || "")
-        ?.messageTree;
+        .sessions.get(
+          useChatSessionStore.getState().currentSessionId || ""
+        )?.messageTree;
 
       if (currentMessageTree) {
         const newMessageTree = setMessageAsLatest(currentMessageTree, nodeId);

@@ -15,7 +15,7 @@ export default function AgentDescription({ agent }: AgentDescriptionProps) {
       as="p"
       secondaryBody
       text03
-      className="w-full min-w-0 text-center break-words"
+      className="w-full min-w-0 text-center wrap-break-word"
     >
       {agent.description}
     </Text>

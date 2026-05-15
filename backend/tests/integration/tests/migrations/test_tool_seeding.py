@@ -100,33 +100,35 @@ def test_tool_seeding_migration() -> None:
 
     # Verify tools were created
     with get_session_with_current_tenant() as db_session:
-        result = db_session.execute(text("""
+        result = db_session.execute(
+            text("""
                 SELECT id, name, display_name, description, in_code_tool_id,
                        user_id, enabled
                 FROM tool
                 ORDER BY id
-                """))
+                """)
+        )
         tools = result.fetchall()
 
-        assert (
-            len(tools) == 11
-        ), f"Should have created exactly 11 builtin tools, got {len(tools)}"
+        assert len(tools) == 11, (
+            f"Should have created exactly 11 builtin tools, got {len(tools)}"
+        )
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
             tool = next((t for t in tools if t[1] == expected.name), None)
             assert tool is not None, f"{expected.name} should exist"
-            assert (
-                tool[2] == expected.display_name
-            ), f"{expected.name} display name should be '{expected.display_name}'"
-            assert (
-                tool[4] == expected.in_code_tool_id
-            ), f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
-            assert (
-                tool[5] is None
-            ), f"{expected.name} should not have a user_id (builtin)"
-            assert (
-                tool[6] == expected.enabled
-            ), f"{expected.name} enabled should be {expected.enabled}"
+            assert tool[2] == expected.display_name, (
+                f"{expected.name} display name should be '{expected.display_name}'"
+            )
+            assert tool[4] == expected.in_code_tool_id, (
+                f"{expected.name} in_code_tool_id should be '{expected.in_code_tool_id}'"
+            )
+            assert tool[5] is None, (
+                f"{expected.name} should not have a user_id (builtin)"
+            )
+            assert tool[6] == expected.enabled, (
+                f"{expected.name} enabled should be {expected.enabled}"
+            )
 
         # Check SearchTool
         validate_tool(EXPECTED_TOOLS["SearchTool"])

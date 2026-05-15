@@ -32,9 +32,11 @@ SKIP_CANON_DRIVE_IDS = os.environ.get("SKIP_CANON_DRIVE_IDS", "true").lower() ==
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
-    result = op.get_bind().execute(sa.text("""
+    result = op.get_bind().execute(
+        sa.text("""
         SELECT * FROM search_settings WHERE status = 'PRESENT' ORDER BY id DESC LIMIT 1
-        """))
+        """)
+    )
     search_settings_fetch = result.fetchall()
     search_settings = (
         SearchSettings(**search_settings_fetch[0]._asdict())
@@ -42,9 +44,11 @@ def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
         else None
     )
 
-    result2 = op.get_bind().execute(sa.text("""
+    result2 = op.get_bind().execute(
+        sa.text("""
         SELECT * FROM search_settings WHERE status = 'FUTURE' ORDER BY id DESC LIMIT 1
-        """))
+        """)
+    )
     search_settings_future_fetch = result2.fetchall()
     search_settings_future = (
         SearchSettings(**search_settings_future_fetch[0]._asdict())
@@ -84,7 +88,8 @@ def normalize_google_drive_url(url: str) -> str:
 def get_google_drive_documents_from_database() -> list[dict]:
     """Get all Google Drive documents from the database."""
     bind = op.get_bind()
-    result = bind.execute(sa.text("""
+    result = bind.execute(
+        sa.text("""
             SELECT d.id
             FROM document d
             JOIN document_by_connector_credential_pair dcc ON d.id = dcc.id
@@ -92,7 +97,8 @@ def get_google_drive_documents_from_database() -> list[dict]:
                 AND dcc.credential_id = cc.credential_id
             JOIN connector c ON cc.connector_id = c.id
             WHERE c.source = 'GOOGLE_DRIVE'
-        """))
+        """)
+    )
 
     documents = []
     for row in result:

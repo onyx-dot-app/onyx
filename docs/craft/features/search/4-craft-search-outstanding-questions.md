@@ -73,7 +73,7 @@ The raw token is set as `ONYX_PAT` in the K8s container env vars at pod creation
 
 The file-sync sidecar is removed (search replaces connector document access). But user library files — raw binaries (spreadsheets, PDFs) the agent opens with Python libraries — aren't indexed in Vespa and can't be replaced by search. They still need direct file access.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at:
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at:
 - **Session setup/resume** — populates the directory, catching any files uploaded while the pod was sleeping
 - **After each upload** — a Celery task fires a kubectl exec to sync the new file immediately
 
@@ -81,7 +81,7 @@ Replace the sidecar with a shared `/workspace/user_library/` directory at the po
 User uploads spreadsheet via API
   └─ write_raw_file() → S3  (existing path, unchanged)
   └─ dispatch SYNC_USER_LIBRARY_FILES Celery task
-      └─ kubectl exec: s5cmd sync s3://.../user_library/ /workspace/user_library/
+      └─ kubectl exec: aws s3 sync s3://.../user_library/ /workspace/user_library/
   └─ file appears in sandbox immediately
 ```
 
@@ -101,14 +101,49 @@ Sessions access files at `/workspace/user_library/` directly — it's a pod-leve
 
 | Method | Purpose | After refactor |
 |--------|---------|----------------|
-| `write_documents()` | Serialize indexed connector docs to JSON files | **Dead.** Search replaces file access. Remove along with `serialize_document()` and path builder helpers. |
+| `write_documents()` | Serialize indexed connector docs to JSON files | **Dead.** Search replaces file access. Removed in PR 3 along with `serialize_document()` and path builder helpers. |
 | `write_raw_file()` | Store user-uploaded binaries (xlsx, pptx, etc.) to S3 | **Alive.** User library uploads still need S3 storage. Keep this method and the factory. |
 
-`SANDBOX_S3_BUCKET` config stays — both the user library write path and the new kubectl exec sync depend on it.
+`SANDBOX_S3_BUCKET` config stays — both the user library write path and the new kubectl exec sync (PR 4) depend on it.
 
-The sync is idempotent — `s5cmd sync` compares checksums and only transfers changed files. If the pod is evicted mid-sync, the next sync recovers cleanly. If the pod is sleeping when an upload happens, files accumulate in S3 and are pulled on resume.
+The sync is idempotent — `aws s3 sync` compares checksums and only transfers changed files. If the pod is evicted mid-sync, the next sync recovers cleanly. If the pod is sleeping when an upload happens, files accumulate in S3 and are pulled on resume.
 
 ### Open question: Docker Compose setups
 
 The shared volume + kubectl exec approach is K8s-native. How user library file delivery works for Docker Compose setups is unclear and depends on how we implement Docker Compose sandboxes — this is out of scope for this plan but needs resolution before Craft ships on non-K8s infrastructure.
+
+---
+
+## 4. Skill delivery for dynamic content (company-search)
+
+### What we need
+
+The `company-search` skill contains a rendered `SKILL.md` with the user's available sources. This content is dynamic (varies per user) but skills are baked into the image at `/workspace/skills/` and symlinked into sessions. We need to get user-specific rendered content into the skill directory without breaking the existing skill setup.
+
+### Decision: Skills stay symlinked, dynamic content written to the pod-level skills directory
+
+Skills remain symlinked from `/workspace/skills/` into each session's `.opencode/skills/` — no symlink-to-copy migration. Dynamic content (the rendered `company-search/SKILL.md`) is written to the pod-level `/workspace/skills/` directory via `write_sandbox_file()`, and session symlinks see it automatically.
+
+This replaces the earlier plan (step 8) which called for copying all skills into each session and writing the rendered SKILL.md per-session. That approach would have duplicated static skill files across every session and required touching each session's directory on every skill update.
+
+### How it works
+
+1. **`render_company_search_skill()`** lives in `sandbox/skills/rendering.py`, co-located with template logic rather than in the session manager. It takes the user's available sources and returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing.
+
+2. **`write_sandbox_file()`** writes the rendered SKILL.md to `/workspace/skills/company-search/SKILL.md`. Since sessions symlink to `/workspace/skills/`, the rendered file is visible in every session immediately — no per-session writes needed.
+
+3. **`DocumentSourceDescription` reuse** — source descriptions come from the existing `DocumentSourceDescription` constant in `configs/constants.py`. No separate `SOURCE_DESCRIPTIONS` dict.
+
+### Why not copy skills per session?
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Symlink + pod-level write** (chosen) | Zero duplication, one write serves all sessions, matches existing K8s skill setup | Dynamic content must go to the shared directory |
+| **Copy all skills per session** (earlier plan) | Session-isolated, could customize per session | Duplicates static files N times, requires touching each session directory, diverges from the existing symlink pattern |
+
+The symlink approach is simpler and consistent with how K8s sessions already handle skills. The one trade-off — dynamic content must be written to the shared directory — is not a real constraint since the company-search skill is user-scoped (one user per pod) not session-scoped.
+
+### Future direction
+
+The current push-based approach (render template, write file) is a stepping stone. A full skill system will eventually handle multi-file skill bundles, versioning, and more complex delivery patterns. The `write_sandbox_file()` + symlink pattern is intentionally minimal to avoid over-engineering ahead of that work.
 

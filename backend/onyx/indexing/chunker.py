@@ -141,9 +141,9 @@ class Chunker:
         self.enable_large_chunks = enable_large_chunks
         self.enable_contextual_rag = enable_contextual_rag
         if enable_contextual_rag:
-            assert (
-                USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY
-            ), "Contextual RAG requires at least one of chunk summary and document summary enabled"
+            assert USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY, (
+                "Contextual RAG requires at least one of chunk summary and document summary enabled"
+            )
         self.default_contextual_rag_reserved_tokens = MAX_CONTEXT_TOKENS * (
             int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
         )

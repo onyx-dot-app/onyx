@@ -228,7 +228,7 @@ export function ChatSessionMorePopup({
           >
             <div
               className={cn(
-                "p-1 rounded cursor-pointer select-none transition-opacity duration-150",
+                "p-1 rounded-sm cursor-pointer select-none transition-opacity duration-150",
                 isVisible || popoverOpen
                   ? "opacity-100 pointer-events-auto"
                   : "opacity-0 pointer-events-none"

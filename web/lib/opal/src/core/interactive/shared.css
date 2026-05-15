@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* Interactive — shared base classes for stateless + stateful primitives */
 
 /* Register --interactive-foreground as a <color> so the browser can

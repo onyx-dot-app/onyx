@@ -6,14 +6,14 @@
 
 Wire onyx-cli into the Craft sandbox as the primary search tool, replacing the legacy `files/` corpus sync. Provision per-user PATs with encrypted-at-rest storage, bundle the CLI binary, create a `company-search` skill with the user's available sources, and tear down the file-sync infrastructure.
 
-**Parts 1–3 are complete.** Part 1 repositioned onyx-cli as an agent-first tool with `ONYX_SERVER_URL`/`ONYX_PAT` env var support, clean exit codes, and `validate-config`. Part 2 shipped `POST /api/search` backed by the full `SearchTool.run()` pipeline (query expansion, hybrid retrieval, LLM document selection, context expansion). Part 3 added the `search` CLI command wrapping that endpoint with `--source`, `--days`, `--limit`, `--agent-id`, `--raw`, and `--no-query-expansion` flags.
+**Parts 1–3 are complete.** Part 1 repositioned onyx-cli as an agent-first tool with `ONYX_SERVER_URL`/`ONYX_PAT` env var support, clean exit codes, and `validate-config`. Part 2 shipped `POST /api/search` backed by the full `SearchTool.run()` pipeline (query expansion, hybrid retrieval, LLM document selection, context expansion). Part 3 added the `search` CLI command wrapping that endpoint with `--source`, `--days`, `--agent-id`, `--raw`, and `--no-query-expansion` flags.
 
 > Key implementation details from Parts 1–3 that affect this plan:
 > - **IOStreams pattern** (Part 1): CLI commands use an `IOStreams` struct for testable I/O. Agent-facing output goes to stdout, progress to stderr.
 > - **`NullEmitter`** (Part 2): Located in `backend/onyx/chat/emitter.py`. Allows `SearchTool` to run without a streaming consumer.
 > - **`message_history`** (Part 2): The search API accepts optional conversation context for better query expansion — not needed for Part 4's skill-based usage, but available.
-> - **`doJSONLong()`** (Part 3): CLI uses a 5-minute HTTP timeout for the search endpoint since `SearchTool.run()` includes multiple LLM calls.
-> - **Default output** (Part 3): `onyx-cli search` prints `llm_facing_text` (a JSON string with `{"results": [...]}`) to stdout by default. `--raw` prints the full `SearchAPIResponse`.
+> - **HTTP timeout** (Part 3): CLI uses the standard `doJSON()` timeout for the search endpoint. The path runs LLM query expansion + relevance selection but does NOT generate a full answer, so the standard 30s ceiling applies (no separate long-timeout client).
+> - **Default output** (Part 3): `onyx-cli search` prints a lean JSON shape — `{"results": [{title, url, source_type, content, updated_at}, ...]}` — to stdout by default. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. `--raw` prints the full `SearchResponse` (adds per-result `citation_id` and `document_id`).
 
 ---
 
@@ -35,7 +35,7 @@ After this work, the sandbox has one path to company knowledge: `onyx-cli search
 | Component | Before | After |
 |-----------|--------|-------|
 | `/workspace/files/` | S3-synced corpus dump | Gone |
-| S3 sidecar container | Runs `s5cmd sync` at pod start | Gone |
+| S3 sidecar container | Runs `aws s3 sync` at pod start | Gone |
 | `onyx-cli` binary | Not present | `/usr/local/bin/onyx-cli` |
 | `company-search` skill | Does not exist | `.opencode/skills/company-search/SKILL.md` with user's sources |
 | `ONYX_PAT` env var | Not set | Per-user PAT, 30-day expiry, re-minted when expired |
@@ -78,7 +78,7 @@ Pods don't live long enough for the PAT to expire mid-session — the 1-hour idl
 
 - **One pod per user**, shared across sessions. Per-session workspaces at `/workspace/sessions/{session_id}/`.
 - **File sync**: S3 `file-sync` sidecar (`peakcom/s5cmd:v2.3.0`) syncs documents to `/workspace/files/`. Main container mounts it read-only. Sessions get a `files/` symlink → `/workspace/files/` (or → `/workspace/demo_data` in demo mode). A standalone `_build_filtered_symlink_script()` helper produces filtered symlinks when `excluded_user_library_paths` is set. `generate_agents_md.py` scans `files/` to populate `{{KNOWLEDGE_SOURCES_SECTION}}` in AGENTS.md. The sidecar stays alive for incremental syncs triggered by `sync_files()`.
-- **Skills**: Baked into image at `/workspace/skills/` (two skills: `image-generation`, `pptx`). **Kubernetes** symlinks skills into sessions (`ln -sf /workspace/skills {session_path}/.opencode/skills`). **Local** already copies them via `DirectoryManager.setup_skills()` using `shutil.copytree()`.
+- **Skills**: Baked into image at `/workspace/skills/` (two skills: `image-generation`, `pptx`). **Kubernetes** symlinks skills into sessions (`ln -sf /workspace/skills {session_path}/.opencode/skills`). **Local** already symlinks them via `DirectoryManager.setup_skills()` (`session/.opencode/skills` -> `sandbox-root/skills/`).
 - **No sandbox auth**: `Sandbox` has no token. The sandbox cannot call the Onyx API.
 - **AGENTS.md**: References `files/`, JSON documents, `find`/`grep`. Uses `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder — filled by `generate_agents_md.py` at container runtime (K8s) or by `generate_agent_instructions()` with a `files_path` argument (local).
 - **OpenCode config**: Whitelists `/workspace/files` and `/workspace/demo_data` as external directories.
@@ -89,7 +89,7 @@ Pods don't live long enough for the PAT to expire mid-session — the 1-hour idl
 
 User library files (spreadsheets, PDFs, etc.) are raw binaries the agent opens directly with Python libraries — search can't replace them. They're written to S3 via `PersistentDocumentWriter.write_raw_file()` and currently synced to the sandbox by the file-sync sidecar.
 
-Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `s5cmd sync`) triggered at session setup and after each upload. Sessions access files directly at `/workspace/user_library/`. Details in PR 3, steps 18–20.
+Replace the sidecar with a shared `/workspace/user_library/` directory at the pod level. Sync via one-shot `kubectl exec` (running `aws s3 sync`) triggered at session setup and after each upload. Sessions access files directly at `/workspace/user_library/`. Sidecar removal is in PR 3 (pure deletion); the new user library delivery mechanism is in PR 4 (steps 23–28).
 
 This preserves `PersistentDocumentWriter.write_raw_file()` and `S3PersistentDocumentWriter` (the S3 write path) while eliminating the sidecar. The `write_documents()` path (connector document serialization) is dead and removed.
 
@@ -220,7 +220,7 @@ No default — must be set when `SANDBOX_BACKEND=kubernetes`. Validated at provi
 
 ### PR 2: Search Tool Wiring
 
-Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage.
+Purely additive (~160 lines). Adds the search tool to the sandbox. After this PR, the agent has **both** `onyx-cli search` and `files/` available — no breakage. Old file-based knowledge code (dead after the AGENTS.template.md rewrite) is left in place and cleaned up in PR 3.
 
 **5. Add onyx-cli to Dockerfile** (`sandbox/kubernetes/docker/Dockerfile`)
 
@@ -232,6 +232,8 @@ RUN chmod +x /usr/local/bin/onyx-cli
 ```
 
 **6. Add company-search skill template** (`sandbox/kubernetes/docker/skills/company-search/SKILL.md.template`)
+
+Baked into the Docker image at `/workspace/skills/company-search/SKILL.md.template`. After `setup_session_workspace()` creates symlinks from sessions into `/workspace/skills/`, `write_sandbox_file()` overwrites the pod-level `skills/company-search/SKILL.md` with rendered content. All session symlinks point there automatically — no change from symlink to copy.
 
 ```markdown
 ---
@@ -259,44 +261,33 @@ assume it exists.
 |------|-------------|---------|
 | `--source` | Filter by source type (comma-separated) | `--source slack,google_drive` |
 | `--days` | Only return results from the last N days | `--days 30` |
-| `--limit` | Maximum number of results | `--limit 5` |
-| `--agent-id` | Scope search to an agent's configured filters | `--agent-id 5` |
-| `--no-query-expansion` | Skip LLM query expansion (faster, less comprehensive) | `--no-query-expansion` |
-| `--raw` | Output full API response with scores, links, and document IDs | `--raw` |
 
 ## Output
 
-Stdout is JSON with a top-level `results` array. Each result has a `document`
-field (the citation ID), plus `title`, `content`, `source_type`, and other
-metadata. Cite results by their `document` number when referencing them in your
-response.
-
-When stdout is not a TTY, output is truncated to 4096 bytes with the full
-response saved to a temp file (path printed at end of output).
+Stdout is JSON with a top-level `results` array. Each result has `title`,
+`url`, `source_type`, `content`, and `updated_at`. Results contain only
+documents the LLM judged relevant, ordered by relevance; `content` is the
+full chunk text of each. Cite results by title and URL when referencing
+them in your response.
 ```
 
-**7. Add `build_available_sources_section`** (`sandbox/util/agent_instructions.py`)
+**7. Add `build_available_sources_section` and `render_company_search_skill`**
 
-New function that queries `get_connector_credential_pairs_for_user(db_session, user, get_editable=False)`, groups by source type, and formats each as `- \`{source_name}\` — {description}`. Descriptions from a `SOURCE_DESCRIPTIONS` dict with fallback to source name. For Slack, Linear, and GitHub, appends sub-scope examples from `connector_specific_config`, capped at 5.
+Both functions live in `sandbox/skills/rendering.py`:
 
-**8. Wire PAT into pod provisioning, skills + validation into session setup** (`session/manager.py`, `kubernetes_sandbox_manager.py`)
+`build_available_sources_section(db_session, user)`: Queries `get_connector_credential_pairs_for_user()`, deduplicates by source type, and formats each as `- \`{source_name}\` — {description}`. Descriptions reuse the existing `DocumentSourceDescription` dict from `configs/constants.py` (with improved wording) — no separate `SOURCE_DESCRIPTIONS` duplication.
 
-In `SessionManager`, during pod provisioning (before `_create_sandbox_pod()`):
-- Call `_ensure_sandbox_pat()` to get `raw_token`
-- Pass `raw_token` to `_create_sandbox_pod()` which sets `ONYX_PAT` and `ONYX_SERVER_URL` as container env vars in the pod spec
+`render_company_search_skill(db_session, user, skills_dir) -> RenderedSkillFile`: Takes the skills template directory as a parameter (via `SKILLS_TEMPLATE_PATH` config constant). Returns a `RenderedSkillFile` (a NamedTuple with `path` and `content` fields). Raises `FileNotFoundError` if the template is missing.
 
-In `SessionManager`, before calling `setup_session_workspace()`:
-- Call `build_available_sources_section()` to get source list
-- Render SKILL.md template with source list
-- Pass rendered SKILL.md to `setup_session_workspace()`
+**8. Add `write_sandbox_file` and `push_dynamic_skills`**
 
-In `setup_session_workspace()` and `restore_snapshot()`:
-- Copy skills (instead of symlink) and write rendered company-search SKILL.md
-- Run `onyx-cli validate-config` — non-zero exit aborts with `OnyxError` (uses pod-level `ONYX_PAT` env var, already set)
+`write_sandbox_file(sandbox_id, path, content)` — new abstract method on `SandboxManager` (`sandbox/base.py`). Writes a file to `/workspace/{path}` on the pod (or sandbox root for local). Used to push rendered dynamic skill content. NOT per-session — writes to the pod-level directory. Existing symlinks make it visible to all sessions.
+
+`push_dynamic_skills(sandbox_id, user_id)` — on `SessionManager` (`session/manager.py`). Resolves the user from UUID, calls `render_company_search_skill()` then calls `write_sandbox_file()` with the result. Catches all exceptions and logs a warning so skill rendering failures don't block session setup. Called after `setup_session_workspace()` in create, reuse, and restore paths. No skill-specific parameters on any manager method — the rendering is fully decoupled from the manager interface.
 
 **9. Rewrite AGENTS.template.md** (`server/features/build/AGENTS.template.md`)
 
-Delete the "Knowledge Sources" section, `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder, the JSON document format note, and all `files/` references. Replace "Step 1: Information Retrieval":
+Remove `files/` references and `{{KNOWLEDGE_SOURCES_SECTION}}`. Point the agent at `onyx-cli search` and the company-search skill. Old code (`CONNECTOR_INFO`, `build_knowledge_sources_section`, `generate_agents_md.py`, etc.) is NOT removed in this PR — it becomes dead code, cleaned up in PR 3.
 
 ```markdown
 ### Step 1: Information Retrieval
@@ -308,30 +299,27 @@ Delete the "Knowledge Sources" section, `{{KNOWLEDGE_SOURCES_SECTION}}` placehol
 2. Read the `company-search` SKILL.md for available sources and flags.
 3. **Iterate** — run additional searches to refine. Use `--source` to narrow by
    connector and `--days` for recent content.
-4. **User library files** (spreadsheets, documents, etc. uploaded by the user)
-   are available at `/workspace/user_library/`. Open them directly with Python
-   libraries when the task requires working with the raw file.
-5. **Summarize** key findings before proceeding to output generation.
+4. **Summarize** key findings before proceeding to output generation.
 ```
-
-Keep everything else. The `{{KNOWLEDGE_SOURCES_SECTION}}` placeholder removal means `generate_agents_md.py` (still in the image) will no-op on its `str.replace()` call — safe, cleaned up in PR 3.
-
-**10. Local development** (`sandbox/local/local_sandbox_manager.py`, `sandbox/manager/directory_manager.py`)
-
-Same changes for local backend: ensure PAT, inject env vars, render + write company-search SKILL.md after `DirectoryManager.setup_skills()` copies skills. `ONYX_SERVER_URL` defaults to `http://localhost:8080/api`. CLI binary must be on developer's `$PATH`.
 
 #### PR 2 file changes
 
 | Action | File |
 |--------|------|
 | New | `sandbox/kubernetes/docker/skills/company-search/SKILL.md.template` |
-| Modify | `sandbox/kubernetes/docker/Dockerfile` — add onyx-cli binary |
-| Modify | `sandbox/util/agent_instructions.py` — add `build_available_sources_section()` + `SOURCE_DESCRIPTIONS` |
-| Modify | `server/features/build/session/manager.py` — render SKILL.md, pass to workspace setup |
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — copy skills, write SKILL.md, validate, in both `setup_session_workspace()` and `restore_snapshot()` |
-| Modify | `sandbox/local/local_sandbox_manager.py` — same for local backend (local: inject env vars at session level since there's no pod) |
-| Modify | `sandbox/manager/directory_manager.py` — write rendered SKILL.md after copying skills |
-| Modify | `server/features/build/AGENTS.template.md` — rewrite, remove `files/` and `{{KNOWLEDGE_SOURCES_SECTION}}` |
+| New | `sandbox/skills/rendering.py` |
+| New | `tests/external_dependency_unit/craft/test_company_search_skill.py` |
+| Modify | `configs.py` — add `SKILLS_TEMPLATE_PATH` constant |
+| Modify | `sandbox/manager/directory_manager.py` — `setup_skills()` changed from copy to symlink |
+| Modify | `configs/constants.py` — improve `DocumentSourceDescription` wording |
+| Modify | `sandbox/base.py` — add `write_sandbox_file()` abstract method |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — implement `write_sandbox_file()` |
+| Modify | `sandbox/local/local_sandbox_manager.py` — implement `write_sandbox_file()` |
+| Modify | `session/manager.py` — add `push_dynamic_skills()` |
+| Modify | `api/sessions_api.py` — call `push_dynamic_skills()` in restore path |
+| Modify | `AGENTS.template.md` — rewrite for onyx-cli search |
+| Modify | `sandbox/util/__init__.py` — remove stale exports (`build_knowledge_sources_section`, etc.) |
+| Modify | `sandbox/manager/test_directory_manager.py` — update tests for `setup_skills()` symlink change |
 
 #### PR 2 tests
 
@@ -339,26 +327,26 @@ Same changes for local backend: ensure PAT, inject env vars, render + write comp
 
 1. **Source list rendering.** Create test CC pairs, call `build_available_sources_section()`, assert correct sources and descriptions.
 2. **Empty sources.** User with no connectors → `"No connected sources available for this user."`.
-3. **Sub-scope examples.** Slack connector with channel config → channels appear in output.
+3. **Deduplication and format.** Multiple CC pairs for the same source produce one line; output lines match `- \`{source}\` — {description}` format.
 
 ---
 
-### PR 3: File Sync Removal + User Library Rework
+### PR 3: File Sync Removal (Pure Deletion)
 
-The breaking change. After this PR, `files/` is gone and connector documents are accessed only via search. User library files get a new delivery mechanism (shared volume + kubectl exec sync). Ship after verifying search works end-to-end in PR 2.
+Removal-only (~1500 lines deleted). After this PR, `files/` is gone and connector documents are accessed only via search. No new functionality — user library rework is deferred to PR 4. Ship after verifying search works end-to-end in PR 2.
 
 Grouped by subsystem for clarity, but ships as one PR.
 
 #### Pod spec
 
-**11. Remove S3 sidecar, add user library volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**11. Remove S3 sidecar and files volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
 In `_create_sandbox_pod()`:
 - Remove the `file-sync` sidecar container (`peakcom/s5cmd:v2.3.0`)
-- Replace the `files` EmptyDir volume (5Gi, previously for all connector docs) with a smaller `user-library` EmptyDir volume (~1Gi) mounted at `/workspace/user_library/`
-- Keep AWS credential injection on the **main container** (needed for `s5cmd` exec calls for user library sync) — remove the IRSA service account that was specific to the sidecar
+- Remove the `files` EmptyDir volume (5Gi)
+- Remove the IRSA service account that was specific to the sidecar
 
-Remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` from `configs.py`. **Keep `SANDBOX_S3_BUCKET`** — `S3PersistentDocumentWriter` (user library writes) and the new kubectl exec sync both depend on it.
+Remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` from `configs.py`. **Keep `SANDBOX_S3_BUCKET`** — `S3PersistentDocumentWriter` (user library writes) still depends on it.
 
 #### Session setup / restore
 
@@ -397,7 +385,7 @@ Update callers:
 - `LocalSandboxManager.setup_session_workspace()` — remove `files_path` argument
 - `KubernetesSandboxManager` — already passes `files_path=None`; remove the parameter
 
-Update `sandbox/util/__init__.py` — remove `build_knowledge_sources_section` export.
+`sandbox/util/__init__.py` exports were already removed in PR 2 — no further changes needed here.
 
 #### OpenCode config
 
@@ -415,37 +403,22 @@ Remove `/workspace/files`, `/workspace/files/**`, `/workspace/demo_data`, and `/
 
 #### Celery tasks
 
-**18. Rework `sync_sandbox_files` into user-library-only sync** (`sandbox/tasks/tasks.py`)
+**18. Remove `sync_sandbox_files` task and helpers** (`sandbox/tasks/tasks.py`)
 
-Replace the current `sync_sandbox_files()` task (~lines 324-394) with a narrower `sync_user_library_files()` task that:
-1. Finds the user's running sandbox via `get_sandbox_by_user_id()`
-2. Runs a one-shot `kubectl exec` in the main container (not a sidecar): `s5cmd sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/`
-3. Returns immediately — no persistent process
+Remove the current `sync_sandbox_files()` task (~lines 324-394) entirely. Connector documents no longer need filesystem sync — they're accessed via search.
 
-Delete `_get_disabled_user_library_paths()` helper (~lines 272-315) — filtered symlinks are gone; the agent sees all user library files.
+Delete `_get_disabled_user_library_paths()` helper (~lines 272-315) — filtered symlinks are gone.
 
-**19. Update task dispatches**
+#### Task dispatches
+
+**19. Remove file sync dispatches**
 
 - `background/indexing/run_docfetching.py` (~lines 940-958): remove the `SANDBOX_FILE_SYNC` dispatch entirely. Connector documents no longer need filesystem sync — they're accessed via search.
-- `server/features/build/api/user_library.py` (~line 223): replace `SANDBOX_FILE_SYNC` dispatch with `SYNC_USER_LIBRARY_FILES` dispatch. This triggers the new kubectl exec sync so uploaded files appear in the sandbox immediately.
-
-#### User library sync at session setup
-
-**20. Sync user library on workspace setup** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
-
-In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
-
-```bash
-s5cmd sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/*" /workspace/user_library/
-```
-
-This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
-
-Add `/workspace/user_library` and `/workspace/user_library/**` to the `external_directory` allowlist in `opencode_config.py`.
+- `server/features/build/api/user_library.py` (~line 223): remove the `SANDBOX_FILE_SYNC` dispatch. (User library upload sync is re-added in PR 4.)
 
 #### Local sandbox
 
-**21. Remove local file sync infrastructure** (`sandbox/manager/directory_manager.py`, `sandbox/local/local_sandbox_manager.py`)
+**20. Remove local file sync infrastructure** (`sandbox/manager/directory_manager.py`, `sandbox/local/local_sandbox_manager.py`)
 
 Remove `setup_files_symlink()`, `_setup_filtered_files()`, `_setup_filtered_user_library()` from `DirectoryManager`.
 
@@ -453,7 +426,7 @@ Remove file-system path construction using `PERSISTENT_DOCUMENT_STORAGE_PATH` fr
 
 #### Persistent document writer
 
-**22. Remove connector document write path, keep user library write path** (`persistent_document_writer.py`, `run_docfetching.py`)
+**21. Remove connector document write path, keep user library write path** (`persistent_document_writer.py`, `run_docfetching.py`)
 
 In `run_docfetching.py`: remove the `get_persistent_document_writer()` import and the code block (~lines 790-818) that writes indexed connector documents to persistent storage. This is the connector-document serialization path — dead now that search replaces file access.
 
@@ -461,9 +434,9 @@ In `persistent_document_writer.py`: remove `write_documents()`, `serialize_docum
 
 #### Demo data
 
-**23. Remove demo data** (`sandbox/kubernetes/docker/Dockerfile`, `sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+**22. Remove demo data** (`sandbox/kubernetes/docker/Dockerfile`, `sandbox/kubernetes/kubernetes_sandbox_manager.py`)
 
-Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its extraction). Remove the demo-data symlink path in `setup_session_workspace()` and `_regenerate_session_config()`. Remove `/workspace/demo_data` allowlist rules from `opencode_config.py` (covered by step 17). Demo data is no longer a supported path.
+Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its extraction). Remove the demo-data symlink path in `setup_session_workspace()` and `_regenerate_session_config()`. Remove `/workspace/demo_data` allowlist rules from `opencode_config.py` (covered by step 16). Demo data is no longer a supported path.
 
 #### Deleted files
 
@@ -479,17 +452,17 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 |--------|------|
 | Delete | `sandbox/kubernetes/docker/generate_agents_md.py` |
 | Delete | `tests/external_dependency_unit/craft/test_persistent_document_writer.py` |
-| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — remove sidecar (replace with user-library volume), remove files/ symlink, remove `generate_agents_md.py` calls, remove `sync_files()`, remove `_build_filtered_symlink_script()`, add user library sync via kubectl exec in setup + restore |
-| Modify | `sandbox/kubernetes/docker/Dockerfile` — remove `files/` mkdir, remove `generate_agents_md.py` copy, remove `demo_data.zip` copy + extraction, add `mkdir -p /workspace/user_library` |
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — remove sidecar, remove files volume, remove files/ symlink, remove `generate_agents_md.py` calls, remove `sync_files()`, remove `_build_filtered_symlink_script()` |
+| Modify | `sandbox/kubernetes/docker/Dockerfile` — remove `files/` mkdir, remove `generate_agents_md.py` copy, remove `demo_data.zip` copy + extraction |
 | Modify | `sandbox/util/agent_instructions.py` — remove `CONNECTOR_INFO`, `build_knowledge_sources_section()`, helpers, `files_path` param |
-| Modify | `sandbox/util/__init__.py` — remove export |
-| Modify | `sandbox/util/opencode_config.py` — remove `/workspace/files` allowlist, add `/workspace/user_library` allowlist |
+| Modify | `sandbox/util/__init__.py` — already cleared in PR 2; no further changes needed |
+| Modify | `sandbox/util/opencode_config.py` — remove `/workspace/files` and `/workspace/demo_data` allowlists |
 | Modify | `sandbox/base.py` — remove `sync_files()` abstract method |
 | Modify | `sandbox/local/local_sandbox_manager.py` — remove `sync_files()` impl, remove files/ setup |
 | Modify | `sandbox/manager/directory_manager.py` — remove file symlink helpers |
-| Modify | `sandbox/tasks/tasks.py` — replace `sync_sandbox_files` with `sync_user_library_files`, delete `_get_disabled_user_library_paths()` |
+| Modify | `sandbox/tasks/tasks.py` — remove `sync_sandbox_files` task, delete `_get_disabled_user_library_paths()` |
 | Modify | `background/indexing/run_docfetching.py` — remove persistent writer call + `SANDBOX_FILE_SYNC` dispatch |
-| Modify | `server/features/build/api/user_library.py` — replace `SANDBOX_FILE_SYNC` dispatch with `SYNC_USER_LIBRARY_FILES` |
+| Modify | `server/features/build/api/user_library.py` — remove `SANDBOX_FILE_SYNC` dispatch |
 | Modify | `server/features/build/indexing/persistent_document_writer.py` — remove `write_documents()`, `serialize_document()`, path builder helpers; keep `write_raw_file()`, `delete_raw_file()`, factory |
 | Modify | `server/features/build/session/manager.py` — remove `PERSISTENT_DOCUMENT_STORAGE_PATH` usage |
 | Modify | `server/features/build/configs.py` — remove `SANDBOX_FILE_SYNC_SERVICE_ACCOUNT` (keep `SANDBOX_S3_BUCKET`) |
@@ -507,5 +480,73 @@ Remove `demo_data/` from the Docker image (the `COPY` of `demo_data.zip` and its
 2. Same query in Onyx chat — top results should overlap.
 3. `find files/` returns nothing.
 4. Session with no sources — SKILL.md says so, agent doesn't hallucinate.
-5. Upload a spreadsheet via user library, verify it appears at `/workspace/user_library/` in the sandbox.
-6. Upload a file mid-session, verify the agent can access it without restarting.
+
+---
+
+### PR 4: User Library Rework (Net New)
+
+New delivery mechanism for raw user library files. With the sidecar removed in PR 3, user library files (spreadsheets, PDFs, etc.) need a new path into the sandbox. This PR adds a shared `/workspace/user_library/` volume, kubectl exec sync, and a Celery task to keep it up to date.
+
+#### Pod spec
+
+**23. Add user library volume** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+
+In `_create_sandbox_pod()`:
+- Add a `user-library` EmptyDir volume (~1Gi) mounted at `/workspace/user_library/`
+- Keep AWS credential injection on the **main container** (needed for `aws s3` exec calls for user library sync)
+
+#### Celery tasks
+
+**24. Add `sync_user_library_files` task** (`sandbox/tasks/tasks.py`)
+
+New `sync_user_library_files()` Celery task that:
+1. Finds the user's running sandbox via `get_sandbox_by_user_id()`
+2. Runs a one-shot `kubectl exec` in the main container (not a sidecar): `aws s3 sync s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/ /workspace/user_library/`
+3. Returns immediately — no persistent process
+
+#### Task dispatches
+
+**25. Add user library sync dispatch on upload**
+
+- `server/features/build/api/user_library.py` (~line 223): add `SYNC_USER_LIBRARY_FILES` dispatch. This triggers the new kubectl exec sync so uploaded files appear in the sandbox immediately.
+
+#### User library sync at session setup
+
+**26. Sync user library on workspace setup** (`sandbox/kubernetes/kubernetes_sandbox_manager.py`)
+
+In `setup_session_workspace()` and `restore_snapshot()`, after creating the session directory, run the same one-shot sync:
+
+```bash
+aws s3 sync "s3://{bucket}/{tenant}/knowledge/{user_id}/user_library/" /workspace/user_library/
+```
+
+This populates the shared directory on first session and on resume (pulling any files uploaded while the pod was sleeping). Sessions access files at `/workspace/user_library/` directly — no symlink needed since it's a pod-level shared directory.
+
+#### OpenCode config
+
+**27. Add user library allowlist** (`sandbox/util/opencode_config.py`)
+
+Add `/workspace/user_library` and `/workspace/user_library/**` to the `external_directory` allowlist in `opencode_config.py`.
+
+#### Dockerfile
+
+**28. Add user library directory** (`sandbox/kubernetes/docker/Dockerfile`)
+
+Add `mkdir -p /workspace/user_library` to the Dockerfile.
+
+#### PR 4 file changes
+
+| Action | File |
+|--------|------|
+| Modify | `sandbox/kubernetes/kubernetes_sandbox_manager.py` — add user-library volume, add user library sync via kubectl exec in setup + restore |
+| Modify | `sandbox/kubernetes/docker/Dockerfile` — add `mkdir -p /workspace/user_library` |
+| Modify | `sandbox/util/opencode_config.py` — add `/workspace/user_library` allowlist |
+| Modify | `sandbox/tasks/tasks.py` — add `sync_user_library_files` task |
+| Modify | `server/features/build/api/user_library.py` — add `SYNC_USER_LIBRARY_FILES` dispatch |
+
+#### PR 4 tests
+
+**Smoke tests** (before merging):
+
+1. Upload a spreadsheet via user library, verify it appears at `/workspace/user_library/` in the sandbox.
+2. Upload a file mid-session, verify the agent can access it without restarting.

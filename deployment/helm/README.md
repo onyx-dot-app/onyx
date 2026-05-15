@@ -1,3 +1,28 @@
+# Recent chart changes (0.5.0)
+
+If you are upgrading from an earlier 0.4.x release, note:
+
+* **Redis** — the chart now bundles the `redis-operator` subchart alongside the
+  `redis` subchart. The operator installs the CRD that the Redis CR binds to,
+  so `helm install` works on a clean cluster without a separate CRD step.
+* **PostgreSQL** — a CloudNativePG `Cluster` CR is now rendered from
+  `templates/postgres-cluster.yaml`, so `helm install` provisions postgres
+  out of the box. The Cluster is named `<release>-pg` (service:
+  `<release>-pg-rw`). Set `postgresql.enabled: false` and override
+  `configMap.POSTGRES_HOST` if you use an external database (RDS, etc.).
+* **REDIS_HOST** — the configmap no longer appends `-master` to the redis
+  service name. If you previously overrode `REDIS_HOST` or had clients that
+  hard-coded the `-master` suffix, update them to point at the
+  redis-operator standalone service.
+* **CNPG CRDs** — copied into `crds/cnpg-crds.yaml` so Helm pre-installs
+  them before templates. The subchart's own CRD template is disabled
+  (`postgresql.crds.create: false`). Run `scripts/check-cnpg-crds.sh` after
+  bumping the CNPG subchart version to verify the copy is in sync.
+* **Pre-delete hook** — a cleanup Job (`templates/pre-delete-cleanup.yaml`)
+  deletes operator-managed CRs before `helm uninstall` tears down the
+  operators, ensuring finalizers are processed and namespace cleanup
+  completes promptly.
+
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
 * cd charts/onyx

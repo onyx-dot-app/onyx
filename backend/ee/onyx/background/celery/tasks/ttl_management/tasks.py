@@ -23,7 +23,10 @@ logger = setup_logger()
     trail=False,
 )
 def perform_ttl_management_task(
-    self: Task, retention_limit_days: int, *, tenant_id: str  # noqa: ARG001
+    self: Task,
+    retention_limit_days: int,
+    *,
+    tenant_id: str,  # noqa: ARG001
 ) -> None:
     task_id = self.request.id
     if not task_id:
@@ -33,7 +36,6 @@ def perform_ttl_management_task(
     session_id: UUID | None = None
     try:
         with get_session_with_current_tenant() as db_session:
-
             old_chat_sessions = get_chat_sessions_older_than(
                 retention_limit_days, db_session
             )

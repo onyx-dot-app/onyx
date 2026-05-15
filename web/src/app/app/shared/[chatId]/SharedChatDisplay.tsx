@@ -152,7 +152,7 @@ export default function SharedChatDisplay({
           )}
         </div>
 
-        <div className="w-full max-w-[50rem] mx-auto px-4 pb-4">
+        <div className="w-full max-w-200 mx-auto px-4 pb-4">
           <SharedAppInputBar />
         </div>
       </div>

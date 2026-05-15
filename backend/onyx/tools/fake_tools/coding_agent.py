@@ -133,8 +133,7 @@ def _run_bash_call(
     cmd = tool_call.tool_args.get(BASH_TOOL_CMD_KEY)
     if not isinstance(cmd, str):
         logger.warning(
-            "[coding_agent] bash tool call %s missing/non-string %r argument; "
-            "got %r",
+            "[coding_agent] bash tool call %s missing/non-string %r argument; got %r",
             tool_call.tool_call_id,
             BASH_TOOL_CMD_KEY,
             cmd,

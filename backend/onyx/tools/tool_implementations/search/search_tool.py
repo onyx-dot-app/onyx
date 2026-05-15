@@ -976,6 +976,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             citation_start=override_kwargs.starting_citation_num,
             limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
+            include_link=override_kwargs.include_link,
         )
 
         # End overall timing

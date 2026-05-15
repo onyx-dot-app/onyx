@@ -316,7 +316,7 @@ export function ResetPasswordModal({
             has been reset. Copy the new password below — it will not be shown
             again.
           </Text>
-          <code className="rounded-sm bg-background-neutral-02 px-3 py-2 text-sm select-all">
+          <code className="rounded-xs bg-background-neutral-02 px-3 py-2 text-sm select-all">
             {newPassword}
           </code>
         </div>

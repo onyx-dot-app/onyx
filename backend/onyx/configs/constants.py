@@ -93,6 +93,7 @@ POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_USER_FILE_PROCESSING_APP_NAME = (
     "celery_worker_user_file_processing"
 )
+POSTGRES_CELERY_WORKER_SCHEDULED_TASKS_APP_NAME = "celery_worker_scheduled_tasks"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -194,8 +195,6 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
-CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
-
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -288,6 +287,8 @@ class NotificationType(str, Enum):
     FEATURE_ANNOUNCEMENT = "feature_announcement"
     CONNECTOR_REPEATED_ERRORS = "connector_repeated_errors"
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
+    SCHEDULED_TASK_FAILED = "scheduled_task_failed"
+    SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
 
 
 class BlobType(str, Enum):
@@ -383,6 +384,7 @@ class FileOrigin(str, Enum):
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
+    SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
 
 
@@ -437,6 +439,9 @@ class OnyxCeleryQueues:
 
     # Sandbox processing queue
     SANDBOX = "sandbox"
+
+    # Scheduled tasks queue (Craft scheduled-task executor)
+    SCHEDULED_TASKS = "scheduled_tasks"
 
     OPENSEARCH_MIGRATION = "opensearch_migration"
 
@@ -498,9 +503,6 @@ class OnyxRedisLocks:
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
     CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
-
-    # Sandbox file sync
-    SANDBOX_FILE_SYNC_LOCK_PREFIX = "da_lock:sandbox_file_sync"
 
 
 class OnyxRedisSignals:
@@ -631,8 +633,10 @@ class OnyxCeleryTask:
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
-    # Sandbox file sync
-    SANDBOX_FILE_SYNC = "sandbox_file_sync"
+    # Scheduled tasks (Craft)
+    SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"
+    SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
+    SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"
@@ -674,58 +678,56 @@ NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1
 
 # TODO: this should be stored likely in database
 DocumentSourceDescription: dict[DocumentSource, str] = {
-    # Special case, document passed in via Onyx APIs without specifying a source type
-    DocumentSource.INGESTION_API: "ingestion_api",
-    DocumentSource.SLACK: "slack channels for discussions and collaboration",
-    DocumentSource.WEB: "indexed web pages",
-    DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
-    DocumentSource.GMAIL: "email messages",
-    DocumentSource.GITHUB: "github data (issues, PRs)",
-    DocumentSource.GITBOOK: "gitbook data",
-    DocumentSource.GITLAB: "gitlab data",
-    DocumentSource.BITBUCKET: "bitbucket data",
-    DocumentSource.GURU: "guru data",
-    DocumentSource.BOOKSTACK: "bookstack data",
-    DocumentSource.OUTLINE: "outline data",
-    DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
-    DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
-    DocumentSource.SLAB: "slab data",
-    DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
-    DocumentSource.FILE: "files",
-    DocumentSource.CANVAS: "canvas lms - courses, pages, assignments, and announcements",
-    DocumentSource.CODA: "coda - team workspace with docs, tables, and pages",
-    DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
-project management, and collaboration tools into a single, customizable platform",
-    DocumentSource.ZULIP: "zulip data",
-    DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
-    DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",
-    DocumentSource.DOCUMENT360: "document360 data",
-    DocumentSource.GONG: "gong - call transcripts",
-    DocumentSource.GOOGLE_SITES: "google_sites - websites",
-    DocumentSource.ZENDESK: "zendesk - customer support data",
-    DocumentSource.LOOPIO: "loopio - rfp data",
-    DocumentSource.DROPBOX: "dropbox - files",
-    DocumentSource.SHAREPOINT: "sharepoint - files",
-    DocumentSource.TEAMS: "teams - chat and collaboration",
-    DocumentSource.SALESFORCE: "salesforce - CRM data",
-    DocumentSource.DISCOURSE: "discourse - discussion forums",
-    DocumentSource.AXERO: "axero - employee engagement data",
-    DocumentSource.CLICKUP: "clickup - project management tool",
-    DocumentSource.MEDIAWIKI: "mediawiki - wiki data",
-    DocumentSource.WIKIPEDIA: "wikipedia - encyclopedia data",
-    DocumentSource.ASANA: "asana",
-    DocumentSource.S3: "s3",
-    DocumentSource.R2: "r2",
-    DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
-    DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
-    DocumentSource.XENFORO: "xenforo - forum data",
-    DocumentSource.DISCORD: "discord - chat and collaboration",
-    DocumentSource.FRESHDESK: "freshdesk - customer support data",
-    DocumentSource.FIREFLIES: "fireflies - call transcripts",
-    DocumentSource.EGNYTE: "egnyte - files",
-    DocumentSource.AIRTABLE: "airtable - database",
-    DocumentSource.HIGHSPOT: "highspot - CRM data",
-    DocumentSource.DRUPAL_WIKI: "drupal wiki - knowledge base content (pages, spaces, attachments)",
-    DocumentSource.IMAP: "imap - email data",
-    DocumentSource.TESTRAIL: "testrail - test case management tool for QA processes",
+    DocumentSource.INGESTION_API: "Documents ingested via API",
+    DocumentSource.SLACK: "Team messages and channel discussions",
+    DocumentSource.WEB: "Indexed web pages",
+    DocumentSource.GOOGLE_DRIVE: "Documents, spreadsheets, and presentations",
+    DocumentSource.GMAIL: "Email conversations and threads",
+    DocumentSource.GITHUB: "Pull requests, issues, and code reviews",
+    DocumentSource.GITBOOK: "Documentation and knowledge base pages",
+    DocumentSource.GITLAB: "Merge requests, issues, and code",
+    DocumentSource.BITBUCKET: "Pull requests, issues, and code",
+    DocumentSource.GURU: "Knowledge cards and collections",
+    DocumentSource.BOOKSTACK: "Documentation and knowledge base pages",
+    DocumentSource.OUTLINE: "Documentation and knowledge base pages",
+    DocumentSource.CONFLUENCE: "Wiki pages, spaces, and documentation",
+    DocumentSource.JIRA: "Issues, tickets, and project tracking",
+    DocumentSource.SLAB: "Documentation and knowledge base pages",
+    DocumentSource.PRODUCTBOARD: "Product management boards and insights",
+    DocumentSource.FILE: "Uploaded files",
+    DocumentSource.CANVAS: "Courses, pages, and assignments",
+    DocumentSource.CODA: "Documents, tables, and team workspace pages",
+    DocumentSource.NOTION: "Documentation, notes, and project pages",
+    DocumentSource.ZULIP: "Chat messages and topic discussions",
+    DocumentSource.LINEAR: "Engineering and product tickets",
+    DocumentSource.HUBSPOT: "CRM data, contacts, and deals",
+    DocumentSource.DOCUMENT360: "Knowledge base articles and documentation",
+    DocumentSource.GONG: "Sales call recordings and transcripts",
+    DocumentSource.GOOGLE_SITES: "Website pages and content",
+    DocumentSource.ZENDESK: "Support tickets and help articles",
+    DocumentSource.LOOPIO: "RFP responses and content library",
+    DocumentSource.DROPBOX: "Cloud-stored files and folders",
+    DocumentSource.SHAREPOINT: "Documents and team sites",
+    DocumentSource.TEAMS: "Chat messages and channels",
+    DocumentSource.SALESFORCE: "Sales data, accounts, and opportunities",
+    DocumentSource.DISCOURSE: "Community forums and discussions",
+    DocumentSource.AXERO: "Employee engagement and intranet content",
+    DocumentSource.CLICKUP: "Tasks and project management",
+    DocumentSource.MEDIAWIKI: "Wiki pages and articles",
+    DocumentSource.WIKIPEDIA: "Encyclopedia articles",
+    DocumentSource.ASANA: "Tasks and project management",
+    DocumentSource.S3: "Cloud-stored files and objects",
+    DocumentSource.R2: "Cloud-stored files and objects",
+    DocumentSource.GOOGLE_CLOUD_STORAGE: "Cloud-stored files and objects",
+    DocumentSource.OCI_STORAGE: "Cloud-stored files and objects",
+    DocumentSource.XENFORO: "Forum threads and discussions",
+    DocumentSource.DISCORD: "Chat messages and server discussions",
+    DocumentSource.FRESHDESK: "Support tickets and customer queries",
+    DocumentSource.FIREFLIES: "Meeting transcripts and recordings",
+    DocumentSource.EGNYTE: "Cloud-stored files and documents",
+    DocumentSource.AIRTABLE: "Structured data and records",
+    DocumentSource.HIGHSPOT: "Sales enablement content and pitches",
+    DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
+    DocumentSource.IMAP: "Email messages and threads",
+    DocumentSource.TESTRAIL: "Test cases and QA management",
 }
