@@ -52,6 +52,7 @@
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js"
     },
+    "./root.css": "./dist/root.css",
     "./colors.css": "./dist/colors.css",
     "./styles.css": "./dist/styles.css",
     "./tailwind-preset": "./tailwind-preset.cjs"

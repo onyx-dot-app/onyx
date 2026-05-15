@@ -1,10 +1,10 @@
+@import "@onyx-ai/opal/root.css";
 @import "./css/attachment-button.css" layer(base);
 @import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
 @import "./css/code.css" layer(base);
 @import "./css/color-swatch.css" layer(base);
-@import "@onyx-ai/opal/colors.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
 @import "./css/inputs.css" layer(base);
@@ -16,9 +16,6 @@
 @import "./css/z-index.css" layer(base);
 
 /* KH Teka Font */
-
-@import "tailwindcss";
-@import "tw-animate-css";
 
 @config '../../tailwind.config.js';
 

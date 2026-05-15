@@ -65,3 +65,9 @@ const colorsRaw = readFileSync(colorsCss, "utf8");
 writeFileSync(join(distDir, "colors.css"), colorsRaw);
 
 console.log(`copied colors.css -> dist/colors.css (${colorsRaw.length} bytes)`);
+
+// root.css = colors + styles in a single file so consumers need only one import.
+const rootBundled = colorsRaw.trimEnd() + "\n\n" + bundled;
+writeFileSync(join(distDir, "root.css"), rootBundled);
+
+console.log(`bundled root.css -> dist/root.css (${rootBundled.length} bytes)`);
