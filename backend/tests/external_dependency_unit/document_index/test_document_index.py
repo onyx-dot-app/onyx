@@ -12,8 +12,12 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from onyx.configs.constants import PUBLIC_DOC_PAT
+from onyx.context.search.models import IndexFilters
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
+from onyx.document_index.interfaces_new import DocumentSectionRequest
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
@@ -31,9 +35,9 @@ from tests.external_dependency_unit.document_index.conftest import (
     make_indexing_metadata,
 )
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -71,27 +75,35 @@ def document_indices(
     yield [opensearch_document_index, vespa_document_index]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 class TestDocumentIndexNew:
-    """Tests the new DocumentIndex interface against real Vespa and OpenSearch."""
+    """
+    Tests the new DocumentIndex interface against real Vespa and OpenSearch.
+    """
 
     def test_index_single_new_doc(
         self,
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """Indexing a single new document returns one record with already_existed=False."""
+        """
+        Tests that indexing a single new document returns one record with
+        already_existed=False.
+        """
+        # Precondition.
         for document_index in document_indices:
             doc_id = f"test_single_new_{uuid.uuid4().hex[:8]}"
             chunk = make_chunk(doc_id)
             metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[1])
 
+            # Under test.
             results = document_index.index(chunks=[chunk], indexing_metadata=metadata)
 
+            # Postcondition.
             assert len(results) == 1
             assert results[0].document_id == doc_id
             assert results[0].already_existed is False
@@ -101,7 +113,11 @@ class TestDocumentIndexNew:
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """Re-indexing a doc with previous chunks returns already_existed=True."""
+        """
+        Tests that re-indexing a doc with previous chunks returns
+        already_existed=True.
+        """
+        # Precondition.
         for document_index in document_indices:
             doc_id = f"test_existing_{uuid.uuid4().hex[:8]}"
             chunk = make_chunk(doc_id)
@@ -119,10 +135,13 @@ class TestDocumentIndexNew:
             metadata_second = make_indexing_metadata(
                 [doc_id], old_counts=[1], new_counts=[1]
             )
+
+            # Under test.
             results = document_index.index(
                 chunks=[chunk], indexing_metadata=metadata_second
             )
 
+            # Postcondition.
             assert len(results) == 1
             assert results[0].already_existed is True
 
@@ -131,7 +150,11 @@ class TestDocumentIndexNew:
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """Indexing multiple documents returns one record per unique document."""
+        """
+        Tests that indexing multiple documents returns one record per unique
+        document.
+        """
+        # Precondition.
         for document_index in document_indices:
             doc1 = f"test_multi_1_{uuid.uuid4().hex[:8]}"
             doc2 = f"test_multi_2_{uuid.uuid4().hex[:8]}"
@@ -144,8 +167,10 @@ class TestDocumentIndexNew:
                 [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
             )
 
+            # Under test.
             results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
+            # Postcondition.
             result_map = {r.document_id: r.already_existed for r in results}
             assert len(result_map) == 2
             assert result_map[doc1] is False
@@ -156,15 +181,20 @@ class TestDocumentIndexNew:
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """Multiple chunks from the same document produce only one
-        DocumentInsertionRecord."""
+        """
+        Tests that multiple chunks from the same document produce only one
+        DocumentInsertionRecord.
+        """
+        # Precondition.
         for document_index in document_indices:
             doc_id = f"test_dedup_{uuid.uuid4().hex[:8]}"
             chunks = [make_chunk(doc_id, chunk_id=i) for i in range(5)]
             metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[5])
 
+            # Under test.
             results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
+            # Postcondition.
             assert len(results) == 1
             assert results[0].document_id == doc_id
 
@@ -173,8 +203,11 @@ class TestDocumentIndexNew:
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """A batch with both new and existing documents returns the correct
-        already_existed flag for each."""
+        """
+        Tests that a batch with both new and existing documents returns the
+        correct already_existed flag for each.
+        """
+        # Precondition.
         for document_index in document_indices:
             existing_doc = f"test_mixed_exist_{uuid.uuid4().hex[:8]}"
             new_doc = f"test_mixed_new_{uuid.uuid4().hex[:8]}"
@@ -186,7 +219,8 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
 
-            time.sleep(2)
+            # Allow near-real-time indexing to settle (needed for Vespa).
+            time.sleep(1)
 
             # Now index a batch with the existing doc and a new doc.
             chunks = [
@@ -197,8 +231,10 @@ class TestDocumentIndexNew:
                 [existing_doc, new_doc], old_counts=[1, 0], new_counts=[1, 1]
             )
 
+            # Under test.
             results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
+            # Postcondition.
             result_map = {r.document_id: r.already_existed for r in results}
             assert len(result_map) == 2
             assert result_map[existing_doc] is True
@@ -209,7 +245,10 @@ class TestDocumentIndexNew:
         document_indices: list[DocumentIndexNew],
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """index() accepts a generator (any iterable), not just a list."""
+        """
+        Tests that index() accepts a generator (any iterable), not just a list.
+        """
+        # Precondition.
         for document_index in document_indices:
             doc_id = f"test_gen_{uuid.uuid4().hex[:8]}"
             metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[3])
@@ -218,10 +257,12 @@ class TestDocumentIndexNew:
                 for i in range(3):
                     yield make_chunk(doc_id, chunk_id=i)
 
+            # Under test.
             results = document_index.index(
                 chunks=chunk_gen(), indexing_metadata=metadata
             )
 
+            # Postcondition.
             assert len(results) == 1
             assert results[0].document_id == doc_id
             assert results[0].already_existed is False
@@ -261,3 +302,164 @@ class TestDocumentIndexNew:
 
             # Postcondition.
             assert mock_verify_and_create_index_if_necessary.call_count == 1
+
+    def test_update_changes_boost_across_multiple_docs_in_single_request(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a single MetadataUpdateRequest covering multiple documents
+        (each with multiple chunks) updates the boost on every chunk of every
+        doc.
+        """
+        # Precondition.
+        for document_index in document_indices:
+            doc1 = f"test_update_boost_multi_1_{uuid.uuid4().hex[:8]}"
+            doc2 = f"test_update_boost_multi_2_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(doc1, chunk_id=0),
+                make_chunk(doc1, chunk_id=1),
+                make_chunk(doc1, chunk_id=2),
+                make_chunk(doc2, chunk_id=0),
+                make_chunk(doc2, chunk_id=1),
+            ]
+            metadata = make_indexing_metadata(
+                [doc1, doc2], old_counts=[0, 0], new_counts=[3, 2]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow near-real-time indexing to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Under test.
+            update_request = MetadataUpdateRequest(
+                document_ids=[doc1, doc2],
+                doc_id_to_chunk_cnt={doc1: 3, doc2: 2},
+                boost=7,
+            )
+            document_index.update([update_request])
+
+            # Allow near-real-time updating to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Postcondition.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            retrieved_doc1 = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+                filters=filters,
+            )
+            retrieved_doc2 = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+                filters=filters,
+            )
+            assert len(retrieved_doc1) == 3
+            assert len(retrieved_doc2) == 2
+            for chunk in retrieved_doc1 + retrieved_doc2:
+                assert chunk.boost == 7
+
+    def test_update_applies_each_request_independently(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that multiple MetadataUpdateRequests in a single update() call
+        each apply their own fields to their own documents.
+        """
+        # Precondition.
+        for document_index in document_indices:
+            doc1 = f"test_update_indep_1_{uuid.uuid4().hex[:8]}"
+            doc2 = f"test_update_indep_2_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(doc1, chunk_id=0),
+                make_chunk(doc1, chunk_id=1),
+                make_chunk(doc2, chunk_id=0),
+            ]
+            metadata = make_indexing_metadata(
+                [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow near-real-time indexing to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Under test - two separate requests, each updating a different doc.
+            req1 = MetadataUpdateRequest(
+                document_ids=[doc1],
+                doc_id_to_chunk_cnt={doc1: 2},
+                boost=3,
+            )
+            req2 = MetadataUpdateRequest(
+                document_ids=[doc2],
+                doc_id_to_chunk_cnt={doc2: 1},
+                boost=9,
+            )
+            document_index.update([req1, req2])
+
+            # Allow near-real-time updating to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Postcondition.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            retrieved_doc1 = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+                filters=filters,
+            )
+            retrieved_doc2 = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+                filters=filters,
+            )
+            assert len(retrieved_doc1) == 2
+            assert len(retrieved_doc2) == 1
+            for chunk in retrieved_doc1:
+                assert chunk.boost == 3
+            assert retrieved_doc2[0].boost == 9
+
+    def test_update_with_no_fields_does_not_modify_chunks(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a MetadataUpdateRequest with no update fields specified is a
+        no-op and the chunks remain retrievable with their original values.
+        """
+        # Precondition.
+        for document_index in document_indices:
+            doc_id = f"test_update_noop_{uuid.uuid4().hex[:8]}"
+            chunks = [make_chunk(doc_id, chunk_id=0), make_chunk(doc_id, chunk_id=1)]
+            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow near-real-time indexing to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Under test - no fields set.
+            update_request = MetadataUpdateRequest(
+                document_ids=[doc_id],
+                doc_id_to_chunk_cnt={doc_id: 2},
+            )
+            document_index.update([update_request])
+
+            # Allow near-real-time updating to settle (needed for Vespa).
+            time.sleep(1)
+
+            # Postcondition - chunks still retrievable with their default boost.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            retrieved = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+                filters=filters,
+            )
+            assert len(retrieved) == 2
+            for chunk in retrieved:
+                assert chunk.boost == 0
