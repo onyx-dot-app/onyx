@@ -300,7 +300,7 @@ class OpenSearchClient(AbstractContextManager):
         Returns:
             The raw cluster health response.
         """
-        if index:
+        if index is not None:
             return self._client.cluster.health(index=index, level=level)
         return self._client.cluster.health(level=level)
 
@@ -326,7 +326,7 @@ class OpenSearchClient(AbstractContextManager):
             A list of dicts, one per shard, with the requested columns as keys.
         """
         kwargs: dict[str, Any] = {"format": "json", "h": columns}
-        if index:
+        if index is not None:
             kwargs["index"] = index
         return self._client.cat.shards(**kwargs)
 
@@ -382,7 +382,7 @@ class OpenSearchClient(AbstractContextManager):
             The raw reroute response. Includes ``acknowledged`` and the
                 post-reroute cluster state.
         """
-        return self._client.cluster.reroute(params={"retry_failed": "true"})
+        return self._client.cluster.reroute(retry_failed=True)
 
     @log_function_time(print_only=True, debug_only=True)
     def ping(self) -> bool:
