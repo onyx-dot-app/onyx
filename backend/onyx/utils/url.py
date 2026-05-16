@@ -57,6 +57,54 @@ def _is_ip_private_or_reserved(ip_str: str) -> bool:
         return True
 
 
+def _is_always_blocked_ip(
+    ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """True if ``ip_obj`` falls into a class that must be blocked even when
+    private networks are otherwise allowed.
+
+    - Loopback (127.0.0.0/8, ::1): the application host's own loopback.
+      Reaching it exposes admin APIs, sidecars, etc.
+    - Unspecified (0.0.0.0, ::): commonly aliased to loopback by the kernel.
+    - Link-local (169.254.0.0/16, fe80::/10): cloud-metadata endpoints
+      (169.254.169.254 on AWS/GCP/Azure) live here. Opting into RFC1918
+      should NEVER open up IMDS — that's a credential exfiltration path.
+    """
+    return ip_obj.is_loopback or ip_obj.is_unspecified or ip_obj.is_link_local
+
+
+def _hostname_resolves_to_always_blocked_ip(hostname: str) -> str | None:
+    """Resolve ``hostname`` via DNS and return the first address in an
+    always-blocked class (loopback / unspecified / link-local), or None.
+
+    Used on the ``allow_private_network=True`` path to maintain the
+    always-blocked floor for DNS names — e.g. an attacker-controlled
+    record like ``loopback.attacker.com`` → 127.0.0.1, or
+    ``imds.attacker.com`` → 169.254.169.254, must not be reachable just
+    because private networks are otherwise allowed. RFC1918 results are
+    *not* flagged here; opting into those is the whole point of the flag.
+
+    Returns None on DNS failure — the actual request will fail naturally
+    if the name is unresolvable, and an internal-only name that's
+    legitimately reachable from the runtime but not from the validation
+    context shouldn't get spuriously rejected here.
+    """
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return None
+
+    for info in addr_info:
+        ip_str = str(info[4][0])
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if _is_always_blocked_ip(ip_obj):
+            return ip_str
+    return None
+
+
 def _validate_and_resolve_url(url: str) -> tuple[str, str, int]:
     """
     Validate a URL for SSRF and resolve it to a safe IP address.
@@ -145,6 +193,7 @@ def validate_outbound_http_url(
     *,
     allow_private_network: bool = False,
     https_only: bool = False,
+    block_loopback_and_link_local: bool = False,
 ) -> str:
     """
     Validate a URL that will be used by backend outbound HTTP calls.
@@ -153,6 +202,18 @@ def validate_outbound_http_url(
         url: The URL to validate.
         allow_private_network: If True, skip private/reserved IP checks.
         https_only: If True, reject http:// URLs (only https:// is allowed).
+        block_loopback_and_link_local: When ``allow_private_network=True``,
+            additionally reject URLs whose host (or DNS resolution) is in the
+            always-dangerous IP classes — loopback (127.0.0.0/8, ::1),
+            unspecified (0.0.0.0, ::), and link-local (169.254.0.0/16,
+            fe80::/10, which contains cloud-metadata endpoints). Default
+            False to preserve behavior for admin-configured callers (voice
+            API, sharepoint, hooks) where the operator typed the URL
+            themselves and reaching a local container at 127.0.0.1 is a
+            feature. Pass True for LLM-controlled paths like ``open_url``
+            where prompt-supplied URLs need a stricter floor regardless of
+            the network opt-out. No-op when ``allow_private_network=False``,
+            since the standard private-IP guard already covers these.
 
     Returns:
         A normalized URL string with surrounding whitespace removed.
@@ -187,6 +248,28 @@ def validate_outbound_http_url(
     if hostname in BLOCKED_HOSTNAMES:
         raise SSRFException(f"Access to hostname '{parsed.hostname}' is not allowed.")
 
+    if allow_private_network and block_loopback_and_link_local:
+        # Loopback / unspecified / link-local addresses are always rejected
+        # on this path even when private networks are otherwise allowed.
+        # Applies to both IP literals and DNS names — closes the cloud-
+        # metadata SSRF surface and the "DNS rebinding to loopback" surface.
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+        except ValueError:
+            blocked_ip = _hostname_resolves_to_always_blocked_ip(hostname)
+            if blocked_ip is not None:
+                raise SSRFException(
+                    f"Hostname '{parsed.hostname}' resolves to loopback/"
+                    f"unspecified/link-local IP '{blocked_ip}'. Access is "
+                    f"not allowed."
+                )
+        else:
+            if _is_always_blocked_ip(ip_obj):
+                raise SSRFException(
+                    f"Access to loopback/unspecified/link-local IP "
+                    f"'{parsed.hostname}' is not allowed."
+                )
+
     if not allow_private_network:
         _validate_and_resolve_url(normalized_url)
 
@@ -200,13 +283,36 @@ def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
+    allow_private_network: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
     Make a single GET request with SSRF protection (no redirect following).
 
     Returns the response which may be a redirect (3xx status).
+
+    When ``allow_private_network`` is True, the private-IP guard is skipped
+    so operators on trusted networks can fetch URLs that resolve to RFC1918
+    addresses (e.g. internal docs sites behind split-horizon DNS). Scheme,
+    credential, and blocked-hostname checks still apply, and the always-
+    dangerous IP classes (loopback / unspecified / link-local, which contains
+    cloud-metadata endpoints) remain blocked on this path since callers are
+    LLM-controlled and need a stricter floor than admin-configured paths.
     """
+    if allow_private_network:
+        validate_outbound_http_url(
+            url,
+            allow_private_network=True,
+            block_loopback_and_link_local=True,
+        )
+        return requests.get(
+            url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
 
@@ -259,6 +365,7 @@ def ssrf_safe_get(
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
     follow_redirects: bool = True,
+    allow_private_network: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -273,6 +380,10 @@ def ssrf_safe_get(
         headers: Optional headers to include in the request
         timeout: Request timeout in seconds
         follow_redirects: Whether to follow redirects (each redirect URL is validated)
+        allow_private_network: If True, allow URLs that resolve to private/internal
+            IPs. Use only when the operator has explicitly opted in (e.g. trusted
+            self-hosted deployment fetching internal docs). Scheme, credential, and
+            blocked-hostname checks still apply on each hop.
         **kwargs: Additional arguments passed to requests.get()
 
     Returns:
@@ -283,7 +394,13 @@ def ssrf_safe_get(
         ValueError: If the URL is malformed
         requests.RequestException: If the request fails
     """
-    response = _make_ssrf_safe_request(url, headers, timeout, **kwargs)
+    response = _make_ssrf_safe_request(
+        url,
+        headers,
+        timeout,
+        allow_private_network=allow_private_network,
+        **kwargs,
+    )
 
     if not follow_redirects:
         return response
@@ -314,7 +431,13 @@ def ssrf_safe_get(
 
         # Validate and follow the redirect (this will raise SSRFException if invalid)
         current_url = redirect_url
-        response = _make_ssrf_safe_request(redirect_url, headers, timeout, **kwargs)
+        response = _make_ssrf_safe_request(
+            redirect_url,
+            headers,
+            timeout,
+            allow_private_network=allow_private_network,
+            **kwargs,
+        )
 
     if response.is_redirect and redirect_count >= MAX_REDIRECTS:
         raise SSRFException(f"Too many redirects (max {MAX_REDIRECTS})")

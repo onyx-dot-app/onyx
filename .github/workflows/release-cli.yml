@@ -46,7 +46,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -102,7 +102,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -158,7 +158,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-cli
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v6.1.0

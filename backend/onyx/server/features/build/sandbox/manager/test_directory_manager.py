@@ -38,16 +38,12 @@ def temp_templates(temp_base_path: Path) -> dict[str, Path]:
     venv_template = templates_dir / "venv"
     venv_template.mkdir()
 
-    skills_path = templates_dir / "skills"
-    skills_path.mkdir()
-
     agent_instructions = templates_dir / "AGENTS.md"
     agent_instructions.write_text("# Agent Instructions\n")
 
     return {
         "outputs": outputs_template,
         "venv": venv_template,
-        "skills": skills_path,
         "agent_instructions": agent_instructions,
     }
 
@@ -61,7 +57,6 @@ def directory_manager(
         base_path=temp_base_path,
         outputs_template_path=temp_templates["outputs"],
         venv_template_path=temp_templates["venv"],
-        skills_path=temp_templates["skills"],
         agent_instructions_template_path=temp_templates["agent_instructions"],
     )
 
@@ -618,9 +613,8 @@ class TestSandboxDirectoryStructure:
         # Setup all components (these methods use sandbox_path as session path — legacy naming)
         directory_manager.setup_outputs_directory(sandbox_path)
         directory_manager.setup_venv(sandbox_path)
-        directory_manager.setup_agent_instructions(sandbox_path)
-        directory_manager.setup_skills(
-            sandbox_path, skills_target=directory_manager.skills_source_path
+        directory_manager.setup_agent_instructions(
+            sandbox_path, skills_section="No skills available."
         )
         directory_manager.setup_attachments_directory(sandbox_path)
         directory_manager.setup_opencode_config(
@@ -634,7 +628,6 @@ class TestSandboxDirectoryStructure:
         assert (sandbox_path / "outputs").exists()
         assert (sandbox_path / ".venv").exists()
         assert (sandbox_path / "AGENTS.md").exists()
-        assert (sandbox_path / ".opencode" / "skills").exists()
         assert (sandbox_path / "attachments").exists()
         assert (sandbox_path / "opencode.json").exists()
 
@@ -644,33 +637,3 @@ class TestSandboxDirectoryStructure:
             "options"
         ]
         assert model_options["thinking"]["type"] == "enabled"
-
-    def test_setup_skills_symlinks_to_target(
-        self,
-        directory_manager: DirectoryManager,
-        temp_base_path: Path,  # noqa: ARG002
-        temp_templates: dict[str, Path],
-    ) -> None:
-        """Test that setup_skills creates a symlink to the target directory."""
-        sandbox_path = directory_manager.create_sandbox_directory("test_skills")
-        session_path = directory_manager.create_session_directory(sandbox_path, "sess1")
-        skills_dest = session_path / ".opencode" / "skills"
-        skills_target = temp_templates["skills"]
-
-        test_skill_dir = skills_target / "test-skill"
-        test_skill_dir.mkdir()
-        (test_skill_dir / "SKILL.md").write_text("# Test Skill")
-
-        directory_manager.setup_skills(session_path, skills_target=skills_target)
-
-        assert skills_dest.is_symlink()
-        assert skills_dest.resolve() == skills_target.resolve()
-        assert (skills_dest / "test-skill" / "SKILL.md").read_text() == "# Test Skill"
-
-        # Updating the source is visible through the symlink
-        (test_skill_dir / "SKILL.md").write_text("# Updated")
-        assert (skills_dest / "test-skill" / "SKILL.md").read_text() == "# Updated"
-
-        # Calling again replaces the symlink cleanly
-        directory_manager.setup_skills(session_path, skills_target=skills_target)
-        assert skills_dest.is_symlink()

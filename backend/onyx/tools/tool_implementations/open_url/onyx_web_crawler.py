@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.configs.app_configs import OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED
+from onyx.configs.app_configs import OPEN_URL_VALIDATE_SSRF
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.tools.tool_implementations.open_url.models import WebContent
@@ -170,12 +171,14 @@ class OnyxWebCrawler(WebContentProvider):
         max_pdf_size_bytes: int | None = None,
         max_html_size_bytes: int | None = None,
         playwright_fallback_enabled: bool = OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED,
+        validate_ssrf: bool = OPEN_URL_VALIDATE_SSRF,
     ) -> None:
         self._read_timeout_seconds = timeout_seconds
         self._connect_timeout_seconds = connect_timeout_seconds
         self._max_pdf_size_bytes = max_pdf_size_bytes
         self._max_html_size_bytes = max_html_size_bytes
         self._playwright_fallback_enabled = playwright_fallback_enabled
+        self._validate_ssrf = validate_ssrf
         self._headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -207,6 +210,7 @@ class OnyxWebCrawler(WebContentProvider):
                 url,
                 headers=self._headers,
                 timeout=(self._connect_timeout_seconds, self._read_timeout_seconds),
+                allow_private_network=not self._validate_ssrf,
             )
         except SSRFException as exc:
             logger.error(
@@ -330,7 +334,9 @@ class OnyxWebCrawler(WebContentProvider):
               or rendered HTML didn't parse to anything). Caller should fall
               back to its own status-based failure reason.
         """
-        rendered: RenderedPage | None = fetch_rendered_html(url)
+        rendered: RenderedPage | None = fetch_rendered_html(
+            url, allow_private_network=not self._validate_ssrf
+        )
         if rendered is None:
             return None
 

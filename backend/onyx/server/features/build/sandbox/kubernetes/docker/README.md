@@ -7,7 +7,7 @@ This directory contains the Dockerfile and resources for building the Onyx Craft
 ```
 docker/
 ├── Dockerfile              # Main container image definition
-├── skills/                 # Agent skills (company-search, image-generation, pptx, etc.)
+├── skills/                 # Built-in skill sources (pushed at session setup, not baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
@@ -79,12 +79,13 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ## What's Baked Into the Image
 
 - **Base**: `node:20-slim` (Debian-based)
-- **Skills**: `/workspace/skills/` — agent skills (company-search, image-generation, pptx)
 - **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
 - **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
 - **AWS CLI**: For S3 snapshot operations
+
+Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 
 ## Runtime Directory Structure
 
@@ -92,12 +93,12 @@ When a session is created, the following structure is set up in the pod:
 
 ```
 /workspace/
-├── skills/                 # Baked into image (agent skills)
+├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/
         ├── .opencode/
-        │   └── skills/     # Symlink to /workspace/skills
+        │   └── skills      # Symlink → /workspace/managed/skills
         ├── outputs/        # Copied from templates, contains web app
         ├── attachments/    # User-uploaded files
         ├── org_info/       # Demo persona info (if demo mode)

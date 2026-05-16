@@ -221,6 +221,7 @@ def session_workspace(
         session_id=session_id,
         llm_config=llm_config,
         nextjs_port=nextjs_port,
+        skills_section="No skills available.",
     )
 
     yield sandbox_record, session_id

@@ -679,7 +679,7 @@ export default function useChatController({
           ? RetrievalType.SelectedDocs
           : RetrievalType.None;
       let documents: OnyxDocument[] = selectedDocuments;
-      let citations: CitationMap | null = null;
+      let citations: CitationMap = {};
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
@@ -707,8 +707,8 @@ export default function useChatController({
       const documentsPerModel: OnyxDocument[][] = isMultiModel
         ? Array.from({ length: numModels }, () => [])
         : [];
-      const citationsPerModel: (CitationMap | null)[] = isMultiModel
-        ? Array(numModels).fill(null)
+      const citationsPerModel: CitationMap[] = isMultiModel
+        ? Array.from({ length: numModels }, () => ({}))
         : [];
       // Track which models have errored so the bottom-of-loop upsert skips them
       const erroredModelIndices = new Set<number>();
@@ -774,7 +774,7 @@ export default function useChatController({
         pendingFlush = false;
 
         parentMessage =
-          parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
+          parentMessage || currentMessageTreeLocal!.get(SYSTEM_NODE_ID)!;
 
         let messagesToUpsert: Message[];
 
@@ -1170,7 +1170,7 @@ export default function useChatController({
                       document_id: string;
                     };
                     citationsPerModel[modelIndex] = {
-                      ...(citationsPerModel[modelIndex] || {}),
+                      ...citationsPerModel[modelIndex],
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
                   } else if (packetObj.type === "message_start") {
@@ -1200,7 +1200,7 @@ export default function useChatController({
                     document_id: string;
                   };
                   citations = {
-                    ...(citations || {}),
+                    ...citations,
                     [citationInfo.citation_number]: citationInfo.document_id,
                   };
                 } else if (packetObj.type === "message_start") {

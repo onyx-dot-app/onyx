@@ -10,10 +10,7 @@
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
 
-import {
-  LLM_ADMIN_URL,
-  LLM_PROVIDERS_ADMIN_URL,
-} from "@/lib/languageModels/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   OllamaModelResponse,
   OpenRouterModelResponse,
@@ -39,7 +36,7 @@ import {
  */
 export async function testDefaultProvider(): Promise<boolean> {
   try {
-    const response = await fetch(`${LLM_ADMIN_URL}/test/default`, {
+    const response = await fetch("/api/admin/llm/test/default", {
       method: "POST",
     });
     return response?.ok || false;
@@ -58,7 +55,7 @@ export async function setDefaultLlmModel(
   providerId: number,
   modelName: string
 ): Promise<void> {
-  const response = await fetch(`${LLM_ADMIN_URL}/default`, {
+  const response = await fetch("/api/admin/llm/default", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -84,8 +81,8 @@ export async function deleteLlmProvider(
   force = false
 ): Promise<void> {
   const url = force
-    ? `${LLM_PROVIDERS_ADMIN_URL}/${providerId}?force=true`
-    : `${LLM_PROVIDERS_ADMIN_URL}/${providerId}`;
+    ? `${SWR_KEYS.adminLlmProviders}/${providerId}?force=true`
+    : `${SWR_KEYS.adminLlmProviders}/${providerId}`;
   const response = await fetch(url, { method: "DELETE" });
 
   if (!response.ok) {
@@ -510,9 +507,9 @@ export const fetchLiteLLMProxyModels = async (
       name: modelData.model_name,
       display_name: modelData.model_name,
       is_visible: true,
-      max_input_tokens: null,
-      supports_image_input: false,
-      supports_reasoning: false,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: modelData.supports_reasoning,
     }));
 
     return { models };

@@ -12,9 +12,7 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import User
-from onyx.server.features.build.sandbox.skills.rendering import (
-    build_available_sources_section,
-)
+from onyx.skills.rendering import build_available_sources_section
 
 
 def _create_cc_pair(

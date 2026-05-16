@@ -23,7 +23,7 @@ import {
   getDefaultLlmSelection,
 } from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/interfaces/llm";
-import { LLM_PROVIDERS_ADMIN_URL } from "@/lib/languageModels/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
 import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
@@ -249,7 +249,7 @@ export default function BuildOnboardingModal({
 
     try {
       const response = await fetch(
-        `${LLM_PROVIDERS_ADMIN_URL}?is_creation=true`,
+        `${SWR_KEYS.adminLlmProviders}?is_creation=true`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -268,9 +268,12 @@ export default function BuildOnboardingModal({
       if (!llmProviders || llmProviders.length === 0) {
         const newProvider = await response.json();
         if (newProvider?.id) {
-          await fetch(`${LLM_PROVIDERS_ADMIN_URL}/${newProvider.id}/default`, {
-            method: "POST",
-          });
+          await fetch(
+            `${SWR_KEYS.adminLlmProviders}/${newProvider.id}/default`,
+            {
+              method: "POST",
+            }
+          );
         }
       }
 

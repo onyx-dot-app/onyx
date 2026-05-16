@@ -22,7 +22,7 @@ export function ApiKeyField({ providerLabel, apiKeyUrl }: ApiKeyFieldProps) {
           : `Paste your API key from ${providerLabel} to connect.`
       )}
     >
-      <PasswordInputTypeInField name="api_key" showClearButton={false} />
+      <PasswordInputTypeInField name="api_key" placeholder="API Key" />
     </InputVertical>
   );
 }

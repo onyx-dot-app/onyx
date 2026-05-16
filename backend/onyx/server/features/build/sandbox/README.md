@@ -25,11 +25,13 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Automatic snapshots to S3
    - Auto-cleanup of idle sandboxes
    - Production-ready with resource isolation
+   - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
 ### Directory Structure
 
 ```
 /workspace/                          # Sandbox root (in container)
+├── managed/skills/                  # Skills pushed at session setup
 ├── outputs/                         # Working directory
 │   ├── web/                        # Lightweight Next.js app (shadcn/ui, Recharts)
 │   ├── slides/                     # Generated presentations
@@ -40,7 +42,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
 ├── attachments/                    # User uploads
 ├── AGENTS.md                       # Agent instructions
 └── .opencode/
-    └── skills/                     # Agent skills
+    └── skills                      # Symlink → /workspace/managed/skills
 ```
 
 ## Setup

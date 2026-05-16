@@ -224,6 +224,7 @@ include = ["backend"]
 exclude = [
     "**/generated/**",
     "**/.venv/**",
+    "**/onyx/server/features/build/sandbox/kubernetes/docker/daemon/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/skills/**",
     "**/onyx/server/features/build/sandbox/kubernetes/docker/templates/**",
 ]
@@ -241,6 +242,7 @@ members = ["tools/ods"]
 include = ["backend"]
 exclude = [
     "backend/generated",
+    "backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon",
     "backend/onyx/server/features/build/sandbox/kubernetes/docker/skills/pptx",
     "backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv",
 ]

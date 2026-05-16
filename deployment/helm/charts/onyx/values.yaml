@@ -1,6 +1,11 @@
 # Default values for onyx.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+#
+# Companion overlays in this directory:
+#   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
+#   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
+#                           /docs/dev/local-kubernetes.md for the full workflow.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -1292,8 +1297,29 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  # Shared secret for api-server → sandbox daemon push auth.
+  # The api-server passes this value directly to sandbox pods at provision time
+  # (same pattern as ONYX_PAT), so only the api-server needs the k8s Secret.
+  sandboxPushSecret:
+    enabled: false
+    secretName: 'onyx-sandbox-push-secret'
+    existingSecret: ""
+    secretKeys:
+      ONYX_SANDBOX_PUSH_SECRET: shared_secret
+    values:
+      shared_secret: ""
 
 configMap:
+  # WARNING: do NOT copy hostname keys from a docker-compose .env into this
+  # block. The compose stack uses underscored service names (e.g. `api_server`,
+  # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
+  # break inter-pod traffic in ways that look like a hung service.
+  # In particular, leave these UNSET and let the chart compute correct
+  # K8s-service hostnames:
+  #   REDIS_HOST, INTERNAL_URL, API_SERVER_HOST,
+  #   MODEL_SERVER_HOST, INDEXING_MODEL_SERVER_HOST
+  # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
   # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
@@ -1378,6 +1404,7 @@ configMap:
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_NAMESPACE: "onyx-sandboxes"
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line

@@ -15,16 +15,23 @@ Architecture Note (User-Shared Sandbox Model):
 """
 
 import threading
+import time
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import UUID
 
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import PushFailure
+from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.utils.logger import setup_logger
@@ -50,12 +57,13 @@ class SandboxManager(ABC):
 
     Directory Structure:
         $SANDBOX_ROOT/
+        ├── managed/skills/            # Pushed skills, symlinked per session
         └── sessions/
             ├── $session_id_1/         # Per-session workspace
             │   ├── outputs/           # Agent output for this session
             │   │   └── web/           # Next.js app
             │   ├── venv/              # Python virtual environment
-            │   ├── skills/            # Opencode skills
+            │   ├── .opencode/skills   # Symlink → managed/skills
             │   ├── AGENTS.md          # Agent instructions
             │   ├── opencode.json      # LLM config
             │   └── attachments/
@@ -119,6 +127,7 @@ class SandboxManager(ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
+        skills_section: str,
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
@@ -130,7 +139,7 @@ class SandboxManager(ABC):
         Creates the per-session directory structure:
         - sessions/$session_id/outputs/ (from snapshot or template)
         - sessions/$session_id/venv/
-        - sessions/$session_id/skills/
+        - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
@@ -140,6 +149,8 @@ class SandboxManager(ABC):
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
+            nextjs_port: Port for the Next.js dev server, or None for headless.
+            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
@@ -212,6 +223,7 @@ class SandboxManager(ABC):
         tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
+        skills_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.
 
@@ -412,6 +424,127 @@ class SandboxManager(ABC):
             Tuple of (file_count, total_size_bytes)
         """
         ...
+
+    @abstractmethod
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: UUID,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Write files atomically to a sandbox. Raise RetriableWriteError for
+        transients, FatalWriteError for permanent failures."""
+        ...
+
+    def push_to_sandbox(
+        self,
+        *,
+        sandbox_id: UUID,
+        mount_path: str,
+        files: FileSet,
+        timeout_s: float = 30.0,
+    ) -> PushResult:
+        """Push files to a single sandbox with retry."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.write_files_to_sandbox(
+                    sandbox_id=sandbox_id,
+                    mount_path=mount_path,
+                    files=files,
+                )
+                return PushResult(targets=1, succeeded=1, failures=[])
+            except FatalWriteError as e:
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="write_error",
+                            detail=str(e),
+                        )
+                    ],
+                )
+            except RetriableWriteError:
+                if attempt < max_retries - 1:
+                    time.sleep(min(2**attempt, timeout_s / max_retries))
+                    continue
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="timeout",
+                            detail=f"Failed after {max_retries} retries",
+                        )
+                    ],
+                )
+            except Exception as e:
+                logger.warning(
+                    "Unexpected error pushing to sandbox %s: %s",
+                    sandbox_id,
+                    e,
+                )
+                return PushResult(
+                    targets=1,
+                    succeeded=0,
+                    failures=[
+                        PushFailure(
+                            sandbox_id=sandbox_id,
+                            reason="write_error",
+                            detail=str(e),
+                        )
+                    ],
+                )
+        raise AssertionError("unreachable: all retries should return")
+
+    def push_to_sandboxes(
+        self,
+        *,
+        mount_path: str,
+        sandbox_files: dict[UUID, FileSet],
+        timeout_s: float = 30.0,
+    ) -> PushResult:
+        """Push files to multiple sandboxes in parallel.
+
+        Caller owns user→sandbox resolution (via DB). This method only handles
+        parallelism and result aggregation over push_to_sandbox.
+        """
+        if not sandbox_files:
+            return PushResult(targets=0, succeeded=0, failures=[])
+
+        all_failures: list[PushFailure] = []
+        pushed = 0
+
+        def _push_one(sandbox_id: UUID) -> PushResult:
+            return self.push_to_sandbox(
+                sandbox_id=sandbox_id,
+                mount_path=mount_path,
+                files=sandbox_files[sandbox_id],
+                timeout_s=timeout_s,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(len(sandbox_files), 10)) as pool:
+            for result in pool.map(_push_one, sandbox_files):
+                pushed += result.succeeded
+                all_failures.extend(result.failures)
+
+        if all_failures:
+            logger.warning(
+                "push_to_sandboxes: %d/%d targets failed for mount_path=%s",
+                len(all_failures),
+                len(sandbox_files),
+                mount_path,
+            )
+
+        return PushResult(
+            targets=len(sandbox_files),
+            succeeded=pushed,
+            failures=all_failures,
+        )
 
     @abstractmethod
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:

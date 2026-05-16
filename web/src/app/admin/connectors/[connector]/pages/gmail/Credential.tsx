@@ -291,17 +291,11 @@ export const GmailJsonUploadSection = ({
             <label
               className={cn(
                 "flex h-10 items-center justify-center w-full px-4 py-2 border border-dashed rounded-md transition-colors",
-                false
-                  ? "opacity-70 cursor-not-allowed border-background-400 bg-background-50/30"
-                  : "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
+                "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
               )}
             >
               <div className="flex items-center space-x-2">
-                {false ? (
-                  <div className="h-4 w-4 border-t-2 border-b-2 border-primary rounded-full animate-spin"></div>
-                ) : (
-                  <FiFile className="h-4 w-4 text-text-500" />
-                )}
+                <FiFile className="h-4 w-4 text-text-500" />
                 <span className="text-sm text-text-500">
                   {truncateString(
                     localServiceAccountData?.service_account_email ||

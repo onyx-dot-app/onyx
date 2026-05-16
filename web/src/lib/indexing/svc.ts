@@ -55,19 +55,21 @@ export async function connectEmbeddingProvider({
   providerType,
   apiKey,
   apiUrl,
+  modelName = "",
   apiVersion,
   deploymentName,
 }: {
   providerType: string;
   apiKey: string | null;
   apiUrl: string;
+  modelName?: string;
   apiVersion: string | null;
   deploymentName: string | null;
 }): Promise<void> {
   if (apiKey !== null) {
     const testResponse = await testEmbedding({
       provider_type: providerType,
-      modelName: "",
+      modelName,
       apiKey,
       apiUrl,
       apiVersion,

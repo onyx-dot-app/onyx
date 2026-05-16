@@ -157,7 +157,11 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem icon={SvgMoreHorizontal} onClick={openRecentFilesModal}>
+          <LineItem
+            key="more-files"
+            icon={SvgMoreHorizontal}
+            onClick={openRecentFilesModal}
+          >
             All Recent Files
           </LineItem>
         ),
@@ -268,10 +272,10 @@ export default function FilePickerPopover({
           description="Upload files or pick from your recent files."
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
-            onPickRecent && onPickRecent(file);
+            onPickRecent?.(file);
           }}
           onUnpickRecent={(file) => {
-            onUnpickRecent && onUnpickRecent(file);
+            onUnpickRecent?.(file);
           }}
           handleUploadChange={handleUploadChange}
           onView={onFileClick}
@@ -288,11 +292,11 @@ export default function FilePickerPopover({
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
-              onPickRecent && onPickRecent(file);
+              onPickRecent?.(file);
               setOpen(false);
             }}
             onFileClick={(file) => {
-              onFileClick && onFileClick(file);
+              onFileClick?.(file);
               setOpen(false);
             }}
             triggerUploadPicker={() => {
