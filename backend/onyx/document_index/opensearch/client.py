@@ -279,6 +279,111 @@ class OpenSearchClient(AbstractContextManager):
             )
         return indices
 
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def cluster_health(
+        self,
+        level: str = "cluster",
+        index: str | None = None,
+    ) -> dict[str, Any]:
+        """Gets the cluster health.
+
+        See the OpenSearch documentation for more information on the cluster
+        health API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-health/
+
+        Args:
+            level: The level of detail. One of "cluster", "indices", "shards",
+                or "awareness_attributes". Defaults to "cluster".
+            index: Optionally scope the health response to a specific index.
+                Defaults to None (whole cluster).
+
+        Returns:
+            The raw cluster health response.
+        """
+        if index:
+            return self._client.cluster.health(index=index, level=level)
+        return self._client.cluster.health(level=level)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def cat_shards(
+        self,
+        index: str | None = None,
+        columns: str = "index,shard,prirep,state,unassigned.reason,unassigned.for,node",
+    ) -> list[dict[str, Any]]:
+        """Lists shards in the cluster.
+
+        See the OpenSearch documentation for more information on the cat shards
+        API:
+        https://docs.opensearch.org/latest/api-reference/cat/cat-shards/
+
+        Args:
+            index: Optionally scope to a specific index. Defaults to None (all
+                indices).
+            columns: Comma-separated list of columns to return. Maps to the
+                ``h`` query parameter.
+
+        Returns:
+            A list of dicts, one per shard, with the requested columns as keys.
+        """
+        kwargs: dict[str, Any] = {"format": "json", "h": columns}
+        if index:
+            kwargs["index"] = index
+        return self._client.cat.shards(**kwargs)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def allocation_explain(
+        self,
+        index: str | None = None,
+        shard: int | None = None,
+        primary: bool | None = None,
+    ) -> dict[str, Any]:
+        """Explains why a shard is or is not allocated.
+
+        With no args, OpenSearch picks an arbitrary unassigned shard to explain.
+        To scope to a specific shard, all three args must be provided together.
+
+        See the OpenSearch documentation for more information on the cluster
+        allocation explain API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-allocation/
+
+        Args:
+            index: The index name.
+            shard: The shard ID.
+            primary: Whether the shard is a primary (True) or replica (False).
+
+        Returns:
+            The raw allocation explanation response.
+        """
+        body: dict[str, Any] = {}
+        if index is not None:
+            body["index"] = index
+        if shard is not None:
+            body["shard"] = shard
+        if primary is not None:
+            body["primary"] = primary
+        if body:
+            return self._client.cluster.allocation_explain(body=body)
+        return self._client.cluster.allocation_explain()
+
+    @log_function_time(print_only=True, debug_only=True)
+    def reroute_retry_failed(self) -> dict[str, Any]:
+        """Triggers a cluster reroute with retry_failed=true.
+
+        Useful when shards are stuck UNASSIGNED due to ALLOCATION_FAILED with
+        max retries exceeded (default 5). This resets the failure counter and
+        attempts allocation again. The cluster's own allocation_explain output
+        recommends this when the ``max_retry`` decider is blocking.
+
+        See the OpenSearch documentation for more information on the cluster
+        reroute API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-reroute/
+
+        Returns:
+            The raw reroute response. Includes ``acknowledged`` and the
+                post-reroute cluster state.
+        """
+        return self._client.cluster.reroute(params={"retry_failed": "true"})
+
     @log_function_time(print_only=True, debug_only=True)
     def ping(self) -> bool:
         """Pings the OpenSearch cluster.
