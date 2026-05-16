@@ -141,6 +141,7 @@ function buildItems(
       !enableEnterprise
     );
     addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SYSTEM_BANNER);
   }
 
   // 7. Usage (admin only)

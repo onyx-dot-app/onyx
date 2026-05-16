@@ -59,7 +59,11 @@ export function AnnouncementBanner() {
   return (
     <>
       {localNotifications
-        .filter((notification) => !notification.dismissed)
+        .filter(
+          (notification) =>
+            !notification.dismissed &&
+            notification.notif_type !== "admin_banner"
+        )
         .map((notification) => {
           return (
             <div

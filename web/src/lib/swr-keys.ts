@@ -159,6 +159,7 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+  adminBanner: "/api/admin/banner",
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
   slackChannels: "/api/manage/admin/slack-app/channel",

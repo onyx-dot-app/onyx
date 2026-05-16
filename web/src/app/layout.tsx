@@ -16,6 +16,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
+import AdminBannerNotice from "@/sections/AdminBannerNotice";
 import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
@@ -108,6 +109,7 @@ export default function RootLayout({
                 <SWRConfigProvider>
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
+                  <AdminBannerNotice />
                   <AppProvider>
                     <DynamicMetadata />
                     <CustomAnalyticsScript />
