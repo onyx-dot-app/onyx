@@ -28,26 +28,26 @@ class NoCleanupManager:
 
 
 class CleanupManager:
-    def __init__(self, session_ids: list) -> None:
+    def __init__(self, session_ids: list[UUID]) -> None:
         self._session_ids = session_ids
-        self.snapshots: list[tuple] = []
-        self.terminated: list = []
+        self.snapshots: list[tuple[UUID, UUID, str]] = []
+        self.terminated: list[UUID] = []
 
     def supports_idle_cleanup(self) -> bool:
         return True
 
-    def list_session_workspaces(self, sandbox_id):
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         assert sandbox_id is not None
         return self._session_ids
 
-    def create_snapshot(self, sandbox_id, session_id, tenant_id):
+    def create_snapshot(self, sandbox_id: UUID, session_id: UUID, tenant_id: str) -> SimpleNamespace:
         self.snapshots.append((sandbox_id, session_id, tenant_id))
         return SimpleNamespace(
             storage_path=f"snapshots/{session_id}.tar.gz",
             size_bytes=123,
         )
 
-    def terminate(self, sandbox_id):
+    def terminate(self, sandbox_id: UUID) -> None:
         self.terminated.append(sandbox_id)
 
 
