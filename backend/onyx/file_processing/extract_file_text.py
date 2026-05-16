@@ -365,12 +365,12 @@ def read_pdf_file(
         # a platform bug. The function returns empty text and the connector
         # continues with the next doc; no need to ship a stack trace to
         # Sentry for every corrupt file we encounter.
-        logger.warning(f"Invalid PDF file, skipping content extraction: {e}")
+        logger.warning("Invalid PDF file, skipping content extraction: %s", e)
     except Exception as e:
         # Unknown PDF parsing failure — elevate just the message, not a
         # traceback, for the same reason. Callers treat empty text as a
         # non-fatal skip.
-        logger.warning(f"Failed to read PDF, skipping content extraction: {e}")
+        logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
     return "", metadata, []
 
