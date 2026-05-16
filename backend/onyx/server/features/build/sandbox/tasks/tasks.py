@@ -1,7 +1,5 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
-from uuid import UUID
-
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
@@ -12,17 +10,12 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
-)
 
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
@@ -47,19 +40,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     4. Terminates the pod (but keeps the sandbox record)
     5. Marks the sandbox as SLEEPING (can be restored later)
 
-    NOTE: This task is a no-op for local backend - sandboxes persist until
-    manually terminated or server restart.
+    NOTE: This task is a no-op for backends that do not support idle cleanup.
 
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
-    # Skip cleanup for local backend - sandboxes persist until manual termination
-    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-        task_logger.debug(
-            "cleanup_idle_sandboxes_task skipped (local backend - cleanup disabled)"
-        )
-        return
-
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -84,10 +69,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
         sandbox_manager = get_sandbox_manager()
 
-        # Type guard for kubernetes-specific methods
-        if not isinstance(sandbox_manager, KubernetesSandboxManager):
+        if not sandbox_manager.supports_idle_cleanup():
             task_logger.debug(
-                "cleanup_idle_sandboxes_task skipped (not kubernetes backend)"
+                "cleanup_idle_sandboxes_task skipped (backend cleanup disabled)"
             )
             return
 
@@ -114,18 +98,16 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
 
                 try:
-                    # List session directories in the pod
-                    session_ids = _list_session_directories(sandbox_manager, sandbox_id)
+                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
                     task_logger.info(
                         f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
                     )
 
                     # Snapshot each session
-                    for session_id_str in session_ids:
+                    for session_id in session_ids:
                         try:
-                            session_id = UUID(session_id_str)
                             task_logger.debug(
-                                f"Creating snapshot for session {session_id_str}"
+                                f"Creating snapshot for session {session_id}"
                             )
                             snapshot_result = sandbox_manager.create_snapshot(
                                 sandbox_id, session_id, tenant_id
@@ -139,11 +121,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                     snapshot_result.size_bytes,
                                 )
                                 task_logger.debug(
-                                    f"Snapshot created for session {session_id_str}"
+                                    f"Snapshot created for session {session_id}"
                                 )
                         except Exception as e:
                             task_logger.warning(
-                                f"Failed to create snapshot for session {session_id_str}: {e}"
+                                f"Failed to create snapshot for session {session_id}: {e}"
                             )
                             # Continue with other sessions even if one fails
 
@@ -186,66 +168,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
-
-
-def _list_session_directories(
-    sandbox_manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-) -> list[str]:
-    """List session directory names in the pod's /workspace/sessions/.
-
-    Args:
-        sandbox_manager: The kubernetes sandbox manager
-        sandbox_id: The sandbox ID
-
-    Returns:
-        List of session ID strings (directory names)
-    """
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream as k8s_stream
-
-    pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
-
-    # List directories in /workspace/sessions/
-    exec_command = [
-        "/bin/sh",
-        "-c",
-        'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
-    ]
-
-    try:
-        resp = k8s_stream(
-            sandbox_manager._core_api.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=sandbox_manager._namespace,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-
-        # Parse output - one directory name per line
-        session_ids = []
-        for line in resp.strip().split("\n"):
-            line = line.strip()
-            if line:
-                # Validate it looks like a UUID
-                try:
-                    UUID(line)
-                    session_ids.append(line)
-                except ValueError:
-                    # Not a valid UUID, skip
-                    pass
-
-        return session_ids
-
-    except ApiException as e:
-        task_logger.warning(f"Failed to list session directories: {e}")
-        return []
-
-
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.
 # @shared_task(
 #     name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
