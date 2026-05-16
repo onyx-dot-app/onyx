@@ -5,6 +5,7 @@ import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, InputVertical } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -20,8 +21,7 @@ import {
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
-  APIBaseFieldWithInfo,
-  CONTAINERIZED_HOST_INFO_TOOLTIP,
+  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -106,24 +106,22 @@ function OllamaModalInternals({
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
-            {settings.is_containerized ? (
-              <APIBaseFieldWithInfo
-                subDescription="The base URL for your Ollama instance."
+            <InputVertical
+              withLabel="api_base"
+              title="API Base URL"
+              subDescription={
+                settings.is_containerized
+                  ? markdown(
+                      `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
+                    )
+                  : "The base URL for your Ollama instance."
+              }
+            >
+              <InputTypeInField
+                name="api_base"
                 placeholder="Your Ollama API base URL"
-                info={CONTAINERIZED_HOST_INFO_TOOLTIP}
               />
-            ) : (
-              <InputVertical
-                withLabel="api_base"
-                title="API Base URL"
-                subDescription="The base URL for your Ollama instance."
-              >
-                <InputTypeInField
-                  name="api_base"
-                  placeholder="Your Ollama API base URL"
-                />
-              </InputVertical>
-            )}
+            </InputVertical>
           </Tabs.Content>
 
           <Tabs.Content value={Tab.TAB_CLOUD}>

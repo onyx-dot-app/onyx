@@ -3,6 +3,7 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -19,7 +20,7 @@ import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
   APIKeyField,
   APIBaseField,
-  CONTAINERIZED_HOST_INFO_TOOLTIP,
+  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -75,13 +76,14 @@ function LMStudioModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="The base URL for your LM Studio server."
-        placeholder="Your LM Studio API base URL"
-        info={
+        subDescription={
           settings.is_containerized
-            ? CONTAINERIZED_HOST_INFO_TOOLTIP
-            : undefined
+            ? markdown(
+                `The base URL for your LM Studio server. ${CONTAINERIZED_HOST_NOTE}`
+              )
+            : "The base URL for your LM Studio server."
         }
+        placeholder="Your LM Studio API base URL"
       />
 
       <APIKeyField

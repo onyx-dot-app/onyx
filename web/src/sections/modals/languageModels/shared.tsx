@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Formik, Form, useField, useFormikContext } from "formik";
+import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
@@ -10,7 +10,7 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
-import { Checkbox, Text as OpalText, Tooltip } from "@opal/components";
+import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
@@ -25,16 +25,13 @@ import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   InputDivider,
-  InputErrorText,
   InputHorizontal,
   InputPadder,
   InputVertical,
-  Label,
 } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgChevronDown,
-  SvgInfoSmall,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -118,42 +115,23 @@ export function APIKeyField({
 // ─── APIBaseField ───────────────────────────────────────────────────────────
 
 /**
- * Tooltip shown next to the API Base URL label when Onyx is detected to be
- * running inside a container — explains why the default uses
+ * Sentence appended to an API Base URL `subDescription` when Onyx is detected
+ * to be running inside a container — explains why the default uses
  * `host.docker.internal`.
  */
-export const CONTAINERIZED_HOST_INFO_TOOLTIP: RichStr = markdown(
-  "We've detected Onyx is running in a container. `host.docker.internal` resolves to your host machine — it behaves like `localhost` from inside the Onyx container."
-);
+export const CONTAINERIZED_HOST_NOTE =
+  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
 
 export interface APIBaseFieldProps {
   optional?: boolean;
   subDescription?: string | RichStr;
   placeholder?: string;
-  /**
-   * When provided, an info icon is rendered next to the title and shows this
-   * content in a tooltip on hover.
-   */
-  info?: string | RichStr;
 }
 export function APIBaseField({
   optional = false,
   subDescription,
   placeholder = "https://",
-  info,
 }: APIBaseFieldProps) {
-  if (info !== undefined) {
-    return (
-      <InputPadder>
-        <APIBaseFieldWithInfo
-          optional={optional}
-          subDescription={subDescription}
-          placeholder={placeholder}
-          info={info}
-        />
-      </InputPadder>
-    );
-  }
   return (
     <InputPadder>
       <InputVertical
@@ -165,68 +143,6 @@ export function APIBaseField({
         <InputTypeInField name="api_base" placeholder={placeholder} />
       </InputVertical>
     </InputPadder>
-  );
-}
-
-interface APIBaseFieldWithInfoProps {
-  optional?: boolean;
-  subDescription?: string | RichStr;
-  placeholder?: string;
-  info: string | RichStr;
-}
-
-/**
- * Custom layout used when an info tooltip is requested next to the
- * "API Base URL" label. `InputVertical`'s built-in title doesn't expose a slot
- * for inline actions, so we compose the layout ourselves while preserving
- * label association, Formik error display, and subDescription.
- */
-export function APIBaseFieldWithInfo({
-  optional = false,
-  subDescription,
-  placeholder = "https://",
-  info,
-}: APIBaseFieldWithInfoProps) {
-  const [, meta] = useField("api_base");
-  return (
-    <Label label="api_base">
-      <Section gap={0.25} alignItems="start" height="fit">
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="start"
-          gap={0.25}
-          width="fit"
-          height="fit"
-        >
-          <OpalText font="main-ui-action" color="text-04">
-            API Base URL
-          </OpalText>
-          {optional && (
-            <OpalText font="main-ui-muted" color="text-03">
-              (Optional)
-            </OpalText>
-          )}
-          <Tooltip tooltip={info} side="top">
-            <Button
-              icon={SvgInfoSmall}
-              prominence="tertiary"
-              size="xs"
-              type="button"
-            />
-          </Tooltip>
-        </Section>
-        <InputTypeInField name="api_base" placeholder={placeholder} />
-        {meta.touched && meta.error && (
-          <InputErrorText>{meta.error}</InputErrorText>
-        )}
-        {subDescription && (
-          <OpalText font="secondary-body" color="text-03">
-            {subDescription}
-          </OpalText>
-        )}
-      </Section>
-    </Label>
   );
 }
 
