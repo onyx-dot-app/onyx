@@ -73,8 +73,8 @@ export const testApiKeyHelper = async (
     api_key_changed: true,
     custom_config_changed: true,
     custom_config: {
-      ...((formValues?.custom_config as Record<string, unknown>) ?? {}),
-      ...(customConfigOverride ?? {}),
+      ...(formValues?.custom_config as Record<string, unknown> | undefined),
+      ...customConfigOverride,
     },
     model: modelName ?? (formValues?.test_model_name as string) ?? "",
   };

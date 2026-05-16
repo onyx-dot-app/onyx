@@ -1,3 +1,5 @@
+> **Archived.** Superseded by `../skills-requirements.md`. The "what is a skill / built-in vs custom / V1 scope" content here is restated cleanly there. Kept for historical context only — do not use as an implementation reference.
+
 # Skills System
 
 ## Objective
@@ -94,7 +96,7 @@ Backend calls a hosted "Onyx Skills" service for bundles at session setup.
 ## Key Design Decisions
 
 1. **Universal layer is consumer-blind.** `backend/onyx/skills/` knows nothing about `BuildSession`, sandboxes, or `.opencode/skills`. Its public API is "given a destination path and a user, resolve and write all the skills they have access to." Consumers choose the destination path and pass the user.
-2. **Built-ins are a registry of `(slug, source_dir, is_available)` entries.** Registered at app boot. The registry exposes `list_available(db_session) -> list[BuiltinSkill]` which evaluates each `is_available` lazily. The build feature owns its own registration module (`backend/onyx/server/features/build/skills/builtins_registration.py`) that wires up Craft's built-ins. Other features add their own registration modules.
+2. **Built-ins are a registry of `(slug, source_dir, is_available)` triples.** Registered at app boot. The registry exposes `list_available_for(db_session) -> list[BuiltinSkill]` which evaluates each `is_available` lazily. The build feature owns its own registration module (`backend/onyx/server/features/build/skills/builtins_registration.py`) that wires up Craft's built-ins. Other features add their own registration modules.
 3. **No DB rows for built-in state.** Admins do not configure built-ins per-org. Whether a built-in is available is determined entirely by code — its `is_available` callable inspects whatever it needs (env vars, configured providers, feature flags, sub-feature DB rows). This trades configurability for simplicity: there's no per-tenant "we don't want pptx" toggle, but also no admin surface to reason about, no state-row-vs-registry-mismatch failure mode, and no migration when we add or remove built-ins.
 4. **Built-ins ship `SKILL.md.template` to opt into rendering.** The materializer checks for `SKILL.md.template` in the source directory; if present, renders against `SkillRenderContext` and writes `SKILL.md`. Otherwise copies the existing `SKILL.md` verbatim. Other files always copy verbatim.
 5. **Custom skills cannot ship templates.** Validation rejects bundles containing any `*.template` file.
@@ -117,7 +119,7 @@ Backend calls a hosted "Onyx Skills" service for bundles at session setup.
                                 ┌──────────────────────────────────────────┐
                                 │  BuiltinSkillRegistry (in-memory)        │
                                 │  ├─ register(slug, dir, is_available)    │
-                                │  └─ list_available(db_session)           │
+                                │  └─ list_available_for(db_session)       │
                                 │                                          │
                                 │  DB (backend/onyx/db/skill.py)           │
                                 │  ├─ skill (one bundle per row)           │
@@ -163,7 +165,7 @@ Materialization sequence (per Craft session start):
 SessionManager.setup_session
   └─ skills.materialize_skills(staging_dir, user, db_session, render_context)
         ├─ resolve:
-        │     ├─ available_builtins = registry.list_available(db_session)
+        │     ├─ available_builtins = registry.list_available_for(db_session)
         │     └─ accessible_customs = list_skills_for_user(user, db_session)
         ├─ for each available built-in:
         │     ├─ copy source_dir → staging_dir/<slug>/
@@ -195,7 +197,7 @@ The Kubernetes path (`KubernetesSandboxManager._setup_session_workspace`, around
 **New files (universal layer):**
 
 - `backend/onyx/skills/__init__.py` — public API: `materialize_skills`, `resolve_skills`, `validate_custom_bundle`, `BuiltinSkillRegistry`, `SkillRenderContext`, `ResolvedSkill`, `BuiltinSkillRef`.
-- `backend/onyx/skills/registry.py` — `BuiltinSkillRegistry` singleton; `register(slug: str, source_dir: Path, is_available: Callable[[Session], bool], unavailable_reason: str | None = None)`, `list_all() -> list[BuiltinSkill]`, `list_available(db_session) -> list[BuiltinSkill]`, `get(slug)`, and `reserved_slugs()`. In-memory; rebuilt at boot.
+- `backend/onyx/skills/registry.py` — `BuiltinSkillRegistry` singleton; `register(slug: str, source_dir: Path, is_available: Callable[[Session], bool], unavailable_reason: str | None = None)`, `list_available_for(db_session) -> list[BuiltinSkill]`, `evaluate_for_admin(db_session) -> list[BuiltinSkillAvailability]` (returns each registered slug + bool + reason, used by the admin GET endpoint), `read_metadata(slug) -> BuiltinMetadata | None`. In-memory; rebuilt at boot.
 - `backend/onyx/skills/bundle.py` — zip helpers: `validate_custom_bundle(zip_bytes) -> ManifestMetadata | InvalidBundleError`, `compute_bundle_sha256(zip_bytes)`. Deterministic checks.
 - `backend/onyx/skills/materialize.py` — `materialize_skills(...)`, `SkillRenderContext` (Pydantic), the manifest writer. The render step delegates to a small `_render_template_placeholders` helper migrated from `agent_instructions.py` so it can be reused outside the build feature.
 - `backend/onyx/db/skill.py` — DB ops: `list_skills_for_user`, `fetch_skill_for_user`, `create_skill`, `replace_skill_bundle`, `delete_skill`. Mirrors `backend/onyx/db/persona.py` patterns.
@@ -350,7 +352,7 @@ def materialize_skills(
     Resolve and write every skill the user has access to into dest_path/<slug>/.
     Returns the manifest (also written as dest_path/.skills_manifest.json).
 
-    Available built-ins (from BuiltinSkillRegistry.list_available) get
+    Available built-ins (from BuiltinSkillRegistry.list_available_for) get
     their SKILL.md.template rendered if present; custom skills the user has
     access to (via list_skills_for_user) are unzipped verbatim.
     """

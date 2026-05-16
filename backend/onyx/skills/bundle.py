@@ -1,7 +1,4 @@
-"""Custom skill bundle validation and helpers.
-
-See docs/craft/features/skills/skills_plan.md §5.
-"""
+"""Custom skill bundle validation and helpers."""
 
 from __future__ import annotations
 
@@ -29,7 +26,7 @@ SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 
 
-def _check_slug(slug: str) -> None:
+def check_slug(slug: str) -> None:
     if not SLUG_REGEX.match(slug):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"invalid slug '{slug}'")
 
@@ -94,7 +91,7 @@ def validate_custom_bundle(
             SKILL.md, traversal, symlink, template, unreadable entry).
         OnyxError(PAYLOAD_TOO_LARGE): per-file or total size cap exceeded.
     """
-    _check_slug(slug)
+    check_slug(slug)
     if slug in BuiltinSkillRegistry.instance().reserved_slugs():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
 

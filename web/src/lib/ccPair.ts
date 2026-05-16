@@ -30,7 +30,7 @@ export async function setCCPairStatus(
         : "Paused connector!"
     );
 
-    onUpdate && onUpdate();
+    onUpdate?.();
   } catch (error) {
     console.error("Error updating CC pair status:", error);
     toast.error("Failed to update connector status");

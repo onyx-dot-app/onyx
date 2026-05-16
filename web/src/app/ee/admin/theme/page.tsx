@@ -49,7 +49,7 @@ export default function ThemePage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        ...(enterpriseSettings || {}),
+        ...enterpriseSettings,
         ...newValues,
       }),
     });

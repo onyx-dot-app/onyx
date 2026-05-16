@@ -4,7 +4,6 @@ from pathlib import Path
 from threading import Lock
 from typing import ClassVar
 from typing import Literal
-from uuid import UUID
 
 import yaml
 from pydantic import BaseModel
@@ -24,12 +23,19 @@ _SLUG_ERROR = (
 )
 
 
-class Skill(BaseModel):
-    """Common skill metadata shared by built-in and custom skill views."""
+class BuiltinSkill(BaseModel):
+    """In-memory entry for an on-disk built-in skill."""
 
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    source: Literal["builtin"] = "builtin"
     slug: str
     name: str
     description: str
+    source_dir: Path
+    has_template: bool
+    is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
+    unavailable_reason: str | None = None
 
     @field_validator("slug")
     @classmethod
@@ -37,29 +43,6 @@ class Skill(BaseModel):
         if not _SLUG_REGEX.fullmatch(slug):
             raise ValueError(_SLUG_ERROR)
         return slug
-
-
-class BuiltinSkill(Skill):
-    """In-memory entry for an on-disk built-in skill."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    source: Literal["builtin"] = "builtin"
-    source_dir: Path
-    has_template: bool
-    is_available: Callable[[Session], bool] = _DEFAULT_IS_AVAILABLE
-    unavailable_reason: str | None = None
-
-
-class CustomSkill(Skill):
-    """DB-backed skill metadata needed by skill consumers."""
-
-    source: Literal["custom"] = "custom"
-    id: UUID
-    bundle_file_id: str
-    bundle_sha256: str
-    is_public: bool
-    enabled: bool
 
 
 def _select_skill_definition_path(source_dir: Path) -> tuple[Path, bool]:

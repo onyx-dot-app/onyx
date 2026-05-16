@@ -1,0 +1,24 @@
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-push
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: api-server
+      ports:
+        - protocol: TCP
+          port: 8731
+{{- end }}

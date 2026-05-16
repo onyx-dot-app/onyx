@@ -50,7 +50,6 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -76,16 +75,16 @@ from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     SSEKeepalive,
 )
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.skills.rendering import (
-    render_company_search_skill,
-)
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
     FOLLOWUP_SUGGESTIONS_SYSTEM_PROMPT,
 )
 from onyx.server.features.build.session.prompts import FOLLOWUP_SUGGESTIONS_USER_PROMPT
+from onyx.skills.push import build_user_skills_payload
+from onyx.skills.push import hydrate_sandbox_skills
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.llm_utils import llm_generation_span
@@ -381,22 +380,14 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def push_dynamic_skills(self, sandbox_id: UUID, user_id: UUID) -> None:
-        """Render dynamic skill templates and push them to the sandbox."""
+    def _hydrate_skills(
+        self, sandbox_id: UUID, user: User, files: FileSet | None = None
+    ) -> None:
         try:
-            user = fetch_user_by_id(self._db_session, user_id)
-            if not user:
-                logger.warning("Cannot push dynamic skills: user %s not found", user_id)
-                return
-            skill_file = render_company_search_skill(
-                self._db_session, user, Path(SKILLS_TEMPLATE_PATH)
-            )
-            self._sandbox_manager.write_sandbox_file(
-                sandbox_id, skill_file.path, skill_file.content
-            )
+            hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
         except Exception:
             logger.warning(
-                "Failed to push dynamic skills to sandbox %s", sandbox_id, exc_info=True
+                "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
             )
 
     def _provision_sandbox(
@@ -586,18 +577,21 @@ class SessionManager:
         user_name = user.personal_name
         user_role = user.personal_role
 
+        skills_section, skills_files = build_user_skills_payload(user, self._db_session)
+
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
+            skills_section=skills_section,
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
             user_work_area=user_work_area,
             user_level=user_level,
         )
-        self.push_dynamic_skills(sandbox.id, user_id)
+        self._hydrate_skills(sandbox.id, user, files=skills_files)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -658,7 +652,11 @@ class SessionManager:
                     )
                 )
                 if is_healthy and workspace_exists:
-                    self.push_dynamic_skills(sandbox.id, user_id)
+                    user = fetch_user_by_id(self._db_session, user_id)
+                    if user is None:
+                        logger.warning("Cannot push skills: user %s not found", user_id)
+                    else:
+                        self._hydrate_skills(sandbox.id, user)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,

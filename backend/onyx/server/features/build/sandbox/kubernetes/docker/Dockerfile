@@ -7,7 +7,7 @@
 #
 # Directory structure (created by init container + session setup):
 #   /workspace/
-#   ├── skills/          # Agent skills (baked into image, copied per-session)
+#   ├── managed/skills/  # Pushed at session-setup time by the API server
 #   ├── templates/       # Output templates (baked into image)
 #   └── sessions/        # Per-session workspaces (created via exec)
 #       └── $session_id/
@@ -58,7 +58,7 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     fi
 
 # Create workspace directories
-RUN mkdir -p /workspace/sessions /workspace/templates && \
+RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed && \
     chown -R sandbox:sandbox /workspace
 
 # Copy outputs template (web app scaffold, without node_modules)
@@ -68,16 +68,19 @@ RUN chown -R sandbox:sandbox /workspace/templates
 # Copy and install Python requirements into a venv
 COPY initial-requirements.txt /tmp/initial-requirements.txt
 RUN python3 -m venv /workspace/.venv && \
-    /workspace/.venv/bin/pip install --upgrade pip && \
-    /workspace/.venv/bin/pip install -r /tmp/initial-requirements.txt && \
-    rm /tmp/initial-requirements.txt && \
+    /workspace/.venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /workspace/.venv/bin/pip install --no-cache-dir -r /tmp/initial-requirements.txt && \
+    rm -rf /tmp/initial-requirements.txt /root/.cache/pip && \
     chown -R sandbox:sandbox /workspace/.venv
 
 # Add venv to PATH so python/pip use it by default
 ENV PATH="/workspace/.venv/bin:${PATH}"
+ENV PYTHONPATH="/workspace:${PYTHONPATH}"
 
 # Install pptxgenjs globally for creating presentations from scratch
-RUN npm install -g pptxgenjs
+RUN npm install -g pptxgenjs && \
+    npm cache clean --force && \
+    rm -rf /root/.npm
 
 # Install opencode CLI as sandbox user so it goes to their home directory
 USER sandbox
@@ -87,8 +90,8 @@ USER root
 # Add opencode to PATH (installs to ~/.opencode/bin)
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 
-# Copy agent skills (symlinked into each session's .opencode/skills/ at setup time)
-COPY --exclude=__pycache__ skills/ /workspace/skills/
+COPY --exclude=__pycache__ daemon/ /workspace/push_daemon/
+COPY entrypoint.sh /workspace/entrypoint.sh
 
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
@@ -104,7 +107,8 @@ WORKDIR /workspace
 # Expose ports
 # - 3000: Next.js dev server (started per-session if needed)
 # - 8081: OpenCode ACP HTTP server (started via exec)
-EXPOSE 3000 8081
+# - 8731: Push daemon (receives tar.gz files from sandbox manager)
+EXPOSE 3000 8081 8731
 
-# Keep container alive - all work done via kubectl exec
-CMD ["sleep", "infinity"]
+# Entrypoint runs push daemon + keeps container alive
+ENTRYPOINT ["/workspace/entrypoint.sh"]

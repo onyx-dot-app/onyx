@@ -159,7 +159,7 @@ export default function CreateCredential({
       await refresh();
 
       if (onSwitch) {
-        onSwitch(response?.credential!);
+        onSwitch(credential);
       }
     } catch (error) {
       console.error("Error submitting credential:", error);

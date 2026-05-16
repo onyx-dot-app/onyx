@@ -115,7 +115,7 @@ function SettingsPopover({
           title="Notifications"
           onClick={onOpenNotifications}
           rightChildren={
-            !!undismissedCount ? (
+            undismissedCount ? (
               <SvgNotificationBubble count={undismissedCount} />
             ) : undefined
           }
@@ -217,7 +217,7 @@ export default function AccountPopover({
               </div>
             )}
             rightChildren={
-              !!undismissedCount ? (
+              undismissedCount ? (
                 <Section padding={0.5}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>

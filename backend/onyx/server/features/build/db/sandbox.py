@@ -285,3 +285,21 @@ def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     db_session.delete(snapshot)
     db_session.commit()
     return True
+
+
+def get_sandbox_user_map(user_ids: list[UUID], db_session: Session) -> dict[UUID, User]:
+    """Return ``{sandbox_id: user}`` for active sandboxes owned by *user_ids*.
+
+    Only sandboxes with ``status == RUNNING`` are included — sleeping or
+    terminated pods can't receive pushes.
+    """
+    if not user_ids:
+        return {}
+
+    stmt = (
+        select(Sandbox, User)
+        .join(User, User.id == Sandbox.user_id)  # ty: ignore[invalid-argument-type]
+        .where(Sandbox.user_id.in_(user_ids))
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+    )
+    return {row.Sandbox.id: row.User for row in db_session.execute(stmt).unique()}

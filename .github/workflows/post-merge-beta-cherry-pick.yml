@@ -1,14 +1,10 @@
 name: Post-Merge Beta Cherry-Pick
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - closed
 
-# SECURITY NOTE:
-# This workflow intentionally uses pull_request_target so post-merge automation can
-# use base-repo credentials. Do not checkout PR head refs in this workflow
-# (e.g. github.event.pull_request.head.sha). Only trusted base refs are allowed.
 permissions:
   contents: read
 
@@ -30,23 +26,19 @@ jobs:
       - name: Resolve merged PR and checkbox state
         id: gate
         env:
-          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          # SECURITY: keep PR body in env/plain-text handling; avoid directly
-          # inlining github.event.pull_request.body into shell commands.
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
-          # Explicit merger allowlist used because pull_request_target runs with
-          # the default GITHUB_TOKEN, which cannot reliably read org/team
-          # membership for this repository context.
+          # Explicit merger allowlist kept as defense-in-depth even though the
+          # cherry-pick job runs with a GitHub App installation token rather
+          # than the default GITHUB_TOKEN.
           ALLOWED_MERGERS: |
             acaprau
             bo-onyx
             danelegend
             duo-onyx
             evan-onyx
-            jessicasingh7
             jmelahman
             joachim-danswer
             justin-tahara
@@ -54,7 +46,6 @@ jobs:
             raunakab
             rohoswagger
             subash-mohan
-            trial2onyx
             wenxi-onyx
             weves
             yuhongsun96
@@ -95,9 +86,6 @@ jobs:
     needs:
       - resolve-cherry-pick-request
     if: needs.resolve-cherry-pick-request.outputs.should_cherrypick == 'true' && needs.resolve-cherry-pick-request.result == 'success'
-    permissions:
-      contents: write
-      pull-requests: write
     outputs:
       cherry_pick_pr_url: ${{ steps.run_cherry_pick.outputs.pr_url }}
       cherry_pick_reason: ${{ steps.run_cherry_pick.outputs.reason }}
@@ -105,30 +93,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
-        # SECURITY: keep checkout pinned to trusted base branch; do not switch to PR head refs.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
           persist-credentials: true
           ref: main
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # ratchet:astral-sh/setup-uv@v8.1.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           enable-cache: false
           version: "0.9.9"
 
-      - name: Configure git identity
+      - name: Configure git identity as App
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       - name: Create cherry-pick PR to latest release
         id: run_cherry_pick
         env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CHERRY_PICK_ASSIGNEE: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
         run: |
@@ -187,7 +187,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
 
@@ -237,7 +237,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
 

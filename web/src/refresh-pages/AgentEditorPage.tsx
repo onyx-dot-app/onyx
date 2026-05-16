@@ -241,7 +241,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-1">
+              <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton
                   key="default-icon"
                   icon={() => (
@@ -885,7 +885,7 @@ export default function AgentEditorPage({
 
       // Call API
       let personaResponse;
-      if (!!existingAgent) {
+      if (existingAgent) {
         personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
         personaResponse = await createAgent(submissionData);

@@ -1,3 +1,5 @@
+> **Archived.** Superseded by `../skills-requirements.md` (what V1 must do) and `../skills-api-plan.md` (how the API layer ships). The sandbox-delivery design here (per-session materialization + event-driven push pipeline) has been replaced by the S3-mounted-bucket model described in `../skills-requirements.md` §5. Kept for historical context only — do not use as an implementation reference.
+
 # Skills V1 — PRD & Implementation Spec
 
 **Status**: design · **Source plan**: `docs/craft/features/skills.md` · **Owner**: Roshan
@@ -141,7 +143,7 @@ A natural-looking simplification is to unify built-ins and custom skills under o
 
 Unifying them forces one of those lifecycles to bend:
 
-- If built-ins inherit the user-data lifecycle, every deploy needs a reconciliation step: compare the on-disk bundle's sha256 against the DB row, decide whether to clobber an admin's edits, tombstone removed built-ins, backfill new tenants, serialize `is_available` callables into rule expressions. None of these are unsolvable; all of them are real code, real tests, real ops complexity.
+- If built-ins inherit the user-data lifecycle, every deploy needs a reconciliation step: compare the on-disk bundle's sha256 against the DB row, decide whether to clobber an admin's edits, tombstone removed built-ins, backfill new tenants, serialize `SkillRequirement.check` callables into rule expressions. None of these are unsolvable; all of them are real code, real tests, real ops complexity.
 - If customs inherit the deploy-artifact lifecycle, they have to live in the repo — not viable, by definition.
 
 The current split costs ~30 lines (a route-handler merge in `api.py`) plus ~10 lines (a second loop in `materialize_skills`). The unified path would cost an upgrade-detection seeder, multi-tenant backfill, reconciliation logic on every deploy, and per-tenant FileStore growth for redundant bundle copies. Lopsided.
@@ -290,10 +292,22 @@ Built-in skills are on-disk directories. We need a way for each feature that shi
 
 ### Proposed Solution
 
-A process-wide singleton populated at app boot. Each registration captures a `(slug, source_dir, name, description, is_available, unavailable_reason)` tuple — name/description are read from the source dir's `SKILL.md` frontmatter at registration time and cached. `is_available` is a single optional org-level dependency check for the skill (e.g. a configured Gemini provider for `image-generation`).
+A process-wide singleton populated at app boot. Each registration captures a `(slug, source_dir, name, description, requirements)` tuple — name/description are read from the source dir's `SKILL.md` frontmatter at registration time and cached. `requirements` declare the org-level dependencies the skill needs to run (e.g. a configured Gemini provider for `image-generation`).
 
 ```python
 # backend/onyx/skills/registry.py
+
+class SkillRequirement(BaseModel):
+    """Org-level dependency a built-in skill needs to be usable.
+    Frozen — registered at app boot, never mutated."""
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    key: str                                 # stable id, e.g. "image_generation_provider"
+    name: str                                # human label, e.g. "Image generation provider"
+    description: str                         # what's missing + where to set it up
+    configure_url: str                       # e.g. "/admin/configuration/image-generation"
+    check: Callable[[Session], bool]         # cheap; returns True if satisfied
+                                              # (arbitrary_types_allowed=True covers Callable + Session)
 
 class BuiltinSkill(BaseModel):
     """In-memory entry in the BuiltinSkillRegistry. Populated at boot from
@@ -305,8 +319,7 @@ class BuiltinSkill(BaseModel):
     name: str                                # from SKILL.md frontmatter
     description: str                         # from SKILL.md frontmatter
     has_template: bool
-    is_available: Callable[[Session], bool] = always_available
-    unavailable_reason: str | None = None
+    requirements: tuple[SkillRequirement, ...] = ()   # all must be satisfied
 
 class BuiltinSkillRegistry:
     """Process-wide. Populated at boot; treated as immutable after."""
@@ -315,24 +328,26 @@ class BuiltinSkillRegistry:
         self,
         slug: str,
         source_dir: Path,
-        is_available: Callable[[Session], bool] = always_available,
-        unavailable_reason: str | None = None,
+        requirements: Sequence[SkillRequirement] = (),
     ) -> None:
         """Reads SKILL.md(.template) frontmatter, validates slug, stores entry."""
 
     def list_all(self) -> list[BuiltinSkill]: ...
-    def list_available(self, db: Session) -> list[BuiltinSkill]:
-        """Built-ins whose availability check returns True. Used by the materializer."""
+    def list_satisfied(self, db: Session) -> list[BuiltinSkill]:
+        """Built-ins whose requirements all check True. Used by the materializer."""
+    def evaluate_for_admin(self, db: Session) -> list[BuiltinSkillStatus]:
+        """Per-built-in: each requirement + satisfied bool. Used by /api/admin/skills."""
     def get(self, slug: str) -> BuiltinSkill | None: ...
     def reserved_slugs(self) -> set[str]: ...
 ```
 
-Registration happens at app boot. Each feature owns its own registration module and imports availability checks from the modules that own the dependencies:
+Registration happens at app boot. Each feature owns its own registration module and imports requirement checks from the modules that own the dependencies:
 
 ```python
 # backend/onyx/server/features/build/skills/builtins_registration.py
 
 from onyx.db.image_generation import get_default_image_generation_config
+from onyx.skills.registry import SkillRequirement
 
 _SKILLS_DIR = Path(__file__).parent.parent / "sandbox/kubernetes/docker/skills"
 
@@ -342,8 +357,15 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
     registry.register(
         slug="image-generation",
         source_dir=_SKILLS_DIR / "image-generation",
-        is_available=lambda db: get_default_image_generation_config(db) is not None,
-        unavailable_reason="Configure an image-generation provider before this skill can run.",
+        requirements=[
+            SkillRequirement(
+                key="image_generation_provider",
+                name="Image generation provider",
+                description="Configure an image-generation provider (e.g. Gemini, OpenAI) before this skill can run.",
+                configure_url="/admin/configuration/image-generation",
+                check=lambda db: get_default_image_generation_config(db) is not None,
+            ),
+        ],
     )
 
     # bio-builder, company-search registered when their on-disk dirs land.
@@ -355,26 +377,27 @@ def register_craft_builtins(registry: BuiltinSkillRegistry) -> None:
 - **Why register at boot rather than on-demand.** Boot-time catches slug collisions and missing source dirs at process start, not mid-request.
 - **Why frontmatter parsing at registration, not materialization.** Lets the admin UI show built-in name/description without reading from disk on every request.
 - **Slug collision = fail loud at boot.** Deploy-time bug; operator must fix.
-- **Single availability check, not a requirement object graph.** V1 only needs one setup condition per built-in. `BuiltinSkill` carries the callable plus the admin-facing reason and configure URL directly, which avoids duplicating the same name/description/configure fields across requirement/status DTOs. If a future skill needs multiple independently rendered setup requirements, add that abstraction when the need is real.
-- **Pydantic, not `@dataclass`.** `BuiltinSkill` uses `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` to match the codebase convention (Pydantic models dominate ~96% of backend type definitions). `arbitrary_types_allowed` is required because `Callable` and `Session` aren't Pydantic-native. Frozen gives immutability + hashability for set membership without needing `__hash__` boilerplate.
+- **`requirements` is structured, not a bare callable.** Letting the admin UI render *what's missing* and *where to fix it* requires more than a bool. A `SkillRequirement` carries enough metadata for the badge, the drawer detail, and the deep-link CTA. A future `is_disabled_by_admin(db)` flavor can be added the same way without changing call sites.
+- **Pydantic, not `@dataclass`.** Both `SkillRequirement` and `BuiltinSkill` use `BaseModel` with `model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)` to match the codebase convention (Pydantic models dominate ~96% of backend type definitions). `arbitrary_types_allowed` is required because `Callable` and `Session` aren't Pydantic-native. Frozen gives immutability + hashability for set membership without needing `__hash__` boilerplate.
 - **Checks must be cheap and side-effect-free.** They run on every session-start materialization and every `GET /api/admin/skills`. Confirmed: all V1 checks are single-row DB lookups (`get_default_image_generation_config(db)`, `fetch_existing_llm_providers(db, ...)`) — sub-millisecond.
 - **Checks come from the feature module that owns the dependency.** `get_default_image_generation_config` lives in `backend/onyx/db/image_generation.py`; the registration module just composes them. Keeps coupling sane and tests independent.
-- **OR composition for "either of these works".** If a skill needs *one of N* providers, `is_available` is `lambda db: provider_a(db) or provider_b(db)`. Single check, composed boolean — keeps the admin UI clean (one "Needs setup" entry, not N).
-- **No shared/bundled availability checks between skills in V1.** If two skills need the same dep, each declares it independently. The admin will see two near-identical "Needs setup" CTAs but they both deep-link to the same configure page — acceptable noise for V1. If we ship five+ skills sharing one dep, factor out a shared helper then.
+- **OR composition for "either of these works".** If a skill needs *one of N* providers, the requirement's `check` is `lambda db: provider_a(db) or provider_b(db)`. Single requirement, composed boolean — keeps the admin UI clean (one "Needs setup" entry, not N).
+- **No shared/bundled requirements between skills in V1.** If two skills need the same dep, each declares it independently. The admin will see two near-identical "Needs setup" CTAs but they both deep-link to the same configure page — acceptable noise for V1. If we ship five+ skills sharing one dep, factor out a `SHARED_REQUIREMENTS` module then.
 - **Users never see unavailable built-ins.** Materializer skips them entirely → not in `.agents/skills/`, not in `AGENTS.md`. The agent doesn't know they could exist. No ghosted-but-disabled UI for users.
 
 ### Todos
+- [ ] Implement `SkillRequirement` dataclass in `backend/onyx/skills/registry.py`.
 - [ ] Implement `BuiltinSkillRegistry`:
   - [ ] Singleton accessor (`BuiltinSkillRegistry.instance()`).
-  - [ ] `register(slug, source_dir, is_available=..., unavailable_reason=None)` — read frontmatter, validate slug, raise on duplicate or missing SKILL.md.
-  - [ ] `list_all()`, `list_available(db)`, `get(slug)`, `reserved_slugs()`.
+  - [ ] `register(slug, source_dir, requirements=[])` — read frontmatter, validate slug, raise on duplicate or missing SKILL.md.
+  - [ ] `list_all()`, `list_satisfied(db)`, `evaluate_for_admin(db)`, `get(slug)`, `reserved_slugs()`.
 - [ ] Implement `register_craft_builtins(registry)` in `backend/onyx/server/features/build/skills/builtins_registration.py`:
   - [ ] `pptx` — no requirements.
   - [ ] `image-generation` — requires `get_default_image_generation_config(db) is not None`, deep-link to `/admin/configuration/image-generation`.
 - [ ] Wire the call into `backend/onyx/main.py` startup.
 - [ ] Startup integration tests:
   - [ ] `assert registry.get("pptx") is not None` after app boot.
-  - [ ] `registry.list_available(db)` excludes `image-generation` when no provider is configured; includes it after one is added.
+  - [ ] `registry.list_satisfied(db)` excludes `image-generation` when no provider is configured; includes it after one is added.
 
 ---
 
@@ -491,7 +514,7 @@ def materialize_skills(
 Algorithm:
 
 1. Ensure `dest_path` exists and is empty.
-2. `builtins = BuiltinSkillRegistry.instance().list_available(db_session)` — only built-ins whose availability check returns true. Unsatisfied built-ins are skipped silently; admins see them as "Needs setup" in the admin UI.
+2. `builtins = BuiltinSkillRegistry.instance().list_satisfied(db_session)` — only built-ins whose requirements all check True. Unsatisfied built-ins are skipped silently; admins see them as "Needs setup" in the admin UI.
 3. `customs = list_skills_for_user(user, db_session)` — single SQL query, public-OR-group-grant, filtered to `enabled = True AND deleted_at IS NULL`. Disabled or soft-deleted skills never reach the materialized set.
 4. For each built-in:
    - `shutil.copytree(source_dir, dest_path/slug)`.
@@ -568,8 +591,15 @@ class BuiltinSkillAdmin(BaseModel):
     name: str
     description: str
     has_template: bool
-    available: bool
-    unavailable_reason: str | None
+    available: bool                              # True iff every requirement satisfied
+    requirements: list[RequirementStatus]        # empty if skill has no requirements
+
+class RequirementStatus(BaseModel):
+    key: str
+    name: str
+    description: str
+    configure_url: str
+    satisfied: bool
 
 class CustomSkillAdmin(BaseModel):
     id: UUID
@@ -1071,9 +1101,9 @@ Single page at `/admin/skills`. **One unified list** of built-ins + customs toge
 #### 13.1 List view
 Columns: letter-monogram avatar, name (and slug as subtext), description (truncated), source badge (`Platform` / `Custom`), grants summary (customs only — "Org-wide" / "3 groups" / "5 users" / "Private"), updated_at, actions.
 
-- **Built-in rows**: no action menu. Click row → drawer with read-only details (frontmatter, files list, on-disk path, availability status).
+- **Built-in rows**: no action menu. Click row → drawer with read-only details (frontmatter, files list, on-disk path, requirements + status).
 - **Custom rows**: action menu → Edit, Replace bundle, Manage grants, Enable/Disable, Delete.
-- **Built-in availability**: Access column shows `Available` (green dot) when `available` is true, or `Needs setup` (warning) with an inline `Configure →` button using a frontend route derived from the built-in slug.
+- **Built-in availability**: Access column shows `Available` (green dot) when all requirements are satisfied, or `Needs setup · N missing` (warning) with an inline `Configure →` button that deep-links to the first unsatisfied requirement's `configure_url` (e.g. `/admin/configuration/image-generation`).
 - **Search**: name + slug.
 - **Filter**: source (All / Platform / Custom), enabled state, availability (All / Available / Needs setup).
 - **Sort**: default by name; can sort by updated_at.
@@ -1505,7 +1535,7 @@ Items knowingly punted; each is reversible without breaking V1.
 
 | Deferred | When | How to add later |
 |---|---|---|
-| Shared/bundled availability-check helpers | When 5+ skills depend on the same configuration surface | Today each skill declares its availability independently — fine when most skills need different things, but if e.g. five skills all need a configured Gemini provider, factor a shared helper module that exports `image_provider_available`, `llm_provider_available`, etc. The data model stays the same; only the registration code dedupes. |
+| Shared/bundled `SkillRequirement` modules | When 5+ skills depend on the same configuration surface | Today each skill declares its requirements independently — fine when most skills need different things, but if e.g. five skills all need a configured Gemini provider, factor a shared `requirements.py` module that exports `IMAGE_GEN_PROVIDER`, `LLM_PROVIDER`, etc. The data model stays the same; only the registration code dedupes. |
 | Per-user skill grants (`Skill__User` table) | When customers report friction with "share with one teammate" via a single-member group workaround, or when user-authored skills (below) land. | Add a `skill__user (skill_id, user_id)` join table, an `Individual users` picker in the grants editor, an OR branch in `list_skills_for_user`'s access query, and `user_ids` to the POST/PUT bodies + `granted_user_ids` to `CustomSkillAdmin`. Migration is additive; no V1 schema disruption. |
 | **User-authored skills (third tier)** | V1.5 — when product wants users to author + share their own skills without admin involvement. | Big lift. Adds: (1) user-side `POST /api/skills` upload endpoint with per-user quota + rate limit, (2) `Skill__User` brought back from the cut above for user→user sharing, (3) `source = "user"` value on the manifest discriminator (already designed in V1), (4) skill promotion workflow — new `skill_promotion_request` table, request/approve endpoints, admin pending-promotions UI tab, (5) slug-namespace decision: stay tenant-global (simplest; user-authored shares a namespace with admin customs), or move to per-author namespace (more flexible, more complex), (6) **threat-model rewrite** — user-authored shifts the security model from "bounded by admin RBAC" to "any tenant user can introduce code that runs in other users' sessions." Lateral attacker model becomes first-class; §18 needs a real expansion. Interception layer still bounds external exfil but not within-tenant abuse. (7) User-facing "My skills" page + authorship indicator on the skills panel. ~+4-6 weeks of work after V1 ships. |
 | **Skill author tooling** | V1.5 — paired with user-authored skills, but useful for admin-authored skills too. | V1 assumes a developer hand-crafts the zip. V1.5 ships authoring affordances so non-engineers can produce a valid skill: (1) a CLI scaffolder (`onyx-cli skill new <slug>`) that generates SKILL.md template, frontmatter, an example script, and the zip layout, (2) a local validator (`onyx-cli skill validate <path>`) that runs the same Pydantic / slug / file-size / SKILL.md-required checks the server does — same error messages, no upload required, (3) a `--dry-run` upload mode that posts to the server, runs validation, and returns the would-be `OnyxError` without persisting, (4) docs page with the format spec, allowed tools, sandboxing constraints, and a worked example. None of this changes the server schema; it's purely a UX layer for skill authors. ~1-2 weeks once we know what shape user-authored skills take. |
@@ -1588,7 +1618,7 @@ In rough order of "cuttable first":
 
 1. **Invocation audit log** (Phase 5 stretch) — high value but defer to V1.5.
 2. **Built-in detail drawer** (Phase 4) — engineers can read source dirs directly.
-3. **Built-in availability checks** (Phase 1, §4) — ship `image-generation` always-available with a runtime-error caveat. Lose the clean "Needs setup" UX but cut a chunk of work. **Only acceptable** if the interception layer is the safety net.
+3. **`SkillRequirement` system** (Phase 1, §4) — ship `image-generation` always-available with a runtime-error caveat. Lose the clean "Needs setup" UX but cut a chunk of work. **Only acceptable** if the interception layer is the safety net.
 4. **Per-skill content endpoint** (`/api/build/sessions/{id}/skills/{slug}/content`, Phase 3) — SKILL.md preview drawer in panel; defer to V1.5.
 5. **Local sandbox backend skills materialization** — if Kubernetes is the only deploy target for V1, defer the local-backend changes.
 

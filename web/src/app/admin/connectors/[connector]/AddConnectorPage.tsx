@@ -434,7 +434,7 @@ export default function AddConnector({
                 liveGmailCredential;
               const linkCredentialResponse = await linkCredential(
                 response.id,
-                credential?.id!,
+                credential!.id,
                 name,
                 access_type,
                 groups,

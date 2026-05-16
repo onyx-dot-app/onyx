@@ -690,6 +690,15 @@ OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
 
+# Whether the open_url tool enforces SSRF protection (rejecting URLs that
+# resolve to private/internal IPs). Default true to keep multi-tenant SaaS
+# safe. Self-hosted operators on trusted networks (e.g. internal docs that
+# resolve to RFC1918 addresses via split-horizon DNS) can set to false to
+# allow fetching from private ranges.
+OPEN_URL_VALIDATE_SSRF = (
+    os.environ.get("OPEN_URL_VALIDATE_SSRF", "true").lower() == "true"
+)
+
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     "HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY",
     HtmlBasedConnectorTransformLinksStrategy.STRIP,

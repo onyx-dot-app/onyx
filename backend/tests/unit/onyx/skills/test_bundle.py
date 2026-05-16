@@ -1,4 +1,4 @@
-"""Unit tests for the custom skill bundle validator (spec §5)."""
+"""Unit tests for the custom skill bundle validator."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def test_valid_bundle_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Failure modes — one test per rule from spec §5
+# Failure modes
 # ---------------------------------------------------------------------------
 
 
@@ -206,7 +206,7 @@ def test_sha256_differs_for_same_content_different_timestamps() -> None:
     """compute_bundle_sha256 is a raw-bytes hash — same contents repacked with
     different timestamps deliberately hash differently.
 
-    Spec §5: ``deterministic over raw bytes`` — we want to detect "this is the
+    ``deterministic over raw bytes`` — we want to detect "this is the
     exact same upload," not "the contents match."
     """
     entries = [
@@ -365,7 +365,7 @@ def test_safe_unzip_rejects_unsupported_compression(tmp_path: Path) -> None:
 
 
 def test_size_violation_returns_413() -> None:
-    """Spec §5 size-cap violations should return HTTP 413, not 400."""
+    """Size-cap violations should return HTTP 413, not 400."""
     zip_bytes = _build_zip(
         [
             ("SKILL.md", VALID_SKILL_MD),

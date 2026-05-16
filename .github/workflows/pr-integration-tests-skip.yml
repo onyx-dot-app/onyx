@@ -1,0 +1,31 @@
+name: Run Integration Tests v2 (Skip)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+    paths-ignore:
+      - "backend/**"
+      - "cli/**"
+      - "deployment/docker_compose/**"
+      - "docker-bake.hcl"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-integration-tests.yml"
+      - ".github/actions/setup-test-license/**"
+
+permissions:
+  contents: read
+
+jobs:
+  # This job immediately succeeds to satisfy branch protection rules when the
+  # paths: filter in pr-integration-tests.yml excludes the PR (e.g. web/-only).
+  # The actual integration tests remain enforced when relevant paths change.
+  # Matches the pattern in merge-group.yml.
+  required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Success
+        run: echo "Success"

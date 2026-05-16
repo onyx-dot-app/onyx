@@ -103,6 +103,102 @@
       },
       "command": "npx",
       "args": ["orval", "--config", "orval.config.js"]
+    },
+    {
+      "label": "k8s: cluster up",
+      "detail": "Create the kind cluster + helm install Onyx. Idempotent.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/k8s-up.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: cluster down (full teardown)",
+      "detail": "Delete the kind cluster and all data.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/k8s-down.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: pause cluster (data preserved)",
+      "detail": "Stop the kind node container. All cluster state and PVC data survive; resume with 'k8s: resume cluster'.",
+      "type": "shell",
+      "command": "docker",
+      "args": ["stop", "onyx-dev-control-plane"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: resume cluster",
+      "detail": "Start the kind node container previously paused with 'k8s: pause cluster'. Kubelet reconciles pods automatically.",
+      "type": "shell",
+      "command": "docker",
+      "args": ["start", "onyx-dev-control-plane"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence connect",
+      "detail": "Bridge host DNS into the cluster (cluster DNS resolves from laptop).",
+      "type": "shell",
+      "command": "telepresence",
+      "args": ["connect", "-n", "onyx"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence intercept api_server",
+      "detail": "Idempotently connect + intercept api_server. Writes cluster env to .vscode/.env.k8s. Wired as preLaunchTask on every (k8s) launch config.",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e; telepresence connect -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file \"${workspaceFolder}/.vscode/.env.k8s\"; if [ -f \"${workspaceFolder}/.vscode/.env.k8s.local\" ]; then echo '' >> \"${workspaceFolder}/.vscode/.env.k8s\"; cat \"${workspaceFolder}/.vscode/.env.k8s.local\" >> \"${workspaceFolder}/.vscode/.env.k8s\"; fi"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence quit",
+      "detail": "Tear down all telepresence intercepts and disconnect.",
+      "type": "shell",
+      "command": "telepresence",
+      "args": ["quit"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
     }
   ]
 }

@@ -4,6 +4,15 @@ from collections.abc import Generator
 
 from pydantic import BaseModel
 
+# Python's csv default field size limit is 131072 bytes (128 KiB), which
+# real-world data (long descriptions, pasted docs, base64 blobs) routinely
+# exceeds — the parser then raises `Error: field larger than field limit
+# (131072)` and fails the whole row, aborting indexing of the CSV section
+# (ONYX-BACKEND-H6FM). Bump to 128 MiB, matching the order of magnitude the
+# salesforce connector already opts into for bulk exports.
+_CSV_FIELD_SIZE_LIMIT_BYTES = 128 * 1024 * 1024
+csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
+
 _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
 
 
