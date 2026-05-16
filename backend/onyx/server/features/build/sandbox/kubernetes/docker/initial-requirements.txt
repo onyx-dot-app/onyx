@@ -1,3 +1,4 @@
+cryptography==46.0.7
 defusedxml==0.7.1
 fastapi==0.115.12
 google-genai==2.2.0

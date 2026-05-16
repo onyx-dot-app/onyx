@@ -1297,17 +1297,17 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
-  # Shared secret for api-server → sandbox daemon push auth.
-  # The api-server passes this value directly to sandbox pods at provision time
-  # (same pattern as ONYX_PAT), so only the api-server needs the k8s Secret.
+  # Ed25519 private key for sandbox push auth (only the public key reaches sandbox pods).
+  # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
   sandboxPushSecret:
     enabled: false
+    allPods: false  # Only inject into API server pods
     secretName: 'onyx-sandbox-push-secret'
     existingSecret: ""
     secretKeys:
-      ONYX_SANDBOX_PUSH_SECRET: shared_secret
+      ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
     values:
-      shared_secret: ""
+      private_key: ""
 
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
