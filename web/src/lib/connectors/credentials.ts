@@ -57,6 +57,10 @@ export interface GitlabCredentialJson {
   gitlab_access_token: string;
 }
 
+export interface PhabricatorCredentialJson {
+  phab_api_token: string;
+}
+
 export interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
@@ -292,6 +296,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bitbucket_api_token: "",
   } as BitbucketCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
+  phabricator: { phab_api_token: "" } as PhabricatorCredentialJson,
   bookstack: {
     bookstack_base_url: "",
     bookstack_api_token_id: "",
@@ -532,6 +537,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Slab
   slab_bot_token: "Slab Bot Token",
+
+  // Phabricator
+  phab_api_token: "Phabricator API Token",
 
   // Coda
   coda_bearer_token: "Coda Bearer Token",
