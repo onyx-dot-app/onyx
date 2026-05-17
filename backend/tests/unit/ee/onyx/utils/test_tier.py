@@ -20,7 +20,7 @@ from onyx.server.settings.models import Tier
 
 
 def _metadata(
-    customer_tier: CustomerTier | None = CustomerTier.ENTERPRISE,
+    customer_tier: CustomerTier | str | None = CustomerTier.ENTERPRISE,
     status: ApplicationStatus = ApplicationStatus.ACTIVE,
 ) -> MagicMock:
     m = MagicMock()
@@ -120,7 +120,12 @@ class TestTierFromLicenseMetadata:
             # back-compat: unrecognized future tier value → ENTERPRISE
             ("UNRECOGNIZED_FUTURE_TIER", Tier.ENTERPRISE),
         ],
-        ids=["business", "enterprise", "legacy_none_backcompat", "unrecognized_backcompat"],
+        ids=[
+            "business",
+            "enterprise",
+            "legacy_none_backcompat",
+            "unrecognized_backcompat",
+        ],
     )
     def test_resolves_active_metadata(
         self,
