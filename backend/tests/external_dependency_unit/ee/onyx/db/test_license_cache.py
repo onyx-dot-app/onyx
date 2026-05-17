@@ -28,8 +28,8 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 @pytest.fixture(autouse=True)
 def _setup(
-    db_session: Session,
-    tenant_context: None,
+    db_session: Session,  # noqa: ARG001 — fixture requested only for its side-effect (SQL engine init); pytest binds by name
+    tenant_context: None,  # noqa: ARG001 — fixture requested only for its side-effect (tenant contextvar); pytest binds by name
 ) -> Generator[None, None, None]:
     """Per-test setup:
 
