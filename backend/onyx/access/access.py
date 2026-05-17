@@ -21,6 +21,9 @@ from onyx.db.models import Connector
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import FileRecord
+from onyx.db.models import Persona
+from onyx.db.models import Persona__User
+from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.user_file import fetch_user_files_with_access_relationships
@@ -214,6 +217,8 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     JSONB scan in `_documents_from_file_connector_config`):
 
     - `UserFile` owned by the user.
+    - `UserFile` attached to a `Persona` the user can read (public, owned,
+      or directly shared via `Persona.users`).
     - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
     - `FileRecord` with origin `CHAT_IMAGE_GEN` (see inline TODO).
@@ -229,6 +234,9 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         .exists()
     ).scalar()
     if owns_user_file:
+        return True
+
+    if _user_can_access_persona_attached_file(file_id, user, db_session):
         return True
 
     chat_file_stmt = (
@@ -262,6 +270,36 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
         return True
 
     return _user_can_access_connector_file(file_id, user, db_session)
+
+
+def _user_can_access_persona_attached_file(
+    file_id: str, user: User, db_session: Session
+) -> bool:
+    """Grant access if `file_id` belongs to a `UserFile` attached to a
+    `Persona` the user can read (public, owned, or directly shared via
+    `Persona.users`).
+    """
+    stmt = (
+        select(UserFile.id)
+        .join(Persona__UserFile, Persona__UserFile.user_file_id == UserFile.id)
+        .join(Persona, Persona.id == Persona__UserFile.persona_id)
+        .outerjoin(
+            Persona__User,
+            (Persona__User.persona_id == Persona.id)
+            & (Persona__User.user_id == user.id),
+        )
+        .where(
+            UserFile.file_id == file_id,
+            Persona.deleted.is_(False),
+            or_(
+                Persona.is_public.is_(True),
+                Persona.user_id == user.id,
+                Persona__User.user_id.is_not(None),
+            ),
+        )
+        .limit(1)
+    )
+    return db_session.execute(stmt).first() is not None
 
 
 def _user_can_access_connector_file(
