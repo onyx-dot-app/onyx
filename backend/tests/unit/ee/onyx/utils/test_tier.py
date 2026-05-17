@@ -81,3 +81,53 @@ class TestSelfHostedTierCacheFailure:
 
         with pytest.raises(ValueError, match="unexpected"):
             get_tier()
+
+
+class TestTierFromLicenseMetadata:
+    """All branches of `tier_from_license_metadata` (tier.py:67-83).
+
+    The helper is the single point where license metadata → Tier translation
+    happens for self-hosted instances. Covers the back-compat fallback that
+    keeps legacy licenses (no `customer_tier` field) and unrecognized future
+    tiers working as ENTERPRISE.
+    """
+
+    def test_none_metadata_returns_community(self) -> None:
+        from ee.onyx.utils.tier import tier_from_license_metadata
+
+        assert tier_from_license_metadata(None) == Tier.COMMUNITY
+
+    def test_gated_access_returns_community_even_with_valid_tier(self) -> None:
+        """GATED_ACCESS short-circuits before customer_tier is read."""
+        from ee.onyx.utils.tier import tier_from_license_metadata
+
+        m = _metadata(
+            customer_tier=CustomerTier.ENTERPRISE,
+            status=ApplicationStatus.GATED_ACCESS,
+        )
+        assert tier_from_license_metadata(m) == Tier.COMMUNITY
+
+    @pytest.mark.parametrize(
+        "customer_tier,expected_tier",
+        [
+            (CustomerTier.BUSINESS, Tier.BUSINESS),
+            (CustomerTier.ENTERPRISE, Tier.ENTERPRISE),
+            # back-compat: legacy license without customer_tier → ENTERPRISE
+            (None, Tier.ENTERPRISE),
+            # back-compat: unrecognized future tier value → ENTERPRISE
+            ("UNRECOGNIZED_FUTURE_TIER", Tier.ENTERPRISE),
+        ],
+        ids=["business", "enterprise", "legacy_none_backcompat", "unrecognized_backcompat"],
+    )
+    def test_resolves_active_metadata(
+        self,
+        customer_tier: CustomerTier | None | str,
+        expected_tier: Tier,
+    ) -> None:
+        from ee.onyx.utils.tier import tier_from_license_metadata
+
+        m = _metadata(
+            customer_tier=customer_tier,
+            status=ApplicationStatus.ACTIVE,
+        )
+        assert tier_from_license_metadata(m) == expected_tier
