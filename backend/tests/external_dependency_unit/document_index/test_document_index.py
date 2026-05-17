@@ -22,10 +22,6 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
-)
-from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -42,7 +38,7 @@ from tests.external_dependency_unit.document_index.conftest import (
 
 @pytest.fixture(scope="module")
 def vespa_document_index(
-    vespa_index: VespaIndex,  # noqa: ARG001 — ensures schema exists
+    vespa_index: VespaDocumentIndex,  # noqa: ARG001 — ensures schema exists
     httpx_client: httpx.Client,
     test_index_name: str,
 ) -> Generator[VespaDocumentIndex, None, None]:
@@ -56,7 +52,7 @@ def vespa_document_index(
 
 @pytest.fixture(scope="module")
 def opensearch_document_index(
-    opensearch_old_index: OpenSearchOldDocumentIndex,  # noqa: ARG001 — ensures index exists
+    opensearch_index: OpenSearchDocumentIndex,  # noqa: ARG001 — ensures index exists
     test_index_name: str,
 ) -> Generator[OpenSearchDocumentIndex, None, None]:
     yield OpenSearchDocumentIndex(

@@ -105,7 +105,7 @@ auth:
   sandboxPushSecret:
     enabled: true
     values:
-      shared_secret: "dev-sandbox-push-secret-not-for-production"
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 # ---- App pods ----
 #

@@ -25,7 +25,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import VespaDocumentFields
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -68,7 +68,7 @@ def document_by_cc_pair_cleanup_task(
     document_id: str,
     connector_id: int,
     credential_id: int,
-    tenant_id: str,
+    tenant_id: str,  # noqa: ARG001 — kept on the celery task signature
 ) -> bool:
     """A lightweight subtask used to clean up document to cc pair relationships.
     Created by connection deletion and connector pruning parent tasks."""
@@ -117,9 +117,8 @@ def document_by_cc_pair_cleanup_task(
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
 
                 for retry_document_index in retry_document_indices:
-                    _ = retry_document_index.delete_single(
+                    _ = retry_document_index.delete(
                         document_id,
-                        tenant_id=tenant_id,
                         chunk_count=chunk_count,
                     )
 
@@ -151,9 +150,15 @@ def document_by_cc_pair_cleanup_task(
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
                 update_doc_sets: set[str] = set(doc_sets)
 
-                fields = VespaDocumentFields(
-                    document_sets=update_doc_sets,
+                update_request = MetadataUpdateRequest(
+                    document_ids=[document_id],
+                    doc_id_to_chunk_cnt={
+                        document_id: (
+                            doc.chunk_count if doc.chunk_count is not None else -1
+                        )
+                    },
                     access=doc_access,
+                    document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,
                 )
@@ -163,13 +168,7 @@ def document_by_cc_pair_cleanup_task(
                     # it was ok if a doc did not exist in the document index. I
                     # don't agree with that claim, so keep an eye on this task
                     # to see if this raises.
-                    retry_document_index.update_single(
-                        document_id,
-                        tenant_id=tenant_id,
-                        chunk_count=doc.chunk_count,
-                        fields=fields,
-                        user_fields=None,
-                    )
+                    retry_document_index.update([update_request])
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(

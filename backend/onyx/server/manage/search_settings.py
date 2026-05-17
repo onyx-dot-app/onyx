@@ -121,11 +121,11 @@ def set_new_search_settings(
     # Ensure the document indices have the new index immediately.
     document_indices = get_all_document_indices(search_settings, new_search_settings)
     for document_index in document_indices:
-        document_index.ensure_indices_exist(
-            primary_embedding_dim=search_settings.final_embedding_dim,
-            primary_embedding_precision=search_settings.embedding_precision,
-            secondary_index_embedding_dim=new_search_settings.final_embedding_dim,
-            secondary_index_embedding_precision=new_search_settings.embedding_precision,
+        # Pair instances already know about their secondary search settings via
+        # the factory; only the primary embedding info needs to be passed in.
+        document_index.verify_and_create_index_if_necessary(
+            embedding_dim=search_settings.final_embedding_dim,
+            embedding_precision=search_settings.embedding_precision,
         )
 
     # Pause index attempts for the currently in-use index to preserve resources.
@@ -167,12 +167,9 @@ def cancel_new_embedding(
         document_index = get_default_document_index(
             primary_search_settings, None, db_session
         )
-        document_index.ensure_indices_exist(
-            primary_embedding_dim=primary_search_settings.final_embedding_dim,
-            primary_embedding_precision=primary_search_settings.embedding_precision,
-            # just finished swap, no more secondary index
-            secondary_index_embedding_dim=None,
-            secondary_index_embedding_precision=None,
+        document_index.verify_and_create_index_if_necessary(
+            embedding_dim=primary_search_settings.final_embedding_dim,
+            embedding_precision=primary_search_settings.embedding_precision,
         )
 
 

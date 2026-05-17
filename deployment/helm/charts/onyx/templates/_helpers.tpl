@@ -69,11 +69,28 @@ Set secret name
 {{- end }}
 
 {{/*
-Create env vars from secrets
+Create env vars from secrets (global secrets only — skips entries with allPods: false)
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) }}
+    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (ne (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- range $name, $key := $secretContent.secretKeys }}
+- name: {{ $name | upper | replace "-" "_" | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $secretContent }}
+      key: {{ default $name $key }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+
+{{/*
+Create env vars from secrets restricted to specific pods (entries with allPods: false)
+*/}}
+{{- define "onyx.envSecretsRestricted" -}}
+    {{- range $secretSuffix, $secretContent := .Values.auth }}
+    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (eq (toString (index $secretContent "allPods" | default "true")) "false") }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
