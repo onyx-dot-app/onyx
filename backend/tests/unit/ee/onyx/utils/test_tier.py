@@ -12,6 +12,9 @@ from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.server.license.models import CustomerTier
+from onyx.db.enums import AccessType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Tier
 
@@ -131,3 +134,66 @@ class TestTierFromLicenseMetadata:
             status=ApplicationStatus.ACTIVE,
         )
         assert tier_from_license_metadata(m) == expected_tier
+
+
+class TestRequireBusinessTierForSyncAccess:
+    """`require_business_tier_for_sync_access` is called from
+    `add_credential_to_connector` when a cc-pair is being created with
+    `access_type=SYNC`. Below BUSINESS must raise FEATURE_NOT_AVAILABLE;
+    non-SYNC access types are unconditional pass-through.
+    """
+
+    @pytest.mark.parametrize(
+        "access_type",
+        [AccessType.PUBLIC, AccessType.PRIVATE],
+        ids=["public", "private"],
+    )
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_non_sync_access_passes_without_checking_tier(
+        self, mock_get_tier: MagicMock, access_type: AccessType
+    ) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_sync_access
+
+        require_business_tier_for_sync_access(access_type)
+        mock_get_tier.assert_not_called()
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_sync_at_community_raises_feature_not_available(
+        self, mock_get_tier: MagicMock
+    ) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_sync_access
+
+        mock_get_tier.return_value = Tier.COMMUNITY
+        with pytest.raises(OnyxError) as exc_info:
+            require_business_tier_for_sync_access(AccessType.SYNC)
+        assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+    @pytest.mark.parametrize(
+        "tier",
+        [Tier.BUSINESS, Tier.ENTERPRISE],
+        ids=["business", "enterprise"],
+    )
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_sync_at_business_or_enterprise_passes(
+        self, mock_get_tier: MagicMock, tier: Tier
+    ) -> None:
+        from ee.onyx.utils.tier import require_business_tier_for_sync_access
+
+        mock_get_tier.return_value = tier
+        require_business_tier_for_sync_access(AccessType.SYNC)
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
+    @patch("ee.onyx.utils.tier.get_tier")
+    def test_legacy_enforcement_disabled_passes_without_checking_tier(
+        self, mock_get_tier: MagicMock
+    ) -> None:
+        """EE deployment with LICENSE_ENFORCEMENT_ENABLED=False — treat as
+        ENTERPRISE, same as `apply_license_status_to_settings`. Don't
+        block legacy installs that never loaded a license."""
+        from ee.onyx.utils.tier import require_business_tier_for_sync_access
+
+        require_business_tier_for_sync_access(AccessType.SYNC)
+        mock_get_tier.assert_not_called()

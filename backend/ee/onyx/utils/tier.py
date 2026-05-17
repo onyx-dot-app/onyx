@@ -22,6 +22,7 @@ import requests
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
+from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
 from ee.onyx.server.license.models import CustomerTier
@@ -31,8 +32,12 @@ from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.tier_management import get_cached_tier
 from ee.onyx.server.tenants.tier_management import update_tenant_tier
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Tier
+from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -172,3 +177,26 @@ def get_tier(tenant_id: str | None = None) -> Tier:
 
     # Don't cache the fallback — next call retries the refresh.
     return Tier.BUSINESS
+
+
+def require_business_tier_for_sync_access(access_type: AccessType) -> None:
+    """Raise FEATURE_NOT_AVAILABLE if SYNC access is requested below BUSINESS.
+
+    Auto-permission-sync requires connector-side permission tracking, which
+    is a Business+ feature. Failing at create/edit time means cc-pairs with
+    SYNC access only exist on tenants that can actually run the sync —
+    instead of letting the row land and silently never sync.
+
+    Mirrors `apply_license_status_to_settings`: with
+    LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
+    legacy EE deployments without a license aren't broken.
+    """
+    if access_type != AccessType.SYNC:
+        return
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Auto-sync access requires the Business or Enterprise plan.",
+        )

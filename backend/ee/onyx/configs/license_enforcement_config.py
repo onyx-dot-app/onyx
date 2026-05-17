@@ -68,8 +68,6 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
     "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
-    # NOTE: /manage/admin/cc-pair/{id}/sync-permissions can't be prefix-matched
-    # (variable in the middle); the FE hides it in AccessTypeForm instead.
     # ----- ENTERPRISE -----
     "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
     "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
