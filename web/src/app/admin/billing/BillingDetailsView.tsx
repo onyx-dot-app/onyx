@@ -171,7 +171,7 @@ function SubscriptionCard({
 
   const settings = useSettingsContext();
   const tier = settings?.settings.tier;
-  const isEnterprise = isManualLicenseOnly || tier === Tier.ENTERPRISE;
+  const isEnterprise = tier === Tier.ENTERPRISE || tier == null;
   const planName = isEnterprise ? "Enterprise Plan" : "Business Plan";
   const PlanIcon = isEnterprise ? SvgOrganization : SvgUsers;
   const expirationDate = billing?.current_period_end ?? license?.expires_at;
