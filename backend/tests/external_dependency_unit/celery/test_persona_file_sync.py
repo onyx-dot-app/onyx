@@ -42,7 +42,7 @@ from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.persona import upsert_persona
-from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -260,12 +260,14 @@ class TestSyncTaskWritesPersonaIds:
                 user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
             )
 
-        mock_doc_index.update_single.assert_called_once()
-        call_args = mock_doc_index.update_single.call_args
-        user_fields: VespaDocumentUserFields = call_args.kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert persona.id in user_fields.personas
-        assert call_args.args[0] == str(uf.id)
+        mock_doc_index.update.assert_called_once()
+        call_args = mock_doc_index.update.call_args
+        update_requests: list[MetadataUpdateRequest] = call_args.args[0]
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.document_ids == [str(uf.id)]
+        assert update_request.persona_ids is not None
+        assert persona.id in update_request.persona_ids
 
     def test_clears_persona_sync_flag(
         self,
@@ -332,12 +334,15 @@ class TestSyncTaskWritesPersonaIds:
                 user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
             )
 
-        call_kwargs = mock_doc_index.update_single.call_args.kwargs
-        user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert user_fields.user_projects is not None
-        assert persona.id in user_fields.personas
-        assert project.id in user_fields.user_projects
+        update_requests: list[MetadataUpdateRequest] = (
+            mock_doc_index.update.call_args.args[0]
+        )
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.persona_ids is not None
+        assert update_request.project_ids is not None
+        assert persona.id in update_request.persona_ids
+        assert project.id in update_request.project_ids
 
         # Both flags should be cleared
         db_session.refresh(uf)
@@ -377,10 +382,13 @@ class TestSyncTaskWritesPersonaIds:
                 user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
             )
 
-        call_kwargs = mock_doc_index.update_single.call_args.kwargs
-        user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert persona.id not in user_fields.personas
+        update_requests: list[MetadataUpdateRequest] = (
+            mock_doc_index.update.call_args.args[0]
+        )
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.persona_ids is not None
+        assert persona.id not in update_request.persona_ids
 
 
 # ---------------------------------------------------------------------------

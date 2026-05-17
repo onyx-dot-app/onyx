@@ -52,6 +52,9 @@ from uuid import uuid4
 
 import httpx
 from acp.schema import PromptResponse
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
 from kubernetes import config
 from kubernetes.client.rest import ApiException
@@ -119,14 +122,43 @@ POD_READY_POLL_INTERVAL_SECONDS = 2
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
-_PUSH_SECRET_ENV = "ONYX_SANDBOX_PUSH_SECRET"
+_PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
+_PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
+
+_push_private_key: Ed25519PrivateKey | None = None
+_push_public_key_b64: str | None = None
 
 
-def _build_push_auth_header() -> str:
-    secret = os.environ.get(_PUSH_SECRET_ENV, "")
-    if not secret:
-        raise RuntimeError(f"{_PUSH_SECRET_ENV} is not set")
-    return f"Bearer {secret}"
+def _get_push_key_pair() -> tuple[Ed25519PrivateKey, str]:
+    global _push_private_key, _push_public_key_b64
+    if _push_private_key is not None and _push_public_key_b64 is not None:
+        return _push_private_key, _push_public_key_b64
+
+    raw_b64 = os.environ.get(_PUSH_PRIVATE_KEY_ENV, "")
+    if not raw_b64:
+        raise RuntimeError(f"{_PUSH_PRIVATE_KEY_ENV} is not set")
+    try:
+        seed = base64.b64decode(raw_b64)
+        _push_private_key = Ed25519PrivateKey.from_private_bytes(seed)
+    except (binascii.Error, ValueError) as e:
+        raise RuntimeError(
+            f"{_PUSH_PRIVATE_KEY_ENV} is not a valid base64-encoded "
+            f"32-byte Ed25519 seed: {e}"
+        ) from e
+    pub_bytes = _push_private_key.public_key().public_bytes(
+        Encoding.Raw, PublicFormat.Raw
+    )
+    _push_public_key_b64 = base64.b64encode(pub_bytes).decode()
+    return _push_private_key, _push_public_key_b64
+
+
+def _sign_push_request(mount_path: str, sha256_hex: str) -> tuple[str, str]:
+    """Sign a push request and return (signature_b64, timestamp)."""
+    priv_key, _ = _get_push_key_pair()
+    ts = str(int(time.time()))
+    message = f"{ts}|{mount_path}|{sha256_hex}".encode()
+    sig = priv_key.sign(message)
+    return base64.b64encode(sig).decode(), ts
 
 
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
@@ -339,11 +371,11 @@ class KubernetesSandboxManager(SandboxManager):
                 )
             )
 
-        push_secret = os.environ.get(_PUSH_SECRET_ENV, "")
+        _, push_public_key_b64 = _get_push_key_pair()
         sandbox_env_vars = [
             client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
             client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
-            client.V1EnvVar(name=_PUSH_SECRET_ENV, value=push_secret),
+            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
         ]
 
         sandbox_container = client.V1Container(
@@ -2468,6 +2500,7 @@ fi
             raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
 
         tar_bytes, sha256_hex = _build_targz(files)
+        sig_b64, ts = _sign_push_request(mount_path, sha256_hex)
 
         url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/push"
         try:
@@ -2477,9 +2510,10 @@ fi
                     params={"mount_path": mount_path},
                     content=tar_bytes,
                     headers={
-                        "Authorization": _build_push_auth_header(),
                         "Content-Type": "application/gzip",
                         "X-Bundle-Sha256": sha256_hex,
+                        "X-Push-Signature": sig_b64,
+                        "X-Push-Timestamp": ts,
                     },
                 )
         except (httpx.TimeoutException, httpx.NetworkError) as e:

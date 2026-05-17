@@ -58,9 +58,11 @@ jest.mock("@/hooks/useToast", () => {
   };
 });
 
-// Mock usePaidEnterpriseFeaturesEnabled
-jest.mock("@/components/settings/usePaidEnterpriseFeaturesEnabled", () => ({
-  usePaidEnterpriseFeaturesEnabled: () => false,
+// Mock useTierAtLeast — return false so the test exercises the
+// non-paid-tier code path, matching the prior usePaidEnterpriseFeaturesEnabled
+// mock behavior.
+jest.mock("@/hooks/useTierAtLeast", () => ({
+  useTierAtLeast: () => false,
 }));
 
 describe("Custom LLM Provider Configuration Workflow", () => {

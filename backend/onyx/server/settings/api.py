@@ -30,9 +30,11 @@ from onyx.server.settings.models import (
 from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
 from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Tier
 from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
+from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -61,18 +63,32 @@ def admin_put_settings(
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
 
-    if not global_version.is_ee_version():
-        existing = load_settings()
-        if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Chat history retention is an Enterprise Plan feature.",
-            )
-        if settings.search_ui_enabled != existing.search_ui_enabled:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Search Mode is an Enterprise Plan feature.",
-            )
+    if global_version.is_ee_version():
+        from ee.onyx.utils.tier import get_tier
+
+        current_tier = get_tier()
+    else:
+        current_tier = Tier.COMMUNITY
+    existing = load_settings()
+    # Search Mode is Business+; Chat Retention is Enterprise-only.
+    # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
+    # middleware uses, so the FE has one shape to handle for tier-rejected
+    # writes.
+    if settings.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
+        current_tier, Tier.BUSINESS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Search Mode requires the Business or Enterprise plan.",
+        )
+    if (
+        settings.maximum_chat_retention_days != existing.maximum_chat_retention_days
+        and not tier_at_least(current_tier, Tier.ENTERPRISE)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Chat history retention requires the Enterprise plan.",
+        )
 
     store_settings(settings)
 

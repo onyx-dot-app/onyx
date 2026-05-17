@@ -47,8 +47,7 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import VespaDocumentFields
-from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import store_user_file_plaintext
@@ -743,9 +742,8 @@ def delete_user_file_impl(
                 )
             )
             for retry_document_index in retry_document_indices:
-                retry_document_index.delete_single(
-                    doc_id=user_file_id,
-                    tenant_id=tenant_id,
+                retry_document_index.delete(
+                    user_file_id,
                     chunk_count=chunk_count,
                 )
 
@@ -888,7 +886,7 @@ def project_sync_user_file_impl(
 
     try:
         # Phase 1: short read session — extract all data needed for Vespa, then
-        # release the connection before the network-bound update_single calls.
+        # release the connection before the network-bound update calls.
         retry_document_indices: list[RetryDocumentIndex] = []
         project_ids: list[int] = []
         persona_ids: list[int] = []
@@ -940,21 +938,17 @@ def project_sync_user_file_impl(
 
         # Phase 2: Vespa HTTP calls (no DB session held)
         if not skip_vespa:
+            update_request = MetadataUpdateRequest(
+                document_ids=[file_id_str],
+                doc_id_to_chunk_cnt={
+                    file_id_str: chunk_count if chunk_count is not None else -1
+                },
+                access=access if access is not None else None,
+                project_ids=set(project_ids),
+                persona_ids=set(persona_ids),
+            )
             for retry_document_index in retry_document_indices:
-                retry_document_index.update_single(
-                    doc_id=file_id_str,
-                    tenant_id=tenant_id,
-                    chunk_count=chunk_count,
-                    fields=(
-                        VespaDocumentFields(access=access)
-                        if access is not None
-                        else None
-                    ),
-                    user_fields=VespaDocumentUserFields(
-                        user_projects=project_ids,
-                        personas=persona_ids,
-                    ),
-                )
+                retry_document_index.update([update_request])
 
         task_logger.info(f"project_sync_user_file_impl - User file id={user_file_id}")
 

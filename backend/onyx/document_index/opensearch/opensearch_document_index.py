@@ -2,15 +2,11 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
-import httpx
-from opensearchpy import NotFoundError
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
-from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -21,21 +17,12 @@ from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.context.search.models import QueryExpansionType
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import DocumentSource
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_text,
 )
-from onyx.document_index.interfaces import DocumentIndex as OldDocumentIndex
-from onyx.document_index.interfaces import (
-    DocumentInsertionRecord as OldDocumentInsertionRecord,
-)
-from onyx.document_index.interfaces import IndexBatchParams
-from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.interfaces import VespaDocumentFields
-from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
@@ -74,7 +61,6 @@ from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger(__name__)
@@ -276,303 +262,6 @@ def _convert_onyx_chunk_to_opensearch_document(
         # Store ancestor hierarchy node IDs for hierarchy-based filtering.
         ancestor_hierarchy_node_ids=chunk.ancestor_hierarchy_node_ids or None,
     )
-
-
-class OpenSearchOldDocumentIndex(OldDocumentIndex):
-    """
-    Wrapper for OpenSearch to adapt the new DocumentIndex interface with
-    invocations to the old DocumentIndex interface in the hotpath.
-
-    The analogous class for Vespa is VespaIndex which calls to
-    VespaDocumentIndex.
-
-    TODO(andrei): This is very dumb and purely temporary until there are no more
-    references to the old interface in the hotpath.
-    """
-
-    def __init__(
-        self,
-        index_name: str,
-        embedding_dim: int,
-        embedding_precision: EmbeddingPrecision,
-        secondary_index_name: str | None,
-        secondary_embedding_dim: int | None,
-        secondary_embedding_precision: EmbeddingPrecision | None,
-        # NOTE: We do not support large chunks right now.
-        large_chunks_enabled: bool,  # noqa: ARG002
-        secondary_large_chunks_enabled: bool | None,  # noqa: ARG002
-        multitenant: bool = False,
-        httpx_client: httpx.Client | None = None,  # noqa: ARG002
-    ) -> None:
-        super().__init__(
-            index_name=index_name,
-            secondary_index_name=secondary_index_name,
-        )
-        if multitenant != MULTI_TENANT:
-            raise ValueError(
-                "Bug: Multitenant mismatch when initializing an OpenSearchDocumentIndex. "
-                f"Expected {MULTI_TENANT}, got {multitenant}."
-            )
-        tenant_id = get_current_tenant_id()
-        tenant_state = TenantState(tenant_id=tenant_id, multitenant=multitenant)
-        self._real_index = OpenSearchDocumentIndex(
-            tenant_state=tenant_state,
-            index_name=index_name,
-            embedding_dim=embedding_dim,
-            embedding_precision=embedding_precision,
-        )
-        self._secondary_real_index: OpenSearchDocumentIndex | None = None
-        if self.secondary_index_name:
-            if secondary_embedding_dim is None or secondary_embedding_precision is None:
-                raise ValueError(
-                    "Bug: Secondary index embedding dimension and precision are not set."
-                )
-            self._secondary_real_index = OpenSearchDocumentIndex(
-                tenant_state=tenant_state,
-                index_name=self.secondary_index_name,
-                embedding_dim=secondary_embedding_dim,
-                embedding_precision=secondary_embedding_precision,
-            )
-
-    @staticmethod
-    def register_multitenant_indices(
-        indices: list[str],
-        embedding_dims: list[int],
-        embedding_precisions: list[EmbeddingPrecision],
-    ) -> None:
-        raise NotImplementedError(
-            "Bug: Multitenant index registration is not supported for OpenSearch."
-        )
-
-    def ensure_indices_exist(
-        self,
-        primary_embedding_dim: int,
-        primary_embedding_precision: EmbeddingPrecision,
-        secondary_index_embedding_dim: int | None,
-        secondary_index_embedding_precision: EmbeddingPrecision | None,
-    ) -> None:
-        self._real_index.verify_and_create_index_if_necessary(
-            primary_embedding_dim, primary_embedding_precision
-        )
-        if self.secondary_index_name:
-            if (
-                secondary_index_embedding_dim is None
-                or secondary_index_embedding_precision is None
-            ):
-                raise ValueError(
-                    "Bug: Secondary index embedding dimension and precision are not set."
-                )
-            assert self._secondary_real_index is not None, (
-                "Bug: Secondary index is not initialized."
-            )
-            self._secondary_real_index.verify_and_create_index_if_necessary(
-                secondary_index_embedding_dim, secondary_index_embedding_precision
-            )
-
-    def index(
-        self,
-        chunks: Iterable[DocMetadataAwareIndexChunk],
-        index_batch_params: IndexBatchParams,
-    ) -> set[OldDocumentInsertionRecord]:
-        """
-        NOTE: Do NOT consider the secondary index here. A separate indexing
-        pipeline will be responsible for indexing to the secondary index. This
-        design is not ideal and we should reconsider this when revamping index
-        swapping.
-        """
-        # Convert IndexBatchParams to IndexingMetadata.
-        chunk_counts: dict[str, IndexingMetadata.ChunkCounts] = {}
-        for doc_id in index_batch_params.doc_id_to_new_chunk_cnt:
-            old_count = index_batch_params.doc_id_to_previous_chunk_cnt[doc_id]
-            new_count = index_batch_params.doc_id_to_new_chunk_cnt[doc_id]
-            chunk_counts[doc_id] = IndexingMetadata.ChunkCounts(
-                old_chunk_cnt=old_count,
-                new_chunk_cnt=new_count,
-            )
-
-        indexing_metadata = IndexingMetadata(doc_id_to_chunk_cnt_diff=chunk_counts)
-
-        results = self._real_index.index(chunks, indexing_metadata)
-
-        # Convert list[DocumentInsertionRecord] to
-        # set[OldDocumentInsertionRecord].
-        return {
-            OldDocumentInsertionRecord(
-                document_id=record.document_id,
-                already_existed=record.already_existed,
-            )
-            for record in results
-        }
-
-    def delete_single(
-        self,
-        doc_id: str,
-        *,
-        tenant_id: str,  # noqa: ARG002
-        chunk_count: int | None,
-    ) -> int:
-        """
-        NOTE: Remember to handle the secondary index here. There is no separate
-        pipeline for deleting chunks in the secondary index. This design is not
-        ideal and we should reconsider this when revamping index swapping.
-        """
-        total_chunks_deleted = self._real_index.delete(doc_id, chunk_count)
-        if self.secondary_index_name:
-            assert self._secondary_real_index is not None, (
-                "Bug: Secondary index is not initialized."
-            )
-            total_chunks_deleted += self._secondary_real_index.delete(
-                doc_id, chunk_count
-            )
-        return total_chunks_deleted
-
-    def update_single(
-        self,
-        doc_id: str,
-        *,
-        tenant_id: str,  # noqa: ARG002
-        chunk_count: int | None,
-        fields: VespaDocumentFields | None,
-        user_fields: VespaDocumentUserFields | None,
-    ) -> None:
-        """
-        NOTE: Remember to handle the secondary index here. There is no separate
-        pipeline for updating chunks in the secondary index. This design is not
-        ideal and we should reconsider this when revamping index swapping.
-        """
-        if fields is None and user_fields is None:
-            logger.warning(
-                "Tried to update document %s with no updated fields or user fields.",
-                doc_id,
-            )
-            return
-
-        # Convert VespaDocumentFields to MetadataUpdateRequest.
-        update_request = MetadataUpdateRequest(
-            document_ids=[doc_id],
-            doc_id_to_chunk_cnt={
-                doc_id: chunk_count if chunk_count is not None else -1
-            },
-            access=fields.access if fields else None,
-            document_sets=fields.document_sets if fields else None,
-            boost=fields.boost if fields else None,
-            hidden=fields.hidden if fields else None,
-            project_ids=(
-                set(user_fields.user_projects)
-                # NOTE: Empty user_projects is semantically different from None
-                # user_projects.
-                if user_fields and user_fields.user_projects is not None
-                else None
-            ),
-            persona_ids=(
-                set(user_fields.personas)
-                # NOTE: Empty personas is semantically different from None
-                # personas.
-                if user_fields and user_fields.personas is not None
-                else None
-            ),
-        )
-
-        try:
-            self._real_index.update([update_request])
-            if self.secondary_index_name:
-                assert self._secondary_real_index is not None, (
-                    "Bug: Secondary index is not initialized."
-                )
-                self._secondary_real_index.update([update_request])
-        except NotFoundError:
-            logger.exception(
-                "Tried to update document %s but at least one of its chunks was not found in OpenSearch. This is likely due to it not having been indexed yet. Skipping update for now...",
-                doc_id,
-            )
-            return
-        except ChunkCountNotFoundError:
-            logger.warning(
-                "Tried to update document %s but its chunk count is not known. We tolerate this for now but this will not be an acceptable state once OpenSearch is the primary document index and the indexing/updating race condition is fixed.",
-                doc_id,
-            )
-            return
-        except ChunkCountZeroError:
-            logger.warning(
-                "Tried to update document %s but its chunk count was 0.", doc_id
-            )
-            return
-
-    def id_based_retrieval(
-        self,
-        chunk_requests: list[VespaChunkRequest],
-        filters: IndexFilters,
-        batch_retrieval: bool = False,
-        get_large_chunks: bool = False,  # noqa: ARG002
-    ) -> list[InferenceChunk]:
-        section_requests = [
-            DocumentSectionRequest(
-                document_id=req.document_id,
-                min_chunk_ind=req.min_chunk_ind,
-                max_chunk_ind=req.max_chunk_ind,
-            )
-            for req in chunk_requests
-        ]
-
-        return self._real_index.id_based_retrieval(
-            section_requests, filters, batch_retrieval
-        )
-
-    def hybrid_retrieval(
-        self,
-        query: str,
-        query_embedding: Embedding,
-        final_keywords: list[str] | None,
-        filters: IndexFilters,
-        hybrid_alpha: float,
-        time_decay_multiplier: float,  # noqa: ARG002
-        num_to_retrieve: int,
-        ranking_profile_type: QueryExpansionType = QueryExpansionType.SEMANTIC,  # noqa: ARG002
-        title_content_ratio: float | None = TITLE_CONTENT_RATIO,  # noqa: ARG002
-    ) -> list[InferenceChunk]:
-        # Determine query type based on hybrid_alpha.
-        if hybrid_alpha >= 0.8:
-            query_type = QueryType.SEMANTIC
-        elif hybrid_alpha <= 0.2:
-            query_type = QueryType.KEYWORD
-        else:
-            query_type = QueryType.SEMANTIC  # Default to semantic for hybrid.
-
-        return self._real_index.hybrid_retrieval(
-            query=query,
-            query_embedding=query_embedding,
-            final_keywords=final_keywords,
-            query_type=query_type,
-            filters=filters,
-            num_to_retrieve=num_to_retrieve,
-        )
-
-    def admin_retrieval(
-        self,
-        query: str,
-        query_embedding: Embedding,
-        filters: IndexFilters,
-        num_to_retrieve: int = NUM_RETURNED_HITS,
-    ) -> list[InferenceChunk]:
-        return self._real_index.hybrid_retrieval(
-            query=query,
-            query_embedding=query_embedding,
-            final_keywords=None,
-            query_type=QueryType.KEYWORD,
-            filters=filters,
-            num_to_retrieve=num_to_retrieve,
-        )
-
-    def random_retrieval(
-        self,
-        filters: IndexFilters,
-        num_to_retrieve: int = 10,
-    ) -> list[InferenceChunk]:
-        return self._real_index.random_retrieval(
-            filters=filters,
-            num_to_retrieve=num_to_retrieve,
-            dirty=None,
-        )
 
 
 class OpenSearchDocumentIndex(DocumentIndex):
@@ -1074,6 +763,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
         # TODO(andrei): There is some duplicated logic in this function with
         # others in this file.
@@ -1093,7 +783,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
-            include_hidden=False,
+            include_hidden=include_hidden,
         )
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
             body=query_body,
@@ -1207,3 +897,146 @@ class OpenSearchDocumentIndex(DocumentIndex):
         self._client.bulk_index_documents(
             documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
         )
+
+
+class OpenSearchIndexPair(DocumentIndex):
+    """Pair wrapper that fans operations out to a primary OpenSearch index and
+    an optional secondary one.
+
+    Mirrors the previous ``OpenSearchOldDocumentIndex`` semantics minus the
+    OLD-interface translation:
+      - `index` writes only to primary (a separate pipeline backfills
+        secondary).
+      - `delete`, `update`, `verify_and_create_index_if_necessary` fan out to
+        both.
+      - All retrieval goes to primary.
+    """
+
+    def __init__(
+        self,
+        primary: OpenSearchDocumentIndex,
+        secondary: OpenSearchDocumentIndex | None,
+        # Embedding info needed at verify-and-create time per index.
+        # TODO(andrei): This is dumb, fix this.
+        secondary_embedding_dim: int | None = None,
+        secondary_embedding_precision: EmbeddingPrecision | None = None,
+    ) -> None:
+        # All three secondary fields must be set together or all None — checked
+        # independently so a partially-set state surfaces here rather than
+        # deferring to a less informative assertion in verify_and_create.
+        secondary_set = secondary is not None
+        dim_set = secondary_embedding_dim is not None
+        precision_set = secondary_embedding_precision is not None
+        if not (secondary_set == dim_set == precision_set):
+            raise ValueError(
+                "Bug: Secondary OpenSearchDocumentIndex, secondary_embedding_dim, and "
+                "secondary_embedding_precision must all be set together or all be None. Got: "
+                f"secondary={secondary_set}, embedding_dim={dim_set}, "
+                f"embedding_precision={precision_set}."
+            )
+        self._primary = primary
+        self._secondary = secondary
+        self._secondary_embedding_dim = secondary_embedding_dim
+        self._secondary_embedding_precision = secondary_embedding_precision
+
+    def verify_and_create_index_if_necessary(
+        self,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
+    ) -> None:
+        self._primary.verify_and_create_index_if_necessary(
+            embedding_dim, embedding_precision
+        )
+        if self._secondary is not None:
+            assert self._secondary_embedding_dim is not None, (
+                "Bug: Secondary embedding dimension is not set."
+            )
+            assert self._secondary_embedding_precision is not None, (
+                "Bug: Secondary embedding precision is not set."
+            )
+            self._secondary.verify_and_create_index_if_necessary(
+                self._secondary_embedding_dim, self._secondary_embedding_precision
+            )
+
+    def index(
+        self,
+        chunks: Iterable[DocMetadataAwareIndexChunk],
+        indexing_metadata: IndexingMetadata,
+    ) -> list[DocumentInsertionRecord]:
+        return self._primary.index(chunks, indexing_metadata)
+
+    def delete(self, document_id: str, chunk_count: int | None = None) -> int:
+        total = self._primary.delete(document_id, chunk_count)
+        if self._secondary is not None:
+            total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+        self._primary.update(update_requests)
+        if self._secondary is not None:
+            self._secondary.update(update_requests)
+
+    def id_based_retrieval(
+        self,
+        chunk_requests: list[DocumentSectionRequest],
+        filters: IndexFilters,
+        batch_retrieval: bool = False,
+    ) -> list[InferenceChunk]:
+        return self._primary.id_based_retrieval(
+            chunk_requests, filters, batch_retrieval
+        )
+
+    def hybrid_retrieval(
+        self,
+        query: str,
+        query_embedding: Embedding,
+        final_keywords: list[str] | None,
+        query_type: QueryType,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        return self._primary.hybrid_retrieval(
+            query,
+            query_embedding,
+            final_keywords,
+            query_type,
+            filters,
+            num_to_retrieve,
+        )
+
+    def keyword_retrieval(
+        self,
+        query: str,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+        include_hidden: bool = False,
+    ) -> list[InferenceChunk]:
+        return self._primary.keyword_retrieval(
+            query, filters, num_to_retrieve, include_hidden=include_hidden
+        )
+
+    def semantic_retrieval(
+        self,
+        query_embedding: Embedding,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        return self._primary.semantic_retrieval(
+            query_embedding, filters, num_to_retrieve
+        )
+
+    def random_retrieval(
+        self,
+        filters: IndexFilters,
+        num_to_retrieve: int = 10,
+        dirty: bool | None = None,
+    ) -> list[InferenceChunk]:
+        return self._primary.random_retrieval(filters, num_to_retrieve, dirty)
+
+    @property
+    def primary(self) -> OpenSearchDocumentIndex:
+        return self._primary
+
+    @property
+    def secondary(self) -> OpenSearchDocumentIndex | None:
+        return self._secondary

@@ -1,12 +1,24 @@
 import concurrent.futures
+import io
 import logging
+import os
 import random
+import re
+import time
+import urllib.parse
+import zipfile
 from collections.abc import Generator
 from collections.abc import Iterable
+from datetime import datetime
+from datetime import timedelta
 from typing import Any
+from typing import BinaryIO
+from typing import cast
 from uuid import UUID
 
 import httpx
+import jinja2
+import requests
 from pydantic import BaseModel
 from retry import retry
 
@@ -16,6 +28,8 @@ from onyx.configs.app_configs import RERANK_COUNT
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import HYBRID_ALPHA
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
+from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
+from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -23,9 +37,6 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
-from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
@@ -44,6 +55,9 @@ from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_exist
 from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
 from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
 from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
+from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
+from onyx.document_index.vespa.internal_types import MinimalDocumentIndexingInfo
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
@@ -58,9 +72,12 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
+from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.key_value_store.factory import get_shared_kv_store
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -72,6 +89,288 @@ logger = setup_logger(__name__)
 # default it emits INFO-level logs for every request.
 httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
+
+
+VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
+
+
+class KGVespaChunkUpdateRequest(BaseModel):
+    document_id: str
+    chunk_id: int
+    url: str
+    update_request: dict[str, dict]
+
+
+class KGUChunkUpdateRequest(BaseModel):
+    """Update KG fields for a document."""
+
+    document_id: str
+    chunk_id: int
+    core_entity: str
+    entities: set[str] | None = None
+    relationships: set[str] | None = None
+    terms: set[str] | None = None
+
+
+class KGUDocumentUpdateRequest(BaseModel):
+    """Update KG fields for a document."""
+
+    document_id: str
+    entities: set[str]
+    relationships: set[str]
+    terms: set[str]
+
+
+def _generate_kg_update_request(
+    kg_update_request: KGUChunkUpdateRequest,
+) -> dict[str, dict]:
+    kg_update_dict: dict[str, dict] = {}
+
+    if kg_update_request.entities is not None:
+        kg_update_dict["kg_entities"] = {"assign": list(kg_update_request.entities)}
+
+    if kg_update_request.relationships is not None:
+        kg_update_dict["kg_relationships"] = {"assign": []}
+        for relationship in kg_update_request.relationships:
+            source, rel_type, target = split_relationship_id(relationship)
+            kg_update_dict["kg_relationships"]["assign"].append(
+                {
+                    "source": source,
+                    "rel_type": rel_type,
+                    "target": target,
+                }
+            )
+
+    return kg_update_dict
+
+
+def _in_memory_zip_from_file_bytes(file_contents: dict[str, bytes]) -> BinaryIO:
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for filename, content in file_contents.items():
+            zipf.writestr(filename, content)
+    zip_buffer.seek(0)
+    return zip_buffer
+
+
+def _create_document_xml_lines(doc_names: list[str | None] | list[str]) -> str:
+    doc_lines = [
+        f'<document type="{doc_name}" mode="index" />'
+        for doc_name in doc_names
+        if doc_name
+    ]
+    return "\n".join(doc_lines)
+
+
+def _add_ngrams_to_schema(schema_content: str) -> str:
+    schema_content = re.sub(
+        r"(field title type string \{[^}]*indexing: summary \| index \| attribute)",
+        r"\1\n            match {\n                gram\n                gram-size: 3\n            }",
+        schema_content,
+    )
+    schema_content = re.sub(
+        r"(field content type string \{[^}]*indexing: summary \| index)",
+        r"\1\n            match {\n                gram\n                gram-size: 3\n            }",
+        schema_content,
+    )
+    return schema_content
+
+
+def deploy_vespa_schemas(
+    primary_index_name: str,
+    primary_embedding_dim: int,
+    primary_embedding_precision: EmbeddingPrecision,
+    secondary_index_name: str | None,
+    secondary_embedding_dim: int | None,
+    secondary_embedding_precision: EmbeddingPrecision | None,
+) -> None:
+    """Deploys (or redeploys) the Vespa application package containing primary
+    (and optionally secondary) document schemas.
+
+    A Vespa application deploy is a single atomic operation, so primary and
+    secondary schemas must be packaged together and shipped in one call —
+    unlike OpenSearch, which has independent per-index creation calls.
+    """
+    if MULTI_TENANT:
+        logger.info(
+            "Skipping Vespa index setup for multitenant (would wipe all indices)"
+        )
+        return
+
+    jinja_env = jinja2.Environment()
+
+    deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
+    logger.notice("Deploying Vespa application package to %s", deploy_url)
+
+    vespa_schema_path = os.path.join(
+        os.getcwd(), "onyx", "document_index", "vespa", "app_config"
+    )
+    schema_jinja_file = os.path.join(
+        vespa_schema_path, "schemas", VESPA_SCHEMA_JINJA_FILENAME
+    )
+    services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+    overrides_jinja_file = os.path.join(
+        vespa_schema_path, "validation-overrides.xml.jinja"
+    )
+
+    with open(services_jinja_file, "r") as services_f:
+        schema_names = [primary_index_name, secondary_index_name]
+        doc_lines = _create_document_xml_lines(schema_names)
+        services_template_str = services_f.read()
+        services_template = jinja_env.from_string(services_template_str)
+        services = services_template.render(
+            document_elements=doc_lines,
+            num_search_threads=str(VESPA_SEARCHER_THREADS),
+        )
+
+    kv_store = get_shared_kv_store()
+
+    needs_reindexing = False
+    try:
+        needs_reindexing = cast(bool, kv_store.load(KV_REINDEX_KEY))
+    except Exception:
+        logger.debug("Could not load the reindexing flag. Using ngrams")
+
+    with open(overrides_jinja_file, "r") as overrides_f:
+        overrides_template_str = overrides_f.read()
+        overrides_template = jinja_env.from_string(overrides_template_str)
+        now = datetime.now()
+        date_in_7_days = now + timedelta(days=7)
+        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        overrides = overrides_template.render(until_date=formatted_date)
+
+    zip_dict = {
+        "services.xml": services.encode("utf-8"),
+        "validation-overrides.xml": overrides.encode("utf-8"),
+    }
+
+    with open(schema_jinja_file, "r") as schema_f:
+        template_str = schema_f.read()
+
+    template = jinja_env.from_string(template_str)
+    schema = template.render(
+        multi_tenant=MULTI_TENANT,
+        schema_name=primary_index_name,
+        dim=primary_embedding_dim,
+        embedding_precision=primary_embedding_precision.value,
+    )
+    schema = _add_ngrams_to_schema(schema) if needs_reindexing else schema
+    zip_dict[f"schemas/{primary_index_name}.sd"] = schema.encode("utf-8")
+
+    if secondary_index_name:
+        if secondary_embedding_dim is None:
+            raise ValueError("Secondary index embedding dimension is required")
+        if secondary_embedding_precision is None:
+            raise ValueError("Secondary index embedding precision is required")
+        upcoming_schema = template.render(
+            multi_tenant=MULTI_TENANT,
+            schema_name=secondary_index_name,
+            dim=secondary_embedding_dim,
+            embedding_precision=secondary_embedding_precision.value,
+        )
+        zip_dict[f"schemas/{secondary_index_name}.sd"] = upcoming_schema.encode("utf-8")
+
+    zip_file = _in_memory_zip_from_file_bytes(zip_dict)
+    headers = {"Content-Type": "application/zip"}
+    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    if response.status_code != 200:
+        logger.error("Failed to prepare Vespa Onyx Index. Response: %s", response.text)
+        raise RuntimeError(
+            f"Failed to prepare Vespa Onyx Index. Response: {response.text}"
+        )
+
+
+def register_multitenant_vespa_indices(
+    indices: list[str],
+    embedding_dims: list[int],
+    embedding_precisions: list[EmbeddingPrecision],
+) -> None:
+    """Registers a set of multi-tenant Vespa schemas in one application deploy."""
+    if not MULTI_TENANT:
+        raise ValueError("Multi-tenant is not enabled")
+
+    deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
+    logger.info("Deploying Vespa application package to %s", deploy_url)
+
+    vespa_schema_path = os.path.join(
+        os.getcwd(), "onyx", "document_index", "vespa", "app_config"
+    )
+    schema_jinja_file = os.path.join(
+        vespa_schema_path, "schemas", VESPA_SCHEMA_JINJA_FILENAME
+    )
+    services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+    overrides_jinja_file = os.path.join(
+        vespa_schema_path, "validation-overrides.xml.jinja"
+    )
+
+    jinja_env = jinja2.Environment()
+
+    with open(services_jinja_file, "r") as services_f:
+        schema_names = list(indices)
+        doc_lines = _create_document_xml_lines(schema_names)
+        services_template_str = services_f.read()
+        services_template = jinja_env.from_string(services_template_str)
+        services = services_template.render(
+            document_elements=doc_lines,
+            num_search_threads=str(VESPA_SEARCHER_THREADS),
+        )
+
+    kv_store = get_shared_kv_store()
+    needs_reindexing = False
+    try:
+        needs_reindexing = cast(bool, kv_store.load(KV_REINDEX_KEY))
+    except Exception:
+        logger.debug("Could not load the reindexing flag. Using ngrams")
+
+    with open(overrides_jinja_file, "r") as overrides_f:
+        overrides_template_str = overrides_f.read()
+        overrides_template = jinja_env.from_string(overrides_template_str)
+        now = datetime.now()
+        date_in_7_days = now + timedelta(days=7)
+        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        overrides = overrides_template.render(until_date=formatted_date)
+
+    zip_dict = {
+        "services.xml": services.encode("utf-8"),
+        "validation-overrides.xml": overrides.encode("utf-8"),
+    }
+
+    with open(schema_jinja_file, "r") as schema_f:
+        schema_template_str = schema_f.read()
+
+    schema_template = jinja_env.from_string(schema_template_str)
+
+    for i, index_name in enumerate(indices):
+        embedding_dim = embedding_dims[i]
+        embedding_precision = embedding_precisions[i]
+        logger.info(
+            "Creating index: %s with embedding dimension: %s",
+            index_name,
+            embedding_dim,
+        )
+        schema = schema_template.render(
+            multi_tenant=MULTI_TENANT,
+            schema_name=index_name,
+            dim=embedding_dim,
+            embedding_precision=embedding_precision.value,
+        )
+        schema = _add_ngrams_to_schema(schema) if needs_reindexing else schema
+        zip_dict[f"schemas/{index_name}.sd"] = schema.encode("utf-8")
+
+    zip_file = _in_memory_zip_from_file_bytes(zip_dict)
+    headers = {"Content-Type": "application/zip"}
+    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Failed to prepare Vespa Onyx Indexes. Response: {response.text}"
+        )
+
+
+class _VespaDeleteRequest:
+    def __init__(self, document_id: str, index_name: str) -> None:
+        self.document_id = document_id
+        encoded_doc_id = urllib.parse.quote_plus(self.document_id)
+        self.url = f"{VESPA_APPLICATION_ENDPOINT}/document/v1/{index_name}/{index_name}/docid/{encoded_doc_id}"
 
 
 def _enrich_basic_chunk_info(
@@ -315,9 +614,27 @@ class VespaDocumentIndex(DocumentIndex):
         self._multitenant = tenant_state.multitenant
 
     def verify_and_create_index_if_necessary(
-        self, embedding_dim: int, embedding_precision: EmbeddingPrecision
+        self,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
     ) -> None:
-        raise NotImplementedError
+        """Deploys (or redeploys) the Vespa application package containing this
+        index's schema.
+
+        NOTE: For paired primary+secondary deployments use
+        :class:`VespaIndexPair`, which packages both schemas into a single
+        deploy call. Calling this on a single VespaDocumentIndex deploys an
+        application with only this one schema, which would wipe a sibling
+        secondary schema if one exists.
+        """
+        deploy_vespa_schemas(
+            primary_index_name=self._index_name,
+            primary_embedding_dim=embedding_dim,
+            primary_embedding_precision=embedding_precision,
+            secondary_index_name=None,
+            secondary_embedding_dim=None,
+            secondary_embedding_precision=None,
+        )
 
     def index(
         self,
@@ -631,8 +948,32 @@ class VespaDocumentIndex(DocumentIndex):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
-        raise NotImplementedError
+        # Ported from the legacy Vespa admin_retrieval: pure-keyword search over
+        # weakAnd(userInput) plus a content_summary userInput pass for
+        # highlighting (n-gram highlighting is broken / not behaving as
+        # desired). The caller decides whether hidden documents are surfaced;
+        # admin search passes include_hidden=True.
+        vespa_where_clauses = build_vespa_filters(
+            filters, include_hidden=include_hidden
+        )
+        yql = (
+            YQL_BASE.format(index_name=self._index_name)
+            + vespa_where_clauses
+            + '({grammar: "weakAnd"}userInput(@query) '
+            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+        )
+
+        params: dict[str, str | int] = {
+            "yql": yql,
+            "query": query,
+            "hits": num_to_retrieve,
+            "ranking.profile": "admin_search",
+            "timeout": VESPA_TIMEOUT,
+        }
+
+        return cleanup_content_for_chunks(query_vespa(params))
 
     def semantic_retrieval(
         self,
@@ -767,3 +1108,246 @@ class VespaDocumentIndex(DocumentIndex):
             response.raise_for_status()
             response_data = response.json()
         return response_data["root"]["fields"]["totalCount"]
+
+    @property
+    def index_name(self) -> str:
+        return self._index_name
+
+    @property
+    def httpx_client_context(self) -> BaseHTTPXClientContext:
+        return self._httpx_client_context
+
+    @classmethod
+    def _apply_kg_chunk_updates_batched(
+        cls,
+        updates: list[KGVespaChunkUpdateRequest],
+        httpx_client: httpx.Client,
+        batch_size: int = BATCH_SIZE,
+    ) -> None:
+        """Runs a batch of KG chunk updates in parallel via the
+        ThreadPoolExecutor."""
+
+        @retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
+        def _kg_update_chunk(
+            update: KGVespaChunkUpdateRequest, http_client: httpx.Client
+        ) -> httpx.Response:
+            return http_client.put(
+                update.url,
+                headers={"Content-Type": "application/json"},
+                json=update.update_request,
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
+            for update_batch in batch_generator(updates, batch_size):
+                future_to_document_id = {
+                    executor.submit(
+                        _kg_update_chunk,
+                        update,
+                        httpx_client,
+                    ): update.document_id
+                    for update in update_batch
+                }
+                for future in concurrent.futures.as_completed(future_to_document_id):
+                    res = future.result()
+                    try:
+                        res.raise_for_status()
+                    except httpx.HTTPStatusError:
+                        # http_client is httpx.Client, so raise_for_status raises
+                        # httpx.HTTPStatusError; logging here is the only way to
+                        # attach the doc id, since the canonical exception
+                        # propagates unchanged for callers.
+                        logger.error(
+                            "Failed to update document %s. Response: %s",
+                            future_to_document_id[future],
+                            res.text,
+                        )
+                        raise
+
+    def kg_chunk_updates(
+        self,
+        kg_update_requests: list[KGUChunkUpdateRequest],
+        tenant_id: str,
+    ) -> None:
+        """Applies a batch of knowledge-graph metadata updates to chunks in
+        this Vespa index."""
+
+        processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
+        update_start = time.monotonic()
+
+        for kg_update_request in kg_update_requests:
+            kg_update_dict: dict[str, dict] = {
+                "fields": _generate_kg_update_request(kg_update_request)
+            }
+            if not kg_update_dict["fields"]:
+                logger.error("Update request received but nothing to update")
+                continue
+
+            doc_chunk_id = get_uuid_from_chunk_info(
+                document_id=kg_update_request.document_id,
+                chunk_id=kg_update_request.chunk_id,
+                tenant_id=tenant_id,
+                large_chunk_id=None,
+            )
+
+            processed_updates_requests.append(
+                KGVespaChunkUpdateRequest(
+                    document_id=kg_update_request.document_id,
+                    chunk_id=kg_update_request.chunk_id,
+                    url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self._index_name)}/{doc_chunk_id}",
+                    update_request=kg_update_dict,
+                )
+            )
+
+        with self._httpx_client_context as httpx_client:
+            self._apply_kg_chunk_updates_batched(
+                processed_updates_requests, httpx_client
+            )
+        logger.debug(
+            "Updated %d vespa documents in %.2f seconds",
+            len(processed_updates_requests),
+            time.monotonic() - update_start,
+        )
+
+
+class VespaIndexPair(DocumentIndex):
+    """Pair wrapper that fans operations out to a primary Vespa index and an
+    optional secondary one.
+
+    Mirrors today's `VespaIndex` semantics minus the OLD-interface translation:
+    `index` writes only to primary (a separate pipeline handles secondary
+    backfill); `delete`, `update`, and `verify_and_create_index_if_necessary`
+    fan out to both.
+
+    Vespa's schema deploy is a single atomic operation, so
+    `verify_and_create_index_if_necessary` packages both schemas into one call
+    rather than calling each individually.
+    """
+
+    def __init__(
+        self,
+        primary: VespaDocumentIndex,
+        secondary: VespaDocumentIndex | None,
+        # Embedding info is needed at deploy time only, so we accept it on the
+        # pair rather than threading it through every retrieval call.
+        secondary_index_name: str | None,
+        secondary_embedding_dim: int | None,
+        secondary_embedding_precision: EmbeddingPrecision | None,
+    ) -> None:
+        # All four secondary fields must be set together or all None — checked
+        # independently so a partially-set state surfaces here rather than
+        # deferring to a less informative ValueError inside deploy_vespa_schemas.
+        secondary_set = secondary is not None
+        name_set = secondary_index_name is not None
+        dim_set = secondary_embedding_dim is not None
+        precision_set = secondary_embedding_precision is not None
+        if not (secondary_set == name_set == dim_set == precision_set):
+            raise ValueError(
+                "Bug: secondary VespaDocumentIndex, secondary_index_name, "
+                "secondary_embedding_dim, and secondary_embedding_precision "
+                "must all be set together or all be None. Got: "
+                f"secondary={secondary_set}, index_name={name_set}, "
+                f"embedding_dim={dim_set}, embedding_precision={precision_set}."
+            )
+        self._primary = primary
+        self._secondary = secondary
+        self._secondary_index_name = secondary_index_name
+        self._secondary_embedding_dim = secondary_embedding_dim
+        self._secondary_embedding_precision = secondary_embedding_precision
+
+    def verify_and_create_index_if_necessary(
+        self,
+        embedding_dim: int,
+        embedding_precision: EmbeddingPrecision,
+    ) -> None:
+        deploy_vespa_schemas(
+            primary_index_name=self._primary._index_name,
+            primary_embedding_dim=embedding_dim,
+            primary_embedding_precision=embedding_precision,
+            secondary_index_name=self._secondary_index_name,
+            secondary_embedding_dim=self._secondary_embedding_dim,
+            secondary_embedding_precision=self._secondary_embedding_precision,
+        )
+
+    def index(
+        self,
+        chunks: Iterable[DocMetadataAwareIndexChunk],
+        indexing_metadata: IndexingMetadata,
+    ) -> list[DocumentInsertionRecord]:
+        # Secondary is filled by a separate pipeline; primary only here.
+        return self._primary.index(chunks, indexing_metadata)
+
+    def delete(self, document_id: str, chunk_count: int | None = None) -> int:
+        total = self._primary.delete(document_id, chunk_count)
+        if self._secondary is not None:
+            total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
+        self._primary.update(update_requests)
+        if self._secondary is not None:
+            self._secondary.update(update_requests)
+
+    def id_based_retrieval(
+        self,
+        chunk_requests: list[DocumentSectionRequest],
+        filters: IndexFilters,
+        batch_retrieval: bool = False,
+    ) -> list[InferenceChunk]:
+        return self._primary.id_based_retrieval(
+            chunk_requests, filters, batch_retrieval
+        )
+
+    def hybrid_retrieval(
+        self,
+        query: str,
+        query_embedding: Embedding,
+        final_keywords: list[str] | None,
+        query_type: QueryType,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        return self._primary.hybrid_retrieval(
+            query,
+            query_embedding,
+            final_keywords,
+            query_type,
+            filters,
+            num_to_retrieve,
+        )
+
+    def keyword_retrieval(
+        self,
+        query: str,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+        include_hidden: bool = False,
+    ) -> list[InferenceChunk]:
+        return self._primary.keyword_retrieval(
+            query, filters, num_to_retrieve, include_hidden=include_hidden
+        )
+
+    def semantic_retrieval(
+        self,
+        query_embedding: Embedding,
+        filters: IndexFilters,
+        num_to_retrieve: int,
+    ) -> list[InferenceChunk]:
+        return self._primary.semantic_retrieval(
+            query_embedding, filters, num_to_retrieve
+        )
+
+    def random_retrieval(
+        self,
+        filters: IndexFilters,
+        num_to_retrieve: int = 10,
+        dirty: bool | None = None,
+    ) -> list[InferenceChunk]:
+        return self._primary.random_retrieval(filters, num_to_retrieve, dirty)
+
+    @property
+    def primary(self) -> VespaDocumentIndex:
+        return self._primary
+
+    @property
+    def secondary(self) -> VespaDocumentIndex | None:
+        return self._secondary

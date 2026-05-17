@@ -7,6 +7,12 @@ export enum ApplicationStatus {
   SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
 }
 
+export enum Tier {
+  COMMUNITY = "community",
+  BUSINESS = "business",
+  ENTERPRISE = "enterprise",
+}
+
 export enum QueryHistoryType {
   DISABLED = "disabled",
   ANONYMIZED = "anonymized",
@@ -53,6 +59,7 @@ export interface Settings {
   // Whether EE features are unlocked (user has a valid enterprise license).
   // Controls UI visibility of EE features like user groups, analytics, RBAC.
   ee_features_enabled?: boolean;
+  tier?: Tier;
 
   // Seat usage - populated when seat limit is exceeded
   seat_count?: number | null;

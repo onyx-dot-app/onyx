@@ -17,6 +17,13 @@ from onyx.db.models import UserRole
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
+_DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+
 
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:

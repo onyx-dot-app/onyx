@@ -6,12 +6,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata
 from ee.onyx.db.license import refresh_license_cache
+from ee.onyx.utils.tier import get_tier
+from ee.onyx.utils.tier import tier_from_license_metadata
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Tier
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -83,11 +87,16 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
     if not LICENSE_ENFORCEMENT_ENABLED:
         # License enforcement disabled - EE code is loaded via
         # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so EE features are on
+        settings.tier = (
+            Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
+        )
         settings.ee_features_enabled = True
         return settings
 
     if MULTI_TENANT:
         # Cloud mode - EE features always available (gating handled by is_tenant_gated)
+        # Cloud tier lives in a separate Redis hash, fetched via get_tier().
+        settings.tier = get_tier()
         settings.ee_features_enabled = True
         return settings
 
@@ -126,9 +135,11 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                 # syncing) means indexed data may need protection.
                 settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
+        settings.tier = tier_from_license_metadata(metadata)
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("Failed to check license metadata for settings: %s", e)
         # Fail closed - disable EE features if we can't verify license
         settings.ee_features_enabled = False
+        settings.tier = Tier.COMMUNITY
 
     return settings

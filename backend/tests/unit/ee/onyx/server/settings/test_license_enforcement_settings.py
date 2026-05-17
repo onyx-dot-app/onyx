@@ -56,9 +56,14 @@ class TestApplyLicenseStatusToSettings:
     @patch("ee.onyx.server.settings.api.MULTI_TENANT", True)
     def test_multi_tenant_enables_ee_features(self, base_settings: Settings) -> None:
         """Cloud mode always enables EE features."""
-        from ee.onyx.server.settings.api import apply_license_status_to_settings
+        from onyx.server.settings.models import Tier
 
-        result = apply_license_status_to_settings(base_settings)
+        with patch(
+            "ee.onyx.server.settings.api.get_tier", return_value=Tier.ENTERPRISE
+        ):
+            from ee.onyx.server.settings.api import apply_license_status_to_settings
+
+            result = apply_license_status_to_settings(base_settings)
         assert _pick(result) == {
             "application_status": ApplicationStatus.ACTIVE,
             "ee_features_enabled": True,

@@ -4,6 +4,19 @@ NOTE: This middleware is NOT used for multi-tenant (cloud) deployments.
 Multi-tenant gating is handled separately by the control plane via the
 /tenants/product-gating endpoint and is_tenant_gated() checks.
 
+Scope (post tier-split)
+=======================
+Per-feature gating (which paths require which tier) lives in the
+`tier_gate` middleware and the `PATH_PREFIX_MIN_TIER` map. This
+middleware only handles the orthogonal *license-state* concerns:
+
+  - GATED_ACCESS (fully expired) → block everything except the
+    billing / auth allowlist.
+  - Seat-limit-exceeded → return 402 with a structured payload so
+    the FE can render the "remove users" prompt.
+
+Per-tier feature gating is `tier_gate`'s job, regardless of deployment.
+
 IMPORTANT: Mutual Exclusivity with ENTERPRISE_EDITION_ENABLED
 ============================================================
 This middleware is controlled by LICENSE_ENFORCEMENT_ENABLED env var.
@@ -14,7 +27,7 @@ It works alongside the legacy ENTERPRISE_EDITION_ENABLED system:
   ENTERPRISE_EDITION_ENABLED. This preserves legacy behavior.
 
 - LICENSE_ENFORCEMENT_ENABLED=true:
-  Middleware actively enforces license status. EE features require
+  Middleware actively enforces license state. EE features require
   a valid license, regardless of ENTERPRISE_EDITION_ENABLED.
 
 Eventually, ENTERPRISE_EDITION_ENABLED will be removed and license
@@ -25,17 +38,20 @@ License Enforcement States (when enabled)
 For self-hosted deployments:
 
 1. No license (never subscribed):
-   - Allow community features (basic connectors, search, chat)
-   - Block EE-only features (analytics, user groups, etc.)
+   - Allow community features (basic connectors, search, chat).
+   - Per-feature gating (Business/Enterprise paths) is delegated to
+     `tier_gate` — see PATH_PREFIX_MIN_TIER. This middleware no
+     longer blocks EE-only paths directly.
 
 2. GATED_ACCESS (fully expired):
-   - Block all routes except billing/auth/license
-   - User must renew subscription to continue
+   - Block all routes except billing/auth/license.
+   - User must renew subscription to continue.
 
 3. Valid license (ACTIVE, GRACE_PERIOD, PAYMENT_REMINDER):
-   - Full access to all EE features
-   - Seat limits enforced
-   - GRACE_PERIOD/PAYMENT_REMINDER are for notifications only, not blocking
+   - Full access to all EE features (subject to tier_gate).
+   - Seat limits enforced.
+   - GRACE_PERIOD / PAYMENT_REMINDER are for notifications only, not
+     blocking.
 """
 
 import logging
@@ -49,7 +65,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
-from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
@@ -68,11 +83,6 @@ def _is_path_allowed(path: str) -> bool:
     )
 
 
-def _is_ee_only_path(path: str) -> bool:
-    """Check if path requires EE license (prefix match)."""
-    return any(path.startswith(prefix) for prefix in EE_ONLY_PATH_PREFIXES)
-
-
 def add_license_enforcement_middleware(
     app: FastAPI, logger: logging.LoggerAdapter
 ) -> None:
@@ -87,7 +97,7 @@ def add_license_enforcement_middleware(
             return await call_next(request)
 
         path = request.url.path
-        if path.startswith("/api"):
+        if path.startswith("/api/"):
             path = path[4:]
 
         if _is_path_allowed(path):
@@ -146,25 +156,14 @@ def add_license_enforcement_middleware(
                             },
                         )
             else:
-                # No license in cache OR database = never subscribed
-                # Allow community features, but block EE-only features
-                if _is_ee_only_path(path):
-                    logger.info(
-                        "[license_enforcement] Blocking EE-only path (no license): %s",
-                        path,
-                    )
-                    return JSONResponse(
-                        status_code=402,
-                        content={
-                            "detail": {
-                                "error": "enterprise_license_required",
-                                "message": "This feature requires an Enterprise license. "
-                                "Please upgrade to access this functionality.",
-                            }
-                        },
-                    )
+                # No license in cache OR database = never subscribed.
+                # Per-feature gating (which paths require Business / Enterprise)
+                # is the responsibility of the tier_gate middleware. Here we
+                # just keep the request flowing — community-tier paths remain
+                # accessible.
                 logger.debug(
-                    "[license_enforcement] No license, allowing community features"
+                    "[license_enforcement] No license, deferring per-feature "
+                    "gating to tier_gate middleware"
                 )
                 is_gated = False
         except CACHE_TRANSIENT_ERRORS as e:

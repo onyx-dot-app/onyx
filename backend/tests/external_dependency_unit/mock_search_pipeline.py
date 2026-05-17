@@ -15,7 +15,7 @@ from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
