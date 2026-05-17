@@ -111,7 +111,7 @@ def get_default_document_index(
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
     if ONYX_DISABLE_VESPA and not opensearch_retrieval_enabled:
         raise ValueError(
-            "BUG: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
+            "Bug: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
         )
 
     if opensearch_retrieval_enabled:
@@ -126,16 +126,17 @@ def get_all_document_indices(
 ) -> list[DocumentIndex]:
     """Gets every document index that should be written to.
 
-    NOTE: Returns a Vespa pair first when Vespa is enabled. In the rare event of
-    a conflict between indexing and the Vespa→OpenSearch migration task, Vespa
-    is treated as more up-to-date.
+    NOTE: Make sure the Vespa index object is returned first. In the rare event
+    that there is some conflict between indexing and the migration task, it is
+    assumed that the state of Vespa is more up-to-date than the state of
+    OpenSearch.
     """
     if DISABLE_VECTOR_DB:
         return [DisabledDocumentIndex()]
 
     if ONYX_DISABLE_VESPA and not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         raise ValueError(
-            "ONYX_DISABLE_VESPA is set but ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is not set."
+            "Bug: ONYX_DISABLE_VESPA is set but ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is not set."
         )
 
     result: list[DocumentIndex] = []

@@ -135,7 +135,7 @@ def search_chunks(
 
     if normal_search_enabled:
         if query_request.hybrid_alpha is not None and query_request.hybrid_alpha == 0.0:
-            # Hybrid alpha explicitly set to keyword only — do pure keyword
+            # Hybrid alpha explicitly set to keyword only —> do pure keyword
             # search without computing an embedding. This branch is currently
             # only set by OpenSearch-aware producers; Vespa would raise
             # NotImplementedError on `keyword_retrieval`.

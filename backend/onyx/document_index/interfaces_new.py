@@ -398,9 +398,9 @@ class HybridCapable(abc.ABC):
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
             include_hidden: When True, surface chunks belonging to documents
-                marked hidden. Defaults to False (user-facing search). The
-                admin search UI passes True so admins can inspect/unhide
-                documents that ordinary users cannot see.
+                marked hidden. Defaults to False (user-facing search). The admin
+                search UI passes True so admins can inspect/unhide documents
+                that ordinary users cannot see.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.

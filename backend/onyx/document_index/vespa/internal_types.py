@@ -1,8 +1,9 @@
 """Vespa-internal data types.
 
-These were previously declared in the now-removed `onyx.document_index.interfaces`
-module. They survive only to support Vespa's chunk-id deletion / range-retrieval
-plumbing, which has not been ported to the new generic DocumentIndex interface.
+These were previously declared in the now-removed
+`onyx.document_index.interfaces` module. They survive only to support Vespa's
+chunk-id deletion / range-retrieval plumbing, which has not been ported to the
+new generic DocumentIndex interface.
 """
 
 from dataclasses import dataclass

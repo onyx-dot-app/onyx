@@ -903,7 +903,7 @@ class OpenSearchIndexPair(DocumentIndex):
     """Pair wrapper that fans operations out to a primary OpenSearch index and
     an optional secondary one.
 
-    Mirrors today's `OpenSearchOldDocumentIndex` semantics minus the
+    Mirrors the previous ``OpenSearchOldDocumentIndex`` semantics minus the
     OLD-interface translation:
       - `index` writes only to primary (a separate pipeline backfills
         secondary).
@@ -917,6 +917,7 @@ class OpenSearchIndexPair(DocumentIndex):
         primary: OpenSearchDocumentIndex,
         secondary: OpenSearchDocumentIndex | None,
         # Embedding info needed at verify-and-create time per index.
+        # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
         secondary_embedding_precision: EmbeddingPrecision | None = None,
     ) -> None:
@@ -928,10 +929,10 @@ class OpenSearchIndexPair(DocumentIndex):
         precision_set = secondary_embedding_precision is not None
         if not (secondary_set == dim_set == precision_set):
             raise ValueError(
-                "Bug: secondary OpenSearchDocumentIndex, secondary_embedding_dim, "
-                "and secondary_embedding_precision must all be set together or "
-                f"all be None. Got: secondary={secondary_set}, "
-                f"embedding_dim={dim_set}, embedding_precision={precision_set}."
+                "Bug: Secondary OpenSearchDocumentIndex, secondary_embedding_dim, and "
+                "secondary_embedding_precision must all be set together or all be None. Got: "
+                f"secondary={secondary_set}, embedding_dim={dim_set}, "
+                f"embedding_precision={precision_set}."
             )
         self._primary = primary
         self._secondary = secondary
@@ -947,8 +948,12 @@ class OpenSearchIndexPair(DocumentIndex):
             embedding_dim, embedding_precision
         )
         if self._secondary is not None:
-            assert self._secondary_embedding_dim is not None
-            assert self._secondary_embedding_precision is not None
+            assert self._secondary_embedding_dim is not None, (
+                "Bug: Secondary embedding dimension is not set."
+            )
+            assert self._secondary_embedding_precision is not None, (
+                "Bug: Secondary embedding precision is not set."
+            )
             self._secondary.verify_and_create_index_if_necessary(
                 self._secondary_embedding_dim, self._secondary_embedding_precision
             )

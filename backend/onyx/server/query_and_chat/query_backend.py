@@ -62,8 +62,8 @@ def admin_search(
             query=query,
             filters=final_filters,
             num_to_retrieve=NUM_RETURNED_HITS,
-            # Admin search should expose hidden documents so admins can
-            # inspect / unhide them.
+            # Admin search should expose hidden documents so admins can inspect
+            # / unhide them.
             include_hidden=True,
         )
 

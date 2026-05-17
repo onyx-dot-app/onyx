@@ -1302,17 +1302,13 @@ def index_doc_batch(
                 db_session=db_session,
             )
 
-            # Iterate doc_id_to_previous_chunk_cnt rather than
-            # doc_id_to_new_chunk_cnt: the user-file adapter populates
-            # new_chunk_cnt via a defaultdict that only contains docs producing
-            # >=1 chunk, so a user file that reindexes to zero chunks would be
-            # missing from new_chunk_cnt and its stale chunks would never get
-            # scheduled for deletion. previous_chunk_cnt always carries every
-            # updatable_id from the DB fetch, so it's the complete keyset.
             doc_id_to_chunk_cnt_diff: dict[str, IndexingMetadata.ChunkCounts] = {}
-            for doc_id in enricher.doc_id_to_previous_chunk_cnt:
+            prev_and_new_doc_id_set = set(
+                enricher.doc_id_to_previous_chunk_cnt.keys()
+            ) | set(enricher.doc_id_to_new_chunk_cnt.keys())
+            for doc_id in prev_and_new_doc_id_set:
                 doc_id_to_chunk_cnt_diff[doc_id] = IndexingMetadata.ChunkCounts(
-                    old_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt[doc_id],
+                    old_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt.get(doc_id, 0),
                     new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt.get(doc_id, 0),
                 )
             indexing_metadata = IndexingMetadata(

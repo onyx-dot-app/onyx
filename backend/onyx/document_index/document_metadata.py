@@ -14,9 +14,10 @@ from onyx.access.models import ExternalAccess
 
 @dataclass
 class DocumentMetadata:
-    """Document information that needs to be inserted into Postgres on first
-    time encountering this document during indexing across any of the
-    connectors."""
+    """
+    Document information that needs to be inserted into Postgres on first time
+    encountering this document during indexing across any of the connectors.
+    """
 
     connector_id: int
     credential_id: int
