@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
@@ -322,3 +323,64 @@ class PptxPreviewResponse(BaseModel):
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== External App Models =====
+class UpsertExternalAppRequest(BaseModel):
+    """Create or update an external app.
+
+    If `id` is provided, the row with that id is updated; otherwise a new
+    row is inserted. `upstream_url_patterns` is a list of regex patterns
+    matched by the egress proxy against outbound request URLs. `enabled`
+    is the kill switch the proxy checks before injecting credentials.
+    """
+
+    id: int | None = None
+    name: str
+    description: str
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+    enabled: bool
+
+
+class ExternalAppAdminResponse(BaseModel):
+    """Admin-facing view of an external app (includes org credentials)."""
+
+    id: int
+    name: str
+    description: str
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+    enabled: bool
+
+
+class UpsertUserCredentialsRequest(BaseModel):
+    """User-supplied credentials for a specific external app."""
+
+    user_credentials: dict[str, Any]
+
+
+class ExternalAppUserResponse(BaseModel):
+    """User-facing view of an external app.
+
+    `credential_keys` are the parameter names the calling user must supply —
+    derived from the app's `auth_template` minus whatever the organization
+    has already filled in. `credential_values` are the values the user has
+    previously stored for those keys (intersection — stale keys from
+    deleted/migrated templates are filtered out). `authenticated` is true
+    iff `credential_values` covers every key in `credential_keys`.
+
+    Organization credentials and the raw auth template are intentionally
+    omitted — those are admin-only.
+    """
+
+    id: int
+    name: str
+    description: str
+    credential_keys: list[str]
+    credential_values: dict[str, Any]
+    authenticated: bool
