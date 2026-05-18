@@ -64,6 +64,7 @@ class MCPTool(Tool[None]):
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        forced_args: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -74,6 +75,7 @@ class MCPTool(Tool[None]):
         self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
+        self._forced_args = forced_args or {}
 
         self._name = tool_name
         self._tool_definition = tool_definition
@@ -245,10 +247,21 @@ class MCPTool(Tool[None]):
                         None,
                     )
 
+            # Merge forced arguments over LLM-provided values.
+            # Forced args always take precedence, ensuring admin-configured
+            # values (e.g., theme_id, org_id) cannot be overridden by the LLM.
+            effective_kwargs = {**llm_kwargs, **self._forced_args}
+
+            if self._forced_args:
+                logger.info(
+                    f"MCP tool '{self._name}': applied forced args "
+                    f"({len(self._forced_args)} keys)"
+                )
+
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._name,
-                llm_kwargs,
+                effective_kwargs,
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,

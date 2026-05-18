@@ -23,6 +23,29 @@ export interface ToolStatusUpdateResponse {
 }
 
 /**
+ * Update forced arguments for a tool
+ */
+export async function updateToolForcedArgs(
+  toolId: number,
+  forcedArgs: Record<string, any> | null
+): Promise<ToolSnapshot> {
+  const response = await fetch(`/api/admin/tool/${toolId}/forced-args`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ forced_args: forcedArgs }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update forced arguments");
+  }
+
+  return await response.json();
+}
+
+/**
  * Delete an MCP server
  */
 export async function deleteMCPServer(serverId: number): Promise<void> {

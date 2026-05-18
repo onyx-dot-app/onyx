@@ -12,7 +12,9 @@ import {
   SvgArrowRightDot,
   SvgCornerRightUpDot,
   SvgMinusCircle,
+  SvgSettings,
 } from "@opal/icons";
+import { Button } from "@opal/components";
 
 type ToolItemVariant = "mcp" | "openapi";
 
@@ -71,8 +73,12 @@ export interface ToolItemProps {
   variant?: ToolItemVariant;
   openApiMetadata?: OpenApiMetadata;
 
+  // Forced args indicator
+  hasForcedArgs?: boolean;
+
   // Handlers
   onToggle?: (enabled: boolean) => void;
+  onConfigure?: () => void;
 
   // Optional styling
   className?: string;
@@ -84,9 +90,11 @@ const ToolItem: React.FC<ToolItemProps> = ({
   icon: Icon,
   isAvailable = true,
   isEnabled = true,
+  hasForcedArgs = false,
   variant = "mcp",
   openApiMetadata,
   onToggle,
+  onConfigure,
   className,
 }) => {
   const isMcpVariant = variant === "mcp";
@@ -218,6 +226,19 @@ const ToolItem: React.FC<ToolItemProps> = ({
                   <SvgAlertTriangle className="w-3 h-3 stroke-status-warning-05" />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Configure Button */}
+          {onConfigure && (
+            <div className={cn(hasForcedArgs && "text-status-info-05")}>
+              <Button
+                icon={SvgSettings}
+                prominence="tertiary"
+                onClick={onConfigure}
+                tooltip="Configure forced arguments"
+                aria-label={`Configure ${name}`}
+              />
             </div>
           )}
 

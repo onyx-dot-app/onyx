@@ -3541,6 +3541,12 @@ class Tool(Base):
         Integer, ForeignKey("oauth_config.id", ondelete="SET NULL"), nullable=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Forced arguments that are always injected/overridden when this tool is called.
+    # These take precedence over LLM-provided arguments. Useful for MCP tools where
+    # specific argument values must be guaranteed (e.g., theme_id, org_id).
+    forced_args: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     oauth_config: Mapped["OAuthConfig | None"] = relationship(

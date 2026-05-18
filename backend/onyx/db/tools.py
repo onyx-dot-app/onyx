@@ -143,6 +143,7 @@ def update_tool(
     db_session: Session,
     passthrough_auth: bool | None,
     oauth_config_id: int | None | UnsetType = UNSET,
+    forced_args: dict[str, Any] | None | UnsetType = UNSET,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
@@ -162,6 +163,8 @@ def update_tool(
         ]
     if passthrough_auth is not None:
         tool.passthrough_auth = passthrough_auth
+    if not isinstance(forced_args, UnsetType):
+        tool.forced_args = forced_args
     old_oauth_config_id = tool.oauth_config_id
     if not isinstance(oauth_config_id, UnsetType):
         tool.oauth_config_id = oauth_config_id

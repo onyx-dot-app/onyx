@@ -145,6 +145,37 @@ def delete_custom_tool(
     db_session.commit()
 
 
+class ToolForcedArgsUpdateRequest(BaseModel):
+    forced_args: dict[str, Any] | None = None
+
+
+@admin_router.patch("/{tool_id}/forced-args")
+def update_tool_forced_args(
+    tool_id: int,
+    request: ToolForcedArgsUpdateRequest,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(current_curator_or_admin_user),
+) -> ToolSnapshot:
+    """Set forced arguments for a tool (especially useful for MCP tools).
+
+    Forced arguments are always injected into tool calls, overriding any
+    values the LLM provides. Set to null to clear forced arguments.
+
+    Unlike custom tool updates, this endpoint works on ANY tool type
+    (MCP, custom, built-in) since forced_args is a generic capability.
+    Only admins can set forced args — enforced by current_curator_or_admin_user
+    on the admin_router.
+    """
+    try:
+        tool = get_tool_by_id(tool_id, db_session)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    tool.forced_args = request.forced_args
+    db_session.commit()
+    return ToolSnapshot.from_model(tool)
+
+
 class ToolStatusUpdateRequest(BaseModel):
     tool_ids: list[int]
     enabled: bool

@@ -463,6 +463,7 @@ def _construct_tools_impl(
                     user_id=str(user.id),
                     user_oauth_token=mcp_user_oauth_token,
                     additional_headers=additional_mcp_headers,
+                    forced_args=saved_tool.forced_args,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 

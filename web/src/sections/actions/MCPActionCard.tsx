@@ -28,6 +28,7 @@ import Text from "@/refresh-components/texts/Text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@opal/utils";
 import Modal from "@/refresh-components/layouts/ConfirmationModalLayout";
+import ForcedArgsModal from "@/sections/actions/modals/ForcedArgsModal";
 
 export interface MCPActionCardProps {
   // Server identification
@@ -105,6 +106,7 @@ export default function MCPActionCard({
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
   const [isToolsRefreshing, setIsToolsRefreshing] = useState(false);
+  const [forcedArgsToolId, setForcedArgsToolId] = useState<number | null>(null);
   const deleteModal = useCreateModal();
 
   // Update expanded state when initialExpanded changes
@@ -314,14 +316,33 @@ export default function MCPActionCard({
               icon={tool.icon}
               isAvailable={tool.isAvailable}
               isEnabled={tool.isEnabled}
+              hasForcedArgs={
+                tool.forcedArgs !== null &&
+                tool.forcedArgs !== undefined &&
+                Object.keys(tool.forcedArgs).length > 0
+              }
               onToggle={(enabled) =>
                 onToolToggle?.(serverId, tool.id, enabled, mutate)
               }
+              onConfigure={() => setForcedArgsToolId(parseInt(tool.id))}
               variant="mcp"
             />
           ))}
         </ToolsList>
       </ActionCard>
+
+      {forcedArgsToolId !== null && (() => {
+        const tool = tools.find((t) => t.id === forcedArgsToolId.toString());
+        return tool ? (
+          <ForcedArgsModal
+            toolId={forcedArgsToolId}
+            toolName={tool.name}
+            forcedArgs={tool.forcedArgs}
+            onClose={() => setForcedArgsToolId(null)}
+            onSaved={() => mutate()}
+          />
+        ) : null;
+      })()}
 
       {deleteModal.isOpen && (
         <Modal

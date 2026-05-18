@@ -98,6 +98,7 @@ export default function useServerTools(
         description: tool.description,
         isAvailable: true,
         isEnabled: tool.enabled,
+        forcedArgs: tool.forced_args,
       }))
     : [];
 

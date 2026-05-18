@@ -60,6 +60,7 @@ export interface MCPTool {
   icon?: React.FunctionComponent<IconProps>;
   isAvailable: boolean;
   isEnabled: boolean;
+  forcedArgs: Record<string, any> | null;
 }
 
 export interface MethodSpec {
@@ -102,6 +103,9 @@ export interface ToolSnapshot {
 
   // Whether the tool is enabled
   enabled: boolean;
+
+  // Forced arguments that override LLM-provided values
+  forced_args: Record<string, any> | null;
 
   // Visibility settings from backend TOOL_VISIBILITY_CONFIG
   chat_selectable: boolean;

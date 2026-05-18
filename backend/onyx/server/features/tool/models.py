@@ -20,6 +20,7 @@ class ToolSnapshot(BaseModel):
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
     enabled: bool = True
+    forced_args: dict[str, Any] | None = None
 
     # Visibility settings computed from TOOL_VISIBILITY_CONFIG
     chat_selectable: bool = True
@@ -45,6 +46,7 @@ class ToolSnapshot(BaseModel):
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
             enabled=tool.enabled,
+            forced_args=tool.forced_args,
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,
             agent_creation_selectable=(
