@@ -1,5 +1,3 @@
-import hashlib
-import json
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -23,7 +21,6 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
@@ -156,30 +153,6 @@ class IndexingPipelineProtocol(Protocol):
         document_batch: list[Document],
         index_attempt_metadata: IndexAttemptMetadata,
     ) -> IndexingPipelineResult: ...
-
-
-def _document_content_hash(doc: Document) -> str:
-    # Hashed before process_image_sections() runs, so image_file_id is the
-    # connector-assigned identifier (not the LLM summary). IDs are stable across
-    # syncs for unchanged documents (derived from source attachment/file IDs).
-    parts = []
-    for s in doc.sections:
-        if isinstance(s, TextSection) and s.text:
-            parts.append(s.text)
-        elif isinstance(s, ImageSection) and s.image_file_id:
-            parts.append(f"[img:{s.image_file_id}]")
-    content = " ".join(parts)
-    meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
-
-    def _owner_key(o: BasicExpertInfo) -> str:
-        return o.email or o.display_name or o.first_name or ""
-
-    owners = json.dumps(
-        [o.model_dump() for o in sorted(doc.primary_owners or [], key=_owner_key)]
-        + [o.model_dump() for o in sorted(doc.secondary_owners or [], key=_owner_key)]
-    )
-    raw = f"{doc.title or ''}||{content}||{meta}||{owners}"
-    return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def _upsert_documents_in_db(
@@ -371,7 +344,7 @@ def get_doc_ids_to_update(
         # document passed the time check above, trust the timestamp — the content
         # may have changed in a way the hash can't detect (e.g. in-place image
         # replacement on GDrive keeps the same image_file_id).
-        content_hash = _document_content_hash(doc)
+        content_hash = doc.content_hash()
         if not doc.doc_updated_at:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash is not None:
@@ -519,9 +492,7 @@ def index_doc_batch_prepare(
         )
     else:
         updatable_docs = documents
-        doc_id_to_content_hash = {
-            doc.id: _document_content_hash(doc) for doc in documents
-        }
+        doc_id_to_content_hash = {doc.id: doc.content_hash() for doc in documents}
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
         skipped_doc_ids = [

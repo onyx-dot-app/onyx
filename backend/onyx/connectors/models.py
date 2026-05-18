@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from collections.abc import Sequence
 from datetime import datetime
@@ -280,6 +282,34 @@ class DocumentBase(BaseModel):
 
     def get_text_content(self) -> str:
         return " ".join([section.text for section in self.sections if section.text])
+
+    def content_hash(self) -> str:
+        """MD5 fingerprint of indexable content. Used to skip re-indexing unchanged documents.
+
+        Covers text sections, image file IDs, metadata, and owners. Excludes
+        semantic_identifier (always derivable from title/URL) and image summaries
+        (LLM-generated after this point in the pipeline).
+        """
+        parts = []
+        for s in self.sections:
+            if isinstance(s, TextSection) and s.text:
+                parts.append(s.text)
+            elif isinstance(s, ImageSection) and s.image_file_id:
+                parts.append(f"[img:{s.image_file_id}]")
+
+        def _owner_key(o: BasicExpertInfo) -> str:
+            return o.email or o.display_name or o.first_name or ""
+
+        owners = json.dumps(
+            [o.model_dump() for o in sorted(self.primary_owners or [], key=_owner_key)]
+            + [
+                o.model_dump()
+                for o in sorted(self.secondary_owners or [], key=_owner_key)
+            ]
+        )
+        meta = json.dumps(self.doc_metadata or {}, sort_keys=True)
+        raw = f"{self.title or ''}||{' '.join(parts)}||{meta}||{owners}"
+        return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def convert_metadata_dict_to_list_of_strings(

@@ -23,7 +23,6 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
-from onyx.indexing.indexing_pipeline import _document_content_hash
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import get_doc_ids_to_update
@@ -764,7 +763,7 @@ class TestProcessImageSections:
 
 
 # ---------------------------------------------------------------------------
-# _document_content_hash
+# content_hash
 # ---------------------------------------------------------------------------
 
 
@@ -781,25 +780,25 @@ def _doc_with_text(title: str | None, *texts: str) -> Document:
 
 def test_content_hash_is_stable() -> None:
     doc = _doc_with_text("Title", "Hello world")
-    assert _document_content_hash(doc) == _document_content_hash(doc)
+    assert doc.content_hash() == doc.content_hash()
 
 
 def test_content_hash_changes_with_text() -> None:
     doc1 = _doc_with_text("Title", "Hello world")
     doc2 = _doc_with_text("Title", "Hello world CHANGED")
-    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+    assert doc1.content_hash() != doc2.content_hash()
 
 
 def test_content_hash_changes_with_title() -> None:
     doc1 = _doc_with_text("Title A", "Same content")
     doc2 = _doc_with_text("Title B", "Same content")
-    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+    assert doc1.content_hash() != doc2.content_hash()
 
 
 def test_content_hash_none_title_treated_as_empty() -> None:
     doc_none = _doc_with_text(None, "content")
     doc_empty = _doc_with_text("", "content")
-    assert _document_content_hash(doc_none) == _document_content_hash(doc_empty)
+    assert doc_none.content_hash() == doc_empty.content_hash()
 
 
 def test_content_hash_changes_with_metadata() -> None:
@@ -807,7 +806,7 @@ def test_content_hash_changes_with_metadata() -> None:
     doc1.doc_metadata = {"author": "Alice"}
     doc2 = _doc_with_text("T", "content")
     doc2.doc_metadata = {"author": "Bob"}
-    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+    assert doc1.content_hash() != doc2.content_hash()
 
 
 def test_content_hash_metadata_key_order_is_irrelevant() -> None:
@@ -815,7 +814,7 @@ def test_content_hash_metadata_key_order_is_irrelevant() -> None:
     doc1.doc_metadata = {"a": "1", "b": "2"}
     doc2 = _doc_with_text("T", "content")
     doc2.doc_metadata = {"b": "2", "a": "1"}
-    assert _document_content_hash(doc1) == _document_content_hash(doc2)
+    assert doc1.content_hash() == doc2.content_hash()
 
 
 def test_content_hash_ignores_semantic_identifier() -> None:
@@ -835,7 +834,7 @@ def test_content_hash_ignores_semantic_identifier() -> None:
         source=DocumentSource.WEB,
         metadata={},
     )
-    assert _document_content_hash(doc1) == _document_content_hash(doc2)
+    assert doc1.content_hash() == doc2.content_hash()
 
 
 def test_content_hash_changes_with_owners() -> None:
@@ -845,7 +844,7 @@ def test_content_hash_changes_with_owners() -> None:
     doc1.primary_owners = [BasicExpertInfo(email="alice@example.com")]
     doc2 = _doc_with_text("T", "content")
     doc2.primary_owners = [BasicExpertInfo(email="bob@example.com")]
-    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+    assert doc1.content_hash() != doc2.content_hash()
 
 
 def test_content_hash_owner_order_is_irrelevant() -> None:
@@ -857,7 +856,7 @@ def test_content_hash_owner_order_is_irrelevant() -> None:
     doc1.primary_owners = [alice, bob]
     doc2 = _doc_with_text("T", "content")
     doc2.primary_owners = [bob, alice]
-    assert _document_content_hash(doc1) == _document_content_hash(doc2)
+    assert doc1.content_hash() == doc2.content_hash()
 
 
 def test_content_hash_includes_image_file_id() -> None:
@@ -873,9 +872,7 @@ def test_content_hash_includes_image_file_id() -> None:
         source=DocumentSource.WEB,
         metadata={},
     )
-    assert _document_content_hash(doc_text_only) != _document_content_hash(
-        doc_with_image
-    )
+    assert doc_text_only.content_hash() != doc_with_image.content_hash()
 
 
 def test_content_hash_changes_when_image_file_id_changes() -> None:
@@ -889,9 +886,7 @@ def test_content_hash_changes_when_image_file_id_changes() -> None:
             metadata={},
         )
 
-    assert _document_content_hash(_image_doc("img-v1")) != _document_content_hash(
-        _image_doc("img-v2")
-    )
+    assert _image_doc("img-v1").content_hash() != _image_doc("img-v2").content_hash()
 
 
 # ---------------------------------------------------------------------------
@@ -924,7 +919,7 @@ def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
     doc = _doc_with_text("Title", "unchanged content")
     doc.id = "doc1"
     doc.doc_updated_at = None
-    stored_hash = _document_content_hash(doc)
+    stored_hash = doc.content_hash()
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
     docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
@@ -941,7 +936,7 @@ def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> 
     doc = _doc_with_text("Title", "same text")
     doc.id = "doc1"
     doc.doc_updated_at = new_time
-    stored_hash = _document_content_hash(doc)  # hash matches — text unchanged
+    stored_hash = doc.content_hash()  # hash matches — text unchanged
     db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
 
     docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
@@ -957,7 +952,7 @@ def test_get_doc_ids_to_update_hash_mismatch_includes_doc() -> None:
     docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
     assert len(docs) == 1
     assert docs[0].id == "doc1"
-    assert hashes["doc1"] == _document_content_hash(doc)
+    assert hashes["doc1"] == doc.content_hash()
 
 
 def test_get_doc_ids_to_update_null_hash_always_included() -> None:
@@ -991,9 +986,7 @@ def test_get_doc_ids_to_update_mixed_batch() -> None:
     doc_changed = _doc_with_text("T", "different now")
     doc_changed.id = "changed"
 
-    db_unchanged = _make_db_doc(
-        "unchanged", content_hash=_document_content_hash(doc_unchanged)
-    )
+    db_unchanged = _make_db_doc("unchanged", content_hash=doc_unchanged.content_hash())
     db_changed = _make_db_doc("changed", content_hash="old_hash")
 
     docs, hashes = get_doc_ids_to_update(
