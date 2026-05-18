@@ -36,7 +36,7 @@ from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
-from onyx.utils.platform import is_running_in_container
+from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
