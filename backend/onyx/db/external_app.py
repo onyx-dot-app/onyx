@@ -73,6 +73,45 @@ def get_user_credentials_by_app_id(
     return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
 
 
+def get_authenticated_builtin_apps_for_user(
+    db_session: Session,
+    user_id: UUID,
+) -> list[ExternalApp]:
+    """Enabled built-in apps the user is authenticated for.
+
+    "Built-in" = the app's `app_type` has a registered OAuth provider
+    (CUSTOM apps have none). "Authenticated" = the user has a credential
+    row that covers every key the app's `auth_template` expects the user
+    (not the org) to supply. Used to decide which built-in app skill
+    bundles to ship into the user's sandbox.
+
+    Ordered by app id for deterministic sandbox filesets.
+    """
+    stmt = (
+        select(ExternalApp, ExternalAppUserCredential)
+        .join(
+            ExternalAppUserCredential,
+            and_(
+                ExternalAppUserCredential.external_app_id == ExternalApp.id,
+                ExternalAppUserCredential.user_id == user_id,
+            ),
+        )
+        .where(ExternalApp.enabled.is_(True))
+        .order_by(ExternalApp.id)
+    )
+
+    authenticated: list[ExternalApp] = []
+    for app, user_cred in db_session.execute(stmt).all():
+        if get_provider_for_app(app) is None:
+            continue
+        required = required_user_credential_keys(
+            app.auth_template, app.organization_credentials
+        )
+        if set(required).issubset(user_cred.user_credentials.keys()):
+            authenticated.append(app)
+    return authenticated
+
+
 def create_external_app__no_commit(
     db_session: Session,
     name: str,
@@ -318,8 +357,7 @@ def refresh_credentials(
     client_secret = matched_app.organization_credentials.get("client_secret")
     if not client_id or not client_secret:
         logger.warning(
-            "Cannot refresh %s tokens: org_credentials missing "
-            "client_id/client_secret",
+            "Cannot refresh %s tokens: org_credentials missing client_id/client_secret",
             matched_app.name,
         )
         return None

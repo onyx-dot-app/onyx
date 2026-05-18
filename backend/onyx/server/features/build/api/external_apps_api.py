@@ -158,6 +158,12 @@ def upsert_user_credentials(
     )
     db_session.commit()
 
+    # Connecting/disconnecting changes which external-app skill bundles
+    # the user's sandbox should have.
+    from onyx.skills.push import push_skills_for_users
+
+    push_skills_for_users({user.id}, db_session)
+
 
 @router.get("/apps")
 def list_external_apps(

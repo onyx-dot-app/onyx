@@ -209,6 +209,12 @@ def handle_external_app_oauth_callback(
     )
     db_session.commit()
 
+    # The user just authenticated — ship this app's skill bundle into
+    # their sandbox.
+    from onyx.skills.push import push_skills_for_users
+
+    push_skills_for_users({user.id}, db_session)
+
     # One-shot — prevent replay.
     r.delete(redis_key)
 
