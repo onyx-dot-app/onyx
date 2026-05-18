@@ -19,7 +19,8 @@
   "files": [
     "dist",
     "tailwind-preset.cjs",
-    "README.md"
+    "README.md",
+    "NOTICE.md"
   ],
   "main": "./dist/components/index.js",
   "types": "./dist/components/index.d.ts",
