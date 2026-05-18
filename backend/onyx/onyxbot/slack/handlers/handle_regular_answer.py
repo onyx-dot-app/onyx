@@ -383,6 +383,9 @@ def handle_regular_answer(
         offer_ephemeral_publication = False
         skip_ai_feedback = False
 
+    if channel_conf.get("disable_ai_feedback", False):
+        skip_ai_feedback = True
+
     all_blocks = build_slack_response_blocks(
         message_info=message_info,
         answer=answer,

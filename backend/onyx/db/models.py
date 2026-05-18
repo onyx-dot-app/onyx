@@ -3884,6 +3884,7 @@ class ChannelConfig(TypedDict):
     follow_up_tags: NotRequired[list[str]]
     show_continue_in_web_ui: NotRequired[bool]  # defaults to False
     disabled: NotRequired[bool]  # defaults to False
+    disable_ai_feedback: NotRequired[bool]  # defaults to False
 
 
 class SlackChannelConfig(Base):
