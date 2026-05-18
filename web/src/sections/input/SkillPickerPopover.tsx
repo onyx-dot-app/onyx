@@ -56,24 +56,22 @@ function SkillPickerPopover({
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "ArrowDown") {
-        if (filtered.length === 0) return;
         e.preventDefault();
         e.stopPropagation();
+        if (filtered.length === 0) return;
         setSelectedIndex((i) => (i + 1) % filtered.length);
       } else if (e.key === "ArrowUp") {
-        if (filtered.length === 0) return;
         e.preventDefault();
         e.stopPropagation();
+        if (filtered.length === 0) return;
         setSelectedIndex((i) => (i - 1 + filtered.length) % filtered.length);
       } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
         if (filtered.length === 0) {
-          e.preventDefault();
-          e.stopPropagation();
           onClose();
           return;
         }
-        e.preventDefault();
-        e.stopPropagation();
         const skill = filtered[selectedIndex] ?? filtered[0];
         if (skill) onSelect(skill.slug);
       } else if (e.key === "Escape") {
