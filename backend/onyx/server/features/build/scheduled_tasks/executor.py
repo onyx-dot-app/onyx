@@ -46,6 +46,7 @@ from acp.schema import RequestPermissionRequest
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ScheduledTaskErrorClass
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.notification import create_notification
@@ -196,7 +197,7 @@ def run_scheduled_task_logic(
                 db_session=db_session,
                 run_id=run_id,
                 status=ScheduledTaskRunStatus.FAILED,
-                error_class="task_missing",
+                error_class=ScheduledTaskErrorClass.TASK_MISSING,
                 error_detail="Scheduled task row no longer exists",
             )
             db_session.commit()
@@ -219,13 +220,18 @@ def run_scheduled_task_logic(
             db_session.commit()
         except Exception as exc:
             logger.exception("Failed to ensure sandbox for scheduled run %s", run_id)
-            error_class = type(exc).__name__
-            error_detail = str(exc)[:1000] or error_class
+            exc_name = type(exc).__name__
+            exc_message = str(exc)
+            error_detail = (
+                f"{exc_name}: {exc_message[: 1000 - len(exc_name) - 2]}"
+                if exc_message
+                else exc_name
+            )
             mark_run_status(
                 db_session=db_session,
                 run_id=run_id,
                 status=ScheduledTaskRunStatus.FAILED,
-                error_class="sandbox_wake_failed",
+                error_class=ScheduledTaskErrorClass.SANDBOX_WAKE_FAILED,
                 error_detail=error_detail,
             )
             _notify(
@@ -275,7 +281,7 @@ def run_scheduled_task_logic(
                         db_session=db_session,
                         run_id=run_id,
                         status=ScheduledTaskRunStatus.FAILED,
-                        error_class="executor_error",
+                        error_class=ScheduledTaskErrorClass.EXECUTOR_ERROR,
                         error_detail="Unexpected executor failure",
                     )
                     _notify(
@@ -378,7 +384,7 @@ def _drive_agent(
                         db_session=db_session,
                         run_id=run_id,
                         status=ScheduledTaskRunStatus.FAILED,
-                        error_class="timeout",
+                        error_class=ScheduledTaskErrorClass.TIMEOUT,
                         error_detail=f"budget exceeded ({budget_seconds}s)",
                     )
                     _notify(
@@ -450,14 +456,22 @@ def _drive_agent(
             # to FAILED. Do NOT re-raise — Celery would retry, which is
             # explicitly out of scope for V1.
             db_session.rollback()
-            error_class = type(exc).__name__
-            error_detail = str(exc)[:1000] or error_class
+            exc_name = type(exc).__name__
+            exc_message = str(exc)
+            # Keep the specific exception class name visible by prepending
+            # it to error_detail; error_class itself stays in the closed
+            # ScheduledTaskErrorClass vocabulary.
+            error_detail = (
+                f"{exc_name}: {exc_message[: 1000 - len(exc_name) - 2]}"
+                if exc_message
+                else exc_name
+            )
             try:
                 mark_run_status(
                     db_session=db_session,
                     run_id=run_id,
                     status=ScheduledTaskRunStatus.FAILED,
-                    error_class=error_class,
+                    error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
                     error_detail=error_detail,
                 )
                 _notify(
