@@ -157,7 +157,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
 ) -> None:
     """After ``provision()``, the baked-in workspace directories exist.
 
-    Pins the sandbox image contract: ``/workspace/templates``, ``/workspace/skills``
+    Pins the sandbox image contract: ``/workspace/templates``, ``/workspace/managed``
     and ``/workspace/sessions`` are all present and the pod is healthy enough to
     answer ``health_check``. Also doubles as the merged ``health_check_returns_true``
     coverage per the plan note.
@@ -172,7 +172,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
 
         for required in (
             "/workspace/templates",
-            "/workspace/skills",
+            "/workspace/managed",
             "/workspace/sessions",
         ):
             resp = pod_exec(

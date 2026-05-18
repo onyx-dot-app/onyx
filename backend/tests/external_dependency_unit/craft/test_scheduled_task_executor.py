@@ -449,6 +449,13 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
         by_task.setdefault(r.task_id, []).append(r)
     assert all(len(v) == 1 for v in by_task.values())
 
+    # Both dispatcher threads must have completed and returned a count.
+    assert len(results) == 2, (
+        f"Expected results from both dispatcher threads; got {results}"
+    )
+    assert all(isinstance(v, int) and v >= 0 for v in results.values()), (
+        f"Dispatcher thread returned invalid result: {results}"
+    )
     # The two dispatchers together claimed exactly 3 — no double-fire.
     assert sum(results.values()) == 3
 

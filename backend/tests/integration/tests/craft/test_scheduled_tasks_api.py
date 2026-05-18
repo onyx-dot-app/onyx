@@ -285,8 +285,10 @@ def test_delete_task_is_idempotent_soft_delete(admin_user: DATestUser) -> None:
 
     row = _get_task_row(task_id)
     # Soft delete: row still exists with deleted=True.
-    if row is not None:
-        assert row.deleted is True
+    assert row is not None, (
+        "Row was hard-deleted; expected soft-delete to preserve the row"
+    )
+    assert row.deleted is True
 
 
 def test_list_runs_paginates_by_started_at_cursor(admin_user: DATestUser) -> None:

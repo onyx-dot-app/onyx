@@ -234,6 +234,9 @@ def test_restore_session_returns_409_when_lock_held(
     for t in threads:
         t.join()
 
+    assert all(r != -1 for r in results), (
+        f"Thread(s) failed with transport error: {results}"
+    )
     assert 409 in results, (
         f"Expected at least one 409 from concurrent restore, got {results}"
     )

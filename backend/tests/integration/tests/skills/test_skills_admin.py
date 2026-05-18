@@ -13,8 +13,10 @@ from sqlalchemy import select
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import FileRecord
 from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -34,10 +36,10 @@ from tests.integration.tests.skills.conftest import skills_dir_for_user
 # When SANDBOX_BACKEND=kubernetes the push goes to a pod; the host filesystem
 # the test process can see is irrelevant.
 _requires_local_backend = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.LOCAL,
+    SANDBOX_BACKEND != SandboxBackend.LOCAL or not ENABLE_CRAFT,
     reason=(
-        "Skill push on-disk verification requires SANDBOX_BACKEND=local; "
-        "K8s pushes go to the sandbox pod, not the test host."
+        "Skill push on-disk verification requires SANDBOX_BACKEND=local and "
+        "ENABLE_CRAFT=true; K8s pushes go to the sandbox pod, not the test host."
     ),
 )
 
@@ -63,6 +65,21 @@ def _bundle_blob_exists(bundle_file_id: str) -> bool:
         file_origin=FileOrigin.SKILL_BUNDLE,
         file_type="application/zip",
     )
+
+
+def _skill_bundle_blob_ids() -> set[str]:
+    """Return the set of all file IDs for SKILL_BUNDLE blobs in the file store."""
+    with get_session_with_current_tenant() as db_session:
+        rows = (
+            db_session.execute(
+                select(FileRecord.file_id).where(
+                    FileRecord.file_origin == FileOrigin.SKILL_BUNDLE
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return set(rows)
 
 
 def _snapshot_dir(path: Path) -> dict[str, bytes]:
@@ -275,20 +292,13 @@ def test_create_skill_400_on_invalid_bundle_zip(admin_user: DATestUser) -> None:
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     """An oversized bundle is rejected with 413.
 
-    The skill-bundle validator enforces two size caps:
-    1. **Per-file cap** (~25 MiB) — any single file inside the zip whose
-       uncompressed size exceeds the limit triggers 413.
-    2. **Total cap** (~100 MiB) — the sum of uncompressed sizes across all
-       members triggers 413.
-
-    A single 101 MiB highly-compressible file trips the per-file cap first
-    (the total cap is never reached because validation short-circuits on
-    the first oversize member). Either limit lands on the same
-    ``PAYLOAD_TOO_LARGE`` HTTP status, which is what users observe; pinning
-    the status is what matters here, not which of the two caps fired.
-    Compression keeps the upload itself small so the test stays cheap.
+    The skill-bundle validator enforces a per-file cap of 25 MiB. A single
+    26 MiB highly-compressible file exceeds that limit but compresses to
+    ~25 KB with ZIP_DEFLATED, so the multipart upload is tiny and passes
+    the HTTP parser without issue. The validator's streaming size check
+    sees the uncompressed size and raises ``PAYLOAD_TOO_LARGE`` (413).
     """
-    oversized_payload = b"A" * (101 * 1024 * 1024)
+    oversized_payload = b"A" * (26 * 1024 * 1024)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
@@ -330,6 +340,9 @@ def test_create_skill_failure_cleans_up_orphan_blob(
     assert first_row is not None
     first_blob_id = first_row.bundle_file_id
 
+    # Snapshot file store blobs before the failing create.
+    blobs_before = _skill_bundle_blob_ids()
+
     # Second create — bundle is fine, but the DB insert fails on the
     # unique-slug check after the blob has already been written. The except
     # branch should delete the just-written blob before re-raising.
@@ -340,6 +353,14 @@ def test_create_skill_failure_cleans_up_orphan_blob(
     # First skill's blob is untouched.
     assert _bundle_blob_exists(first_blob_id), (
         "first skill's blob should be intact after the failing duplicate create"
+    )
+
+    # The orphan blob was cleaned up from the file store: no new blob IDs
+    # appeared after the failing create.
+    blobs_after = _skill_bundle_blob_ids()
+    orphan_blobs = blobs_after - blobs_before
+    assert not orphan_blobs, (
+        f"Orphan blob(s) leaked into the file store: {orphan_blobs}"
     )
 
     # And the failing create's blob was cleaned up: the only skill row for

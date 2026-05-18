@@ -52,6 +52,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from collections.abc import Iterable
 from typing import Any
+from typing import cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import ACPEvent
@@ -61,6 +62,8 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+
+_UNSET = object()
 
 
 def _not_configured(method_name: str) -> NotImplementedError:
@@ -120,7 +123,7 @@ class StubSandboxManager(SandboxManager):
         self.provision_returns: SandboxInfo | None = None
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
-        self.create_snapshot_returns: SnapshotResult | None = None
+        self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
@@ -279,9 +282,9 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "tenant_id": tenant_id,
         }
-        if self.create_snapshot_returns is None:
+        if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")
-        return self.create_snapshot_returns
+        return cast("SnapshotResult | None", self.create_snapshot_returns)
 
     def restore_snapshot(
         self,

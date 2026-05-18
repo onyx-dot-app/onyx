@@ -18,15 +18,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import TYPE_CHECKING
 from uuid import UUID
 from uuid import uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from kubernetes import client as k8s_client_module
-from kubernetes import config as k8s_config_module
-from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream as k8s_stream
+
+if TYPE_CHECKING:
+    from kubernetes import client as k8s_client_module
 from redis import Redis
 from sqlalchemy.orm import Session
 
@@ -285,6 +285,20 @@ def running_sandbox(
     monkeypatch.setattr(
         "onyx.server.features.build.sandbox.local.local_sandbox_manager.SANDBOX_BASE_PATH",
         str(base_path),
+    )
+    # Redirect template paths so _validate_templates() passes in CI where the
+    # real template directories do not exist.
+    outputs_tpl = tmp_path / "templates" / "outputs"
+    venv_tpl = tmp_path / "templates" / "venv"
+    outputs_tpl.mkdir(parents=True, exist_ok=True)
+    venv_tpl.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        "onyx.server.features.build.sandbox.local.local_sandbox_manager.OUTPUTS_TEMPLATE_PATH",
+        str(outputs_tpl),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.build.sandbox.local.local_sandbox_manager.VENV_TEMPLATE_PATH",
+        str(venv_tpl),
     )
     # Reset the singleton via monkeypatch so the prior value is restored on
     # teardown. We deliberately use raising=False because the attribute may
@@ -712,6 +726,8 @@ def acp_event_sequence() -> Callable[[Iterable[ACPEvent]], list[ACPEvent]]:
 
 def _load_kube_config() -> None:
     """Load in-cluster config if available, otherwise fall back to kubeconfig."""
+    from kubernetes import config as k8s_config_module
+
     try:
         k8s_config_module.load_incluster_config()
     except k8s_config_module.ConfigException:
@@ -719,19 +735,21 @@ def _load_kube_config() -> None:
 
 
 @pytest.fixture(scope="session")
-def k8s_client() -> k8s_client_module.CoreV1Api:
+def k8s_client() -> "k8s_client_module.CoreV1Api":
     """Session-scope CoreV1Api client.
 
     Only meaningful inside tests gated by
     ``pytest.mark.skipif(SANDBOX_BACKEND != KUBERNETES, ...)``. The fixture
     itself does not enforce that gate — module-level ``pytestmark`` does.
     """
+    from kubernetes import client as k8s_client_module
+
     _load_kube_config()
     return k8s_client_module.CoreV1Api()
 
 
 def pod_exec(
-    client: k8s_client_module.CoreV1Api,
+    client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     namespace: str,
     command: str | list[str],
@@ -741,6 +759,8 @@ def pod_exec(
     ``command`` may be a shell-string (auto-wrapped in ``/bin/sh -c``) or an
     explicit argv list passed straight through to ``connect_get_namespaced_pod_exec``.
     """
+    from kubernetes.stream import stream as k8s_stream
+
     argv = ["/bin/sh", "-c", command] if isinstance(command, str) else list(command)
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
@@ -757,7 +777,7 @@ def pod_exec(
 
 
 def wait_for_nextjs_ready(
-    client: k8s_client_module.CoreV1Api,
+    client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     port: int,
     max_attempts: int = 30,
@@ -783,12 +803,14 @@ def wait_for_nextjs_ready(
 
 
 def wait_for_pod_deletion(
-    client: k8s_client_module.CoreV1Api,
+    client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     namespace: str = SANDBOX_NAMESPACE,
     max_attempts: int = 30,
 ) -> None:
     """Wait until the pod is fully gone (404) or in a terminating state."""
+    from kubernetes.client.rest import ApiException
+
     for _ in range(max_attempts):
         try:
             pod = client.read_namespaced_pod(name=pod_name, namespace=namespace)
@@ -800,6 +822,10 @@ def wait_for_pod_deletion(
             if e.status == 404:
                 return
             raise
+    raise RuntimeError(
+        f"Pod {pod_name} in namespace {namespace} was not deleted "
+        f"after {max_attempts} attempts"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -821,21 +847,24 @@ _K8S_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 
 @pytest.fixture(scope="function")
-def k8s_manager() -> KubernetesSandboxManager:
+def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
     """Initialise DB engine + tenant context and return the K8s manager.
 
     Consumer modules must gate themselves on
     ``SANDBOX_BACKEND == KUBERNETES`` via ``pytestmark``.
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-    return KubernetesSandboxManager()
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    try:
+        yield KubernetesSandboxManager()
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture(scope="function")
 def live_pod(
     k8s_manager: KubernetesSandboxManager,
-    k8s_client: k8s_client_module.CoreV1Api,
+    k8s_client: "k8s_client_module.CoreV1Api",
 ) -> Generator[tuple[UUID, UUID, str], None, None]:
     """Provision a sandbox + session pod and tear it down on exit.
 
