@@ -284,11 +284,16 @@ class DocumentBase(BaseModel):
         return " ".join([section.text for section in self.sections if section.text])
 
     def content_hash(self) -> str:
-        """MD5 fingerprint of indexable content. Used to skip re-indexing unchanged documents.
+        """MD5 fingerprint of indexable content.
 
-        Covers text sections, image file IDs, metadata, and owners. Excludes
-        semantic_identifier (always derivable from title/URL) and image summaries
-        (LLM-generated after this point in the pipeline).
+        Used as a fallback dedup gate for connectors that don't supply doc_updated_at
+        (e.g. web connector). Computed before image summarization runs, so LLM-generated
+        image summaries are intentionally excluded — they are non-deterministic and
+        unavailable at this point in the pipeline.
+
+        Covers: title, text section bodies, image_file_ids (connector-assigned, stable),
+        doc_metadata (sorted keys), primary and secondary owners (sorted by email).
+        Excludes: semantic_identifier (deterministically derived from other fields).
         """
         parts = []
         for s in self.sections:
