@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -45,10 +45,30 @@ function stripReferenceDirectives(source) {
   return source.replace(/^@reference\s+['"][^'"]+['"];\s*\n?/gm, "");
 }
 
+// Strip @import directives whose target resolves to another file inside srcDir.
+// Those files are already inlined into the bundle by findCss(), so the @import
+// is redundant — exactly like @reference. Without this, relative paths like
+// `../../core/interactive/shared.css` survive into dist/styles.css and fail to
+// resolve when consumers import the package from npm (source files are not in
+// the published "files" list).
+function stripIntraPackageImports(source, filePath) {
+  const fileDir = dirname(filePath);
+  return source.replace(
+    /@import\s+['"]([^'"]+)['"];\s*\n?/gm,
+    (match, importPath) => {
+      const resolved = resolve(fileDir, importPath);
+      return resolved.startsWith(srcDir + "/") ? "" : match;
+    }
+  );
+}
+
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
   const raw = readFileSync(file, "utf8");
-  const cleaned = file === referenceCss ? raw : stripReferenceDirectives(raw);
+  const cleaned =
+    file === referenceCss
+      ? raw
+      : stripIntraPackageImports(stripReferenceDirectives(raw), file);
   return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });
 

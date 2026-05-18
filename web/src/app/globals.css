@@ -94,23 +94,6 @@
 }
 
 @layer base {
-  /* BORDER RADII */
-  :root {
-    --border-radius-02: 0.125rem;
-    --border-radius-04: 0.25rem;
-    --border-radius-08: 0.5rem;
-    --border-radius-12: 0.75rem;
-    --border-radius-16: 1rem;
-    --border-radius-full: 64rem;
-  }
-
-  /* BACKDROP BLUR */
-  :root {
-    --backdrop-blur-01: 2px;
-    --backdrop-blur-02: 1px;
-    --backdrop-blur-03: 1px;
-  }
-
   * {
     @apply border-border;
   }
