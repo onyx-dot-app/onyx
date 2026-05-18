@@ -130,6 +130,9 @@ def get_objects_access_for_user_id(
     should be in parallel so query time doesn't get too long.
     """
     truncated_record_ids = record_ids[:_MAX_RECORD_IDS_PER_QUERY]
+    # SOQL `IN ()` with an empty list is a malformed query, so short-circuit.
+    if not truncated_record_ids:
+        return {}
     access_query = format_soql(
         """
     SELECT RecordId, HasReadAccess
