@@ -2,7 +2,6 @@ import base64
 import uuid
 
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from ee.onyx.server.oauth.api_router import router
@@ -14,6 +13,8 @@ from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -72,15 +73,15 @@ def prepare_authorization_request(
         oauth_url = None
 
     if not oauth_url:
-        raise HTTPException(
-            status_code=404,
-            detail=f"The document source type {connector} does not have OAuth implemented",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"The document source type {connector} does not have OAuth implemented",
         )
 
     if not session:
-        raise HTTPException(
-            status_code=500,
-            detail=f"The document source type {connector} failed to generate an OAuth session.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"The document source type {connector} failed to generate an OAuth session.",
         )
 
     r = get_redis_client(tenant_id=tenant_id)
