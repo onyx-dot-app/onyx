@@ -19,6 +19,7 @@ export { default as SvgArrowUpRight } from "@opal/icons/arrow-up-right";
 export { default as SvgArrowWallRight } from "@opal/icons/arrow-wall-right";
 export { default as SvgAudio } from "@opal/icons/audio";
 export { default as SvgAudioEqSmall } from "@opal/icons/audio-eq-small";
+export { default as SvgAvian } from "@opal/icons/avian";
 export { default as SvgBarChart } from "@opal/icons/bar-chart";
 export { default as SvgBarChartSmall } from "@opal/icons/bar-chart-small";
 export { default as SvgBell } from "@opal/icons/bell";

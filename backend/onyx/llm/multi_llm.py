@@ -511,9 +511,11 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
+        is_avian = self._model_provider == LlmProviderNames.AVIAN
         is_openai_compatible_proxy = self._model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.AVIAN,
         )
         model_provider = (
             f"{self.config.model_provider}/responses"
@@ -667,6 +669,34 @@ class LitellmLLM(LLM):
             )
             with env_ctx:
                 messages = _prompt_to_dicts(prompt)
+
+                # Avian: prune oldest non-system messages when estimated token
+                # count exceeds the configured context limit.
+                # Removes assistant+tool groups together to keep valid sequences.
+                if is_avian and len(messages) > 1:
+                    _CHARS_PER_TOKEN = 4
+                    _budget = self._max_input_tokens * _CHARS_PER_TOKEN
+                    _total = sum(
+                        len(str(m.get("content") or "")) for m in messages
+                    )
+                    while _total > _budget and len(messages) > 1:
+                        drop_start = None
+                        for i, m in enumerate(messages):
+                            if m.get("role") != "system":
+                                drop_start = i
+                                break
+                        if drop_start is None:
+                            break
+                        drop_end = drop_start + 1
+                        if messages[drop_start].get("role") == "assistant" and messages[drop_start].get("tool_calls"):
+                            while drop_end < len(messages) and messages[drop_end].get("role") == "tool":
+                                drop_end += 1
+                        elif messages[drop_start].get("role") == "tool":
+                            while drop_end < len(messages) and messages[drop_end].get("role") == "tool":
+                                drop_end += 1
+                        for m in messages[drop_start:drop_end]:
+                            _total -= len(str(m.get("content") or ""))
+                        del messages[drop_start:drop_end]
 
                 # Bedrock's Converse API requires toolConfig when messages
                 # contain toolUse/toolResult content blocks. When no tools are

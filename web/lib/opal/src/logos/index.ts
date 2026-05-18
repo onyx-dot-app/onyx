@@ -1,6 +1,7 @@
 export { default as SvgAirtable } from "@opal/logos/airtable";
 export { default as SvgAnthropic } from "@opal/logos/anthropic";
 export { default as SvgAsana } from "@opal/logos/asana";
+export { default as SvgAvian } from "@opal/logos/avian";
 export { default as SvgAws } from "@opal/logos/aws";
 export { default as SvgAxero } from "@opal/logos/axero";
 export { default as SvgAzure } from "@opal/logos/azure";
