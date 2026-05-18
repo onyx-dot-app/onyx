@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from pathlib import Path
 
+from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
 from onyx.skills.registry import BuiltinSkill
 from onyx.utils.logger import setup_logger
@@ -137,6 +138,36 @@ def build_skills_section_from_data(
 
     entries.sort(key=lambda e: e[0])
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
+
+
+def build_external_apps_section(apps: Iterable[ExternalApp]) -> str:
+    """Render the AGENTS.md "Connected External Apps" block.
+
+    External apps reuse the skill delivery mechanism but are
+    intentionally kept separate from the skills list (and never appear
+    in the skills tab). Returns "" when the user has no connected apps
+    so the caller can omit the section entirely.
+    """
+    entries = sorted(
+        ((a.name, _truncate(a.description)) for a in apps),
+        key=lambda e: e[0],
+    )
+    if not entries:
+        return ""
+
+    lines = [
+        "## Connected External Apps",
+        "",
+        (
+            "The user has connected these apps. Their API calls are "
+            "authenticated automatically — you "
+            "do not handle tokens. Read the relevant "
+            "`_external_apps/<dir>/SKILL.md` before using one."
+        ),
+        "",
+    ]
+    lines += [f"- **{name}**: {desc}" for name, desc in entries]
+    return "\n".join(lines)
 
 
 def generate_agent_instructions(

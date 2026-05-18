@@ -8,15 +8,21 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.external_app import get_authenticated_builtin_apps_for_user
+from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import list_skills_for_user
+from onyx.external_apps.skill_bundle import get_builtin_external_app_bundle
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import PushResult
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_external_apps_section,
+)
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section_from_data,
 )
@@ -28,6 +34,12 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
+
+# Built-in external app skill bundles are mounted under this reserved
+# subdirectory. Skill slugs match ^[a-z]... so they can never collide
+# with this leading-underscore name, which keeps external-app bundles
+# off the skills tab without any explicit filtering.
+_EXTERNAL_APPS_DIR = "_external_apps"
 
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
@@ -109,11 +121,33 @@ def _assemble_fileset(
     return files
 
 
+def _merge_external_app_bundles(files: FileSet, apps: list[ExternalApp]) -> None:
+    """Merge each app's built-in skill bundle into *files* under the
+    reserved ``_external_apps/`` prefix.
+
+    These are delivered like skills but are never ``Skill`` rows, so
+    they never surface in the skills tab. Skill slugs match ^[a-z]...
+    so they can't collide with the leading-underscore prefix.
+    """
+    for app in apps:
+        bundle = get_builtin_external_app_bundle(app.app_type)
+        if bundle is None:
+            continue
+        # id-prefixed so multiple instances of the same provider can't
+        # collide on the same directory.
+        app_dir = f"{_EXTERNAL_APPS_DIR}/{app.id}-{app.app_type.value.lower()}"
+        for rel, content in bundle.items():
+            files[f"{app_dir}/{rel}"] = content
+
+
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return a flat ``{path: bytes}`` map of every skill the user can see."""
     builtins = BuiltinSkillRegistry.instance().list_available(db_session)
     customs = list_skills_for_user(user=user, db_session=db_session)
-    return _assemble_fileset(builtins, customs, user, db_session)
+    files = _assemble_fileset(builtins, customs, user, db_session)
+    ext_apps = get_authenticated_builtin_apps_for_user(db_session, user.id)
+    _merge_external_app_bundles(files, ext_apps)
+    return files
 
 
 def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
@@ -122,6 +156,12 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     customs = list_skills_for_user(user=user, db_session=db_session)
     section = build_skills_section_from_data(builtins, customs)
     files = _assemble_fileset(builtins, customs, user, db_session)
+
+    ext_apps = get_authenticated_builtin_apps_for_user(db_session, user.id)
+    _merge_external_app_bundles(files, ext_apps)
+    ext_section = build_external_apps_section(ext_apps)
+    if ext_section:
+        section = f"{section}\n\n{ext_section}"
     return section, files
 
 
