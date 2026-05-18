@@ -37,6 +37,26 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger(__name__)
 
+# Lucene enforces a hard 32,766-byte limit on keyword field terms.  The
+# metadata_list field is mapped as "keyword", so any item whose UTF-8 encoding
+# exceeds this limit causes OpenSearch to reject the entire document during bulk
+# indexing and stalls the migration permanently.
+_MAX_LUCENE_TERM_BYTES = 32_766
+
+
+def _truncate_metadata_list(metadata_list: list[str]) -> list[str]:
+    result = []
+    for item in metadata_list:
+        encoded = item.encode("utf-8")
+        if len(encoded) > _MAX_LUCENE_TERM_BYTES:
+            logger.warning(
+                f"Truncating metadata_list item from {len(encoded)} bytes to "
+                f"{_MAX_LUCENE_TERM_BYTES} bytes to satisfy Lucene keyword limit."
+            )
+            item = encoded[:_MAX_LUCENE_TERM_BYTES].decode("utf-8", errors="ignore")
+        result.append(item)
+    return result
+
 
 FIELDS_NEEDED_FOR_TRANSFORMATION: list[str] = [
     DOCUMENT_ID,
@@ -244,7 +264,12 @@ def transform_vespa_chunks_to_opensearch_chunks(
                     f"Missing source_type in Vespa chunk with document ID {vespa_document_id} and chunk index {chunk_index}."
                 )
 
-            metadata_list: list[str] | None = vespa_chunk.get(METADATA_LIST)
+            _raw_metadata_list: list[str] | None = vespa_chunk.get(METADATA_LIST)
+            metadata_list: list[str] | None = (
+                _truncate_metadata_list(_raw_metadata_list)
+                if _raw_metadata_list
+                else None
+            )
 
             _raw_doc_updated_at: int | None = vespa_chunk.get(DOC_UPDATED_AT)
             last_updated: datetime | None = (
