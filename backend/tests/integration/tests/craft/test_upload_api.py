@@ -145,7 +145,7 @@ def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
         BuildSessionManager.upload_file(
             admin_user,
             session_id,
-            filename=f"chunk_{i}.bin",
+            filename=f"chunk_{i}.txt",
             content=chunk,
         )
 
@@ -154,7 +154,7 @@ def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
     }
     response = requests.post(
         _upload_url(session_id),
-        files={"file": ("chunk_overflow.bin", chunk, "application/octet-stream")},
+        files={"file": ("chunk_overflow.txt", chunk, "application/octet-stream")},
         headers=headers,
         cookies=admin_user.cookies,
     )
