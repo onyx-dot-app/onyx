@@ -1,4 +1,5 @@
 import copy
+import fnmatch
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
@@ -21,6 +22,8 @@ from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
+from onyx.configs.app_configs import GITHUB_CONNECTOR_INCLUDE_CODE_FILES
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.connector_runner import ConnectorRunner
@@ -58,6 +61,170 @@ _MAX_NUM_RATE_LIMIT_RETRIES = 5
 
 ONE_DAY = timedelta(days=1)
 SLIM_BATCH_SIZE = 100
+
+# Maximum per-file size when indexing repo code files. Files above this
+# are skipped at listing time to keep memory bounded (#9406).
+MAX_CODE_FILE_BYTES = 500_000
+
+# fnmatch-style patterns for paths to exclude from code-file indexing.
+# Covers common non-source content: dependency trees, build artifacts,
+# minified bundles, lock files, binary/image formats.
+CODE_FILE_EXCLUDE_PATTERNS: list[str] = [
+    # Dependency / vendored directories
+    "node_modules/*",
+    "*/node_modules/*",
+    "vendor/*",
+    "*/vendor/*",
+    ".venv/*",
+    "*/.venv/*",
+    "venv/*",
+    "*/venv/*",
+    "__pycache__/*",
+    "*/__pycache__/*",
+    ".git/*",
+    "*/.git/*",
+    ".idea/*",
+    "*/.idea/*",
+    ".vscode/*",
+    "*/.vscode/*",
+    # Build output
+    "dist/*",
+    "*/dist/*",
+    "build/*",
+    "*/build/*",
+    "target/*",
+    "*/target/*",
+    "out/*",
+    "*/out/*",
+    ".next/*",
+    "*/.next/*",
+    ".nuxt/*",
+    "*/.nuxt/*",
+    # Lock / manifest files
+    "package-lock.json",
+    "*/package-lock.json",
+    "yarn.lock",
+    "*/yarn.lock",
+    "pnpm-lock.yaml",
+    "*/pnpm-lock.yaml",
+    "poetry.lock",
+    "*/poetry.lock",
+    "uv.lock",
+    "*/uv.lock",
+    "Pipfile.lock",
+    "*/Pipfile.lock",
+    "Cargo.lock",
+    "*/Cargo.lock",
+    "Gemfile.lock",
+    "*/Gemfile.lock",
+    "composer.lock",
+    "*/composer.lock",
+    "go.sum",
+    "*/go.sum",
+    # Minified / compiled assets
+    "*.min.js",
+    "*.min.css",
+    "*.map",
+    "*.pyc",
+    "*.class",
+    "*.o",
+    "*.so",
+    "*.dll",
+    "*.exe",
+    # Images / media
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.ico",
+    "*.svg",
+    "*.webp",
+    "*.mp4",
+    "*.mov",
+    "*.mp3",
+    "*.wav",
+    # Archives / binaries
+    "*.zip",
+    "*.tar",
+    "*.gz",
+    "*.bz2",
+    "*.7z",
+    "*.rar",
+    "*.jar",
+    "*.war",
+    "*.whl",
+    "*.pdf",
+    # Data
+    "*.parquet",
+    "*.arrow",
+    "*.feather",
+]
+
+
+def _should_exclude_code_file(path: str) -> bool:
+    """Match a tree path against ``CODE_FILE_EXCLUDE_PATTERNS``."""
+    return any(fnmatch.fnmatch(path, pattern) for pattern in CODE_FILE_EXCLUDE_PATTERNS)
+
+
+def _passes_path_filter(path: str, path_filter: str | None) -> bool:
+    """Return True when ``path`` is within ``path_filter`` (or no filter set).
+
+    Filter is a simple prefix match: ``src/`` → include anything under ``src/``.
+    Empty string and ``None`` both mean "no filter".
+    """
+    if not path_filter:
+        return True
+    normalized = path_filter if path_filter.endswith("/") else path_filter + "/"
+    return path == path_filter.rstrip("/") or path.startswith(normalized)
+
+
+def _get_code_file_contents(
+    repo: Repository.Repository,
+    path: str,
+    default_branch: str,
+    github_client: Github,
+    attempt_num: int = 0,
+) -> Any:
+    """Fetch a single file's ContentFile with the same retry/backoff pattern
+    as the rest of this connector."""
+    if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+        raise RuntimeError(
+            f"Re-tried fetching code file {path} too many times. "
+            "Something is going wrong with GitHub rate limiting."
+        )
+    try:
+        return repo.get_contents(path, ref=default_branch)
+    except RateLimitExceededException:
+        sleep_after_rate_limit_exception(github_client)
+        return _get_code_file_contents(
+            repo, path, default_branch, github_client, attempt_num + 1
+        )
+
+
+def _convert_code_file_to_document(
+    repo: Repository.Repository,
+    path: str,
+    content: str,
+    default_branch: str,
+    external_access: ExternalAccess | None,
+) -> Document:
+    """Build a Document for a single repo code file."""
+    file_url = f"{repo.html_url}/blob/{default_branch}/{path}"
+    return Document(
+        id=file_url,
+        sections=[TextSection(link=file_url, text=content)],
+        source=DocumentSource.GITHUB,
+        semantic_identifier=path,
+        external_access=external_access,
+        metadata={
+            "type": "CodeFile",
+            "repo": repo.full_name,
+            "path": path,
+            "branch": default_branch,
+        },
+    )
+
+
 # Cases
 # X (from start) standard run, no fallback to cursor-based pagination
 # X (from start) standard run errors, fallback to cursor-based pagination
@@ -401,6 +568,7 @@ class GithubConnectorStage(Enum):
     START = "start"
     PRS = "prs"
     ISSUES = "issues"
+    CODE_FILES = "code_files"
 
 
 class GithubConnectorCheckpoint(ConnectorCheckpoint):
@@ -414,13 +582,19 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     num_retrieved: int
     cursor_url: str | None = None
 
+    # For the CODE_FILES stage: path list is produced by one Git Trees API
+    # call and drained across subsequent pages. `None` means "not listed yet".
+    cached_code_file_paths: list[str] | None = None
+
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, and cursor_url to their initial values (0, 0, None)
+        Resets curr_page, num_retrieved, cursor_url, and cached_code_file_paths
+        to their initial values.
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
+        self.cached_code_file_paths = None
 
 
 def make_cursor_url_callback(
@@ -448,12 +622,18 @@ class GithubConnector(
         state_filter: str = "all",
         include_prs: bool = True,
         include_issues: bool = False,
+        include_code_files: bool = GITHUB_CONNECTOR_INCLUDE_CODE_FILES,
+        code_files_path_filter: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
+        self.include_code_files = include_code_files
+        self.code_files_path_filter = (
+            code_files_path_filter.strip() if code_files_path_filter else None
+        ) or None
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -694,7 +874,10 @@ class GithubConnector(
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
-        checkpoint.stage = GithubConnectorStage.ISSUES
+        # Only advance into ISSUES from PRS — never demote from a later stage
+        # (e.g. CODE_FILES) that we might have resumed into directly.
+        if checkpoint.stage == GithubConnectorStage.PRS:
+            checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info("Fetching issues for repo: %s", repo.name)
@@ -764,8 +947,125 @@ class GithubConnector(
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
                 return checkpoint
 
-            # if we went past the start date during the loop or there are no more
-            # issues to get, we move on to the next repo
+        # Advance out of ISSUES unconditionally — covers both the skipped case
+        # (`include_issues=False`, the default) and the drained case. Without
+        # this, a code-files-only connector would never leave the ISSUES stage
+        # and would silently index nothing.
+        if checkpoint.stage == GithubConnectorStage.ISSUES:
+            if self.include_code_files:
+                checkpoint.stage = GithubConnectorStage.CODE_FILES
+                checkpoint.reset()
+                # Save at the stage boundary so the next run starts cleanly in
+                # CODE_FILES without replaying the issues pass.
+                return checkpoint
+            checkpoint.stage = GithubConnectorStage.PRS
+            checkpoint.reset()
+
+        if (
+            self.include_code_files
+            and checkpoint.stage == GithubConnectorStage.CODE_FILES
+        ):
+            # First call in the stage: list the repo's tree once (recursive), filter
+            # to indexable paths, and cache them on the checkpoint. Subsequent calls
+            # drain the cache INDEX_BATCH_SIZE paths at a time.
+            if checkpoint.cached_code_file_paths is None:
+                try:
+                    default_branch = repo.default_branch
+                    tree = repo.get_git_tree(default_branch, recursive=True)
+                except RateLimitExceededException:
+                    sleep_after_rate_limit_exception(self.github_client)
+                    return checkpoint
+                except GithubException as e:
+                    logger.warning(
+                        f"Failed to list code files for repo {repo.name}: {e}"
+                    )
+                    # Reset + fall through (NOT return!) so control reaches the
+                    # `cached_repo_ids` pop below and we progress to the next
+                    # repo. Returning here leaves the failing repo in
+                    # `cached_repo` and loops PRS→ISSUES→CODE_FILES→fail→…
+                    # forever. The drained-cache branch will run a harmless
+                    # second reset on the way to the next-repo logic.
+                    checkpoint.stage = GithubConnectorStage.PRS
+                    checkpoint.reset()
+                else:
+                    filtered: list[str] = []
+                    for entry in tree.tree:
+                        if entry.type != "blob":
+                            continue
+                        if not _passes_path_filter(
+                            entry.path, self.code_files_path_filter
+                        ):
+                            continue
+                        if _should_exclude_code_file(entry.path):
+                            continue
+                        if entry.size is not None and entry.size > MAX_CODE_FILE_BYTES:
+                            continue
+                        filtered.append(entry.path)
+
+                    checkpoint.cached_code_file_paths = filtered
+                    logger.info(
+                        f"Listed {len(filtered)} code files for repo: {repo.name}"
+                    )
+                    return checkpoint
+
+            if checkpoint.cached_code_file_paths:
+                default_branch = repo.default_branch
+                # Slice off a batch and drain it from the checkpoint so a
+                # mid-batch crash resumes cleanly.
+                batch_paths = checkpoint.cached_code_file_paths[:INDEX_BATCH_SIZE]
+                checkpoint.cached_code_file_paths = checkpoint.cached_code_file_paths[
+                    INDEX_BATCH_SIZE:
+                ]
+                checkpoint.curr_page += 1
+
+                for path in batch_paths:
+                    if is_slim:
+                        file_url = f"{repo.html_url}/blob/{default_branch}/{path}"
+                        yield Document(
+                            id=file_url,
+                            sections=[],
+                            external_access=repo_external_access,
+                            source=DocumentSource.GITHUB,
+                            semantic_identifier="",
+                            metadata={},
+                        )
+                        continue
+
+                    try:
+                        content_file = _get_code_file_contents(
+                            repo, path, default_branch, self.github_client
+                        )
+                        raw_bytes = content_file.decoded_content
+                        content = raw_bytes.decode("utf-8", errors="replace")
+                        yield _convert_code_file_to_document(
+                            repo=repo,
+                            path=path,
+                            content=content,
+                            default_branch=default_branch,
+                            external_access=repo_external_access,
+                        )
+                    except Exception as e:
+                        error_msg = f"Error indexing code file {path}: {e}"
+                        logger.exception(error_msg)
+                        yield ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=(
+                                    f"{repo.html_url}/blob/{default_branch}/{path}"
+                                ),
+                                document_link=(
+                                    f"{repo.html_url}/blob/{default_branch}/{path}"
+                                ),
+                            ),
+                            failure_message=error_msg,
+                            exception=e,
+                        )
+                        continue
+
+                # If the cache still has entries left, checkpoint and resume.
+                if checkpoint.cached_code_file_paths:
+                    return checkpoint
+
+            # Code files drained for this repo — move on to the next repo.
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
 
