@@ -158,15 +158,14 @@ class IndexingPipelineProtocol(Protocol):
 
 
 def _document_content_hash(doc: Document) -> str:
-    parts = []
-    for s in doc.sections:
-        if isinstance(s, TextSection) and s.text:
-            parts.append(s.text)
-        elif isinstance(s, ImageSection):
-            parts.append(f"[img:{s.image_file_id}]")
-        elif s.link:
-            parts.append(f"[section:{s.link}]")
-    content = " ".join(parts)
+    # Only text sections are hashed. Non-text sections (images, attachments) are
+    # excluded: image_file_id can be reassigned across syncs (e.g. sequential
+    # indexing), which would produce spurious hash mismatches for unchanged content.
+    # The web connector — the primary motivation for this dedup — strips images
+    # entirely, so this exclusion has no practical effect there.
+    content = " ".join(
+        s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+    )
     meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
 
     def _owner_key(o: BasicExpertInfo) -> str:
