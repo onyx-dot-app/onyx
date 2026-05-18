@@ -39,6 +39,8 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
     doc_batches = gitlab_connector.load_from_state()
     docs = list(itertools.chain(*doc_batches))
     # Assert right number of docs - Adjust if necessary based on test repo state
+    # Deduplication ensures that even with multiple branches, identical files
+    # are only indexed once, so the count should remain stable.
     assert len(docs) == 79
 
     # Find one of each type to validate
@@ -104,8 +106,8 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             doc.semantic_identifier == target_code_file_semantic_id
             and doc_type == "CodeFile"
         ):
-            # ID is a git hash (e.g., 'd177...'), Link is the blob URL
-            assert doc.id != section.link
+            # ID is now the blob URL
+            assert doc.id == section.link
             assert section.link.endswith("/README.md")
             assert "# onyx" in section.text  # Check for a known part of the content
             # Code files might not have primary owners assigned this way
@@ -122,7 +124,7 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             assert gitlab_base_url in doc.id  # Issue ID should be a URL
             assert doc.id == section.link  # Link and ID are the same URL
         elif doc_type == "CodeFile" and not validated_code_file:
-            assert doc.id != section.link  # ID is GID/hash, link is blob URL
+            assert doc.id == section.link  # Link and ID are the same URL
 
         # Early exit optimization (optional)
         # if validated_mr and validated_issue and validated_code_file:
