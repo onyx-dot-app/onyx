@@ -9,10 +9,12 @@ from simple_salesforce import Salesforce
 from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
 from simple_salesforce.exceptions import SalesforceRefusedRequest
+from simple_salesforce.format import format_soql
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
+from onyx.connectors.salesforce.utils import validate_sf_identifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -63,17 +65,26 @@ def _make_time_filter_for_sf_type(
 def _make_time_filtered_query(
     queryable_fields: set[str], sf_type: str, time_filter: str
 ) -> str:
-    # SF schema identifiers and a constant time filter; SOQL cannot bind names.
-    query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"  # noqa: S608
+    # SOQL has no parameter binding for table/column identifiers, so the SF
+    # type and field names are validated against a strict regex before being
+    # interpolated. time_filter is built internally from datetime.isoformat().
+    validate_sf_identifier(sf_type)
+    fields = ", ".join(validate_sf_identifier(f) for f in queryable_fields)
+    query = f"SELECT {fields} FROM {sf_type}{time_filter}"  # noqa: S608
     return query
 
 
 def get_object_by_id_query(
     object_id: str, sf_type: str, queryable_fields: set[str]
 ) -> str:
-    # object_id is an SF-issued record ID from an earlier SOQL response.
-    query = (
-        f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"  # noqa: S608
+    # SOQL has no parameter binding for table/column identifiers; validate them.
+    # object_id is an SF-issued record ID from an earlier SOQL response, but
+    # we still quote-escape it via format_soql for safety.
+    validate_sf_identifier(sf_type)
+    fields = ", ".join(validate_sf_identifier(f) for f in queryable_fields)
+    query = format_soql(
+        f"SELECT {fields} FROM {sf_type} WHERE Id = {{object_id}}",  # noqa: S608
+        object_id=object_id,
     )
     return query
 
@@ -93,7 +104,8 @@ def _object_type_has_api_data(
     Use the rest api to check to make sure the query will result in a non-empty response.
     """
     try:
-        # SF schema identifier and a constant time filter; SOQL cannot bind names.
+        # SOQL cannot bind names; validate. time_filter is built internally.
+        validate_sf_identifier(sf_type)
         query = f"SELECT Count() FROM {sf_type}{time_filter} LIMIT 1"  # noqa: S608
         result = sf_client.query(query)
         if result["totalSize"] == 0:
