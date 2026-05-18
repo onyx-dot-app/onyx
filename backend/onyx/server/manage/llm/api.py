@@ -989,16 +989,18 @@ def get_bedrock_available_models(
     Returns model IDs with display names from AWS. Prefers inference profiles
     (for cross-region support) over base models when available.
     """
+    # boto3 reads AWS_BEARER_TOKEN_BEDROCK lazily at API call time, not at
+    # Session construction — so the env var must stay set through the actual
+    # list_foundation_models / list_inference_profiles calls below, not just
+    # while building the Session.
+    prev_bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+    if request.aws_bearer_token_bedrock:
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
+
     try:
         # Precedence: bearer → keys → IAM
         if request.aws_bearer_token_bedrock:
-            try:
-                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
-                    request.aws_bearer_token_bedrock
-                )
-                session = boto3.Session(region_name=request.aws_region_name)
-            finally:
-                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+            session = boto3.Session(region_name=request.aws_region_name)
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -1134,6 +1136,12 @@ def get_bedrock_available_models(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Unexpected error fetching Bedrock models: {e}",
         )
+    finally:
+        if request.aws_bearer_token_bedrock:
+            if prev_bearer_token is None:
+                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+            else:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prev_bearer_token
 
 
 def _get_ollama_available_model_names(api_base: str) -> set[str]:
