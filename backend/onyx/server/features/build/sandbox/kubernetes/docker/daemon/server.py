@@ -2,6 +2,7 @@ import base64
 import binascii
 import hashlib
 import os
+import subprocess
 import tarfile
 import time
 
@@ -15,8 +16,11 @@ from fastapi import Query
 from fastapi import Request
 from push_daemon.extract import MAX_BUNDLE_BYTES
 from push_daemon.extract import safe_extract_then_atomic_swap
+from push_daemon.snapshot import create_snapshot
+from push_daemon.snapshot import restore_snapshot
+from pydantic import BaseModel
 
-app = FastAPI(title="sandbox-push-daemon", docs_url=None, redoc_url=None)
+app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
 _MAX_TIMESTAMP_DRIFT_SECONDS = 60
@@ -44,26 +48,27 @@ def _get_public_key() -> Ed25519PublicKey:
 
 
 def _verify_signature(
-    mount_path: str,
+    path: str,
     sha256_hex: str,
     signature_b64: str,
     timestamp: str,
 ) -> None:
+    """Verify timestamp drift and Ed25519 signature over {timestamp}|{path}|{sha256_hex}."""
     try:
         ts_int = int(timestamp)
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid timestamp")
-
-    drift = abs(time.time() - ts_int)
-    if drift > _MAX_TIMESTAMP_DRIFT_SECONDS:
+    if abs(time.time() - ts_int) > _MAX_TIMESTAMP_DRIFT_SECONDS:
         raise HTTPException(status_code=401, detail="Timestamp out of range")
 
-    message = f"{timestamp}|{mount_path}|{sha256_hex}".encode()
-    sig = base64.b64decode(signature_b64)
-
-    pub_key = _get_public_key()
     try:
-        pub_key.verify(sig, message)
+        sig = base64.b64decode(signature_b64)
+    except binascii.Error:
+        raise HTTPException(status_code=401, detail="Invalid signature encoding")
+
+    message = f"{timestamp}|{path}|{sha256_hex}".encode()
+    try:
+        _get_public_key().verify(sig, message)
     except InvalidSignature:
         raise HTTPException(status_code=401, detail="Invalid signature")
 
@@ -118,6 +123,82 @@ async def push(
         raise HTTPException(status_code=400, detail=str(e))
 
     return {"status": "ok"}
+
+
+class SnapshotCreateRequest(BaseModel):
+    session_id: str
+    tenant_id: str
+    s3_bucket: str
+    snapshot_id: str
+
+
+class SnapshotRestoreRequest(BaseModel):
+    session_id: str
+    s3_bucket: str
+    storage_path: str
+
+
+@app.post("/snapshot/create")
+async def snapshot_create(
+    request: Request,
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+) -> dict[str, str | int]:
+    body = await request.body()
+    _verify_signature(
+        "/snapshot/create",
+        hashlib.sha256(body).hexdigest(),
+        x_push_signature,
+        x_push_timestamp,
+    )
+
+    try:
+        payload = SnapshotCreateRequest.model_validate_json(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    try:
+        status, storage_path = create_snapshot(
+            session_id=payload.session_id,
+            tenant_id=payload.tenant_id,
+            s3_bucket=payload.s3_bucket,
+            snapshot_id=payload.snapshot_id,
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Snapshot create failed: {e}")
+
+    return {"status": status, "storage_path": storage_path, "size_bytes": 0}
+
+
+@app.post("/snapshot/restore")
+async def snapshot_restore(
+    request: Request,
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+) -> dict[str, str]:
+    body = await request.body()
+    _verify_signature(
+        "/snapshot/restore",
+        hashlib.sha256(body).hexdigest(),
+        x_push_signature,
+        x_push_timestamp,
+    )
+
+    try:
+        payload = SnapshotRestoreRequest.model_validate_json(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    try:
+        restore_snapshot(
+            session_id=payload.session_id,
+            s3_bucket=payload.s3_bucket,
+            storage_path=payload.storage_path,
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Snapshot restore failed: {e}")
+
+    return {"status": "restored"}
 
 
 if __name__ == "__main__":

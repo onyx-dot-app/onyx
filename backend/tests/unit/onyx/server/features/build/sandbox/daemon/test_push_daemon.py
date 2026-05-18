@@ -47,30 +47,22 @@ def _load_daemon_modules() -> tuple[ModuleType, ModuleType]:
     The test runner doesn't have that path, so we register the modules under
     the expected names in ``sys.modules`` before loading server.py.
     """
-    # If already loaded, return cached.
     if "push_daemon.server" in sys.modules and "push_daemon.extract" in sys.modules:
         return sys.modules["push_daemon.extract"], sys.modules["push_daemon.server"]
 
     if "push_daemon" not in sys.modules:
         sys.modules["push_daemon"] = types.ModuleType("push_daemon")
 
-    extract_spec = importlib.util.spec_from_file_location(
-        "push_daemon.extract", str(_DAEMON_DIR / "extract.py")
-    )
-    assert extract_spec is not None and extract_spec.loader is not None
-    extract_mod = importlib.util.module_from_spec(extract_spec)
-    sys.modules["push_daemon.extract"] = extract_mod
-    extract_spec.loader.exec_module(extract_mod)
+    for name in ("extract", "snapshot", "server"):
+        spec = importlib.util.spec_from_file_location(
+            f"push_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[f"push_daemon.{name}"] = mod
+        spec.loader.exec_module(mod)
 
-    server_spec = importlib.util.spec_from_file_location(
-        "push_daemon.server", str(_DAEMON_DIR / "server.py")
-    )
-    assert server_spec is not None and server_spec.loader is not None
-    server_mod = importlib.util.module_from_spec(server_spec)
-    sys.modules["push_daemon.server"] = server_mod
-    server_spec.loader.exec_module(server_mod)
-
-    return extract_mod, server_mod
+    return sys.modules["push_daemon.extract"], sys.modules["push_daemon.server"]
 
 
 # ---------------------------------------------------------------------------
@@ -385,3 +377,218 @@ def test_push_missing_public_key_raises_onyx_error(
 
     assert resp.status_code == 500
     assert "public key" in resp.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Snapshot endpoint tests
+#
+# Snapshot endpoints share signing infra with /push but use a different
+# signing format: {ts}|{endpoint_path}|{sha256(body)}. The path acts as a
+# domain separator so a captured push signature can't be replayed against
+# a snapshot endpoint (and vice versa).
+# ---------------------------------------------------------------------------
+
+
+def _sign_snapshot(
+    priv: Ed25519PrivateKey,
+    *,
+    endpoint_path: str,
+    body: bytes,
+    timestamp: str,
+) -> str:
+    sha256_hex = hashlib.sha256(body).hexdigest()
+    message = f"{timestamp}|{endpoint_path}|{sha256_hex}".encode()
+    return base64.b64encode(priv.sign(message)).decode()
+
+
+def _post_snapshot(
+    client: TestClient,
+    endpoint_path: str,
+    body: bytes,
+    *,
+    signature: str,
+    timestamp: str,
+) -> httpx.Response:
+    return client.post(
+        endpoint_path,
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Push-Signature": signature,
+            "X-Push-Timestamp": timestamp,
+        },
+    )
+
+
+def _signed_snapshot_post(
+    client: TestClient,
+    endpoint_path: str,
+    body: bytes,
+    priv: Ed25519PrivateKey,
+) -> httpx.Response:
+    ts = str(int(time.time()))
+    sig = _sign_snapshot(priv, endpoint_path=endpoint_path, body=body, timestamp=ts)
+    return _post_snapshot(client, endpoint_path, body, signature=sig, timestamp=ts)
+
+
+def test_snapshot_create_parses_body_and_returns_storage_path(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The endpoint deserializes the JSON body, hands all four fields to
+    the snapshot function, and surfaces its return value as the response.
+
+    Verifying the args round-trip catches schema drift (e.g. a renamed
+    field silently being dropped by pydantic).
+    """
+    _, server_mod, priv, _ = configured_daemon
+    captured: dict[str, str] = {}
+
+    def fake_create(**kwargs: str) -> tuple[str, str]:
+        captured.update(kwargs)
+        return "created", "t-1/snapshots/sess-1/snap-1.tar.gz"
+
+    monkeypatch.setattr(server_mod, "create_snapshot", fake_create)
+
+    body = (
+        b'{"session_id":"sess-1","tenant_id":"t-1",'
+        b'"s3_bucket":"buck","snapshot_id":"snap-1"}'
+    )
+    resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "status": "created",
+        "storage_path": "t-1/snapshots/sess-1/snap-1.tar.gz",
+        "size_bytes": 0,
+    }
+    assert captured == {
+        "session_id": "sess-1",
+        "tenant_id": "t-1",
+        "s3_bucket": "buck",
+        "snapshot_id": "snap-1",
+    }
+
+
+def test_snapshot_create_passes_through_empty_status(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty session yields status="empty" with no storage_path.
+
+    The caller (api-server) uses this to skip persisting a snapshot record,
+    so misreporting it as "created" would create dangling DB rows pointing
+    at nonexistent S3 keys.
+    """
+    _, server_mod, priv, _ = configured_daemon
+    monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("empty", ""))
+
+    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "empty"
+    assert resp.json()["storage_path"] == ""
+
+
+def test_snapshot_restore_parses_body_and_returns_restored(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, server_mod, priv, _ = configured_daemon
+    captured: dict[str, str] = {}
+
+    def fake_restore(**kwargs: str) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(server_mod, "restore_snapshot", fake_restore)
+
+    body = b'{"session_id":"sess-1","s3_bucket":"buck","storage_path":"t/s/x.tar.gz"}'
+    resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "restored"}
+    assert captured == {
+        "session_id": "sess-1",
+        "s3_bucket": "buck",
+        "storage_path": "t/s/x.tar.gz",
+    }
+
+
+@pytest.mark.parametrize("endpoint", ["/snapshot/create", "/snapshot/restore"])
+def test_snapshot_signature_from_wrong_key_is_rejected(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    endpoint: str,
+) -> None:
+    """The agent shares the pod network namespace and can curl localhost.
+    A signature from any key other than the configured public key must fail.
+    """
+    _, _, _, _ = configured_daemon
+    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    ts = str(int(time.time()))
+    other_priv, _ = _new_keypair()
+    sig = _sign_snapshot(other_priv, endpoint_path=endpoint, body=body, timestamp=ts)
+
+    resp = _post_snapshot(client, endpoint, body, signature=sig, timestamp=ts)
+    assert resp.status_code == 401
+
+
+def test_snapshot_body_tampering_after_signing_is_rejected(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mutating any byte of the body after signing must invalidate the
+    signature — otherwise a network attacker (or compromised agent) could
+    redirect a snapshot to a different tenant by swapping tenant_id.
+    """
+    _, server_mod, priv, _ = configured_daemon
+    monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("created", "p"))
+
+    signed_body = (
+        b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    )
+    ts = str(int(time.time()))
+    sig = _sign_snapshot(
+        priv, endpoint_path="/snapshot/create", body=signed_body, timestamp=ts
+    )
+
+    tampered_body = signed_body.replace(b'"tenant_id":"t"', b'"tenant_id":"VICTIM"')
+    assert tampered_body != signed_body  # sanity: the mutation actually changed bytes
+
+    resp = _post_snapshot(
+        client, "/snapshot/create", tampered_body, signature=sig, timestamp=ts
+    )
+    assert resp.status_code == 401
+
+
+def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
+    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+) -> None:
+    """A captured /push signature signs {ts}|{mount_path}|{sha} — the path
+    component differs from a snapshot signature ({ts}|{endpoint}|{sha}).
+    Without that domain separation, a leaked push signature could be
+    replayed to trigger arbitrary snapshot operations.
+    """
+    _, _, priv, _ = configured_daemon
+    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    ts = str(int(time.time()))
+
+    # Sign as if this were a push to /snapshot/create (mount_path = endpoint).
+    # The daemon should still reject because the snapshot endpoint signs over
+    # the SHA of the request body, not the SHA passed in a header.
+    push_style_sig = _sign(
+        priv,
+        mount_path="/snapshot/create",
+        sha256_hex="0" * 64,  # arbitrary — push signs over header SHA, not body
+        timestamp=ts,
+    )
+    resp = _post_snapshot(
+        client, "/snapshot/create", body, signature=push_style_sig, timestamp=ts
+    )
+    assert resp.status_code == 401

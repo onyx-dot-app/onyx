@@ -450,6 +450,143 @@ def test_health_check_returns_false_for_missing_pod(
     )
 
 
+# ---------------------------------------------------------------------------
+# Sidecar contract: the two-container model is what enforces credential
+# isolation. These tests verify the live-cluster shape that the unit-level
+# pod-spec tests can't observe (IRSA injection happens at admission time).
+# ---------------------------------------------------------------------------
+
+
+def test_pod_runs_sandbox_and_sidecar_containers(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+) -> None:
+    """After provision, the pod has both `sandbox` and `sidecar` containers
+    and the sidecar reports ready (its `/health` probe is what gates this).
+    """
+    sandbox_id = uuid4()
+    try:
+        _provisioned_sandbox(k8s_manager, sandbox_id)
+        pod_name = k8s_manager._get_pod_name(sandbox_id)
+        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
+
+        statuses = {c.name: c for c in pod.status.container_statuses or []}
+        assert set(statuses) == {"sandbox", "sidecar"}, (
+            f"pod should have exactly 2 containers, got {set(statuses)}"
+        )
+        assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
+        assert statuses["sandbox"].ready, "sandbox container should be ready"
+    finally:
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(
+            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        )
+
+
+def test_irsa_credentials_present_in_sidecar_only(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
+) -> None:
+    """The EKS IRSA webhook honors the `skip-containers` SA annotation.
+
+    The annotation lives in `cloud-deployment-yamls`; this test is the only
+    way to detect a regression (someone removing the annotation, or the
+    webhook ignoring it on a particular EKS version) before it ships
+    cross-tenant S3 access to the agent.
+    """
+    sandbox_id = uuid4()
+    try:
+        _provisioned_sandbox(k8s_manager, sandbox_id)
+        pod_name = k8s_manager._get_pod_name(sandbox_id)
+
+        sandbox_env = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            'printenv AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE 2>&1 || echo "(unset)"',
+            container="sandbox",
+        )
+        assert "(unset)" in sandbox_env or sandbox_env.strip() == "", (
+            f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
+        )
+
+        # Belt to the env-var suspenders: confirm the projected token mount
+        # path doesn't exist in the sandbox container.
+        token_mount = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            "[ -d /var/run/secrets/eks.amazonaws.com ] && echo PRESENT || echo MISSING",
+            container="sandbox",
+        )
+        assert "MISSING" in token_mount, (
+            f"IRSA token mount leaked into sandbox container: {token_mount!r}"
+        )
+
+        sidecar_role = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            'printenv AWS_ROLE_ARN || echo "(unset)"',
+            container="sidecar",
+        )
+        assert "arn:aws:iam" in sidecar_role, (
+            f"sidecar should have AWS_ROLE_ARN from IRSA, got: {sidecar_role!r}"
+        )
+    finally:
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(
+            k8s_client, k8s_manager._get_pod_name(sandbox_id), SANDBOX_NAMESPACE
+        )
+
+
+def test_managed_directory_is_read_only_from_sandbox_container(
+    k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
+    k8s_client: client.CoreV1Api,
+    live_pod: tuple[UUID, UUID, str],
+) -> None:
+    """A write attempt to `/workspace/managed/` from the agent container
+    must fail at the kernel level (EROFS), not just at the application level.
+
+    Without this, a compromised agent could swap a pushed skill bundle
+    after the daemon extracts it.
+    """
+    _, _, pod_name = live_pod
+
+    write_attempt = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        # sh writes the error to stderr; pod_exec captures combined output.
+        "echo agent-write > /workspace/managed/probe.txt 2>&1 || echo BLOCKED",
+        container="sandbox",
+    )
+    assert "BLOCKED" in write_attempt, (
+        f"sandbox container should NOT be able to write to /workspace/managed. "
+        f"Got: {write_attempt!r}"
+    )
+
+    # And the same write from the sidecar succeeds — confirming the mount
+    # is rw there and the volume is actually shared.
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "echo sidecar-write > /workspace/managed/probe.txt",
+        container="sidecar",
+    )
+    read_from_sandbox = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "cat /workspace/managed/probe.txt",
+        container="sandbox",
+    )
+    assert "sidecar-write" in read_from_sandbox, (
+        f"sandbox should see files the sidecar wrote. Got: {read_from_sandbox!r}"
+    )
+
+
 def test_terminate_removes_pod_and_marks_db(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
