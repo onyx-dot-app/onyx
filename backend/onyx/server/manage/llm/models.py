@@ -349,6 +349,9 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
+    # Newline-delimited "<key>  <value>" pairs from the Modelfile, e.g.
+    # "num_ctx 8192\ntemperature 0.6\n". Empty when no PARAMETERs are set.
+    parameters: str = ""
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -357,6 +360,23 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+    def parsed_num_ctx(self) -> int | None:
+        """Return the Modelfile-configured `num_ctx`, if any.
+
+        Honors an explicit Modelfile `PARAMETER num_ctx <N>` so operators
+        can cap context to fit their VRAM budget without Onyx silently
+        overriding it with the model's architectural maximum.
+        """
+        for line in self.parameters.splitlines():
+            tokens = line.split(maxsplit=1)
+            if len(tokens) == 2 and tokens[0] == "num_ctx":
+                try:
+                    value = int(tokens[1].strip())
+                except ValueError:
+                    return None
+                return value if value > 0 else None
+        return None
 
 
 # OpenRouter dynamic models fetch
