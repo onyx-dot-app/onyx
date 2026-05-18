@@ -252,6 +252,7 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
     DRUPAL_WIKI = "drupal_wiki"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
 
     IMAP = "imap"
     BITBUCKET = "bitbucket"
