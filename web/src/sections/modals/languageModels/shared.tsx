@@ -115,6 +115,14 @@ export function APIKeyField({
 
 // ─── APIBaseField ───────────────────────────────────────────────────────────
 
+/**
+ * Sentence appended to an API Base URL `subDescription` when Onyx is detected
+ * to be running inside a container — explains why the default uses
+ * `host.docker.internal`.
+ */
+export const CONTAINERIZED_HOST_NOTE =
+  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+
 export interface APIBaseFieldProps {
   optional?: boolean;
   subDescription?: string | RichStr;
