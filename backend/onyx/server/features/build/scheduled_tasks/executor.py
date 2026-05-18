@@ -10,11 +10,13 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
 1. Fetch the run row + owning task. Bail out idempotently if the run is
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
    marked it failed).
-2. Resolve the owning user's sandbox. If it's SLEEPING / TERMINATED /
-   FAILED, wake it via ``SessionManager.ensure_sandbox_running`` so the
-   task can fire even when the user isn't actively in Craft. SKIP for
-   the unrecoverable cases: no sandbox row (``sandbox_not_found``) or a
-   concurrent provision in flight (``sandbox_provisioning``).
+2. Get the user's sandbox to a RUNNING state via
+   ``SessionManager.ensure_sandbox_running`` — creates a sandbox if the
+   user has none, waits up to 30s for any concurrent provisioner, and
+   wakes SLEEPING / TERMINATED / FAILED sandboxes in place. SKIP only
+   if the wait window elapses with the sandbox still PROVISIONING
+   (``sandbox_provisioning``); any other failure marks the run FAILED
+   with ``error_class=sandbox_wake_failed``.
 3. Transition QUEUED -> RUNNING.
 4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
@@ -44,7 +46,6 @@ from acp.schema import RequestPermissionRequest
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.notification import create_notification
@@ -52,9 +53,7 @@ from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.session.manager import BuildStreamingState
-from onyx.server.features.build.session.manager import SandboxNotFoundError
 from onyx.server.features.build.session.manager import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
@@ -206,27 +205,17 @@ def run_scheduled_task_logic(
         task_name = task.name
         task_prompt = task.prompt
 
-        sandbox = get_sandbox_by_user_id(db_session, task_user_id)
-        if sandbox is None:
-            # User has never opened Craft (or their sandbox row was
-            # hard-deleted). Nothing to wake — skip.
-            mark_run_status(
-                db_session=db_session,
-                run_id=run_id,
-                status=ScheduledTaskRunStatus.SKIPPED,
-                skip_reason="sandbox_not_found",
-            )
+        # ensure_sandbox_running handles every state we care about:
+        # creates a sandbox if none exists, waits up to 30s for any
+        # concurrent provisioner, wakes SLEEPING / TERMINATED / FAILED,
+        # and recovers a RUNNING-but-unhealthy pod.
+        try:
+            session_manager = SessionManager(db_session)
+            sandbox = session_manager.ensure_sandbox_running(task_user_id)
             db_session.commit()
-            logger.info(
-                "Scheduled run %s skipped — no sandbox for user %s",
-                run_id,
-                task_user_id,
-            )
-            return
-
-        if sandbox.status == SandboxStatus.PROVISIONING:
-            # Another request is mid-provision; racing it would corrupt
-            # state. Transient — let the next scheduled fire try again.
+        except SandboxProvisioningError:
+            # Concurrent provisioner didn't finish in the wait window;
+            # let the next scheduled fire try again.
             mark_run_status(
                 db_session=db_session,
                 run_id=run_id,
@@ -235,60 +224,31 @@ def run_scheduled_task_logic(
             )
             db_session.commit()
             logger.info(
-                "Scheduled run %s skipped — sandbox %s is PROVISIONING",
+                "Scheduled run %s skipped — sandbox still PROVISIONING after wait",
                 run_id,
-                sandbox.id,
             )
             return
-
-        if sandbox.status != SandboxStatus.RUNNING:
-            # SLEEPING / TERMINATED / FAILED — wake the sandbox so the
-            # task can run against it. ensure_sandbox_running also
-            # recovers a RUNNING-but-unhealthy pod transparently.
-            try:
-                session_manager = SessionManager(db_session)
-                sandbox = session_manager.ensure_sandbox_running(task_user_id)
-                db_session.commit()
-            except SandboxProvisioningError:
-                # Lost a race between the initial read and the wake call.
-                mark_run_status(
-                    db_session=db_session,
-                    run_id=run_id,
-                    status=ScheduledTaskRunStatus.SKIPPED,
-                    skip_reason="sandbox_provisioning",
-                )
-                db_session.commit()
-                return
-            except SandboxNotFoundError:
-                mark_run_status(
-                    db_session=db_session,
-                    run_id=run_id,
-                    status=ScheduledTaskRunStatus.SKIPPED,
-                    skip_reason="sandbox_not_found",
-                )
-                db_session.commit()
-                return
-            except Exception as exc:
-                logger.exception("Failed to wake sandbox for scheduled run %s", run_id)
-                error_class = type(exc).__name__
-                error_detail = str(exc)[:1000] or error_class
-                mark_run_status(
-                    db_session=db_session,
-                    run_id=run_id,
-                    status=ScheduledTaskRunStatus.FAILED,
-                    error_class="sandbox_wake_failed",
-                    error_detail=error_detail,
-                )
-                _notify(
-                    db_session=db_session,
-                    user_id=task_user_id,
-                    task_name=task_name,
-                    task_id=task_id,
-                    run_id=run_id,
-                    notif_type=NotificationType.SCHEDULED_TASK_FAILED,
-                )
-                db_session.commit()
-                return
+        except Exception as exc:
+            logger.exception("Failed to ensure sandbox for scheduled run %s", run_id)
+            error_class = type(exc).__name__
+            error_detail = str(exc)[:1000] or error_class
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.FAILED,
+                error_class="sandbox_wake_failed",
+                error_detail=error_detail,
+            )
+            _notify(
+                db_session=db_session,
+                user_id=task_user_id,
+                task_name=task_name,
+                task_id=task_id,
+                run_id=run_id,
+                notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+            )
+            db_session.commit()
+            return
 
         sandbox_id = sandbox.id
 

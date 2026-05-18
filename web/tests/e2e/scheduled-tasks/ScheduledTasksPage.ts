@@ -187,8 +187,8 @@ export class ScheduledTasksPage {
    * Wait for a run row to reach a terminal state. SUCCEEDED, FAILED, and
    * SKIPPED all qualify — any of them prove the dispatcher → executor →
    * run-history wiring is reachable end-to-end. (SKIPPED is the deterministic
-   * outcome when no sandbox row exists for the user, e.g.
-   * `sandbox_not_found`.)
+   * outcome when a concurrent provisioner doesn't finish within the wait
+   * window, e.g. `sandbox_provisioning`.)
    */
   async expectRunInTerminalState(timeout = 60_000): Promise<void> {
     const terminalRunRow = this.page
