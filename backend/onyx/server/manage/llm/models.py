@@ -349,6 +349,9 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
+    # Modelfile-format text (e.g. "num_ctx                        8192\n...").
+    # Empty string when the Modelfile has no PARAMETER entries.
+    parameters: str = ""
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -357,6 +360,25 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+    def get_num_ctx(self) -> int | None:
+        """Return the ``num_ctx`` declared in the Modelfile parameters, if any.
+
+        Ollama's ``/api/show`` returns PARAMETER entries as whitespace-separated
+        lines. We read the user-configured ``num_ctx`` rather than
+        ``model_info["<arch>.context_length"]`` (the architectural ceiling), which
+        would cause ``num_ctx`` to be forced to absurd values like 262144 on
+        consumer hardware and evict the model from VRAM (#9364).
+        """
+        for line in self.parameters.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == "num_ctx":
+                try:
+                    value = int(parts[1])
+                except ValueError:
+                    return None
+                return value if value > 0 else None
+        return None
 
 
 # OpenRouter dynamic models fetch

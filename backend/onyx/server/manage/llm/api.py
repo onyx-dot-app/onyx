@@ -1201,13 +1201,12 @@ def get_ollama_available_models(
             if not ollama_model_details.supports_completion():
                 continue
 
-            # Optimistically access. Context limit is stored as "model_architecture.context" = int
-            architecture = ollama_model_details.model_info.get(
-                "general.architecture", ""
-            )
-            context_limit = ollama_model_details.model_info.get(
-                architecture + ".context_length", None
-            )
+            # Use the model's effective num_ctx from its Modelfile parameters.
+            # The architectural context_length in model_info is intentionally
+            # ignored — sending it as num_ctx evicts the model from VRAM on
+            # consumer hardware (#9364). Admins can still bump max_input_tokens
+            # from the UI if they want a larger context.
+            context_limit = ollama_model_details.get_num_ctx()
             supports_image_input = ollama_model_details.supports_image_input()
         except ValidationError as e:
             logger.warning(
