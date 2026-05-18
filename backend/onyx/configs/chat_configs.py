@@ -70,3 +70,8 @@ COMPRESSION_TRIGGER_RATIO = float(os.environ.get("COMPRESSION_TRIGGER_RATIO", "0
 SKIP_DEEP_RESEARCH_CLARIFICATION = (
     os.environ.get("SKIP_DEEP_RESEARCH_CLARIFICATION", "false").lower() == "true"
 )
+
+# Maximum tokens allowed per tool-call result before it is truncated.
+# Prevents oversized MCP / custom-tool responses from blowing the context window.
+# Mirrors MAX_MCP_OUTPUT_TOKENS used by Claude Code. Override via env var.
+MAX_TOOL_RESULT_TOKENS: int = int(os.environ.get("MAX_TOOL_RESULT_TOKENS") or 20_000)
