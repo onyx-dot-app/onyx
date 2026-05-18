@@ -23,6 +23,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
@@ -161,7 +162,15 @@ def _document_content_hash(doc: Document) -> str:
         s.text for s in doc.sections if isinstance(s, TextSection) and s.text
     )
     meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
-    raw = f"{doc.title or ''}||{content}||{doc.semantic_identifier}||{meta}"
+
+    def _owner_key(o: BasicExpertInfo) -> str:
+        return o.email or o.display_name or o.first_name or ""
+
+    owners = json.dumps(
+        [o.model_dump() for o in sorted(doc.primary_owners or [], key=_owner_key)]
+        + [o.model_dump() for o in sorted(doc.secondary_owners or [], key=_owner_key)]
+    )
+    raw = f"{doc.title or ''}||{content}||{meta}||{owners}"
     return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
