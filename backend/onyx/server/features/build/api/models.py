@@ -327,13 +327,8 @@ class PptxPreviewResponse(BaseModel):
 
 # ===== External App Models =====
 class UpsertExternalAppRequest(BaseModel):
-    """Create or update an external app.
-
-    If `id` is provided, the row with that id is updated; otherwise a new
-    row is inserted. `upstream_url_patterns` is a list of regex patterns
-    matched by the egress proxy against outbound request URLs. `enabled`
-    is the kill switch the proxy checks before injecting credentials.
-    """
+    """Create (no id) or update (id set). `upstream_url_patterns` are
+    regex patterns the egress proxy matches against outbound URLs."""
 
     id: int | None = None
     name: str
@@ -346,8 +341,6 @@ class UpsertExternalAppRequest(BaseModel):
 
 
 class ExternalAppAdminResponse(BaseModel):
-    """Admin-facing view of an external app (includes org credentials)."""
-
     id: int
     name: str
     description: str
@@ -359,28 +352,57 @@ class ExternalAppAdminResponse(BaseModel):
 
 
 class UpsertUserCredentialsRequest(BaseModel):
-    """User-supplied credentials for a specific external app."""
-
     user_credentials: dict[str, Any]
 
 
 class ExternalAppUserResponse(BaseModel):
-    """User-facing view of an external app.
-
-    `credential_keys` are the parameter names the calling user must supply —
-    derived from the app's `auth_template` minus whatever the organization
-    has already filled in. `credential_values` are the values the user has
-    previously stored for those keys (intersection — stale keys from
-    deleted/migrated templates are filtered out). `authenticated` is true
-    iff `credential_values` covers every key in `credential_keys`.
-
-    Organization credentials and the raw auth template are intentionally
-    omitted — those are admin-only.
-    """
+    """User-facing view — strips admin-only fields (auth_template,
+    organization_credentials). `app_type` is exposed so the frontend
+    can render the right logo per app without hitting an admin-only
+    endpoint."""
 
     id: int
     name: str
     description: str
+    app_type: ExternalAppType
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
+
+
+class OAuthStartResponse(BaseModel):
+    authorize_url: str
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str
+
+
+class OAuthCallbackResponse(BaseModel):
+    success: bool
+    external_app_id: int
+
+
+class OrgCredentialFieldDescriptor(BaseModel):
+    """One credential field the admin must fill in to configure a
+    built-in provider."""
+
+    key: str
+    label: str
+    description: str
+    secret: bool
+
+
+class BuiltInExternalAppDescriptor(BaseModel):
+    """Backend-defined preset for a built-in OAuth provider. The admin
+    UI fetches these and uses them to render the Configure modal +
+    POST body, so adding a new provider is a backend-only change."""
+
+    app_type: ExternalAppType
+    name: str
+    description: str
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, str]
+    required_org_credential_fields: list[OrgCredentialFieldDescriptor]
+    setup_instructions: str
