@@ -94,8 +94,9 @@ def document_by_cc_pair_cleanup_task(
 
     try:
         # Phase 1: read DB state, then release the connection before the
-        # Vespa HTTP call. Holding a pg transaction across the round-trip
-        # pins a pgbouncer slot for the duration and saturates the pool under
+        # document-index HTTP call (OpenSearch on cloud, Vespa on legacy
+        # deployments). Holding a pg transaction across the round-trip pins
+        # a pgbouncer slot for the duration and saturates the pool under
         # bulk-deletion fan-out across the light worker fleet.
         chunk_count: int | None = None
         update_request: MetadataUpdateRequest | None = None
@@ -141,7 +142,7 @@ def document_by_cc_pair_cleanup_task(
             RetryDocumentIndex(document_index) for document_index in document_indices
         ]
 
-        # Phase 2: Vespa I/O — no DB connection held.
+        # Phase 2: document-index I/O — no DB connection held.
         if count == 1:
             action = "delete"
             for retry_document_index in retry_document_indices:
@@ -175,7 +176,7 @@ def document_by_cc_pair_cleanup_task(
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
         elif count > 1:
             with get_session_with_current_tenant() as db_session:
-                # there are still other cc_pair references to the doc, so just resync to Vespa
+                # there are still other cc_pair references to the doc, so just resync to the document index
                 delete_document_by_connector_credential_pair__no_commit(
                     db_session=db_session,
                     document_id=document_id,
