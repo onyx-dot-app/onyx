@@ -818,7 +818,7 @@ def test_content_hash_metadata_key_order_is_irrelevant() -> None:
     assert _document_content_hash(doc1) == _document_content_hash(doc2)
 
 
-def test_content_hash_changes_with_semantic_identifier() -> None:
+def test_content_hash_ignores_semantic_identifier() -> None:
     doc1 = Document(
         id="x",
         title="T",
@@ -835,7 +835,29 @@ def test_content_hash_changes_with_semantic_identifier() -> None:
         source=DocumentSource.WEB,
         metadata={},
     )
+    assert _document_content_hash(doc1) == _document_content_hash(doc2)
+
+
+def test_content_hash_changes_with_owners() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [BasicExpertInfo(email="alice@example.com")]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [BasicExpertInfo(email="bob@example.com")]
     assert _document_content_hash(doc1) != _document_content_hash(doc2)
+
+
+def test_content_hash_owner_order_is_irrelevant() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    alice = BasicExpertInfo(email="alice@example.com")
+    bob = BasicExpertInfo(email="bob@example.com")
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [alice, bob]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [bob, alice]
+    assert _document_content_hash(doc1) == _document_content_hash(doc2)
 
 
 def test_content_hash_ignores_image_sections() -> None:
