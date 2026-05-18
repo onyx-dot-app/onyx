@@ -1,4 +1,6 @@
+import hashlib
 import json
+import re
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
@@ -26,6 +28,29 @@ logger = setup_logger()
 DENYLISTED_MCP_HEADERS = {
     "host",  # Prevents Host Header Injection attacks
 }
+
+
+def _safe_llm_tool_name(mcp_server_id: int, tool_name: str) -> str:
+    """Return a provider-safe, per-server MCP tool name.
+
+    OpenAI/Anthropic-compatible function names must be alphanumeric, underscore,
+    or hyphen. MCP servers commonly expose generic names like `search` and
+    `fetch`, so namespace by the stable numeric server id to avoid collisions.
+    """
+
+    safe_tool_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name).strip("_-")
+    if not safe_tool_name:
+        safe_tool_name = "tool"
+
+    prefix = f"mcp_{mcp_server_id}_"
+    name = f"{prefix}{safe_tool_name}"
+    if len(name) <= 64:
+        return name
+
+    digest = hashlib.sha1(safe_tool_name.encode()).hexdigest()[:8]
+    suffix = f"_{digest}"
+    return f"{prefix}{safe_tool_name[: 64 - len(prefix) - len(suffix)]}{suffix}"
+
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
@@ -79,7 +104,7 @@ class MCPTool(Tool[None]):
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
+        self._llm_name = _safe_llm_tool_name(mcp_server.id, tool_name)
 
     @property
     def id(self) -> int:
@@ -87,7 +112,7 @@ class MCPTool(Tool[None]):
 
     @property
     def name(self) -> str:
-        return self._name
+        return self._llm_name
 
     @property
     def description(self) -> str:
@@ -107,7 +132,7 @@ class MCPTool(Tool[None]):
         return {
             "type": "function",
             "function": {
-                "name": self._name,
+                "name": self._llm_name,
                 "description": self._description,
                 "parameters": _normalize_parameters_schema(self._tool_definition),
             },

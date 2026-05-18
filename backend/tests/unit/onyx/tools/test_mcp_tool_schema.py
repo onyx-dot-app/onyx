@@ -15,7 +15,27 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.tools.tool_implementations.mcp.mcp_tool import _normalize_parameters_schema
+from onyx.tools.tool_implementations.mcp.mcp_tool import _safe_llm_tool_name
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+
+
+class TestSafeLLMToolName:
+    def test_strips_edge_hyphens_and_underscores(self) -> None:
+        assert _safe_llm_tool_name(7, "-search_") == "mcp_7_search"
+
+    def test_long_names_are_capped_at_64_chars(self) -> None:
+        safe_name = _safe_llm_tool_name(123, "aws___retrieve_and_generate_with_additional_model_response_fields")
+
+        assert len(safe_name) == 64
+        assert safe_name.startswith("mcp_123_")
+
+    def test_long_names_keep_hash_suffix_to_avoid_collisions(self) -> None:
+        first_name = _safe_llm_tool_name(1, f"{'a' * 80}_first")
+        second_name = _safe_llm_tool_name(1, f"{'a' * 80}_second")
+
+        assert len(first_name) == 64
+        assert len(second_name) == 64
+        assert first_name != second_name
 
 
 class TestNormalizeParametersSchema:
