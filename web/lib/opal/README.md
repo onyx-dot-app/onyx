@@ -166,3 +166,10 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.
 - See `web/AGENTS.md` for broader frontend standards.
+
+## Third-party trademarks
+
+The `@onyx-ai/opal/logos` subpath ships brand marks of third-party
+products Onyx integrates with. Marks remain the property of their
+respective owners; Onyx claims no trademark over them. See
+[`NOTICE.md`](./NOTICE.md) for details.
