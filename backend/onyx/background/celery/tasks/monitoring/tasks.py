@@ -270,6 +270,7 @@ def _build_connector_final_metrics(
             IndexingStatus.SUCCESS,
             IndexingStatus.FAILED,
             IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
         ]:
             # Not finished; skip
             continue

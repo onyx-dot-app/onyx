@@ -277,6 +277,14 @@ def should_index(
     if not last_index_attempt:
         return True
 
+    # If the previous attempt was interrupted by infrastructure (pod death,
+    # OOM, rolling deploy SIGKILL), retry immediately rather than waiting
+    # for the connector's refresh cadence — the watchdog already saved a
+    # checkpoint that the next attempt will resume from. Must come before
+    # the refresh_freq=None gate so one-time-sync connectors still recover.
+    if last_index_attempt.status == IndexingStatus.INTERRUPTED:
+        return True
+
     if connector.refresh_freq is None:
         # print(f"Not indexing cc_pair={cc_pair.id}: refresh_freq is None")
         return False

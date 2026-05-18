@@ -42,6 +42,11 @@ class IndexingStatus(str, PyEnum):
     CANCELED = "canceled"
     FAILED = "failed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
+    # Worker died mid-run (pod OOM, rolling deploy SIGKILL). Distinguished from
+    # FAILED so the scheduler retries immediately instead of waiting for the
+    # connector's refresh cadence, and so it isn't counted toward the 5-strike
+    # auto-pause for repeated logical failures.
+    INTERRUPTED = "interrupted"
 
     def is_terminal(self) -> bool:
         terminal_states = {
@@ -49,6 +54,7 @@ class IndexingStatus(str, PyEnum):
             IndexingStatus.COMPLETED_WITH_ERRORS,
             IndexingStatus.CANCELED,
             IndexingStatus.FAILED,
+            IndexingStatus.INTERRUPTED,
         }
         return self in terminal_states
 

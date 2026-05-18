@@ -70,6 +70,20 @@ export function IndexAttemptStatus({
         Canceled
       </Badge>
     );
+  } else if (status === "interrupted") {
+    const icon = (
+      <Badge variant="in_progress" icon={FiClock}>
+        Interrupted
+      </Badge>
+    );
+    const tooltipMsg =
+      errorMsg ||
+      "Worker restarted mid-run. Onyx will automatically resume indexing from the last saved checkpoint.";
+    badge = (
+      <Tooltip tooltip={tooltipMsg}>
+        <div className="cursor-pointer">{icon}</div>
+      </Tooltip>
+    );
   } else if (status === "invalid") {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
@@ -222,6 +236,15 @@ export function CCPairStatus({
       badge = (
         <Badge variant="canceled" icon={FiClock}>
           Canceled
+        </Badge>
+      );
+    } else if (
+      lastIndexAttemptStatus &&
+      lastIndexAttemptStatus === "interrupted"
+    ) {
+      badge = (
+        <Badge variant="in_progress" icon={FiClock}>
+          Interrupted
         </Badge>
       );
     } else {
