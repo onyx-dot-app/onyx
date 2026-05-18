@@ -405,7 +405,8 @@ def test_llm_configuration(
                 else None
             )
         if existing_provider and not test_llm_request.custom_config_changed:
-            test_custom_config = existing_provider.custom_config
+            if test_custom_config is None:
+                test_custom_config = existing_provider.custom_config
 
     test_custom_config = _validate_and_normalize_vertex_auth(
         provider=test_llm_request.provider,
@@ -565,8 +566,12 @@ def put_llm_provider(
             if existing_provider.api_key
             else None
         )
+    # Keep caller-supplied custom_config when present even if
+    # custom_config_changed=False; only use stored config as a fallback when
+    # custom_config is omitted/null.
     if existing_provider and not llm_provider_upsert_request.custom_config_changed:
-        llm_provider_upsert_request.custom_config = existing_provider.custom_config
+        if not llm_provider_upsert_request.custom_config:
+            llm_provider_upsert_request.custom_config = existing_provider.custom_config
 
     llm_provider_upsert_request.custom_config = _validate_and_normalize_vertex_auth(
         provider=llm_provider_upsert_request.provider,
