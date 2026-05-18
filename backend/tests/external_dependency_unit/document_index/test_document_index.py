@@ -61,7 +61,12 @@ def _retrieve_chunks_with_expected_boost(
         ):
             return retrieved
         time.sleep(poll_interval_s)
-    return retrieved
+    actual_boosts = [chunk.boost for chunk in retrieved]
+    pytest.fail(
+        f"Timed out after {timeout_s}s waiting for document {document_id!r}: "
+        f"expected {expected_chunk_count} chunk(s) with boost={expected_boost}, "
+        f"got {len(retrieved)} chunk(s) with boosts={actual_boosts}."
+    )
 
 
 # ------------------------------------------------------------------------------
