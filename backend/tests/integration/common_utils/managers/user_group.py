@@ -199,7 +199,7 @@ class UserGroupManager:
                 )
             else:
                 print("User groups were not synced yet, waiting...")
-            time.sleep(2)
+            time.sleep(1)
 
     @staticmethod
     def wait_for_deletion_completion(
@@ -222,4 +222,4 @@ class UserGroupManager:
                 )
             else:
                 print("Some user groups are still being deleted, waiting...")
-            time.sleep(2)
+            time.sleep(1)

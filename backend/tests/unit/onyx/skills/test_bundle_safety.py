@@ -1,0 +1,205 @@
+"""Unit tests for the custom skill bundle security boundary.
+
+Covers symlink rejection, path traversal rejection, and _safe_unzip extraction
+safety (defense in depth alongside the upload validator). Validation-side tests
+(slug check, missing SKILL.md, size cap reporting) live in
+test_bundle_validation.py.
+"""
+
+from __future__ import annotations
+
+import io
+import stat
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.bundle import _safe_unzip
+from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
+from onyx.skills.bundle import validate_custom_bundle
+
+
+def _build_zip(
+    entries: list[tuple[str, bytes]],
+    *,
+    symlinks: list[tuple[str, bytes]] | None = None,
+    fixed_date: tuple[int, int, int, int, int, int] = (2026, 1, 1, 0, 0, 0),
+) -> bytes:
+    """Build a zip in-memory. ``symlinks`` is a list of (path, target) pairs."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for path, data in entries:
+            info = zipfile.ZipInfo(filename=path, date_time=fixed_date)
+            zf.writestr(info, data)
+        for path, target in symlinks or []:
+            info = zipfile.ZipInfo(filename=path, date_time=fixed_date)
+            info.create_system = _ZIP_UNIX_CREATE_SYSTEM
+            info.external_attr = (stat.S_IFLNK | 0o755) << 16
+            zf.writestr(info, target)
+    return buf.getvalue()
+
+
+VALID_SKILL_MD = b"# Hello\n\nBody content.\n"
+
+
+def _valid_bundle() -> bytes:
+    return _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            ("scripts/run.sh", b"#!/bin/sh\necho hi\n"),
+            ("docs/notes.md", b"# Notes\n"),
+        ]
+    )
+
+
+def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:
+    """Build a valid ZIP_STORED zip, then patch the compression-method field
+    in both the local header and the central directory to ``method``.
+
+    `zipfile.ZipFile(...).writestr()` refuses to write an unknown method, but
+    `zipfile.ZipFile(...).open()` happily reads what it can and raises
+    `NotImplementedError` when it can't — which is exactly the failure mode we
+    want to exercise.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("SKILL.md", payload)
+    raw = bytearray(buf.getvalue())
+    # Patch every occurrence of the compression-method field. In each header
+    # the method is a little-endian uint16 at a fixed offset from the magic.
+    for magic, offset in ((b"PK\x03\x04", 8), (b"PK\x01\x02", 10)):
+        pos = raw.find(magic)
+        if pos != -1:
+            raw[pos + offset : pos + offset + 2] = method.to_bytes(2, "little")
+    return bytes(raw)
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "../escape.txt",
+        "foo/../../escape.txt",
+        "/etc/passwd",
+        "./shouldnotbehere",
+    ],
+)
+def test_validator_rejects_path_traversal(bad_path: str) -> None:
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            (bad_path, b"oops"),
+        ]
+    )
+    with pytest.raises(OnyxError, match="escapes root"):
+        validate_custom_bundle(zip_bytes, slug="hello")
+
+
+def test_validator_rejects_symlink() -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", VALID_SKILL_MD)],
+        symlinks=[("link", b"/etc/passwd")],
+    )
+    with pytest.raises(OnyxError, match="symlink"):
+        validate_custom_bundle(zip_bytes, slug="hello")
+
+
+def test_zip_extraction_extracts_valid_bundle(tmp_path: Path) -> None:
+    _safe_unzip(_valid_bundle(), tmp_path / "out")
+    assert (tmp_path / "out" / "SKILL.md").read_bytes() == VALID_SKILL_MD
+    assert (tmp_path / "out" / "scripts" / "run.sh").exists()
+
+
+def test_zip_extraction_rejects_traversal(tmp_path: Path) -> None:
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            ("../escape.txt", b"x"),
+        ]
+    )
+    with pytest.raises(OnyxError, match="escapes root"):
+        _safe_unzip(zip_bytes, tmp_path / "out")
+
+
+def test_zip_extraction_rejects_symlink(tmp_path: Path) -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", VALID_SKILL_MD)],
+        symlinks=[("link", b"/etc/passwd")],
+    )
+    with pytest.raises(OnyxError, match="symlink"):
+        _safe_unzip(zip_bytes, tmp_path / "out")
+
+
+def test_zip_extraction_enforces_per_file_cap(tmp_path: Path) -> None:
+    """Defense-in-depth: even if upload validation is bypassed or the stored
+    blob is tampered, extraction must not write unbounded data to disk."""
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            ("big.bin", b"\x00" * 64),
+        ]
+    )
+    with pytest.raises(OnyxError, match="exceeds"):
+        _safe_unzip(zip_bytes, tmp_path / "out", per_file_max_bytes=32)
+
+
+def test_zip_extraction_cleans_dest_on_size_cap_failure(tmp_path: Path) -> None:
+    """Half-extracted skill trees on disk break atomicity — a failed
+    _safe_unzip must leave nothing behind."""
+    out = tmp_path / "out"
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", VALID_SKILL_MD),
+            ("a/first.bin", b"\x00" * 16),
+            ("a/second.bin", b"\x00" * 64),  # tips us past per_file cap
+        ]
+    )
+    with pytest.raises(OnyxError, match="exceeds"):
+        _safe_unzip(zip_bytes, out, per_file_max_bytes=32)
+    assert not out.exists()
+
+
+def test_zip_extraction_cleans_dest_on_unreadable_entry(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
+    with pytest.raises(OnyxError, match="cannot extract"):
+        _safe_unzip(zip_bytes, out)
+    assert not out.exists()
+
+
+def test_zip_extraction_wraps_mkdir_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A permissions / OS failure during mkdir must surface as OnyxError,
+    not bubble as a raw OSError → HTTP 500."""
+
+    def boom(self: Path, *_args: object, **_kwargs: object) -> None:  # noqa: ARG001
+        raise PermissionError("simulated permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", boom)
+    with pytest.raises(OnyxError, match="cannot create"):
+        _safe_unzip(_valid_bundle(), tmp_path / "out")
+
+
+def test_zip_extraction_enforces_total_cap(tmp_path: Path) -> None:
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", b"x" * 64),
+            ("a.bin", b"y" * 64),
+            ("b.bin", b"z" * 64),
+        ]
+    )
+    with pytest.raises(OnyxError, match="uncompressed"):
+        _safe_unzip(
+            zip_bytes,
+            tmp_path / "out",
+            per_file_max_bytes=1024,
+            total_max_bytes=128,
+        )
+
+
+def test_zip_extraction_rejects_unsupported_compression(tmp_path: Path) -> None:
+    zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
+    with pytest.raises(OnyxError, match="cannot extract"):
+        _safe_unzip(zip_bytes, tmp_path / "out")

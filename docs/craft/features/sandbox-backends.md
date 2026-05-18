@@ -247,7 +247,7 @@ Lightweight. Sandbox correctness is dominated by the K8s integration tests alrea
 - The new `create_snapshot_from_stream` / `restore_snapshot_to_stream` methods round-trip correctly with an in-memory `BytesIO`, against a fake `FileStore`. Confirms the tempfile-wrapping path-based API still produces the same `(snapshot_id, storage_path, size_bytes)` shape.
 
 **Integration (no new tests):**
-- The existing Craft session integration tests in `backend/tests/integration/tests/build/` (which run against `local`) should be re-run with `SANDBOX_BACKEND=docker` in a CI matrix lane *if* CI has Docker-in-Docker. If not, treat docker mode as covered by the external-dependency-unit tests plus manual verification.
+- The existing Craft session integration tests in `backend/tests/integration/tests/craft/` (which run against `local`) should be re-run with `SANDBOX_BACKEND=docker` in a CI matrix lane *if* CI has Docker-in-Docker. If not, treat docker mode as covered by the external-dependency-unit tests plus manual verification.
 - Skip Playwright. The web UI doesn't change.
 
 **Manual smoke (do this before merging):**
