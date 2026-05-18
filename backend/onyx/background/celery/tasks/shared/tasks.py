@@ -90,11 +90,16 @@ def document_by_cc_pair_cleanup_task(
     start = time.monotonic()
 
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
+    action = "skip"
 
     try:
+        # Phase 1: read DB state, then release the connection before the
+        # Vespa HTTP call. Holding a pg transaction across the round-trip
+        # pins a pgbouncer slot for the duration and saturates the pool under
+        # bulk-deletion fan-out across the light worker fleet.
+        chunk_count: int | None = None
+        update_request: MetadataUpdateRequest | None = None
         with get_session_with_current_tenant() as db_session:
-            action = "skip"
-
             active_search_settings = get_active_search_settings(db_session)
             # This flow is for updates and deletion so we get all indices.
             document_indices = get_all_document_indices(
@@ -103,40 +108,10 @@ def document_by_cc_pair_cleanup_task(
                 httpx_client=HttpxPool.get("vespa"),
             )
 
-            retry_document_indices: list[RetryDocumentIndex] = [
-                RetryDocumentIndex(document_index)
-                for document_index in document_indices
-            ]
-
             count = get_document_connector_count(db_session, document_id)
             if count == 1:
-                # count == 1 means this is the only remaining cc_pair reference to the doc
-                # delete it from vespa and the db
-                action = "delete"
-
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
-
-                for retry_document_index in retry_document_indices:
-                    _ = retry_document_index.delete(
-                        document_id,
-                        chunk_count=chunk_count,
-                    )
-
-                delete_document_references_from_kg(
-                    db_session=db_session,
-                    document_id=document_id,
-                )
-
-                delete_documents_complete(
-                    db_session=db_session,
-                    document_ids=[document_id],
-                )
-
-                completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
             elif count > 1:
-                action = "update"
-
-                # count > 1 means the document still has cc_pair references
                 doc = get_document(document_id, db_session)
                 if not doc:
                     return False
@@ -148,7 +123,6 @@ def document_by_cc_pair_cleanup_task(
                 )
 
                 doc_sets = fetch_document_sets_for_document(document_id, db_session)
-                update_doc_sets: set[str] = set(doc_sets)
 
                 update_request = MetadataUpdateRequest(
                     document_ids=[document_id],
@@ -158,18 +132,49 @@ def document_by_cc_pair_cleanup_task(
                         )
                     },
                     access=doc_access,
-                    document_sets=update_doc_sets,
+                    document_sets=set(doc_sets),
                     boost=doc.boost,
                     hidden=doc.hidden,
                 )
 
-                for retry_document_index in retry_document_indices:
-                    # TODO(andrei): Previously there was a comment here saying
-                    # it was ok if a doc did not exist in the document index. I
-                    # don't agree with that claim, so keep an eye on this task
-                    # to see if this raises.
-                    retry_document_index.update([update_request])
+        retry_document_indices: list[RetryDocumentIndex] = [
+            RetryDocumentIndex(document_index) for document_index in document_indices
+        ]
 
+        # Phase 2: Vespa I/O — no DB connection held.
+        if count == 1:
+            action = "delete"
+            for retry_document_index in retry_document_indices:
+                _ = retry_document_index.delete(
+                    document_id,
+                    chunk_count=chunk_count,
+                )
+        elif count > 1:
+            action = "update"
+            assert update_request is not None
+            for retry_document_index in retry_document_indices:
+                # TODO(andrei): Previously there was a comment here saying
+                # it was ok if a doc did not exist in the document index. I
+                # don't agree with that claim, so keep an eye on this task
+                # to see if this raises.
+                retry_document_index.update([update_request])
+
+        # Phase 3: write back to PG in a fresh transaction.
+        if count == 1:
+            with get_session_with_current_tenant() as db_session:
+                delete_document_references_from_kg(
+                    db_session=db_session,
+                    document_id=document_id,
+                )
+
+                delete_documents_complete(
+                    db_session=db_session,
+                    document_ids=[document_id],
+                )
+
+            completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
+        elif count > 1:
+            with get_session_with_current_tenant() as db_session:
                 # there are still other cc_pair references to the doc, so just resync to Vespa
                 delete_document_by_connector_credential_pair__no_commit(
                     db_session=db_session,
@@ -183,14 +188,14 @@ def document_by_cc_pair_cleanup_task(
                 mark_document_as_synced(document_id, db_session)
                 db_session.commit()
 
-                completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
-            else:
-                completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
+            completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
+        else:
+            completion_status = OnyxCeleryTaskCompletionStatus.SKIPPED
 
-            elapsed = time.monotonic() - start
-            task_logger.info(
-                f"doc={document_id} action={action} refcount={count} elapsed={elapsed:.2f}"
-            )
+        elapsed = time.monotonic() - start
+        task_logger.info(
+            f"doc={document_id} action={action} refcount={count} elapsed={elapsed:.2f}"
+        )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
         completion_status = OnyxCeleryTaskCompletionStatus.SOFT_TIME_LIMIT
