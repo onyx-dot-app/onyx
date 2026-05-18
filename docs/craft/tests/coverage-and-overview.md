@@ -34,7 +34,7 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 - **Sessions** — create, list, delete, restore (with lock contention), pre-provisioned check, sandbox reset, generate-suggestions fallback, rename fallback chain, limited-role check.
 - **Uploads** — success, auth, foreign session rejection, blocked extensions, unicode filenames.
 - **File ops** — path traversal rejection on every verb, hidden-entry filtering, cross-user isolation, opencode.json hidden from download.
-- **Skills admin** — full CRUD + push side-effects, invalid/oversized/corrupt bundle rejection, duplicate slug, FK violation on unknown group, orphan-blob cleanup, visibility-change push, description-only-no-push.
+- **Skills admin** — full CRUD HTTP contract, invalid/oversized/corrupt bundle rejection, duplicate slug, FK violation on unknown group, orphan-blob cleanup. Push-pipeline side effects (visibility change, description-only no-op, replace/delete propagation, grant union) live in the ext-dep tier — see `external_dependency_unit/craft/test_skill_push.py`.
 - **Webapp proxy** — sharing scope enforcement, set-cookie stripping, route-order, cross-session isolation.
 - **User library** — upload/delete/toggle, cross-user isolation.
 - **Scheduled tasks** — cron compilation, paired-field validation, run-now on paused, idempotent soft-delete, pagination.
