@@ -22,7 +22,6 @@ import hashlib
 import io
 import os
 import tarfile
-import threading
 import time
 from uuid import UUID
 from uuid import uuid4
@@ -628,33 +627,21 @@ def test_acp_resumes_existing_session_when_present(
     )
 
 
-def test_cancel_during_send_does_not_race(
+def test_cancel_during_send_does_not_corrupt_sandbox(
     k8s_manager: KubernetesSandboxManager,
     live_pod: tuple[UUID, UUID, str],
 ) -> None:
-    """Closing the ``send_message`` generator mid-stream from another thread
-    must not race with the finally-block teardown.
+    """Early consumer exit (partial iteration) must not corrupt the sandbox.
 
-    ``send_message`` is a streaming generator: it yields ACP events while the
-    pod is mid-response. The consumer can stop iteration at any time (this is
-    the in-process equivalent of a user-initiated cancel — a previous
-    public ``cancel_message`` entrypoint was removed in favour of relying on
-    ``GeneratorExit``). This test launches a background thread that calls
-    ``stream.close()`` after the consumer has received its first event, and
-    verifies that:
-
-    1. ``GeneratorExit`` propagates cleanly (no exception escapes
-       ``close()``);
-    2. the consumer observes a normal end-of-iteration (no error escapes
-       the ``for`` loop); and
-    3. the sandbox is still healthy after the race (the cancel did not
-       leave the pod in a corrupted state).
+    In production the cancel path is triggered when the HTTP client
+    disconnects, which the ASGI layer translates into a ``GeneratorExit``
+    on the *owning* thread. We model this by consuming a few events and
+    then breaking out of the loop on the same thread — CPython does not
+    allow ``generator.close()`` from a *different* thread while
+    ``__next__`` is executing.
     """
     sandbox_id, session_id, _ = live_pod
 
-    # ``send_message`` is a generator; the cancel path triggers via
-    # ``GeneratorExit`` when the generator is closed. We drive that from
-    # another thread while the consumer is still iterating.
     stream = k8s_manager.send_message(
         sandbox_id,
         session_id,
@@ -662,50 +649,14 @@ def test_cancel_during_send_does_not_race(
     )
 
     received: list[ACPEvent] = []
-    cancel_thread_error: list[BaseException] = []
-    cancel_done = threading.Event()
+    for event in stream:
+        received.append(event)
+        if len(received) >= 2:
+            break  # triggers GeneratorExit via same-thread cleanup
 
-    def _cancel_after_first_event() -> None:
-        try:
-            # Wait until the consumer has pulled at least one event so we
-            # land mid-stream rather than before start.
-            for _ in range(50):
-                if received:
-                    break
-                time.sleep(0.05)
-            stream.close()
-        except BaseException as e:  # noqa: BLE001 — captured for the assert below
-            cancel_thread_error.append(e)
-        finally:
-            cancel_done.set()
+    assert received, "expected at least one event before early exit"
 
-    cancel_thread = threading.Thread(target=_cancel_after_first_event, daemon=True)
-    cancel_thread.start()
-
-    # Consume the stream. ``GeneratorExit`` (raised inside the generator by
-    # ``close()``) is observed by the consumer as a clean StopIteration.
-    try:
-        for event in stream:
-            received.append(event)
-    except StopIteration:
-        pass
-
-    assert cancel_done.wait(timeout=10), (
-        "cancel thread did not finish — generator.close() likely deadlocked"
-    )
-    cancel_thread.join(timeout=5)
-    assert not cancel_thread.is_alive(), "cancel thread should have exited cleanly"
-
-    assert not cancel_thread_error, (
-        f"generator.close() should not raise — got: {cancel_thread_error!r}"
-    )
-    # The consumer should have observed at least one event before the cancel
-    # landed (otherwise the cancel happened pre-start and the regression is
-    # not exercised).
-    assert received, "expected the consumer to receive at least one event before cancel"
-
-    # After a cancel-race, ``health_check`` must still report the pod as
-    # healthy — the cancel must not have corrupted the sandbox.
+    # After an early exit, the sandbox must still be healthy.
     assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
         "sandbox should remain healthy after a mid-stream cancel"
     )
