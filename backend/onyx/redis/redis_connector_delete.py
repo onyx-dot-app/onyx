@@ -14,6 +14,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
+from onyx.db.connector_credential_pair import ConnectorCredentialPair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import construct_document_id_select_for_connector_credential_pair
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -118,6 +119,8 @@ class RedisConnectorDelete:
             return None
 
         num_tasks_sent = 0
+        batch_size = 100
+        doc_batch = []
 
         stmt = construct_document_id_select_for_connector_credential_pair(
             cc_pair.connector_id, cc_pair.credential_id
@@ -131,31 +134,48 @@ class RedisConnectorDelete:
                 lock.reacquire()
                 last_lock_time = current_time
 
-            custom_task_id = self._generate_task_id()
+            doc_batch.append(doc_id)
 
-            # add to the tracking taskset in redis BEFORE creating the celery task.
-            # note that for the moment we are using a single taskset key, not differentiated by cc_pair id
-            self.redis.sadd(self.taskset_key, custom_task_id)
-            self.redis.expire(self.taskset_key, self.TASKSET_TTL)
+            if len(doc_batch) >= batch_size:
+                num_tasks_sent += self._dispatch_batch(doc_batch, cc_pair, celery_app)
+                doc_batch = []
 
-            # Priority on sync's triggered by new indexing should be medium
-            celery_app.send_task(
-                OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
-                queue=OnyxCeleryQueues.CONNECTOR_DELETION,
-                task_id=custom_task_id,
-                priority=OnyxCeleryPriority.MEDIUM,
-                ignore_result=True,
-            )
-
-            num_tasks_sent += 1
+        # Flush remaining documents
+        if doc_batch:
+            num_tasks_sent += self._dispatch_batch(doc_batch, cc_pair, celery_app)
 
         return num_tasks_sent
+
+    def _dispatch_batch(
+        self,
+        doc_ids: list[str],
+        cc_pair: ConnectorCredentialPair,
+        celery_app: Celery,
+    ) -> int:
+        """Dispatch a batch of documents as a single task."""
+        custom_task_id = self._generate_task_id()
+
+        # Use pipeline to batch SADD + EXPIRE into one round-trip
+        pipeline = self.redis.pipeline()
+        pipeline.sadd(self.taskset_key, custom_task_id)
+        pipeline.expire(self.taskset_key, self.TASKSET_TTL)
+        pipeline.execute()
+
+        celery_app.send_task(
+            OnyxCeleryTask.DOCUMENT_BATCH_BY_CC_PAIR_CLEANUP_TASK,
+            kwargs=dict(
+                document_ids=doc_ids,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                tenant_id=self.tenant_id,
+            ),
+            queue=OnyxCeleryQueues.CONNECTOR_DELETION,
+            task_id=custom_task_id,
+            priority=OnyxCeleryPriority.MEDIUM,
+            ignore_result=True,
+        )
+
+        return 1
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)

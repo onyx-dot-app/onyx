@@ -268,6 +268,152 @@ def document_by_cc_pair_cleanup_task(
     return True
 
 
+# Batch processing: 600s soft limit, 700s hard limit for 100 documents
+BATCH_SOFT_TIME_LIMIT = 600
+BATCH_TIME_LIMIT = 700
+
+
+@shared_task(
+    name=OnyxCeleryTask.DOCUMENT_BATCH_BY_CC_PAIR_CLEANUP_TASK,
+    soft_time_limit=BATCH_SOFT_TIME_LIMIT,
+    time_limit=BATCH_TIME_LIMIT,
+    max_retries=DOCUMENT_BY_CC_PAIR_CLEANUP_MAX_RETRIES,
+    bind=True,
+)
+def document_batch_by_cc_pair_cleanup_task(
+    self: Task,  # noqa: ARG001
+    document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+    tenant_id: str,
+) -> bool:
+    """Process a batch of document deletions for a connector-credential pair.
+
+    Deletes or updates Vespa/Postgres entries for multiple documents in a single task,
+    reducing queue load. Failures for individual documents are logged but don't abort the batch.
+    """
+    task_logger.debug(f"Batch task start: num_docs={len(document_ids)}")
+    start = time.monotonic()
+    num_succeeded = 0
+    num_failed = 0
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            active_search_settings = get_active_search_settings(db_session)
+            document_indices = get_all_document_indices(
+                active_search_settings.primary,
+                active_search_settings.secondary,
+                httpx_client=HttpxPool.get("vespa"),
+            )
+
+            retry_document_indices: list[RetryDocumentIndex] = [
+                RetryDocumentIndex(document_index)
+                for document_index in document_indices
+            ]
+
+            for document_id in document_ids:
+                try:
+                    count = get_document_connector_count(db_session, document_id)
+                    if count == 1:
+                        chunk_count = fetch_chunk_count_for_document(
+                            document_id, db_session
+                        )
+
+                        for retry_document_index in retry_document_indices:
+                            _ = retry_document_index.delete_single(
+                                document_id,
+                                tenant_id=tenant_id,
+                                chunk_count=chunk_count,
+                            )
+
+                        delete_document_references_from_kg(
+                            db_session=db_session,
+                            document_id=document_id,
+                        )
+
+                        delete_documents_complete(
+                            db_session=db_session,
+                            document_ids=[document_id],
+                        )
+
+                        num_succeeded += 1
+                    elif count > 1:
+                        doc = get_document(document_id, db_session)
+                        if not doc:
+                            num_failed += 1
+                            continue
+
+                        doc_access = get_access_for_document(
+                            document_id=document_id, db_session=db_session
+                        )
+
+                        doc_sets = fetch_document_sets_for_document(
+                            document_id, db_session
+                        )
+                        update_doc_sets: set[str] = set(doc_sets)
+
+                        fields = VespaDocumentFields(
+                            document_sets=update_doc_sets,
+                            access=doc_access,
+                            boost=doc.boost,
+                            hidden=doc.hidden,
+                        )
+
+                        for retry_document_index in retry_document_indices:
+                            retry_document_index.update_single(
+                                document_id,
+                                tenant_id=tenant_id,
+                                chunk_count=doc.chunk_count,
+                                fields=fields,
+                                user_fields=None,
+                            )
+
+                        delete_document_by_connector_credential_pair__no_commit(
+                            db_session=db_session,
+                            document_id=document_id,
+                            connector_credential_pair_identifier=ConnectorCredentialPairIdentifier(
+                                connector_id=connector_id,
+                                credential_id=credential_id,
+                            ),
+                        )
+
+                        mark_document_as_synced(document_id, db_session)
+                        num_succeeded += 1
+                    # else count == 0, skip silently
+
+                except SoftTimeLimitExceeded:
+                    task_logger.info(
+                        f"SoftTimeLimitExceeded while processing batch doc={document_id}"
+                    )
+                    num_failed += 1
+                except Exception:  # noqa: BLE001
+                    task_logger.exception(
+                        f"Error processing document in batch: doc={document_id}"
+                    )
+                    num_failed += 1
+
+            # Commit once at the end of the batch
+            db_session.commit()
+
+            elapsed = time.monotonic() - start
+            task_logger.info(
+                f"Batch completed: num_docs={len(document_ids)} succeeded={num_succeeded} failed={num_failed} elapsed={elapsed:.2f}"
+            )
+
+    except SoftTimeLimitExceeded:
+        task_logger.info(
+            "SoftTimeLimitExceeded in document_batch_by_cc_pair_cleanup_task"
+        )
+        return False
+    except Exception:  # noqa: BLE001
+        task_logger.exception(
+            "Unexpected error in document_batch_by_cc_pair_cleanup_task"
+        )
+        return False
+
+    return num_failed == 0
+
+
 @shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
 def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
     """When this task runs, it writes a key to Redis with a TTL.
