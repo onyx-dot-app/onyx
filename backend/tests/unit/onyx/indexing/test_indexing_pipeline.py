@@ -914,8 +914,9 @@ def _make_db_doc(
 def test_get_doc_ids_to_update_new_doc_always_included() -> None:
     doc = _doc_with_text("Title", "content")
     doc.id = "new-doc"
-    result = get_doc_ids_to_update([doc], db_docs=[])
-    assert len(result) == 1
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[])
+    assert len(docs) == 1
+    assert "new-doc" in hashes
 
 
 def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
@@ -926,8 +927,9 @@ def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
     stored_hash = _document_content_hash(doc)
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
-    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
-    assert result == []
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
 
 
 def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> None:
@@ -942,8 +944,9 @@ def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> 
     stored_hash = _document_content_hash(doc)  # hash matches — text unchanged
     db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
 
-    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
-    assert len(result) == 1  # timestamp advanced → must re-index despite hash match
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1  # timestamp advanced → must re-index despite hash match
+    assert "doc1" in hashes
 
 
 def test_get_doc_ids_to_update_hash_mismatch_includes_doc() -> None:
@@ -951,9 +954,10 @@ def test_get_doc_ids_to_update_hash_mismatch_includes_doc() -> None:
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash="stale_hash_abc123")
 
-    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
-    assert len(result) == 1
-    assert result[0].id == "doc1"
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert docs[0].id == "doc1"
+    assert hashes["doc1"] == _document_content_hash(doc)
 
 
 def test_get_doc_ids_to_update_null_hash_always_included() -> None:
@@ -962,8 +966,9 @@ def test_get_doc_ids_to_update_null_hash_always_included() -> None:
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash=None)
 
-    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
-    assert len(result) == 1
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert "doc1" in hashes
 
 
 def test_get_doc_ids_to_update_time_skip_still_works() -> None:
@@ -974,8 +979,9 @@ def test_get_doc_ids_to_update_time_skip_still_works() -> None:
     doc.doc_updated_at = old_time
     db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
 
-    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
-    assert result == []
+    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
 
 
 def test_get_doc_ids_to_update_mixed_batch() -> None:
@@ -990,8 +996,10 @@ def test_get_doc_ids_to_update_mixed_batch() -> None:
     )
     db_changed = _make_db_doc("changed", content_hash="old_hash")
 
-    result = get_doc_ids_to_update(
+    docs, hashes = get_doc_ids_to_update(
         [doc_unchanged, doc_changed], db_docs=[db_unchanged, db_changed]
     )
-    assert len(result) == 1
-    assert result[0].id == "changed"
+    assert len(docs) == 1
+    assert docs[0].id == "changed"
+    assert "changed" in hashes
+    assert "unchanged" not in hashes

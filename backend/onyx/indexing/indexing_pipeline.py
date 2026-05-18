@@ -119,6 +119,7 @@ class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
     id_to_boost_map: dict[str, int]
     indexable_docs: list[IndexingDocument] = []
+    doc_id_to_content_hash: dict[str, str] = {}
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -339,18 +340,24 @@ def embed_and_stream(
 
 def get_doc_ids_to_update(
     documents: list[Document], db_docs: list[DBDocument]
-) -> list[Document]:
+) -> tuple[list[Document], dict[str, str]]:
     """Figures out which documents actually need to be updated. If a document is already present
     and the `updated_at` hasn't changed, we shouldn't need to do anything with it.
 
     NB: Still need to associate the document in the DB if multiple connectors are
-    indexing the same doc."""
+    indexing the same doc.
+
+    Returns the list of documents to update and a pre-computed content hash map
+    for those documents (used later to persist hashes after successful indexing,
+    avoiding a second hash computation pass).
+    """
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
     }
     id_to_db_doc_map = {doc.id: doc for doc in db_docs}
 
     updatable_docs: list[Document] = []
+    doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
         if (
             doc.id in id_update_time_map
@@ -364,18 +371,20 @@ def get_doc_ids_to_update(
         # document passed the time check above, trust the timestamp — the content
         # may have changed in a way the hash can't detect (e.g. in-place image
         # replacement on GDrive keeps the same image_file_id).
+        content_hash = _document_content_hash(doc)
         if not doc.doc_updated_at:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash is not None:
-                if _document_content_hash(doc) == db_doc.content_hash:
+                if content_hash == db_doc.content_hash:
                     logger.debug(
                         f"Skipping document {doc.id!r} — content hash unchanged"
                     )
                     continue
 
+        doc_id_to_content_hash[doc.id] = content_hash
         updatable_docs.append(doc)
 
-    return updatable_docs
+    return updatable_docs, doc_id_to_content_hash
 
 
 def index_doc_batch_with_handler(
@@ -504,11 +513,15 @@ def index_doc_batch_prepare(
         db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
     }
 
-    updatable_docs = (
-        get_doc_ids_to_update(documents=documents, db_docs=db_docs)
-        if not ignore_time_skip
-        else documents
-    )
+    if not ignore_time_skip:
+        updatable_docs, doc_id_to_content_hash = get_doc_ids_to_update(
+            documents=documents, db_docs=db_docs
+        )
+    else:
+        updatable_docs = documents
+        doc_id_to_content_hash = {
+            doc.id: _document_content_hash(doc) for doc in documents
+        }
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
         skipped_doc_ids = [
@@ -573,7 +586,9 @@ def index_doc_batch_prepare(
 
     id_to_boost_map = {doc.id: doc.boost for doc in db_docs}
     return DocumentBatchPrepareContext(
-        updatable_docs=updatable_docs, id_to_boost_map=id_to_boost_map
+        updatable_docs=updatable_docs,
+        id_to_boost_map=id_to_boost_map,
+        doc_id_to_content_hash=doc_id_to_content_hash,
     )
 
 
@@ -1421,17 +1436,16 @@ def index_doc_batch(
             # Persist content hash only for documents confirmed written to the
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
-            # on the next sync.
+            # on the next sync. Hashes were pre-computed in get_doc_ids_to_update.
             if primary_doc_idx_insertion_records is not None:
                 successfully_indexed_ids = {
                     r.document_id for r in primary_doc_idx_insertion_records
                 }
-                id_to_doc = {doc.id: doc for doc in context.updatable_docs}
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
-                        doc_id: _document_content_hash(id_to_doc[doc_id])
+                        doc_id: context.doc_id_to_content_hash[doc_id]
                         for doc_id in successfully_indexed_ids
-                        if doc_id in id_to_doc
+                        if doc_id in context.doc_id_to_content_hash
                     },
                     db_session=db_session,
                 )
