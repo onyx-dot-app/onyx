@@ -449,7 +449,7 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
         return CertificateData(
             private_key=key_pem,
-            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),
+            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),  # noqa: S303 — MSAL certificate auth requires the SHA1 thumbprint per RFC 5280
         )
     except Exception as e:
         logger.error("Error loading certificate: %s", e)
