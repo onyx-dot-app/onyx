@@ -216,7 +216,7 @@ export default function ThemePage() {
           custom_help_link_url: values.custom_help_link_url?.trim() || null,
           custom_help_link_label:
             values.custom_help_link_label?.trim() || null,
-          hide_onyx_branding: values.hide_onyx_branding || null,
+          hide_onyx_branding: values.hide_onyx_branding ?? null,
         });
 
         // Important: after a successful save, reset Formik's "baseline" so

@@ -1,5 +1,6 @@
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { AppearanceThemePage } from "@tests/e2e/admin/theme/AppearanceThemePage";
 
 test.describe("Appearance Theme Settings @exclusive", () => {
   const TEST_VALUES = {
@@ -247,121 +248,71 @@ test.describe("Appearance Theme Settings @exclusive", () => {
   test("custom help link appears in the profile popover with the configured label", async ({
     page,
   }) => {
-    const urlInput = page.locator('[data-label="custom-help-link-url-input"]');
-    const labelInput = page.locator(
-      '[data-label="custom-help-link-label-input"]'
-    );
-    await urlInput.fill(TEST_VALUES.customHelpLinkUrl);
-    await labelInput.fill(TEST_VALUES.customHelpLinkLabel);
-
-    const saveButton = page.getByRole("button", { name: "Apply Changes" });
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
-    const response = await page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/enterprise-settings") &&
-        r.request().method() === "PUT",
-      { timeout: 10000 }
-    );
-    expect(response.status()).toBe(200);
-    await expect(page.getByText(/successfully/i)).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Open the profile popover from the sidebar
-    await page.locator("#onyx-user-dropdown").click();
-
-    const customHelpItem = page.getByTestId("Settings/custom-help-link");
-    await expect(customHelpItem).toBeVisible({ timeout: 5000 });
-    await expect(customHelpItem).toContainText(
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLink(
+      TEST_VALUES.customHelpLinkUrl,
       TEST_VALUES.customHelpLinkLabel
     );
-    // LineItemButton with href renders an <a> with that href under the hood
-    await expect(
-      customHelpItem.locator(`a[href="${TEST_VALUES.customHelpLinkUrl}"]`)
-    ).toHaveCount(1);
+
+    const response = await themePage.saveAndWaitForPut();
+    expect(response.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+
+    await themePage.openUserDropdown();
+    await themePage.expectCustomHelpLinkVisible(
+      TEST_VALUES.customHelpLinkLabel,
+      TEST_VALUES.customHelpLinkUrl
+    );
   });
 
   test("custom help link uses the URL as the title when the label is empty", async ({
     page,
   }) => {
-    const urlInput = page.locator('[data-label="custom-help-link-url-input"]');
-    await urlInput.fill(TEST_VALUES.customHelpLinkUrl);
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLink(TEST_VALUES.customHelpLinkUrl);
 
-    const saveButton = page.getByRole("button", { name: "Apply Changes" });
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
-    const response = await page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/enterprise-settings") &&
-        r.request().method() === "PUT",
-      { timeout: 10000 }
-    );
+    const response = await themePage.saveAndWaitForPut();
     expect(response.status()).toBe(200);
-    await expect(page.getByText(/successfully/i)).toBeVisible({
-      timeout: 5000,
-    });
+    await themePage.expectSaveSuccessToast();
 
-    await page.locator("#onyx-user-dropdown").click();
-    const customHelpItem = page.getByTestId("Settings/custom-help-link");
-    await expect(customHelpItem).toBeVisible({ timeout: 5000 });
+    await themePage.openUserDropdown();
     // Falls back to URL itself as the displayed title
-    await expect(customHelpItem).toContainText(TEST_VALUES.customHelpLinkUrl);
+    await themePage.expectCustomHelpLinkContainsText(
+      TEST_VALUES.customHelpLinkUrl
+    );
   });
 
   test("validation fails when the label is set but the URL is empty", async ({
     page,
   }) => {
-    const labelInput = page.locator(
-      '[data-label="custom-help-link-label-input"]'
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLinkLabelOnly(TEST_VALUES.customHelpLinkLabel);
+
+    // Should NOT trigger a PUT — assert error message becomes visible
+    await themePage.clickSave();
+    await themePage.expectValidationMessage(
+      "URL is required when a label is set"
     );
-    await labelInput.fill(TEST_VALUES.customHelpLinkLabel);
-
-    const saveButton = page.getByRole("button", { name: "Apply Changes" });
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
-
-    // Should NOT trigger a PUT — assert error message becomes visible and form
-    // didn't post by checking for the validation copy
-    await expect(page.getByText("URL is required when a label is set")).toBeVisible({
-      timeout: 5000,
-    });
 
     // Clean up: clear the orphan label before afterEach runs
-    await labelInput.clear();
+    await themePage.clearCustomHelpLinkLabel();
   });
 
   test("Hide Onyx Branding toggle removes the 'Powered by Onyx' tagline", async ({
     page,
   }) => {
+    const themePage = new AppearanceThemePage(page);
+
     // Sanity: tagline should be visible by default in the sidebar
-    await expect(page.getByText("Powered by Onyx").first()).toBeVisible({
-      timeout: 5000,
-    });
+    await themePage.expectPoweredByOnyxVisible();
 
-    const hideBrandingToggle = page.locator(
-      '[data-label="hide-onyx-branding-toggle"]'
-    );
-    await hideBrandingToggle.scrollIntoViewIfNeeded();
-    await hideBrandingToggle.click();
+    await themePage.toggleHideBranding();
 
-    const saveButton = page.getByRole("button", { name: "Apply Changes" });
-    await expect(saveButton).toBeEnabled();
-    await saveButton.click();
-    const response = await page.waitForResponse(
-      (r) =>
-        r.url().includes("/api/admin/enterprise-settings") &&
-        r.request().method() === "PUT",
-      { timeout: 10000 }
-    );
+    const response = await themePage.saveAndWaitForPut();
     expect(response.status()).toBe(200);
-    await expect(page.getByText(/successfully/i)).toBeVisible({
-      timeout: 5000,
-    });
+    await themePage.expectSaveSuccessToast();
 
     // After SWR revalidation the tagline should be gone from the sidebar
-    await expect(page.getByText("Powered by Onyx")).toHaveCount(0, {
-      timeout: 5000,
-    });
+    await themePage.expectPoweredByOnyxAbsent();
   });
 });

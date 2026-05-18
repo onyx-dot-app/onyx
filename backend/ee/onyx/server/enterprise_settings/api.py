@@ -137,8 +137,8 @@ def admin_ee_put_settings(
     # writes to those fields when tier < ENTERPRISE so the FE disabled state
     # cannot be bypassed by crafting a request. Uses FEATURE_NOT_AVAILABLE
     # (402) to match the tier_gate middleware shape.
-    existing = load_settings()
     if not tier_at_least(get_tier(), Tier.ENTERPRISE):
+        existing = load_settings()
         if (
             settings.custom_help_link_url != existing.custom_help_link_url
             or settings.custom_help_link_label != existing.custom_help_link_label

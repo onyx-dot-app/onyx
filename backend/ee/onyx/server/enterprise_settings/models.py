@@ -1,9 +1,11 @@
 from enum import Enum
 from typing import Any
 from typing import List
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 
 class NavigationItem(BaseModel):
@@ -61,6 +63,16 @@ class EnterpriseSettings(BaseModel):
 
     # hide the "Powered by Onyx" tagline under the sidebar logo
     hide_onyx_branding: bool | None = None
+
+    @field_validator("custom_help_link_url")
+    @classmethod
+    def _validate_help_link_scheme(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("custom_help_link_url must use http or https")
+        return v
 
     def check_validity(self) -> None:
         return
