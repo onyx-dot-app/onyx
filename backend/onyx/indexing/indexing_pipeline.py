@@ -4,6 +4,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import NamedTuple
 from typing import Protocol
 
 import sentry_sdk
@@ -100,6 +101,11 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+
+
+class _DocsToUpdateResult(NamedTuple):
+    updatable_docs: list[Document]
+    doc_id_to_content_hash: dict[str, str]
 
 
 class _PendingImageSummarization(BaseModel):
@@ -313,7 +319,7 @@ def embed_and_stream(
 
 def get_doc_ids_to_update(
     documents: list[Document], db_docs: list[DBDocument]
-) -> tuple[list[Document], dict[str, str]]:
+) -> _DocsToUpdateResult:
     """Figures out which documents actually need to be updated. If a document is already present
     and the `updated_at` hasn't changed, we shouldn't need to do anything with it.
 
@@ -357,7 +363,7 @@ def get_doc_ids_to_update(
         doc_id_to_content_hash[doc.id] = content_hash
         updatable_docs.append(doc)
 
-    return updatable_docs, doc_id_to_content_hash
+    return _DocsToUpdateResult(updatable_docs, doc_id_to_content_hash)
 
 
 def index_doc_batch_with_handler(
