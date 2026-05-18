@@ -99,8 +99,6 @@ class OpenSearchUpdateError(Exception):
     exceptions update calls can raise.
     """
 
-    pass
-
 
 class OpenSearchIndexError(Exception):
     """
@@ -109,7 +107,11 @@ class OpenSearchIndexError(Exception):
     exceptions index calls can raise.
     """
 
-    pass
+
+class OpenSearchServerSideTimeout(Exception):
+    """
+    A server-side timeout occurred when searching an OpenSearch index.
+    """
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -1204,21 +1206,26 @@ class OpenSearchIndexClient(OpenSearchClient):
                 hits, time_took, timed_out, phase_took, profile = (
                     self._get_hits_and_profile_from_search_result(result)
                 )
+                # Inside the try/except so that server-side timeouts (which
+                # raise inside this helper) land in
+                # record_opensearch_search_error and never reach
+                # observe_opensearch_search — keeping the latency histograms
+                # clean of timed-out queries.
+                self._log_search_result_perf(
+                    time_took=time_took,
+                    timed_out=timed_out,
+                    phase_took=phase_took,
+                    profile=profile,
+                    body=body,
+                    search_pipeline_id=search_pipeline_id,
+                    raise_on_timeout=True,
+                )
                 if self._emit_metrics:
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
                     record_opensearch_search_error(search_type, e)
                 raise
-        self._log_search_result_perf(
-            time_took=time_took,
-            timed_out=timed_out,
-            phase_took=phase_took,
-            profile=profile,
-            body=body,
-            search_pipeline_id=search_pipeline_id,
-            raise_on_timeout=True,
-        )
 
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
         for hit in hits:
@@ -1299,20 +1306,25 @@ class OpenSearchIndexClient(OpenSearchClient):
                 hits, time_took, timed_out, phase_took, profile = (
                     self._get_hits_and_profile_from_search_result(result)
                 )
+                # Inside the try/except so that server-side timeouts (which
+                # raise inside this helper) land in
+                # record_opensearch_search_error and never reach
+                # observe_opensearch_search — keeping the latency histograms
+                # clean of timed-out queries.
+                self._log_search_result_perf(
+                    time_took=time_took,
+                    timed_out=timed_out,
+                    phase_took=phase_took,
+                    profile=profile,
+                    body=body,
+                    raise_on_timeout=True,
+                )
                 if self._emit_metrics:
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
                     record_opensearch_search_error(search_type, e)
                 raise
-        self._log_search_result_perf(
-            time_took=time_took,
-            timed_out=timed_out,
-            phase_took=phase_took,
-            profile=profile,
-            body=body,
-            raise_on_timeout=True,
-        )
 
         # TODO(andrei): Implement scroll/point in time for results so that we
         # can return arbitrarily-many IDs.
@@ -1428,7 +1440,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
             logger.error(error_str)
             if raise_on_timeout:
-                raise RuntimeError(error_str)
+                raise OpenSearchServerSideTimeout(error_str)
 
     def _get_emit_metrics_context_manager(
         self, search_type: OpenSearchSearchType
