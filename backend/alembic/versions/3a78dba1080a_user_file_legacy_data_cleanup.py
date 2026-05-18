@@ -57,7 +57,7 @@ def batch_delete(
         batch_ids = ids[i : i + batch_size]
         try:
             stmt = text(
-                f"DELETE FROM {table_name} WHERE {id_column} = ANY(:ids)"
+                f"DELETE FROM {table_name} WHERE {id_column} = ANY(:ids)"  # noqa: S608 - table_name/id_column come from hardcoded callers in this migration
             ).bindparams(sa.bindparam("ids", value=batch_ids, type_=array_type))
             result = bind.execute(stmt)
             total_deleted += result.rowcount

@@ -134,7 +134,7 @@ def upgrade() -> None:
                     UPDATE "{table}"
                     SET user_id = :user_id
                     WHERE {condition}
-                    """),
+                    """),  # noqa: S608 - table from TABLES_WITH_USER_ID allowlist, condition hardcoded above
                 {"user_id": ANONYMOUS_USER_UUID},
             )
             if result.rowcount > 0:
@@ -157,7 +157,7 @@ def downgrade() -> None:
                     UPDATE "{table}"
                     SET user_id = NULL
                     WHERE user_id = :user_id
-                    """),
+                    """),  # noqa: S608 - table from TABLES_WITH_USER_ID allowlist
                 {"user_id": ANONYMOUS_USER_UUID},
             )
 

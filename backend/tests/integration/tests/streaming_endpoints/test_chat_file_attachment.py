@@ -4,6 +4,7 @@ from typing import Any
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -93,6 +94,7 @@ def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
         f"{API_SERVER_URL}/admin/settings",
         json={"file_token_count_threshold_k": threshold_k},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 
@@ -111,6 +113,7 @@ def _upload_raw(
         f"{API_SERVER_URL}/user/projects/file/upload",
         files=[("files", (filename, content, mime_type or "application/octet-stream"))],
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()

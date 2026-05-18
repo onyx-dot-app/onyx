@@ -44,13 +44,13 @@ def get_any_salesforce_client_for_doc_id(
 
 
 def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
-    query = f"SELECT Id FROM User WHERE Username = '{user_email}' AND IsActive = true"
+    query = f"SELECT Id FROM User WHERE Username = '{user_email}' AND IsActive = true"  # noqa: S608 - SOQL query to external Salesforce API, not our DB
     result = sf_client.query(query)
     if len(result["records"]) > 0:
         return result["records"][0]["Id"]
 
     # try emails
-    query = f"SELECT Id FROM User WHERE Email = '{user_email}' AND IsActive = true"
+    query = f"SELECT Id FROM User WHERE Email = '{user_email}' AND IsActive = true"  # noqa: S608 - SOQL query to external Salesforce API, not our DB
     result = sf_client.query(query)
     if len(result["records"]) > 0:
         return result["records"][0]["Id"]
@@ -129,7 +129,7 @@ def get_objects_access_for_user_id(
     FROM UserRecordAccess
     WHERE RecordId IN ({record_ids_str})
     AND UserId = '{user_id}'
-    """
+    """  # noqa: S608 - SOQL query to external Salesforce API, not our DB
     result = salesforce_client.query_all(access_query)
     return {record["RecordId"]: record["HasReadAccess"] for record in result["records"]}
 

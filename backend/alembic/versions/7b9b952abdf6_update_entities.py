@@ -275,7 +275,7 @@ def upgrade() -> None:
         # delete removed entity types
         if entity_type not in new_entity_type_conversion:
             op.execute(
-                sa.text(f"DELETE FROM kg_entity_type WHERE id_name = '{entity_type}'")
+                sa.text(f"DELETE FROM kg_entity_type WHERE id_name = '{entity_type}'")  # noqa: S608 - entity_type read from internal table in this migration
             )
             continue
 
@@ -288,7 +288,7 @@ def upgrade() -> None:
         attributes_str = json.dumps(attributes).replace("'", "''")
         op.execute(
             sa.text(
-                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"
+                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"  # noqa: S608 - values read from internal table in this migration
             ),
         )
 
@@ -310,6 +310,6 @@ def downgrade() -> None:
         attributes_str = json.dumps(attributes).replace("'", "''")
         op.execute(
             sa.text(
-                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"
+                f"UPDATE kg_entity_type SET attributes = '{attributes_str}'WHERE id_name = '{entity_type}'"  # noqa: S608 - values read from internal table in this migration
             ),
         )

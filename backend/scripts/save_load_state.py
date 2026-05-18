@@ -66,7 +66,7 @@ def save_vespa(filename: str) -> None:
     while continuation is not None:
         if continuation:
             params = {"continuation": continuation}
-        response = requests.get(endpoint, params=params)
+        response = requests.get(endpoint, params=params, timeout=60)
         response.raise_for_status()
         found = response.json()
         continuation = found.get("continuation")
@@ -92,6 +92,7 @@ def load_vespa(filename: str) -> None:
                 endpoint + "/" + doc_id,
                 headers=headers,
                 json=new_doc,
+                timeout=60,
             )
             response.raise_for_status()
 

@@ -2,6 +2,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -61,6 +62,7 @@ def test_non_admin_cannot_list_admin(basic_user: DATestUser) -> None:
     response = requests.get(
         f"{API_SERVER_URL}/admin/skills",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 403
 
@@ -73,5 +75,6 @@ def test_non_admin_cannot_delete(
     response = requests.delete(
         f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 403

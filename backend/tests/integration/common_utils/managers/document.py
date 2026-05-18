@@ -10,6 +10,7 @@ from onyx.db.enums import AccessType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
@@ -115,6 +116,7 @@ class DocumentManager:
                 f"{API_SERVER_URL}/onyx-api/ingestion",
                 json=document,
                 headers=api_key.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             response.raise_for_status()
 
@@ -151,6 +153,7 @@ class DocumentManager:
             f"{API_SERVER_URL}/onyx-api/ingestion",
             json=document,
             headers=api_key.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -271,6 +274,7 @@ class IngestionManager(DocumentManager):
         response = requests.get(
             f"{API_SERVER_URL}/onyx-api/ingestion",
             headers=api_key.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -283,6 +287,7 @@ class IngestionManager(DocumentManager):
         response = requests.delete(
             f"{API_SERVER_URL}/onyx-api/ingestion/{document_id}",
             headers=api_key.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         print(f"Deleted document {document_id} successfully.")

@@ -5,6 +5,7 @@ import requests
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -28,6 +29,7 @@ def test_limited(reset: None) -> None:  # noqa: ARG001
     response = requests.get(
         f"{API_SERVER_URL}/persona/0",
         headers=api_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -35,6 +37,7 @@ def test_limited(reset: None) -> None:  # noqa: ARG001
     response = requests.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=api_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 403
 
@@ -48,6 +51,7 @@ def _get_service_account_account_type(
         f"{API_SERVER_URL}/manage/users",
         headers=admin_user.headers,
         params={"include_api_keys": "true"},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     data = response.json()
@@ -170,6 +174,7 @@ def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG0
     resp = requests.get(
         f"{API_SERVER_URL}/persona/0",
         headers=limited_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert resp.status_code == 200, (
         f"Limited key should access /persona/0, got {resp.status_code}: {resp.text}"
@@ -179,6 +184,7 @@ def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG0
     resp = requests.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=limited_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert resp.status_code == 403, (
         f"Limited key should be blocked from /query/valid-tags, got {resp.status_code}: {resp.text}"
@@ -197,6 +203,7 @@ def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
     resp = requests.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=basic_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert resp.status_code == 200, (
         f"Basic key should access /query/valid-tags, got {resp.status_code}: {resp.text}"
@@ -215,6 +222,7 @@ def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
     resp = requests.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=admin_key.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert resp.status_code == 200, (
         f"Admin key should access /query/valid-tags, got {resp.status_code}: {resp.text}"

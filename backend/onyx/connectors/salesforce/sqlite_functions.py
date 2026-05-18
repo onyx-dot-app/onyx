@@ -200,7 +200,7 @@ class OnyxSalesforceSQLite:
                 index_name: str, create_statement: str
             ) -> None:
                 cursor.execute(
-                    f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}'"
+                    f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}'"  # noqa: S608 - local sqlite cache; index_name from hardcoded callers
                 )
                 if not cursor.fetchone():
                     cursor.execute(create_statement)
@@ -375,7 +375,7 @@ class OnyxSalesforceSQLite:
                         SELECT id FROM salesforce_objects
                         WHERE id IN ({id_placeholders})
                         AND object_type = ?
-                        """,
+                        """,  # noqa: S608 - id_placeholders is generated "?,?,..." parameter placeholders
                         batch_ids + [parent_type],
                     )
                     affected_ids.update(row[0] for row in cursor.fetchall())
@@ -388,7 +388,7 @@ class OnyxSalesforceSQLite:
                         INDEXED BY idx_relationship_types_lookup
                         WHERE parent_type = ?
                         AND child_id IN ({id_placeholders})
-                        """,
+                        """,  # noqa: S608 - id_placeholders is generated "?,?,..." parameter placeholders
                         [parent_type] + batch_ids,
                     )
                     affected_ids.update(row[0] for row in cursor.fetchall())

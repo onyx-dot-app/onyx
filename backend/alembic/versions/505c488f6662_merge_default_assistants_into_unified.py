@@ -280,7 +280,7 @@ def upgrade() -> None:
             set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
             updates["user_id"] = str(user_id)  # Convert UUID to string for SQL
             conn.execute(
-                sa.text(f'UPDATE "user" SET {set_clause} WHERE id = :user_id'),
+                sa.text(f'UPDATE "user" SET {set_clause} WHERE id = :user_id'),  # noqa: S608 - set_clause built from hardcoded column names
                 updates,
             )
 

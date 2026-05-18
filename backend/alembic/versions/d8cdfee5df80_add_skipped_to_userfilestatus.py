@@ -48,7 +48,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(f"UPDATE {TABLE} SET {COLUMN} = 'COMPLETED' WHERE {COLUMN} = 'SKIPPED'")
+    op.execute(f"UPDATE {TABLE} SET {COLUMN} = 'COMPLETED' WHERE {COLUMN} = 'SKIPPED'")  # noqa: S608 - TABLE/COLUMN are module-level constants
     _drop_status_check_constraint()
     in_clause = ", ".join(f"'{v}'" for v in OLD_VALUES)
     op.create_check_constraint(CONSTRAINT_NAME, TABLE, f"{COLUMN} IN ({in_clause})")

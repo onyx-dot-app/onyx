@@ -9,6 +9,7 @@ from onyx.server.manage.models import AllUsersResponse
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -31,6 +32,7 @@ class TenantManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 

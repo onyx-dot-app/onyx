@@ -1,6 +1,7 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestTool
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -13,6 +14,7 @@ class ToolManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/tool",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [
@@ -47,6 +49,7 @@ class ToolManager:
             url=f"{API_SERVER_URL}/admin/tool/status",
             headers=user_performing_action.headers,
             json={"tool_ids": tool_ids, "enabled": enabled},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response

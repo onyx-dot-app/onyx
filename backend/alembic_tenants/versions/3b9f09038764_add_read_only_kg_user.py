@@ -43,7 +43,7 @@ def upgrade() -> None:
                 END IF;
             END
             $$;
-            """)
+            """)  # noqa: S608 - DDL built from env-configured credentials, no user input
     )
 
 
@@ -62,6 +62,6 @@ def downgrade() -> None:
             END IF;
         END
         $$;
-    """)
+    """)  # noqa: S608 - DDL built from env-configured credentials, no user input
     )
     op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

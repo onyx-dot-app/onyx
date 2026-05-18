@@ -8,6 +8,7 @@ from onyx.db.enums import AccessType
 from onyx.server.documents.models import ConnectorUpdateRequest
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -51,6 +52,7 @@ class ConnectorManager:
             url=f"{API_SERVER_URL}/manage/admin/connector",
             json=connector_update_request.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -74,6 +76,7 @@ class ConnectorManager:
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             json=connector.model_dump(exclude={"id"}),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -85,6 +88,7 @@ class ConnectorManager:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -95,6 +99,7 @@ class ConnectorManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [
@@ -116,6 +121,7 @@ class ConnectorManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector/{connector_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         conn = response.json()

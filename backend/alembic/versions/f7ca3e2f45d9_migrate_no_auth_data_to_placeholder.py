@@ -116,7 +116,7 @@ BEGIN
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-"""
+"""  # noqa: S608 - DDL built from hardcoded TRIGGER_NAME/FUNCTION_NAME constants
 
 MIGRATE_NO_AUTH_TRIGGER = f"""
 CREATE TRIGGER {TRIGGER_NAME}
@@ -163,7 +163,7 @@ def upgrade() -> None:
     for table in tables_to_check:
         try:
             result = connection.execute(
-                sa.text(f'SELECT 1 FROM "{table}" WHERE user_id IS NULL LIMIT 1')
+                sa.text(f'SELECT 1 FROM "{table}" WHERE user_id IS NULL LIMIT 1')  # noqa: S608 - table from hardcoded tables_to_check allowlist
             )
             if result.fetchone():
                 has_null_records = True
@@ -214,7 +214,7 @@ def upgrade() -> None:
                     UPDATE "{table}"
                     SET user_id = :user_id
                     WHERE {condition}
-                    """),
+                    """),  # noqa: S608 - table from hardcoded tables_to_check, condition built from hardcoded branches above
                 {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
             )
             if result.rowcount > 0:
@@ -261,7 +261,7 @@ def downgrade() -> None:
                     UPDATE "{table}"
                     SET user_id = NULL
                     WHERE user_id = :user_id
-                    """),
+                    """),  # noqa: S608 - table from hardcoded tables_to_update allowlist
                 {"user_id": NO_AUTH_PLACEHOLDER_USER_UUID},
             )
         except Exception:

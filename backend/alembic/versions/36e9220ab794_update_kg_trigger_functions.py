@@ -68,7 +68,7 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """)
+            """)  # noqa: S608 - DDL built from internal schema names + hardcoded constants
     )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".kg_entity')
@@ -110,7 +110,7 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """)
+            """)  # noqa: S608 - DDL built from internal schema names + hardcoded constants
     )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".document')

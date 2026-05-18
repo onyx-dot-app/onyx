@@ -17,6 +17,7 @@ from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import DocumentSyncStatus
 from tests.integration.common_utils.config import api_config
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -127,6 +128,7 @@ class CCPairManager:
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "PAUSED"},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
 
@@ -139,6 +141,7 @@ class CCPairManager:
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "ACTIVE"},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
 
@@ -155,6 +158,7 @@ class CCPairManager:
             url=f"{API_SERVER_URL}/manage/admin/deletion-attempt",
             json=cc_pair_identifier.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
 
@@ -166,6 +170,7 @@ class CCPairManager:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         cc_pair_json = response.json()
@@ -180,6 +185,7 @@ class CCPairManager:
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=user_performing_action.headers,
             json={"get_all_connectors": True},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         indexing_status_response = response.json()
@@ -199,6 +205,7 @@ class CCPairManager:
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=user_performing_action.headers,
             json={"get_all_connectors": True},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         indexing_status_response = response.json()
@@ -216,6 +223,7 @@ class CCPairManager:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/connector/status",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [ConnectorStatus(**status) for status in response.json()]
@@ -262,6 +270,7 @@ class CCPairManager:
             url=f"{API_SERVER_URL}/manage/admin/connector/run-once",
             json=body,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
 
@@ -396,6 +405,7 @@ class CCPairManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/prune",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
 
@@ -407,6 +417,7 @@ class CCPairManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         response_str = response.json()
@@ -458,6 +469,7 @@ class CCPairManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if result.status_code != 409:
             result.raise_for_status()
@@ -465,6 +477,7 @@ class CCPairManager:
         group_sync_result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if group_sync_result.status_code != 409:
             group_sync_result.raise_for_status()
@@ -478,6 +491,7 @@ class CCPairManager:
         doc_sync_response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         doc_sync_response.raise_for_status()
         doc_sync_response_str = doc_sync_response.json()
@@ -499,6 +513,7 @@ class CCPairManager:
         group_sync_response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         group_sync_response.raise_for_status()
         group_sync_response_str = group_sync_response.json()
@@ -520,6 +535,7 @@ class CCPairManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         doc_sync_statuses: list[DocumentSyncStatus] = []

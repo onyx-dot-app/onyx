@@ -16,6 +16,7 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
@@ -166,6 +167,7 @@ def handle_google_drive_oauth_callback(
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()

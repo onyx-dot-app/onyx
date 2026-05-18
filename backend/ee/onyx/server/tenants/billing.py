@@ -12,6 +12,7 @@ from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -45,7 +46,9 @@ def fetch_stripe_checkout_session(
         "billing_period": billing_period,
         "seats": seats,
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(
+        url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     if not response.ok:
         try:
             data = response.json()
@@ -70,7 +73,9 @@ def fetch_tenant_stripe_information(tenant_id: str) -> dict:
     }
     url = f"{CONTROL_PLANE_API_BASE_URL}/tenant-stripe-information"
     params = {"tenant_id": tenant_id}
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(
+        url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     response.raise_for_status()
     return response.json()
 
@@ -85,7 +90,9 @@ def fetch_billing_information(
     }
     url = f"{CONTROL_PLANE_API_BASE_URL}/billing-information"
     params = {"tenant_id": tenant_id}
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(
+        url, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     response.raise_for_status()
 
     response_data = response.json()
@@ -117,7 +124,9 @@ def fetch_customer_portal_session(tenant_id: str, return_url: str | None = None)
     payload = {"tenant_id": tenant_id}
     if return_url:
         payload["return_url"] = return_url
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(
+        url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     response.raise_for_status()
     return response.json()["url"]
 

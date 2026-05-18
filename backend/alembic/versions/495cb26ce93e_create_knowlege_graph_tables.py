@@ -57,7 +57,7 @@ def upgrade() -> None:
                     END IF;
                 END
                 $$;
-                """)
+                """)  # noqa: S608 - DDL built from env-configured credentials, no user input
         )
 
     # Grant usage on current schema to readonly user
@@ -513,7 +513,7 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """)
+            """)  # noqa: S608 - DDL built from internal constants only, no user input
     )
     trigger = f"{function}_trigger"
     op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON kg_entity")
@@ -555,7 +555,7 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """)
+            """)  # noqa: S608 - DDL built from internal constants only, no user input
     )
     trigger = f"{function}_trigger"
     op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
@@ -642,7 +642,7 @@ def downgrade() -> None:
                 END IF;
             END
             $$;
-            """)
+            """)  # noqa: S608 - DDL built from env-configured credentials, no user input
     )
 
     if not MULTI_TENANT:
@@ -661,6 +661,6 @@ def downgrade() -> None:
                 END IF;
             END
             $$;
-        """)
+        """)  # noqa: S608 - DDL built from env-configured credentials, no user input
         )
         op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

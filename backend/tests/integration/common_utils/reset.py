@@ -32,6 +32,7 @@ from onyx.setup import setup_postgres
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 
 logger = setup_logger()
@@ -102,7 +103,7 @@ def downgrade_postgres(
             WHERE pg_stat_activity.datname = '{database}'
             AND pg_stat_activity.state = 'idle in transaction'
             AND pid <> pg_backend_pid();
-        """)
+        """)  # noqa: S608 - test reset script; database name from POSTGRES_DB env
 
         # Drop and recreate the public schema - this removes ALL objects
         cur.execute(f"DROP SCHEMA {schema} CASCADE;")
@@ -364,7 +365,9 @@ def reset_vespa() -> None:
                 if continuation:
                     params = {**params, "continuation": continuation}
                 response = requests.delete(
-                    DOCUMENT_ID_ENDPOINT.format(index_name=index_name), params=params
+                    DOCUMENT_ID_ENDPOINT.format(index_name=index_name),
+                    params=params,
+                    timeout=GENERAL_REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
 
@@ -432,6 +435,7 @@ def reset_vespa_multitenant() -> None:
                     response = requests.delete(
                         DOCUMENT_ID_ENDPOINT.format(index_name=index_name),
                         params=params,
+                        timeout=GENERAL_REQUEST_TIMEOUT,
                     )
                     response.raise_for_status()
 

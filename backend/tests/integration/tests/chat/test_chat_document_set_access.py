@@ -19,6 +19,7 @@ import requests
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -81,6 +82,7 @@ def _send_message_with_document_set_filter(
         headers=user.headers,
         stream=True,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 

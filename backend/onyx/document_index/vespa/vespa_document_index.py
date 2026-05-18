@@ -272,7 +272,7 @@ def deploy_vespa_schemas(
 
     zip_file = _in_memory_zip_from_file_bytes(zip_dict)
     headers = {"Content-Type": "application/zip"}
-    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    response = requests.post(deploy_url, headers=headers, data=zip_file, timeout=300)
     if response.status_code != 200:
         logger.error("Failed to prepare Vespa Onyx Index. Response: %s", response.text)
         raise RuntimeError(
@@ -359,7 +359,7 @@ def register_multitenant_vespa_indices(
 
     zip_file = _in_memory_zip_from_file_bytes(zip_dict)
     headers = {"Content-Type": "application/zip"}
-    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    response = requests.post(deploy_url, headers=headers, data=zip_file, timeout=300)
     if response.status_code != 200:
         raise RuntimeError(
             f"Failed to prepare Vespa Onyx Indexes. Response: {response.text}"
@@ -1096,7 +1096,7 @@ class VespaDocumentIndex(DocumentIndex):
         where_clause = (
             f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
         )
-        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"
+        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"  # noqa: S608 - YQL query to Vespa (not our DB); index_name/tenant_id from internal config
         params: dict[str, str | int] = {
             "yql": yql,
             "ranking.profile": "unranked",

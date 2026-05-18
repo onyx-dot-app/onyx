@@ -4,6 +4,7 @@ import requests
 
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.persona import PersonaLabelManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestPersonaLabel
@@ -45,6 +46,7 @@ def test_update_persona_with_null_label_ids_preserves_labels(
         json=update_request.model_dump(mode="json", exclude_none=False),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 
@@ -52,6 +54,7 @@ def test_update_persona_with_null_label_ids_preserves_labels(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     fetched.raise_for_status()
     fetched_persona = fetched.json()

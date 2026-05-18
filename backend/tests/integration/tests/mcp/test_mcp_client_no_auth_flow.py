@@ -13,6 +13,7 @@ from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -102,6 +103,7 @@ def test_mcp_client_no_auth_flow(
         },
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     create_response.raise_for_status()
     server_id = create_response.json()["server_id"]
@@ -111,6 +113,7 @@ def test_mcp_client_no_auth_flow(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     tools_response.raise_for_status()
     tool_entries = tools_response.json()["tools"]
@@ -122,6 +125,7 @@ def test_mcp_client_no_auth_flow(
         params={"status": "CONNECTED"},
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     status_response.raise_for_status()
 
@@ -129,6 +133,7 @@ def test_mcp_client_no_auth_flow(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     tools_response.raise_for_status()
     tool_entries = tools_response.json()["tools"]
@@ -148,6 +153,7 @@ def test_mcp_client_no_auth_flow(
         f"{API_SERVER_URL}/persona",
         headers=basic_user.headers,
         cookies=basic_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     persona_tools_response.raise_for_status()
     persona_entries = persona_tools_response.json()

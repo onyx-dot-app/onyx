@@ -79,6 +79,7 @@ class OAuthTokenManager:
             self.oauth_config.token_url,
             data=data,
             headers={"Accept": "application/json"},
+            timeout=30,
         )
         response.raise_for_status()
 
@@ -146,6 +147,7 @@ class OAuthTokenManager:
             self.oauth_config.token_url,
             data=data,
             headers={"Accept": "application/json"},
+            timeout=30,
         )
         response.raise_for_status()
 

@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 CODE_INTERPRETER_URL = f"{API_SERVER_URL}/admin/code-interpreter"
@@ -18,6 +19,7 @@ def preserve_code_interpreter_state(
     response = requests.get(
         CODE_INTERPRETER_URL,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     initial_enabled = response.json()["enabled"]
@@ -28,5 +30,6 @@ def preserve_code_interpreter_state(
         CODE_INTERPRETER_URL,
         json={"enabled": initial_enabled},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     restore.raise_for_status()

@@ -286,7 +286,7 @@ class GCSBackedFileStore(FileStore):
                     return
                 if not file_record.bucket_name:
                     logger.error(
-                        f"File record {file_id} with key {file_record.object_key} "
+                        f"File record {file_id} with key {file_record.object_key} "  # noqa: S608 - log message, not SQL
                         "has no bucket name, cannot delete from filestore"
                     )
                     delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)

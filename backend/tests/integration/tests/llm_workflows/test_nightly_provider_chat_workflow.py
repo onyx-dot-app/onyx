@@ -12,6 +12,7 @@ from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.tool import ToolManager
@@ -304,6 +305,7 @@ def _ensure_provider_is_default(
     list_response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     list_response.raise_for_status()
     default_text = list_response.json().get("default_text")
@@ -392,6 +394,7 @@ def _create_and_test_provider_for_model(
         f"{API_SERVER_URL}/admin/llm/test",
         headers=admin_user.headers,
         json=provider_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert test_response.status_code == 200, (
         f"Provider test endpoint failed for provider={config.provider} "
@@ -402,6 +405,7 @@ def _create_and_test_provider_for_model(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=provider_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response.status_code == 200, (
         f"Provider creation failed for provider={config.provider} "
@@ -414,6 +418,7 @@ def _create_and_test_provider_for_model(
             f"{API_SERVER_URL}/admin/llm/default",
             headers=admin_user.headers,
             json={"provider_id": provider_id, "model_name": model_name},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert set_default_response.status_code == 200, (
             f"Setting default provider failed for provider={config.provider} "
@@ -434,6 +439,7 @@ def _create_and_test_provider_for_model(
         requests.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
 

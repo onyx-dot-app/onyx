@@ -14,6 +14,7 @@ import requests
 
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -34,6 +35,7 @@ def _poll_file_status(
         resp = requests.get(
             f"{API_SERVER_URL}/user/projects/file/{file_id}",
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if resp.ok:
             status = resp.json().get("status")
@@ -52,6 +54,7 @@ def _file_is_gone(file_id: UUID, user: DATestUser, timeout: int = 15) -> None:
         resp = requests.get(
             f"{API_SERVER_URL}/user/projects/file/{file_id}",
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if resp.status_code == 404:
             return
@@ -97,6 +100,7 @@ def test_file_upload_process_delete_lifecycle(
     unlink_resp = requests.delete(
         f"{API_SERVER_URL}/user/projects/{project.id}/files/{file_id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert unlink_resp.status_code == 204, (
         f"Expected 204 on unlink, got {unlink_resp.status_code}: {unlink_resp.text}"
@@ -105,6 +109,7 @@ def test_file_upload_process_delete_lifecycle(
     delete_resp = requests.delete(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_resp.ok, (
         f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
@@ -146,6 +151,7 @@ def test_delete_blocked_while_associated(
     delete_resp = requests.delete(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_resp.ok
     body = delete_resp.json()
@@ -156,5 +162,6 @@ def test_delete_blocked_while_associated(
     get_resp = requests.get(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert get_resp.status_code == 200, "File should still exist after blocked delete"

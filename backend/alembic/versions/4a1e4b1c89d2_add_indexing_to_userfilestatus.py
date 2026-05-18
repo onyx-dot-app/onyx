@@ -44,7 +44,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        f"UPDATE {TABLE} SET {COLUMN} = 'PROCESSING' WHERE {COLUMN} = 'INDEXING'"
+        f"UPDATE {TABLE} SET {COLUMN} = 'PROCESSING' WHERE {COLUMN} = 'INDEXING'"  # noqa: S608 - TABLE/COLUMN are module-level constants
     )
     op.drop_constraint(CONSTRAINT_NAME, TABLE, type_="check")
     in_clause = ", ".join(f"'{v}'" for v in OLD_VALUES)

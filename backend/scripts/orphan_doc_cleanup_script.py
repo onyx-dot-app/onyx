@@ -113,7 +113,7 @@ def main() -> None:
                         return doc_id
                     except Exception as e:
                         print(
-                            f"Error deleting document {doc_id} in Vespa and will not delete from Postgres: {e}"
+                            f"Error deleting document {doc_id} in Vespa and will not delete from Postgres: {e}"  # noqa: S608 - print message, not SQL
                         )
                         return None
 

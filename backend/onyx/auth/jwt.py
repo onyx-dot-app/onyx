@@ -13,6 +13,7 @@ from jwt import PyJWTError
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,7 +35,7 @@ def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] 
         return None
 
     try:
-        response = requests.get(JWT_PUBLIC_KEY_URL)
+        response = requests.get(JWT_PUBLIC_KEY_URL, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
     except requests.RequestException as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))

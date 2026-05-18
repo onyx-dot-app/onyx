@@ -107,7 +107,7 @@ def get_all_tenant_ids() -> list[str]:
                 f"""
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', '{POSTGRES_DEFAULT_SCHEMA}')"""
+                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', '{POSTGRES_DEFAULT_SCHEMA}')"""  # noqa: S608 - POSTGRES_DEFAULT_SCHEMA is a hardcoded config constant
             )
         )
         tenant_ids = [row[0] for row in result]

@@ -6,6 +6,7 @@ from uuid import uuid4
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestDocumentSet
 from tests.integration.common_utils.test_models import DATestUser
@@ -40,6 +41,7 @@ class DocumentSetManager:
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_creation_request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -74,6 +76,7 @@ class DocumentSetManager:
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_update_request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return True
@@ -86,6 +89,7 @@ class DocumentSetManager:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/document-set/{document_set.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return True
@@ -97,6 +101,7 @@ class DocumentSetManager:
         response = requests.get(
             f"{API_SERVER_URL}/manage/document-set",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [

@@ -13,6 +13,7 @@ import requests
 
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 
 _BEDROCK_MODEL = "us.amazon.nova-2-lite-v1:0"
@@ -41,6 +42,7 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
             "api_key_changed": True,
             "custom_config_changed": True,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 400, (

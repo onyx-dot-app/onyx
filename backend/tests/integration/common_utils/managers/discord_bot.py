@@ -10,6 +10,7 @@ from onyx.db.utils import DiscordChannelView
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestDiscordChannelConfig
 from tests.integration.common_utils.test_models import DATestDiscordGuildConfig
 from tests.integration.common_utils.test_models import DATestUser
@@ -31,6 +32,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -46,6 +48,7 @@ class DiscordBotManager:
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
             json={"bot_token": bot_token},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -59,6 +62,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -74,6 +78,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -87,6 +92,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -105,6 +111,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -135,6 +142,7 @@ class DiscordBotManager:
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
             json=body,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -149,6 +157,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -165,6 +174,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds/{guild_config_id}/channels",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [DATestDiscordChannelConfig(**c) for c in response.json()]
@@ -196,6 +206,7 @@ class DiscordBotManager:
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
             json=body,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return DATestDiscordChannelConfig(**response.json())
@@ -235,6 +246,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return None
@@ -251,6 +263,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return False
@@ -266,6 +279,7 @@ class DiscordBotManager:
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return False

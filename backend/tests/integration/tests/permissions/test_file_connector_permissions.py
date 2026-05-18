@@ -9,6 +9,7 @@ from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -30,6 +31,7 @@ def _upload_connector_file(
         f"{API_SERVER_URL}/manage/admin/connector/file/upload",
         files=[("files", (file_name, io.BytesIO(content), "text/plain"))],
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     payload = response.json()
@@ -52,6 +54,7 @@ def _update_connector_files(
         data={"file_ids_to_remove": json.dumps(file_ids_to_remove)},
         files=[("files", (new_file_name, io.BytesIO(new_file_content), "text/plain"))],
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 
@@ -63,6 +66,7 @@ def _list_connector_files(
     return requests.get(
         f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files",
         headers=user_performing_action.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 

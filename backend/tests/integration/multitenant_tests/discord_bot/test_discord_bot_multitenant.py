@@ -20,6 +20,7 @@ from onyx.server.manage.discord_bot.utils import generate_discord_registration_k
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
 from onyx.server.manage.discord_bot.utils import REGISTRATION_KEY_PREFIX
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -121,6 +122,7 @@ class TestGuildDataIsolation:
         response1 = requests.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         # If Discord bot feature is not enabled, skip the test
@@ -136,6 +138,7 @@ class TestGuildDataIsolation:
             list_response1 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert list_response1.ok
             tenant1_guilds = list_response1.json()
@@ -146,6 +149,7 @@ class TestGuildDataIsolation:
             list_response2 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert list_response2.ok
             tenant2_guilds = list_response2.json()
@@ -157,6 +161,7 @@ class TestGuildDataIsolation:
             requests.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
 
     def test_guild_list_returns_only_own_tenant(
@@ -182,6 +187,7 @@ class TestGuildDataIsolation:
         response1 = requests.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response1.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
@@ -198,6 +204,7 @@ class TestGuildDataIsolation:
         response2 = requests.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user2.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response2.ok, f"Failed to create guild in tenant 2: {response2.text}"
         guild2_data = response2.json()
@@ -246,6 +253,7 @@ class TestGuildDataIsolation:
             list_response1 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert list_response1.ok
             tenant1_guilds = list_response1.json()
@@ -282,6 +290,7 @@ class TestGuildDataIsolation:
             list_response2 = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert list_response2.ok
             tenant2_guilds = list_response2.json()
@@ -327,10 +336,12 @@ class TestGuildDataIsolation:
             requests.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             requests.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild2_id}",
                 headers=admin_user2.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
 
 
@@ -359,6 +370,7 @@ class TestGuildAccessIsolation:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
@@ -370,6 +382,7 @@ class TestGuildAccessIsolation:
             get_response = requests.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user2.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             # Should either return 404 (not found) or 403 (forbidden)
             assert get_response.status_code in [
@@ -381,6 +394,7 @@ class TestGuildAccessIsolation:
             delete_response = requests.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user2.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert delete_response.status_code in [403, 404]
 
@@ -389,6 +403,7 @@ class TestGuildAccessIsolation:
             requests.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
 
 

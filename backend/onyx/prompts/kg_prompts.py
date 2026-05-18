@@ -770,7 +770,7 @@ Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start
 
 <reasoning>[think very briefly through the problem step by step, not more than 2-3 sentences]</reasoning> \
 <sql>[the new SQL statement that returns the source documents involved in the original SQL statement]</sql>
-""".strip()
+""".strip()  # noqa: S608 - LLM prompt text, not an SQL query
 
 
 ENTITY_TABLE_DESCRIPTION = f"""\
@@ -962,7 +962,7 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 
 <reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
-""".strip()
+""".strip()  # noqa: S608 - LLM prompt text, not an SQL query
 
 # TODO: remove following before merging after enough testing
 SIMPLE_SQL_CORRECTION_PROMPT = f"""
@@ -1084,7 +1084,7 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 
 <reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
-""".strip()
+""".strip()  # noqa: S608 - LLM prompt text, not an SQL query
 
 SIMPLE_SQL_ERROR_FIX_PROMPT = f"""
 You are an expert at fixing SQL statements. You will be provided with a SQL statement that aims to address \

@@ -24,6 +24,7 @@ from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import build_email
@@ -648,6 +649,7 @@ def test_scim_created_group_has_basic_permission(
     perms_resp = requests.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
         headers=admin.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     perms_resp.raise_for_status()
     perms = perms_resp.json()

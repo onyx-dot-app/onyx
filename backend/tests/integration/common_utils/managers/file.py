@@ -10,6 +10,7 @@ import requests
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -33,6 +34,7 @@ class FileManager:
             f"{API_SERVER_URL}/user/projects/file/upload",
             files=files_param,
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if not response.ok:
@@ -67,6 +69,7 @@ class FileManager:
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.content
@@ -99,6 +102,7 @@ class FileManager:
             f"{API_SERVER_URL}/manage/admin/connector/file/upload",
             files=files,
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if not response.ok:

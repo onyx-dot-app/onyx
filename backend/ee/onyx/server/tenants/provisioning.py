@@ -28,6 +28,7 @@ from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
 from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
@@ -618,6 +619,7 @@ def get_tenant_by_domain_from_control_plane(
             f"{CONTROL_PLANE_API_BASE_URL}/tenant-by-domain",
             headers=headers,
             json={"domain": domain, "tenant_id": tenant_id},
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         if response.status_code != 200:

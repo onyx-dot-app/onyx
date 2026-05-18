@@ -31,6 +31,7 @@ from tenacity import wait_random
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
 from onyx.configs.model_configs import (
     BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
@@ -895,6 +896,7 @@ class EmbeddingModel:
                 endpoint,
                 headers=headers,
                 json=embed_request.model_dump(),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             # signify that this is a rate limit error
             if response.status_code == 429:
@@ -1300,7 +1302,9 @@ class RerankingModel:
                 )
 
                 response = requests.post(
-                    self.rerank_server_endpoint, json=rerank_request.model_dump()
+                    self.rerank_server_endpoint,
+                    json=rerank_request.model_dump(),
+                    timeout=REQUEST_TIMEOUT_SECONDS,
                 )
                 response.raise_for_status()
 
@@ -1338,7 +1342,9 @@ class QueryAnalysisModel:
             provider="model_server",
         ):
             response = requests.post(
-                self.intent_server_endpoint, json=intent_request.model_dump()
+                self.intent_server_endpoint,
+                json=intent_request.model_dump(),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
 

@@ -22,6 +22,7 @@ from onyx.configs.app_configs import REDIS_HOST
 from onyx.configs.app_configs import REDIS_PORT
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -118,6 +119,7 @@ def test_slack_user_reactivation_blocked_by_seat_limit(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
             json={"user_email": slack_user.email},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 402
     finally:

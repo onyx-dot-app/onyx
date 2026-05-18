@@ -1,6 +1,7 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 CODE_INTERPRETER_URL = f"{API_SERVER_URL}/admin/code-interpreter"
@@ -14,6 +15,7 @@ def test_get_code_interpreter_health_as_admin(
     response = requests.get(
         CODE_INTERPRETER_HEALTH_URL,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     data = response.json()
@@ -28,6 +30,7 @@ def test_get_code_interpreter_status_as_admin(
     response = requests.get(
         CODE_INTERPRETER_URL,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     data = response.json()
@@ -45,6 +48,7 @@ def test_update_code_interpreter_disable_and_enable(
         CODE_INTERPRETER_URL,
         json={"enabled": False},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -52,6 +56,7 @@ def test_update_code_interpreter_disable_and_enable(
     response = requests.get(
         CODE_INTERPRETER_URL,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     assert response.json()["enabled"] is False
@@ -61,6 +66,7 @@ def test_update_code_interpreter_disable_and_enable(
         CODE_INTERPRETER_URL,
         json={"enabled": True},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -68,6 +74,7 @@ def test_update_code_interpreter_disable_and_enable(
     response = requests.get(
         CODE_INTERPRETER_URL,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     assert response.json()["enabled"] is True
@@ -80,12 +87,14 @@ def test_code_interpreter_endpoints_require_admin(
     health_response = requests.get(
         CODE_INTERPRETER_HEALTH_URL,
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert health_response.status_code == 403
 
     get_response = requests.get(
         CODE_INTERPRETER_URL,
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert get_response.status_code == 403
 
@@ -93,5 +102,6 @@ def test_code_interpreter_endpoints_require_admin(
         CODE_INTERPRETER_URL,
         json={"enabled": True},
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert put_response.status_code == 403

@@ -18,6 +18,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 # How long to wait for the celery task to run and sync models
@@ -57,6 +58,7 @@ def _create_provider_with_api(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         json=llm_provider_data,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -67,6 +69,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict:
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     for provider in response.json()["providers"]:
@@ -80,6 +83,7 @@ def get_auto_config(admin_user: DATestUser) -> dict | None:
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/auto-config",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     if response.status_code == 502:
         return None

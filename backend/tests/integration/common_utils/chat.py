@@ -2,6 +2,7 @@ import requests
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 
 
 def test_create_chat_session_and_send_messages() -> None:
@@ -22,6 +23,7 @@ def test_create_chat_session_and_send_messages() -> None:
             "persona_id": 1,
         },  # Assuming persona_id 1 exists
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_session_response.status_code == 200
     chat_session_id = create_session_response.json()["chat_session_id"]
@@ -37,6 +39,7 @@ def test_create_chat_session_and_send_messages() -> None:
             "stream_response": False,
         },
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert send_message_response.status_code == 200
 
@@ -51,12 +54,15 @@ def test_create_chat_session_and_send_messages() -> None:
             "stream_response": False,
         },
         headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert send_message_response.status_code == 200
 
     # Verify chat session details
     get_session_response = requests.get(
-        f"{base_url}/chat/get-chat-session/{chat_session_id}", headers=headers
+        f"{base_url}/chat/get-chat-session/{chat_session_id}",
+        headers=headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert get_session_response.status_code == 200
     session_details = get_session_response.json()

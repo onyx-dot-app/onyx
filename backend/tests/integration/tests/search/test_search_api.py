@@ -9,6 +9,7 @@ import requests
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -31,6 +32,7 @@ def _search(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 
@@ -188,5 +190,6 @@ def test_unauthenticated_returns_401(
     resp = requests.post(
         SEARCH_URL,
         json={"query": "test"},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert resp.status_code == 403

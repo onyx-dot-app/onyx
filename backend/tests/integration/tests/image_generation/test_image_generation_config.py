@@ -10,6 +10,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.image_generation import (
     ImageGenerationConfigManager,
 )
@@ -112,6 +113,7 @@ def test_create_duplicate_config_fails(
             "api_key": "sk-test-key-2",
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 400
@@ -188,6 +190,7 @@ def test_get_credentials_not_found(
     response = requests.get(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id/credentials",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404
@@ -289,6 +292,7 @@ def test_update_config_source_provider_not_found(
             "source_llm_provider_id": 999999,
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404
@@ -339,6 +343,7 @@ def test_delete_config_not_found(
     response = requests.delete(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404
@@ -446,6 +451,7 @@ def test_set_default_not_found(
     response = requests.post(
         f"{API_SERVER_URL}/admin/image-generation/config/non-existent-id/default",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404
@@ -465,6 +471,7 @@ def test_create_config_missing_credentials(
             "model_name": "gpt-image-1",
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 400
@@ -485,6 +492,7 @@ def test_create_config_source_provider_not_found(
             "source_llm_provider_id": 999999,  # Non-existent ID
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404

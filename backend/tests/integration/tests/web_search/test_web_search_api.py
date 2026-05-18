@@ -6,6 +6,7 @@ import requests
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -24,6 +25,7 @@ class TestOnyxWebCrawler:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://example.com/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -53,6 +55,7 @@ class TestOnyxWebCrawler:
                 ]
             },
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -69,6 +72,7 @@ class TestOnyxWebCrawler:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://this-domain-definitely-does-not-exist-12345.com/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -91,6 +95,7 @@ class TestOnyxWebCrawler:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": [url]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -108,6 +113,7 @@ class TestOnyxWebCrawler:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://www.iana.org/about"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, response.text
         data = response.json()
@@ -133,6 +139,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://127.0.0.1/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -145,6 +152,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://10.0.0.1/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -156,6 +164,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://192.168.1.1/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -167,6 +176,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://172.16.0.1/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -178,6 +188,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://169.254.169.254/latest/meta-data/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -189,6 +200,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://kubernetes.default.svc.cluster.local/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -200,6 +212,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://metadata.google.internal/"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -211,6 +224,7 @@ class TestSsrfProtection:
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://127.0.0.1:8080/metrics"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -228,6 +242,7 @@ class TestSsrfProtection:
                 ]
             },
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200
         data = response.json()
@@ -262,6 +277,7 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
             "activate": True,
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, response.text
 
@@ -288,6 +304,7 @@ def test_web_search_endpoints_with_exa(
         f"{API_SERVER_URL}/web-search/search-lite",
         json=search_request,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert lite_response.status_code == 200, lite_response.text
     lite_data = lite_response.json()
@@ -302,6 +319,7 @@ def test_web_search_endpoints_with_exa(
         f"{API_SERVER_URL}/web-search/open-urls",
         json={"urls": urls},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert open_response.status_code == 200, open_response.text
     open_data = open_response.json()
@@ -314,6 +332,7 @@ def test_web_search_endpoints_with_exa(
         f"{API_SERVER_URL}/web-search/search",
         json=search_request,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert combined_response.status_code == 200, combined_response.text
     combined_data = combined_response.json()

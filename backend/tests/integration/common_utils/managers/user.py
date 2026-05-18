@@ -16,6 +16,7 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 DOMAIN = "example.com"
@@ -66,6 +67,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/auth/register",
             json=body,
             headers=GENERAL_HEADERS,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -98,6 +100,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/auth/login",
             data=data,
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         response.raise_for_status()
@@ -117,6 +120,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/me",
             headers=test_user.headers,
             cookies=test_user.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         me_response.raise_for_status()
         me_response_json = me_response.json()
@@ -131,6 +135,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/me/permissions",
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -144,6 +149,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
             cookies=user_to_verify.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if user_to_verify.is_active is False:
@@ -175,6 +181,7 @@ class UserManager:
                 "explicit_override": explicit_override,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -194,6 +201,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if target_status is False:
@@ -222,6 +230,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",  # ty: ignore[possibly-unresolved-reference]
             json={"user_email": user_to_set.email},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -276,6 +285,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -300,6 +310,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/manage/admin/users",
             headers=user_performing_action.headers,
             json={"emails": [user_to_invite_email]},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -315,6 +326,7 @@ class UserManager:
             url=f"{API_SERVER_URL}/tenants/users/invite/accept",
             headers=user_performing_action.headers,
             json={"tenant_id": tenant_id},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -333,6 +345,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/invited",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -348,6 +361,7 @@ class UserManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return UserInfo(**response.json())

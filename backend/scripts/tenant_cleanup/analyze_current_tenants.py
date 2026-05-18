@@ -94,7 +94,7 @@ def collect_control_plane_data() -> list[dict[str, Any]]:
         raise ValueError("PEM_FILE_LOCATION is not set")
 
     full_cmd = (
-        f"ssh -i {pem_file_location} ec2-user@{bastion_host} "
+        f"ssh -i {pem_file_location} ec2-user@{bastion_host} "  # noqa: S608 - ops script; values from env, SQL is hardcoded constant
         f"\"psql {db_url} -c '\\copy (SELECT * FROM tenant) "
         f"to '/tmp/control_plane_data.csv' with (format csv);'\""
     )
