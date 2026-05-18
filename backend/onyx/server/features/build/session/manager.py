@@ -100,6 +100,14 @@ class UploadLimitExceededError(ValueError):
     """Raised when file upload limits are exceeded."""
 
 
+class SandboxNotFoundError(LookupError):
+    """Raised when a user has no sandbox row to act on."""
+
+
+class SandboxProvisioningError(RuntimeError):
+    """Raised when a sandbox is mid-provision and the caller would race it."""
+
+
 class BuildStreamingState:
     """Container for accumulating state during ACP streaming.
 
@@ -410,6 +418,86 @@ class SessionManager:
         update_sandbox_status__no_commit(
             self._db_session, sandbox.id, sandbox_info.status
         )
+
+    def ensure_sandbox_running(self, user_id: UUID) -> Sandbox:
+        """Ensure the user's existing sandbox is RUNNING, waking it if needed.
+
+        Headless entry point for flows (e.g. scheduled tasks) that need the
+        sandbox up but aren't going through ``create_session__no_commit``.
+        Mirrors the sandbox-handling section of ``create_session__no_commit``
+        but without creating a session record. Falls back to the system
+        default LLM config since there is no user cookie context.
+
+        Behavior by current sandbox status:
+        - ``RUNNING`` + pod healthy: returns as-is.
+        - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions.
+        - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
+        - ``PROVISIONING``: raises ``SandboxProvisioningError`` (another
+          request owns the in-flight provision; this call would race).
+
+        Honors ``SANDBOX_MAX_CONCURRENT_PER_ORG`` when ``MULTI_TENANT`` for
+        non-RUNNING cases — waking a SLEEPING sandbox adds 1 to the running
+        count.
+
+        Caller is responsible for committing.
+
+        Raises:
+            SandboxNotFoundError: User has no sandbox row.
+            SandboxProvisioningError: Sandbox is currently PROVISIONING.
+            ValueError: Max concurrent sandboxes reached, or user missing.
+            RuntimeError: Sandbox manager failed to provision the pod.
+        """
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        if sandbox is None:
+            raise SandboxNotFoundError(f"User {user_id} has no sandbox to wake")
+
+        # RUNNING + healthy is the hot path — return immediately.
+        if sandbox.status == SandboxStatus.RUNNING:
+            if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
+                return sandbox
+            # DB says RUNNING but the pod is gone; fall through to
+            # terminate + re-provision below.
+            logger.warning(
+                "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
+                sandbox.id,
+            )
+            self._sandbox_manager.terminate(sandbox.id)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox.id, SandboxStatus.TERMINATED
+            )
+
+        if sandbox.status == SandboxStatus.PROVISIONING:
+            raise SandboxProvisioningError(
+                f"Sandbox {sandbox.id} is PROVISIONING; another request owns it"
+            )
+
+        tenant_id = get_current_tenant_id()
+        if MULTI_TENANT:
+            from onyx.server.features.build.configs import (
+                SANDBOX_MAX_CONCURRENT_PER_ORG,
+            )
+
+            running_count = get_running_sandbox_count_by_tenant(
+                self._db_session, tenant_id
+            )
+            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
+                raise ValueError(
+                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
+                )
+
+        user = fetch_user_by_id(self._db_session, user_id)
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+
+        llm_config = self._get_llm_config(None, None)
+        logger.info(
+            "Waking sandbox %s (status=%s) for user %s",
+            sandbox.id,
+            sandbox.status.value,
+            user_id,
+        )
+        self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+        return sandbox
 
     def create_session__no_commit(
         self,
