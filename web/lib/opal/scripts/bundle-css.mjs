@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -57,7 +57,7 @@ function stripIntraPackageImports(source, filePath) {
     /@import\s+['"]([^'"]+)['"];\s*\n?/gm,
     (match, importPath) => {
       const resolved = resolve(fileDir, importPath);
-      return resolved.startsWith(srcDir + "/") ? "" : match;
+      return resolved.startsWith(srcDir + sep) ? "" : match;
     }
   );
 }
@@ -86,8 +86,13 @@ writeFileSync(join(distDir, "colors.css"), colorsRaw);
 
 console.log(`copied colors.css -> dist/colors.css (${colorsRaw.length} bytes)`);
 
-// root.css = colors + styles in a single file so consumers need only one import.
-const rootBundled = colorsRaw.trimEnd() + "\n\n" + bundled;
+// root.css = single-import entry point: _reference.css must be first so that
+// @import "tailwindcss" precedes all :root {} declarations (CSS requires @import
+// before any non-@charset/non-@layer rules). Colors are inserted after the
+// reference header; the rest of the bundle follows.
+const [refPart, ...remainingParts] = parts;
+const colorPart = `/* === colors.css === */\n${colorsRaw.trimEnd()}\n`;
+const rootBundled = [refPart, colorPart, ...remainingParts].join("\n");
 writeFileSync(join(distDir, "root.css"), rootBundled);
 
 console.log(`bundled root.css -> dist/root.css (${rootBundled.length} bytes)`);
