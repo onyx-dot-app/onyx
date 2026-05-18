@@ -745,6 +745,48 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Index all tickets from a specified Jira Service Management project.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the JSM project key:",
+        label: "JSM Project Key",
+        name: "jsm_project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'ITSM'). Must be a Service Desk project.",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "Add user emails whose comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
