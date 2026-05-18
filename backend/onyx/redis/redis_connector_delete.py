@@ -119,8 +119,8 @@ class RedisConnectorDelete:
             return None
 
         num_tasks_sent = 0
-        batch_size = 100
-        doc_batch = []
+        batch_size: int = 100
+        doc_batch: list[str] = []
 
         stmt = construct_document_id_select_for_connector_credential_pair(
             cc_pair.connector_id, cc_pair.credential_id

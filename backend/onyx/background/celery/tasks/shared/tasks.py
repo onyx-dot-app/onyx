@@ -381,19 +381,19 @@ def document_batch_by_cc_pair_cleanup_task(
                         num_succeeded += 1
                     # else count == 0, skip silently
 
+                    db_session.commit()
                 except SoftTimeLimitExceeded:
                     task_logger.info(
                         f"SoftTimeLimitExceeded while processing batch doc={document_id}"
                     )
-                    num_failed += 1
+                    db_session.commit()
+                    raise
                 except Exception:  # noqa: BLE001
                     task_logger.exception(
                         f"Error processing document in batch: doc={document_id}"
                     )
+                    db_session.rollback()
                     num_failed += 1
-
-            # Commit once at the end of the batch
-            db_session.commit()
 
             elapsed = time.monotonic() - start
             task_logger.info(

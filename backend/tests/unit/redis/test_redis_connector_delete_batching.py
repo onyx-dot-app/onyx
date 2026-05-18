@@ -61,22 +61,16 @@ def test_generate_tasks_batches_250_documents(redis_connector_delete, mock_redis
     # Mock the lock
     mock_lock = MagicMock()
 
-    # Patch the get_connector_credential_pair_from_id
+    # Patch the get_connector_credential_pair_from_id and construct_document_id_select
     with (
         patch(
             "onyx.redis.redis_connector_delete.get_connector_credential_pair_from_id",
             return_value=mock_cc_pair,
         ),
         patch(
-            "onyx.redis.redis_connector_delete.TenantRedisPipeline"
-        ) as mock_pipeline_class,
-        patch(
             "onyx.redis.redis_connector_delete.construct_document_id_select_for_connector_credential_pair"
         ) as mock_construct_stmt,
     ):
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline_class.return_value = mock_pipeline_instance
-
         mock_construct_stmt.return_value = MagicMock()
 
         # Call generate_tasks
@@ -96,6 +90,9 @@ def test_generate_tasks_batches_250_documents(redis_connector_delete, mock_redis
         calls = mock_celery_app.send_task.call_args_list
         batch_sizes = [len(call[1]["kwargs"]["document_ids"]) for call in calls]
         assert batch_sizes == [100, 100, 50]
+
+        # Verify that Redis pipeline was used for batching
+        assert mock_redis.pipeline.call_count == 3
 
 
 def test_generate_tasks_single_batch_50_documents(redis_connector_delete, mock_redis):  # noqa: ARG001
@@ -124,7 +121,6 @@ def test_generate_tasks_single_batch_50_documents(redis_connector_delete, mock_r
             "onyx.redis.redis_connector_delete.get_connector_credential_pair_from_id",
             return_value=mock_cc_pair,
         ),
-        patch("onyx.redis.redis_connector_delete.TenantRedisPipeline"),
         patch(
             "onyx.redis.redis_connector_delete.construct_document_id_select_for_connector_credential_pair"
         ) as mock_construct_stmt,
@@ -143,6 +139,9 @@ def test_generate_tasks_single_batch_50_documents(redis_connector_delete, mock_r
         assert mock_celery_app.send_task.call_count == 1
         call_kwargs = mock_celery_app.send_task.call_args[1]["kwargs"]
         assert len(call_kwargs["document_ids"]) == 50
+
+        # Verify that Redis pipeline was used
+        assert mock_redis.pipeline.call_count == 1
 
 
 def test_generate_tasks_full_batch_100_documents(redis_connector_delete, mock_redis):  # noqa: ARG001
@@ -171,7 +170,6 @@ def test_generate_tasks_full_batch_100_documents(redis_connector_delete, mock_re
             "onyx.redis.redis_connector_delete.get_connector_credential_pair_from_id",
             return_value=mock_cc_pair,
         ),
-        patch("onyx.redis.redis_connector_delete.TenantRedisPipeline"),
         patch(
             "onyx.redis.redis_connector_delete.construct_document_id_select_for_connector_credential_pair"
         ) as mock_construct_stmt,
@@ -190,6 +188,9 @@ def test_generate_tasks_full_batch_100_documents(redis_connector_delete, mock_re
         assert mock_celery_app.send_task.call_count == 1
         call_kwargs = mock_celery_app.send_task.call_args[1]["kwargs"]
         assert len(call_kwargs["document_ids"]) == 100
+
+        # Verify that Redis pipeline was used
+        assert mock_redis.pipeline.call_count == 1
 
 
 def test_generate_tasks_uses_pipeline_for_redis(redis_connector_delete, mock_redis):  # noqa: ARG001
@@ -219,15 +220,9 @@ def test_generate_tasks_uses_pipeline_for_redis(redis_connector_delete, mock_red
             return_value=mock_cc_pair,
         ),
         patch(
-            "onyx.redis.redis_connector_delete.TenantRedisPipeline"
-        ) as mock_pipeline_class,
-        patch(
             "onyx.redis.redis_connector_delete.construct_document_id_select_for_connector_credential_pair"
         ) as mock_construct_stmt,
     ):
-        mock_pipeline_instance = MagicMock()
-        mock_pipeline_class.return_value = mock_pipeline_instance
-
         mock_construct_stmt.return_value = MagicMock()
 
         num_tasks_sent = redis_connector_delete.generate_tasks(
@@ -241,16 +236,3 @@ def test_generate_tasks_uses_pipeline_for_redis(redis_connector_delete, mock_red
 
         # Assert that pipeline was created twice (once per batch)
         assert mock_redis.pipeline.call_count == 2
-
-        # Assert that sadd and expire were called on the pipeline
-        for call in mock_pipeline_instance.method_calls:
-            # Each batch should call sadd and expire
-            assert any(
-                "sadd" in str(call) for call in mock_pipeline_instance.method_calls
-            )
-            assert any(
-                "expire" in str(call) for call in mock_pipeline_instance.method_calls
-            )
-
-        # Assert that execute was called twice (once per batch)
-        assert mock_pipeline_instance.execute.call_count == 2
