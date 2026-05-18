@@ -34,7 +34,11 @@ def _extract_urls_from_sitemap(sitemap_url: str) -> Set[str]:
         if resp.status_code != 200:
             return urls
 
-        root = ET.fromstring(resp.content)  # noqa: S314 — sitemap XML from connector-configured URL; only URL text is read, never executed
+        # TODO(security): switch to defusedxml.ElementTree. Modern xml.etree
+        # disables DTD/external-entity processing by default, but element-
+        # expansion (billion-laughs) DoS is still possible on attacker-
+        # controlled sitemap content.
+        root = ET.fromstring(resp.content)  # noqa: S314
 
         # Handle both regular sitemaps and sitemap indexes
         # Remove namespace for easier parsing

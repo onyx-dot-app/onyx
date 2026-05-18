@@ -21,7 +21,9 @@ class LongTermLogger:
     def __init__(
         self,
         metadata: dict[str, str] | None = None,
-        log_file_path: str = "/tmp/long_term_log",  # noqa: S108 — default path, callers override in production
+        # TODO(security): this class is unused (see NOTE above). Either delete
+        # it or change the default to a non-world-writable location.
+        log_file_path: str = "/tmp/long_term_log",  # noqa: S108
         max_files_per_category: int = 1000,
     ):
         self.metadata = metadata
