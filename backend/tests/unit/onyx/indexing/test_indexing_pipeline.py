@@ -918,14 +918,32 @@ def test_get_doc_ids_to_update_new_doc_always_included() -> None:
     assert len(result) == 1
 
 
-def test_get_doc_ids_to_update_hash_match_skips_doc() -> None:
+def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
+    """Hash skip applies only when doc_updated_at is absent (e.g. web connector)."""
     doc = _doc_with_text("Title", "unchanged content")
     doc.id = "doc1"
+    doc.doc_updated_at = None
     stored_hash = _document_content_hash(doc)
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
     result = get_doc_ids_to_update([doc], db_docs=[db_doc])
     assert result == []
+
+
+def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> None:
+    """When doc_updated_at advances, the document must be re-indexed even if the
+    hash matches — e.g. GDrive in-place image replacement keeps image_file_id
+    the same but the image bytes changed."""
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    new_time = datetime(2021, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "same text")
+    doc.id = "doc1"
+    doc.doc_updated_at = new_time
+    stored_hash = _document_content_hash(doc)  # hash matches — text unchanged
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
+
+    result = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    assert len(result) == 1  # timestamp advanced → must re-index despite hash match
 
 
 def test_get_doc_ids_to_update_hash_mismatch_includes_doc() -> None:

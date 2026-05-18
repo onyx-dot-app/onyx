@@ -364,13 +364,19 @@ def get_doc_ids_to_update(
         ):
             continue
 
-        # Secondary dedup gate: skip if content hash matches what's stored.
-        # Catches connectors (e.g. web) that don't provide reliable doc_updated_at.
-        db_doc = id_to_db_doc_map.get(doc.id)
-        if db_doc and db_doc.content_hash is not None:
-            if _document_content_hash(doc) == db_doc.content_hash:
-                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
-                continue
+        # Hash-based skip: fallback for connectors without reliable doc_updated_at
+        # (e.g. web connector). When a reliable timestamp IS available and the
+        # document passed the time check above, trust the timestamp — the content
+        # may have changed in a way the hash can't detect (e.g. in-place image
+        # replacement on GDrive keeps the same image_file_id).
+        if not doc.doc_updated_at:
+            db_doc = id_to_db_doc_map.get(doc.id)
+            if db_doc and db_doc.content_hash is not None:
+                if _document_content_hash(doc) == db_doc.content_hash:
+                    logger.debug(
+                        f"Skipping document {doc.id!r} — content hash unchanged"
+                    )
+                    continue
 
         updatable_docs.append(doc)
 
