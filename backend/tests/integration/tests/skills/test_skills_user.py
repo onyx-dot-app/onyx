@@ -11,10 +11,8 @@ Admin-route auth (POST, list, etc.) is covered exhaustively in
 
 from __future__ import annotations
 
-import os
 from uuid import uuid4
 
-import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -78,16 +76,20 @@ def test_user_sees_public_skill(
     assert slug in custom_slugs
 
 
-@pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
-    reason="User-group management requires EE features enabled.",
-)
 def test_user_sees_private_skill_with_grant(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
     """Adding ``basic_user`` to a granted group surfaces a private skill."""
-    group = UserGroupManager.create(admin_user, name=f"grant-r-{uuid4().hex[:6]}")
+    group = UserGroupManager.create(
+        admin_user,
+        name=f"grant-r-{uuid4().hex[:6]}",
+        user_ids=[admin_user.id],
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[group],
+    )
     UserGroupManager.add_users(group, [basic_user.id], admin_user)
 
     slug = f"private-granted-{uuid4().hex[:6]}"

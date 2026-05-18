@@ -257,38 +257,6 @@ def test_upload_persists_file_to_s3(admin_user: DATestUser) -> None:
     assert any(e["id"] == entry["id"] for e in tree)
 
 
-def test_upload_over_per_file_cap_succeeds_under_threshold(
-    admin_user: DATestUser,
-) -> None:
-    """A small file (1 KiB) is well under the 500 MB per-file cap and succeeds.
-
-    Allocating a 500 MB+ payload would OOM CI, so this test verifies the
-    happy path with a sub-threshold payload.  When the cap *is* exceeded the
-    endpoint returns ``HTTPException(400)``.
-    """
-    # Small payload — avoids 500 MB+ allocation that can OOM CI.
-    payload = b"\x00" * 1024
-    response = _upload(admin_user, [(f"big-{uuid4().hex[:8]}.bin", payload, None)])
-
-    assert response.status_code == 200
-
-
-def test_upload_over_per_user_cap_succeeds_under_threshold(
-    admin_user: DATestUser,
-) -> None:
-    """A small file (1 KiB) is well under the 10 GB per-user cap and succeeds.
-
-    Allocating a payload large enough to exceed the cumulative cap would OOM
-    CI, so this test verifies the happy path with a sub-threshold payload.
-    When the cap *is* exceeded the endpoint returns ``HTTPException(400)``.
-    """
-    # Small payload — avoids 500 MB+ allocation that can OOM CI.
-    payload = b"\x00" * 1024
-    response = _upload(admin_user, [(f"over-{uuid4().hex[:8]}.bin", payload, None)])
-
-    assert response.status_code == 200
-
-
 def test_upload_batch_over_count_cap_rejects(admin_user: DATestUser) -> None:
     """A batch upload of 101 files exceeds ``USER_LIBRARY_MAX_FILES_PER_UPLOAD``
     (100) and is rejected with 400.

@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import pytest
 
+from tests.integration.common_utils.test_models import DATestLLMProvider
+
 
 @pytest.fixture(autouse=True)
 def _reset_db(reset: None) -> None:  # noqa: ARG001
     """Auto-reset DB before each build test."""
+
+
+@pytest.fixture(autouse=True)
+def _ensure_llm_provider(llm_provider: DATestLLMProvider) -> None:  # noqa: ARG001
+    """Seed a default LLM provider after each DB reset."""

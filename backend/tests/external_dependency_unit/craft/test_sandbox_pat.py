@@ -287,7 +287,7 @@ class TestEnsureSandboxPat:
         stub ``_pod_exists_and_healthy`` to return False so the guard is
         actually reached.
         """
-        manager = KubernetesSandboxManager.__new__(KubernetesSandboxManager)
+        manager = object.__new__(KubernetesSandboxManager)
 
         def _no_pod(
             self: KubernetesSandboxManager,  # noqa: ARG001

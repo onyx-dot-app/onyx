@@ -414,7 +414,15 @@ def test_patch_visibility_pushes_to_union_of_pre_and_post_affected_users(
     # Add basic_user to a group, then grant the skill only to that group +
     # flip to private. Admin's sandbox is unaffected (admin has no grant),
     # so the skill should disappear from there; basic_user keeps it.
-    group = UserGroupManager.create(admin_user, name=f"vis-{uuid4().hex[:6]}")
+    group = UserGroupManager.create(
+        admin_user,
+        name=f"vis-{uuid4().hex[:6]}",
+        user_ids=[admin_user.id],
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[group],
+    )
     UserGroupManager.add_users(group, [basic_user.id], admin_user)
 
     SkillManager.patch_custom(skill, admin_user, is_public=False)
@@ -621,7 +629,15 @@ def test_replace_grants_pushes_to_union(
         "precondition: private skill with no grant should not be on basic's disk"
     )
 
-    group = UserGroupManager.create(admin_user, name=f"grant-{uuid4().hex[:6]}")
+    group = UserGroupManager.create(
+        admin_user,
+        name=f"grant-{uuid4().hex[:6]}",
+        user_ids=[admin_user.id],
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[group],
+    )
     UserGroupManager.add_users(group, [basic_user.id], admin_user)
 
     SkillManager.replace_grants(skill, [group.id], admin_user)
@@ -648,7 +664,15 @@ def test_replace_grants_empty_list_revokes_all(
         is_public=False,
     )
 
-    group = UserGroupManager.create(admin_user, name=f"revoke-{uuid4().hex[:6]}")
+    group = UserGroupManager.create(
+        admin_user,
+        name=f"revoke-{uuid4().hex[:6]}",
+        user_ids=[admin_user.id],
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[group],
+    )
     UserGroupManager.add_users(group, [basic_user.id], admin_user)
     SkillManager.replace_grants(skill, [group.id], admin_user)
 
