@@ -99,18 +99,19 @@ def _snapshot_dir(path: Path) -> dict[str, bytes]:
 
 
 def test_create_and_list_skill(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug="test-create")
+    slug = f"test-create-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, slug=slug)
     assert skill.id is not None
-    assert skill.slug == "test-create"
+    assert skill.slug == slug
     assert skill.enabled is True
 
     skills_list = SkillManager.list_all(admin_user)
     custom_slugs = [c["slug"] for c in skills_list["customs"]]
-    assert "test-create" in custom_slugs
+    assert slug in custom_slugs
 
 
 def test_patch_skill_metadata(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug="patch-test")
+    skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
 
     updated = SkillManager.patch_custom(
         skill,
@@ -128,25 +129,28 @@ def test_patch_skill_metadata(admin_user: DATestUser) -> None:
 
 
 def test_replace_bundle(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug="bundle-test")
-    new_bundle = build_minimal_bundle("bundle-test")
+    slug = f"bundle-test-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, slug=slug)
+    new_bundle = build_minimal_bundle(slug)
     updated = SkillManager.replace_bundle(skill, new_bundle, admin_user)
-    assert updated.slug == "bundle-test"
+    assert updated.slug == slug
 
 
 def test_delete_skill(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug="delete-test")
+    slug = f"delete-test-{uuid4().hex[:6]}"
+    skill = SkillManager.create_custom(admin_user, slug=slug)
     SkillManager.delete_custom(skill, admin_user)
 
     skills_list = SkillManager.list_all(admin_user)
     custom_slugs = [c["slug"] for c in skills_list["customs"]]
-    assert "delete-test" not in custom_slugs
+    assert slug not in custom_slugs
 
 
 def test_duplicate_slug_rejected(admin_user: DATestUser) -> None:
-    SkillManager.create_custom(admin_user, slug="dupe-slug")
+    slug = f"dupe-slug-{uuid4().hex[:6]}"
+    SkillManager.create_custom(admin_user, slug=slug)
     with pytest.raises(requests.HTTPError) as exc_info:
-        SkillManager.create_custom(admin_user, slug="dupe-slug")
+        SkillManager.create_custom(admin_user, slug=slug)
     assert exc_info.value.response.status_code == 409
 
 
@@ -158,7 +162,7 @@ def test_bundle_missing_skill_md(admin_user: DATestUser) -> None:
 
     with pytest.raises(requests.HTTPError) as exc_info:
         SkillManager.create_custom(
-            admin_user, slug="bad-bundle", bundle_bytes=bad_bundle
+            admin_user, slug=f"bad-bundle-{uuid4().hex[:6]}", bundle_bytes=bad_bundle
         )
     assert exc_info.value.response.status_code == 400
 
@@ -172,23 +176,30 @@ def test_bundle_with_template_rejected(admin_user: DATestUser) -> None:
 
     with pytest.raises(requests.HTTPError) as exc_info:
         SkillManager.create_custom(
-            admin_user, slug="template-bundle", bundle_bytes=bad_bundle
+            admin_user,
+            slug=f"template-bundle-{uuid4().hex[:6]}",
+            bundle_bytes=bad_bundle,
         )
     assert exc_info.value.response.status_code == 400
 
 
 def test_grants_replace(admin_user: DATestUser) -> None:
-    skill = SkillManager.create_custom(admin_user, slug="grants-test", is_public=False)
+    skill = SkillManager.create_custom(
+        admin_user, slug=f"grants-test-{uuid4().hex[:6]}", is_public=False
+    )
     updated = SkillManager.replace_grants(skill, [], admin_user)
     assert updated.granted_group_ids == []
 
 
 def test_patch_slug_to_duplicate(admin_user: DATestUser) -> None:
-    SkillManager.create_custom(admin_user, slug="slug-a")
-    skill_b = SkillManager.create_custom(admin_user, slug="slug-b")
+    suffix = uuid4().hex[:6]
+    slug_a = f"slug-a-{suffix}"
+    slug_b = f"slug-b-{suffix}"
+    SkillManager.create_custom(admin_user, slug=slug_a)
+    skill_b = SkillManager.create_custom(admin_user, slug=slug_b)
 
     with pytest.raises(requests.HTTPError) as exc_info:
-        SkillManager.patch_custom(skill_b, admin_user, slug="slug-a")
+        SkillManager.patch_custom(skill_b, admin_user, slug=slug_a)
     assert exc_info.value.response.status_code == 409
 
 
@@ -464,11 +475,14 @@ def test_description_only_patch_leaves_user_sandboxes_unchanged(
 
 
 def test_patch_slug_409_on_collision(admin_user: DATestUser) -> None:
-    SkillManager.create_custom(admin_user, slug="patch-collide-a")
-    skill_b = SkillManager.create_custom(admin_user, slug="patch-collide-b")
+    suffix = uuid4().hex[:6]
+    slug_a = f"patch-collide-a-{suffix}"
+    slug_b = f"patch-collide-b-{suffix}"
+    SkillManager.create_custom(admin_user, slug=slug_a)
+    skill_b = SkillManager.create_custom(admin_user, slug=slug_b)
 
     with pytest.raises(requests.HTTPError) as exc_info:
-        SkillManager.patch_custom(skill_b, admin_user, slug="patch-collide-a")
+        SkillManager.patch_custom(skill_b, admin_user, slug=slug_a)
     assert exc_info.value.response.status_code == 409
 
 
@@ -765,9 +779,17 @@ def test_curator_can_post_skill(
         user_performing_action=admin_user,
         explicit_override=True,
     )
-
-    skill = SkillManager.create_custom(
-        curator, slug=f"curator-create-{uuid4().hex[:6]}"
-    )
-    assert skill.id is not None
-    assert skill.enabled is True
+    try:
+        skill = SkillManager.create_custom(
+            curator, slug=f"curator-create-{uuid4().hex[:6]}"
+        )
+        assert skill.id is not None
+        assert skill.enabled is True
+    finally:
+        # restore so module-shared basic_user fixture stays BASIC
+        UserManager.set_role(
+            user_to_set=basic_user,
+            target_role=UserRole.BASIC,
+            user_performing_action=admin_user,
+            explicit_override=True,
+        )

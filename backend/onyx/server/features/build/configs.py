@@ -31,6 +31,10 @@ _THIS_FILE = Path(__file__)
 SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
 VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
+# "copy" (default, safe for production where the agent may pip install) or
+# "symlink" (CI-only: node_modules + venv become symlinks to the template,
+# saving ~45s of per-session copytree).
+SANDBOX_TEMPLATE_MODE = os.environ.get("SANDBOX_TEMPLATE_MODE", "copy").lower()
 SKILLS_TEMPLATE_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
 )

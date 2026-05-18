@@ -143,11 +143,7 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
-          # ENABLE_CRAFT=true bakes Node.js, npm, opencode, and pre-built
-          # sandbox templates (venv + outputs) into the image so the Craft
-          # router's session-creation code can succeed at runtime.  Without
-          # this, the runtime falls through to "templates missing" / "npm
-          # not found" 500s.
+          # Bake Node.js, opencode, and sandbox templates into the image.
           build-args: |
             ENABLE_CRAFT=true
           cache-from: |
@@ -353,6 +349,7 @@ jobs:
           MCP_SERVER_ENABLED=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           ENABLE_CRAFT=true
+          SANDBOX_TEMPLATE_MODE=symlink
           EOF
 
           # EE-only config
@@ -417,9 +414,7 @@ jobs:
 
           wait_for_service "http://localhost:8080/health" "API server"
 
-          # Verify background worker started and critical Celery processes are up.
-          # Without this, a crashed background container causes 20-min timeout
-          # failures across every test suite that depends on async tasks.
+          # Fail fast if the background container or its Celery workers are down.
           echo "Checking background worker health..."
           if ! docker inspect --format='{{.State.Running}}' onyx-background-1 2>/dev/null | grep -q true; then
             echo "ERROR: Background worker container is not running!"
@@ -427,8 +422,7 @@ jobs:
             exit 1
           fi
 
-          # Wait for supervisord to start all programs (startsecs=10 in conf)
-          sleep 15
+          sleep 15  # supervisord startsecs
 
           FAILED_PROCS=$(docker exec onyx-background-1 \
             supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status 2>&1 \

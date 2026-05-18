@@ -14,7 +14,6 @@ from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
-import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -403,16 +402,3 @@ def test_cross_user_access_returns_404(
     # And basic_user's tree does not contain admin's row.
     basic_tree = _tree(basic_user)
     assert all(e["id"] != document_id for e in basic_tree)
-
-
-@pytest.fixture(autouse=True)
-def _ensure_admin_first(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
-    """Force ``admin_user`` to materialise before each test.
-
-    User library tests rely on the per-user tree being empty at the start of
-    each test; the shared session fixture in conftest already wipes the
-    DB, but pytest evaluates fixtures lazily and the import order in this
-    file otherwise leaves ``admin_user`` un-instantiated until the first
-    direct reference.
-    """
-    return admin_user
