@@ -113,6 +113,13 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+
+  // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
+  custom_help_link_url: string | null;
+  custom_help_link_label: string | null;
+
+  // Hide the "Powered by Onyx" tagline under the sidebar logo.
+  hide_onyx_branding: boolean | null;
 }
 
 export interface CombinedSettings {
