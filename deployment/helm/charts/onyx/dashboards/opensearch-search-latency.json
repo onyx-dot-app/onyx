@@ -184,7 +184,7 @@
     },
     {
       "title": "Search Throughput by Type",
-      "description": "Searches per second broken down by search type.",
+      "description": "Search attempts per second broken down by search type. Includes both successes and failures — pair with the failure rate panel below for context.",
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 10 },
       "id": 4,
@@ -313,6 +313,102 @@
           "expr": "histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_server_duration_seconds_bucket[5m])))",
           "legendFormat": "Server P50",
           "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Search Failure Rate",
+      "description": "Fraction of OpenSearch search attempts that raised an exception, over a 5-minute window. Overall plus a per-search-type breakdown.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 30 },
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisLabel": "failure rate",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "(sum(rate(onyx_opensearch_search_errors_total[5m])) / sum(rate(onyx_opensearch_search_total[5m]))) or vector(0)",
+          "legendFormat": "overall",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "(sum by (search_type) (rate(onyx_opensearch_search_errors_total[5m])) or (0 * sum by (search_type) (rate(onyx_opensearch_search_total[5m])))) / sum by (search_type) (rate(onyx_opensearch_search_total[5m]))",
+          "legendFormat": "{{ search_type }}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Search Errors by Type",
+      "description": "Search errors per second, broken down by search_type and the Python exception class name.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 30 },
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisLabel": "errors/s",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (search_type, error_type) (rate(onyx_opensearch_search_errors_total[5m]))",
+          "legendFormat": "{{ search_type }} / {{ error_type }}",
+          "refId": "A"
         }
       ]
     }
