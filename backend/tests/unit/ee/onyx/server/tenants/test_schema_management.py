@@ -3,7 +3,7 @@
 import pytest
 
 from ee.onyx.server.tenants.schema_management import drop_schema
-from ee.onyx.server.tenants.schema_management import validate_tenant_id
+from onyx.db.engine.tenant_utils import validate_tenant_id
 
 
 class TestValidateTenantId:
