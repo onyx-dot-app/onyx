@@ -141,9 +141,7 @@ class OnyxSalesforce(Salesforce):
             #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
             validate_sf_identifier(child_relationship)
             fields = relationships_to_fields[child_relationship]
-            fields_fragment = ",".join(
-                validate_sf_identifier(f) for f in fields
-            )
+            fields_fragment = ",".join(validate_sf_identifier(f) for f in fields)
             query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "  # noqa: S608
 
         query = query.rstrip(", ")

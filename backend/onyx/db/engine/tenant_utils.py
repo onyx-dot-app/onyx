@@ -136,8 +136,6 @@ def get_all_tenant_ids() -> list[str]:
         tenant_ids = [row[0] for row in result]
 
     valid_tenants = [
-        tenant
-        for tenant in tenant_ids
-        if tenant is None or validate_tenant_id(tenant)
+        tenant for tenant in tenant_ids if tenant is None or validate_tenant_id(tenant)
     ]
     return valid_tenants
