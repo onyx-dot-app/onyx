@@ -366,26 +366,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-
-          # Write a compose override that hardcodes ENABLE_CRAFT=true for
-          # both api_server and background.  This bypasses ${} interpolation
-          # entirely — the .env / export path proved unreliable in CI.
-          cat > docker-compose.ci-craft.yml <<'CRAFT_OVERRIDE'
-          services:
-            api_server:
-              environment:
-                - ENABLE_CRAFT=true
-            background:
-              environment:
-                - ENABLE_CRAFT=true
-          CRAFT_OVERRIDE
-
-          export ENABLE_CRAFT=true
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.dev.yml \
-            -f docker-compose.ci-craft.yml \
-            up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
             relational_db \
             index \
             cache \
@@ -462,37 +443,6 @@ jobs:
             exit 1
           fi
           echo "Background worker is healthy — all critical processes running."
-
-          # Verify ENABLE_CRAFT reached the API server container — both as
-          # an env var AND as the Python module-level constant the gating
-          # check actually reads.
-          API_CRAFT_ENV=$(docker exec onyx-api_server-1 \
-            python -c "import os; print(os.environ.get('ENABLE_CRAFT', 'NOT_SET'))" 2>&1)
-          API_CRAFT_PY=$(docker exec onyx-api_server-1 \
-            python -c "from onyx.server.features.build.configs import ENABLE_CRAFT; print(ENABLE_CRAFT)" 2>&1)
-          echo "API server os.environ ENABLE_CRAFT=${API_CRAFT_ENV}"
-          echo "API server module ENABLE_CRAFT=${API_CRAFT_PY}"
-          if [ "$API_CRAFT_ENV" != "true" ] || [ "$API_CRAFT_PY" != "True" ]; then
-            echo "ERROR: ENABLE_CRAFT not properly propagated"
-            echo "--- .env file content ---"
-            cat deployment/docker_compose/.env
-            echo "--- docker inspect api_server env ---"
-            docker inspect onyx-api_server-1 --format='{{range .Config.Env}}{{println .}}{{end}}' | grep -i craft || true
-            exit 1
-          fi
-
-          # Probe the actual gating: an unauthenticated POST to /build/sessions.
-          # If ENABLE_CRAFT is wired correctly, this fails at auth (401/403 from
-          # current_user), NOT at the craft check. The response body distinguishes
-          # the two — "Onyx Craft is not available" means feature flag failure.
-          CRAFT_PROBE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:8080/build/sessions \
-            -H "Content-Type: application/json" -d '{}' || echo "curl_error")
-          CRAFT_PROBE_BODY=$(curl -s \
-            -X POST http://localhost:8080/build/sessions \
-            -H "Content-Type: application/json" -d '{}' || echo "curl_error")
-          echo "Unauthenticated /build/sessions probe: HTTP ${CRAFT_PROBE}"
-          echo "Body: ${CRAFT_PROBE_BODY}"
 
           echo "Finished waiting for services."
 
