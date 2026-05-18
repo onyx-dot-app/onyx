@@ -25,7 +25,7 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
-from onyx.indexing.indexing_pipeline import get_doc_ids_to_update
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_response import Choice
@@ -890,7 +890,7 @@ def test_content_hash_changes_when_image_file_id_changes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# get_doc_ids_to_update — content hash skip
+# get_docs_to_update — content hash skip
 # ---------------------------------------------------------------------------
 
 
@@ -906,15 +906,15 @@ def _make_db_doc(
     return db_doc
 
 
-def test_get_doc_ids_to_update_new_doc_always_included() -> None:
+def test_get_docs_to_update_new_doc_always_included() -> None:
     doc = _doc_with_text("Title", "content")
     doc.id = "new-doc"
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[])
+    docs, hashes = get_docs_to_update([doc], db_docs=[])
     assert len(docs) == 1
     assert "new-doc" in hashes
 
 
-def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
+def test_get_docs_to_update_hash_match_skips_doc_without_timestamp() -> None:
     """Hash skip applies only when doc_updated_at is absent (e.g. web connector)."""
     doc = _doc_with_text("Title", "unchanged content")
     doc.id = "doc1"
@@ -922,12 +922,12 @@ def test_get_doc_ids_to_update_hash_match_skips_doc_without_timestamp() -> None:
     stored_hash = doc.content_hash()
     db_doc = _make_db_doc("doc1", content_hash=stored_hash)
 
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
     assert docs == []
     assert hashes == {}
 
 
-def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> None:
+def test_get_docs_to_update_hash_not_consulted_when_timestamp_available() -> None:
     """When doc_updated_at advances, the document must be re-indexed even if the
     hash matches — e.g. GDrive in-place image replacement keeps image_file_id
     the same but the image bytes changed."""
@@ -939,34 +939,34 @@ def test_get_doc_ids_to_update_hash_not_consulted_when_timestamp_available() -> 
     stored_hash = doc.content_hash()  # hash matches — text unchanged
     db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
 
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
     assert len(docs) == 1  # timestamp advanced → must re-index despite hash match
     assert "doc1" in hashes
 
 
-def test_get_doc_ids_to_update_hash_mismatch_includes_doc() -> None:
+def test_get_docs_to_update_hash_mismatch_includes_doc() -> None:
     doc = _doc_with_text("Title", "new content")
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash="stale_hash_abc123")
 
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
     assert len(docs) == 1
     assert docs[0].id == "doc1"
     assert hashes["doc1"] == doc.content_hash()
 
 
-def test_get_doc_ids_to_update_null_hash_always_included() -> None:
+def test_get_docs_to_update_null_hash_always_included() -> None:
     """Null hash (pre-migration doc) must be indexed to populate the hash."""
     doc = _doc_with_text("Title", "content")
     doc.id = "doc1"
     db_doc = _make_db_doc("doc1", content_hash=None)
 
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
     assert len(docs) == 1
     assert "doc1" in hashes
 
 
-def test_get_doc_ids_to_update_time_skip_still_works() -> None:
+def test_get_docs_to_update_time_skip_still_works() -> None:
     """The existing doc_updated_at skip should still apply before the hash check."""
     doc = _doc_with_text("Title", "content")
     doc.id = "doc1"
@@ -974,12 +974,12 @@ def test_get_doc_ids_to_update_time_skip_still_works() -> None:
     doc.doc_updated_at = old_time
     db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
 
-    docs, hashes = get_doc_ids_to_update([doc], db_docs=[db_doc])
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
     assert docs == []
     assert hashes == {}
 
 
-def test_get_doc_ids_to_update_mixed_batch() -> None:
+def test_get_docs_to_update_mixed_batch() -> None:
     """Unchanged doc is skipped; changed doc is included."""
     doc_unchanged = _doc_with_text("T", "same")
     doc_unchanged.id = "unchanged"
@@ -989,7 +989,7 @@ def test_get_doc_ids_to_update_mixed_batch() -> None:
     db_unchanged = _make_db_doc("unchanged", content_hash=doc_unchanged.content_hash())
     db_changed = _make_db_doc("changed", content_hash="old_hash")
 
-    docs, hashes = get_doc_ids_to_update(
+    docs, hashes = get_docs_to_update(
         [doc_unchanged, doc_changed], db_docs=[db_unchanged, db_changed]
     )
     assert len(docs) == 1

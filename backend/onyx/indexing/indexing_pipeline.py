@@ -317,7 +317,7 @@ def embed_and_stream(
         yield result, store
 
 
-def get_doc_ids_to_update(
+def get_docs_to_update(
     documents: list[Document], db_docs: list[DBDocument]
 ) -> _DocsToUpdateResult:
     """Figures out which documents actually need to be updated. If a document is already present
@@ -493,7 +493,7 @@ def index_doc_batch_prepare(
     }
 
     if not ignore_time_skip:
-        updatable_docs, doc_id_to_content_hash = get_doc_ids_to_update(
+        updatable_docs, doc_id_to_content_hash = get_docs_to_update(
             documents=documents, db_docs=db_docs
         )
     else:
@@ -1413,7 +1413,7 @@ def index_doc_batch(
             # Persist content hash only for documents confirmed written to the
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
-            # on the next sync. Hashes were pre-computed in get_doc_ids_to_update.
+            # on the next sync. Hashes were pre-computed in get_docs_to_update.
             if primary_doc_idx_insertion_records is not None:
                 successfully_indexed_ids = {
                     r.document_id for r in primary_doc_idx_insertion_records
