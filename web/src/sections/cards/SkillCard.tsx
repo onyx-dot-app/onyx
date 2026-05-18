@@ -11,17 +11,24 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export type SkillCardSource = "builtin" | "custom";
 
-export interface SkillCardItem {
+interface SkillCardItemBase {
   id: string;
   name: string;
   description: string;
-  source: SkillCardSource;
-  // Built-in only
-  is_available?: boolean;
+}
+
+export interface BuiltinSkillCardItem extends SkillCardItemBase {
+  source: "builtin";
+  is_available: boolean;
   unavailable_reason?: string | null;
-  // Custom only
+}
+
+export interface CustomSkillCardItem extends SkillCardItemBase {
+  source: "custom";
   author_email?: string | null;
 }
+
+export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
 
 export interface SkillCardProps {
   item: SkillCardItem;
@@ -29,13 +36,15 @@ export interface SkillCardProps {
 }
 
 export default function SkillCard({ item, onClick }: SkillCardProps) {
-  const isBuiltin = item.source === "builtin";
   const { enterpriseSettings } = useSettingsContext();
   const appName = enterpriseSettings?.application_name || "Onyx";
 
   const handleClick = useCallback(() => {
     onClick?.(item);
   }, [onClick, item]);
+
+  const authorTitle =
+    item.source === "builtin" ? appName : item.author_email || appName;
 
   return (
     <Interactive.Simple onClick={handleClick} group="group/SkillCard">
@@ -57,14 +66,14 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
           <div className="py-1 px-2 min-w-0 flex-1">
             <Content
               icon={SvgUser}
-              title={isBuiltin ? appName : item.author_email || appName}
+              title={authorTitle}
               sizePreset="secondary"
               variant="body"
               color="muted"
             />
           </div>
           <div className="p-0.5 pr-1.5">
-            {isBuiltin ? (
+            {item.source === "builtin" ? (
               item.is_available ? (
                 <Tag title="Built-in" color="blue" />
               ) : (

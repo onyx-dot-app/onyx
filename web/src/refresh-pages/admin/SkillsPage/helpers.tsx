@@ -38,6 +38,7 @@ export function summarizeVisibility(skill: CustomSkill): VisibilitySummary {
 export function formatRelativeTime(isoTimestamp: string | null): string {
   if (!isoTimestamp) return "—";
   const then = new Date(isoTimestamp).getTime();
+  if (Number.isNaN(then)) return "—";
   const now = Date.now();
   const diffMs = now - then;
   const diffMin = Math.round(diffMs / 60_000);

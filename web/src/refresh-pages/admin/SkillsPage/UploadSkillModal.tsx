@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
@@ -26,6 +26,7 @@ export default function UploadSkillModal({
   const [isPublic, setIsPublic] = useState(true);
   const [groupIds, setGroupIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setFile(null);
@@ -60,6 +61,7 @@ export default function UploadSkillModal({
       onUploaded();
       onClose();
     } catch (err) {
+      console.error("Failed to upload skill bundle", err);
       toast.error(err instanceof Error ? err.message : "Upload failed", {
         description: "Skill bundle was not saved.",
       });
@@ -87,23 +89,19 @@ export default function UploadSkillModal({
               </Text>
               <div className="flex items-center gap-2">
                 <input
-                  id="skill-bundle-file"
+                  ref={fileInputRef}
                   type="file"
                   accept=".zip,application/zip"
                   onChange={handleFileChange}
                   className="hidden"
                 />
-                <label htmlFor="skill-bundle-file">
-                  <Button
-                    icon={SvgUploadCloud}
-                    prominence="secondary"
-                    onClick={() => {
-                      document.getElementById("skill-bundle-file")?.click();
-                    }}
-                  >
-                    {file ? "Change file" : "Choose zip"}
-                  </Button>
-                </label>
+                <Button
+                  icon={SvgUploadCloud}
+                  prominence="secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {file ? "Change file" : "Choose zip"}
+                </Button>
                 <Text as="span" mainUiBody text03>
                   {file ? file.name : "No file selected"}
                 </Text>

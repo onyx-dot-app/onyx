@@ -265,6 +265,14 @@ const InputBar = memo(
         [onInput, evaluateSkillPicker]
       );
 
+      // Re-evaluate the slash trigger when the caret moves without input
+      // (arrow keys, Home/End, mouse clicks). Without this, the picker can
+      // hold a stale `slashIndex`/`query` from a previous position and
+      // replace the wrong text on select.
+      const handleSelectionChange = useCallback(() => {
+        evaluateSkillPicker();
+      }, [evaluateSkillPicker]);
+
       const closeSkillPicker = useCallback(() => {
         setSkillPicker((s) => ({ ...s, open: false }));
       }, []);
@@ -422,6 +430,8 @@ const InputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
+                onKeyUp={handleSelectionChange}
+                onMouseUp={handleSelectionChange}
                 className={cn(
                   "w-full",
                   "h-full",

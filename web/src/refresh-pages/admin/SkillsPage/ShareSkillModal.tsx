@@ -43,24 +43,43 @@ export default function ShareSkillModal({
     if (!skill) return;
     setSaving(true);
     try {
-      if (isPublic !== skill.is_public) {
-        await patchCustomSkill(skill.id, { is_public: isPublic });
-      }
-
       // Org-wide skills don't keep group grants — the visibility filter
       // ignores them, so clear the list to keep the DB tidy.
       const targetGroups = isPublic ? [] : groupIds;
       const groupsChanged =
         targetGroups.length !== skill.granted_group_ids.length ||
         targetGroups.some((id) => !skill.granted_group_ids.includes(id));
-      if (groupsChanged) {
-        await replaceCustomSkillGrants(skill.id, targetGroups);
+      const isPublicChanged = isPublic !== skill.is_public;
+
+      // Order operations so a partial failure can only widen access, never
+      // narrow it. When making access broader (flipping `is_public` to true),
+      // apply the org-wide flip first and clean up grants after. When
+      // narrowing, write grants first so the skill remains reachable via
+      // groups even if the `is_public` patch later fails.
+      if (isPublic) {
+        if (isPublicChanged) {
+          await patchCustomSkill(skill.id, { is_public: isPublic });
+        }
+        if (groupsChanged) {
+          await replaceCustomSkillGrants(skill.id, targetGroups);
+        }
+      } else {
+        if (groupsChanged) {
+          await replaceCustomSkillGrants(skill.id, targetGroups);
+        }
+        if (isPublicChanged) {
+          await patchCustomSkill(skill.id, { is_public: isPublic });
+        }
       }
 
       toast.success(`Updated "${skill.name}" visibility`);
       onSaved();
       onClose();
     } catch (err) {
+      console.error("Failed to update skill visibility", err);
+      // Refresh parent data even on failure so the next open reflects the
+      // partially-applied server state rather than the stale `skill` prop.
+      onSaved();
       toast.error(
         err instanceof Error ? err.message : "Failed to update visibility"
       );

@@ -123,10 +123,7 @@ function SkillPickerPopover({
               ]
             : filtered.map((skill, idx) => {
                 const isSelected = idx === selectedIndex;
-                const showName =
-                  skill.name.toLowerCase() !== skill.slug.toLowerCase();
-                const description =
-                  skill.description ?? (showName ? skill.name : undefined);
+                const description = skill.description;
                 return (
                   <LineItem
                     key={skill.slug}

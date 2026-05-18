@@ -42,6 +42,7 @@ export default function SkillsPage() {
       );
       refresh();
     } catch (err) {
+      console.error("Failed to update skill enabled state", err);
       toast.error(
         err instanceof Error ? err.message : "Failed to update skill"
       );
@@ -54,6 +55,7 @@ export default function SkillsPage() {
       toast.success(`Deleted "${skill.name}"`);
       refresh();
     } catch (err) {
+      console.error("Failed to delete skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to delete");
     }
   }
@@ -77,6 +79,7 @@ export default function SkillsPage() {
       toast.success(`Replaced bundle for "${target.name}"`);
       refresh();
     } catch (err) {
+      console.error("Failed to replace skill bundle", err);
       toast.error(
         err instanceof Error ? err.message : "Failed to replace bundle"
       );

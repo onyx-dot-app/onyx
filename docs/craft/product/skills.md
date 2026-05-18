@@ -25,7 +25,7 @@ These are the endpoints the product behaviors in this doc rely on (see `../featu
 |---|---|
 | `GET /admin/skills` | Admin: list built-ins (with availability) + customs (with grants, including disabled) |
 | `POST /admin/skills/custom` | Admin: upload a new custom skill (multipart bundle + metadata) |
-| `PATCH /admin/skills/custom/{id}` | Admin: edit slug, name, description, `is_public`, `enabled` |
+| `PATCH /admin/skills/custom/{id}` | Admin: edit `is_public`, `enabled` |
 | `PUT /admin/skills/custom/{id}/bundle` | Admin: replace the bundle bytes |
 | `PUT /admin/skills/custom/{id}/grants` | Admin: atomic replace of group grants |
 | `DELETE /admin/skills/custom/{id}` | Admin: hard-delete (no soft-delete in V1) |
@@ -172,7 +172,7 @@ Implicit. Admin configures the underlying dependency (`GEMINI_API_KEY`, provider
 #### A3. Upload a custom skill
 
 1. Admin clicks **Upload skill** on `/admin/skills`.
-2. Modal collects: zip, slug, name, description, `is_public` flag, group IDs (JSON-encoded list).
+2. Modal collects: zip, `is_public` flag, group IDs (JSON-encoded list). The slug is derived from the zip filename, and `name` + `description` are parsed from `SKILL.md` frontmatter — they are not separate form fields.
 3. Admin selects a local zip with `SKILL.md` at the root + supporting files (markdown, scripts in any language, executables, schemas, fixtures, fonts, images).
 4. Click **Upload**. `POST /admin/skills/custom` runs `validate_custom_bundle` synchronously.
    - **Validation fails** → modal shows the specific `OnyxError` reason (e.g. *"`SKILL.md` is missing"*, *"Bundle contains `SKILL.md.template` (templates aren't supported in custom skills)"*, *"Slug reserved by a built-in skill"*). Nothing persists.
@@ -189,9 +189,9 @@ If the admin wants no sandbox to use the skill while reworking it, they disable 
 
 #### A5. Edit metadata (without replacing the bundle)
 
-`PATCH /admin/skills/custom/{id}` accepts a `SkillPatchRequest` covering `slug`, `name`, `description`, `is_public`, `enabled`. Slug changes are validated against reserved built-in slugs and against the existing-custom slug-uniqueness constraint. Bundle content is not editable here — bundle changes go through Replace (A4).
+`PATCH /admin/skills/custom/{id}` accepts a `SkillPatchRequest` covering `is_public` and `enabled`. Slug, name, and description are derived from the bundle (filename + `SKILL.md` frontmatter) and are only mutated via Replace (A4). Bundle content is not editable here — bundle changes go through Replace (A4).
 
-The endpoint pushes to affected sandboxes only when visibility-affecting fields change (`is_public`, `enabled`, `slug`); name and description changes don't trigger a push.
+The endpoint pushes to affected sandboxes when visibility-affecting fields change (`is_public`, `enabled`).
 
 #### A6. Configure visibility on a custom skill
 

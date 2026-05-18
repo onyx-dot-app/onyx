@@ -35,7 +35,11 @@ export default function SkillSharePicker({
   groupIds,
   onGroupIdsChange,
 }: SkillSharePickerProps) {
-  const { data: groupsData } = useShareableGroups();
+  const {
+    data: groupsData,
+    isLoading: groupsLoading,
+    error: groupsError,
+  } = useShareableGroups();
   const groups = groupsData ?? [];
 
   const comboBoxOptions = useMemo(
@@ -110,7 +114,7 @@ export default function SkillSharePicker({
                 ))}
               </Section>
             )}
-            {groups.length === 0 && (
+            {!groupsLoading && !groupsError && groups.length === 0 && (
               <Text as="span" secondaryBody text03>
                 No user groups exist yet. Create groups in /admin/groups to
                 share skills with specific groups.
