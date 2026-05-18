@@ -9,6 +9,7 @@ import urllib.parse
 import zipfile
 from collections.abc import Generator
 from collections.abc import Iterable
+from collections.abc import Mapping
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
@@ -769,23 +770,33 @@ class VespaDocumentIndex(DocumentIndex):
         ]
 
     def delete(self, document_id: str, chunk_count: int | None = None) -> int:
-        total_chunks_deleted = 0
+        return self.delete_batch({document_id: chunk_count})
 
-        sanitized_doc_id = replace_invalid_doc_id_characters(document_id)
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],
+    ) -> int:
+        if not doc_id_to_chunk_count:
+            return 0
+
+        total_chunks_deleted = 0
 
         with (
             concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
             self._httpx_client_context as http_client,
         ):
-            enriched_doc_info = _enrich_basic_chunk_info(
-                index_name=self._index_name,
-                http_client=http_client,
-                document_id=sanitized_doc_id,
-                previous_chunk_count=chunk_count,
-                new_chunk_count=0,
-            )
+            enriched_doc_infos = [
+                _enrich_basic_chunk_info(
+                    index_name=self._index_name,
+                    http_client=http_client,
+                    document_id=replace_invalid_doc_id_characters(document_id),
+                    previous_chunk_count=chunk_count,
+                    new_chunk_count=0,
+                )
+                for document_id, chunk_count in doc_id_to_chunk_count.items()
+            ]
             chunks_to_delete = get_document_chunk_ids(
-                enriched_document_info_list=[enriched_doc_info],
+                enriched_document_info_list=enriched_doc_infos,
                 tenant_id=self._tenant_id,
                 large_chunks_enabled=self._large_chunks_enabled,
             )
@@ -1284,6 +1295,15 @@ class VespaIndexPair(DocumentIndex):
         total = self._primary.delete(document_id, chunk_count)
         if self._secondary is not None:
             total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],
+    ) -> int:
+        total = self._primary.delete_batch(doc_id_to_chunk_count)
+        if self._secondary is not None:
+            total += self._secondary.delete_batch(doc_id_to_chunk_count)
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
