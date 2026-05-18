@@ -632,6 +632,12 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
+        # Passthrough kwargs
+        passthrough_kwargs = build_litellm_passthrough_kwargs(
+            model_kwargs=self._model_kwargs,
+            user_identity=user_identity,
+        )
+
         if (
             not (is_claude_model or is_ollama or is_mistral)
             or is_openai_compatible_proxy
@@ -642,13 +648,15 @@ class LitellmLLM(LLM):
             # routed through Bifrost's OpenAI-compatible endpoint.
             # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
             # See also, https://github.com/ollama/ollama/issues/11171
-            optional_kwargs["allowed_openai_params"] = ["tool_choice"]
-
-        # Passthrough kwargs
-        passthrough_kwargs = build_litellm_passthrough_kwargs(
-            model_kwargs=self._model_kwargs,
-            user_identity=user_identity,
-        )
+            allowed_openai_params = ["tool_choice"]
+            # LiteLLM also drops some OpenAI-compatible passthrough fields for
+            # non-whitelisted models. Preserve user/session metadata only when
+            # the caller explicitly enabled and populated it.
+            if "user" in passthrough_kwargs:
+                allowed_openai_params.append("user")
+            if "metadata" in passthrough_kwargs:
+                allowed_openai_params.append("metadata")
+            optional_kwargs["allowed_openai_params"] = allowed_openai_params
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
