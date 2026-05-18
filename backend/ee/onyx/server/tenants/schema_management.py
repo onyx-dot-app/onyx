@@ -10,9 +10,6 @@ from sqlalchemy.schema import CreateSchema
 
 from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
-from onyx.db.engine.tenant_utils import (
-    TENANT_ID_PATTERN,  # noqa: F401 - re-exported for back-compat
-)
 from onyx.db.engine.tenant_utils import validate_tenant_id
 
 logger = logging.getLogger(__name__)
