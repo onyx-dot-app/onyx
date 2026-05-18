@@ -136,7 +136,7 @@ repos:
         language: system
         entry: bash -c 'cd web && npm install --no-save'
         pass_filenames: false
-        files: ^web/package(-lock)?\.json$
+        files: ^web/(package(-lock)?\.json|lib/opal/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
       - id: npm-install-check
         name: npm install --package-lock-only
@@ -144,7 +144,7 @@ repos:
         language: system
         entry: bash -c 'cd web && npm install --package-lock-only'
         pass_filenames: false
-        files: ^web/package(-lock)?\.json$
+        files: ^web/(package(-lock)?\.json|lib/opal/package\.json)$
 
       - id: oxfmt
         name: oxfmt
