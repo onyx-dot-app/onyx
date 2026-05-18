@@ -11,12 +11,18 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
 
 @pytest.fixture(autouse=True)
 def _reset_db(reset: None) -> None:  # noqa: ARG001
     """Auto-reset DB before each skills test."""
+
+
+@pytest.fixture(autouse=True)
+def _ensure_llm_provider(llm_provider: DATestLLMProvider) -> None:  # noqa: ARG001
+    """Seed a default LLM provider after each DB reset."""
 
 
 def get_sandbox_id_for_user(user: DATestUser) -> UUID:

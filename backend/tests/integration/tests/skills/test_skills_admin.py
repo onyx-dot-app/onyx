@@ -411,19 +411,18 @@ def test_patch_visibility_pushes_to_union_of_pre_and_post_affected_users(
     assert admin_skill_md.exists(), "precondition: admin sandbox missing skill"
     assert basic_skill_md.exists(), "precondition: basic sandbox missing skill"
 
-    # Add basic_user to a group, then grant the skill only to that group +
-    # flip to private. Admin's sandbox is unaffected (admin has no grant),
-    # so the skill should disappear from there; basic_user keeps it.
+    # Create a group with only basic_user, grant the skill to that group,
+    # then flip to private. Admin is NOT in the group, so the skill should
+    # disappear from admin's sandbox; basic_user keeps it.
     group = UserGroupManager.create(
         admin_user,
         name=f"vis-{uuid4().hex[:6]}",
-        user_ids=[admin_user.id],
+        user_ids=[basic_user.id],
     )
     UserGroupManager.wait_for_sync(
         user_performing_action=admin_user,
         user_groups_to_check=[group],
     )
-    UserGroupManager.add_users(group, [basic_user.id], admin_user)
 
     SkillManager.patch_custom(skill, admin_user, is_public=False)
     SkillManager.replace_grants(skill, [group.id], admin_user)

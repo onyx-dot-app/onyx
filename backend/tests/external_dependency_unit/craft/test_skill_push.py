@@ -43,7 +43,6 @@ from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
 from onyx.db.skill import SkillPatch
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.skills.push import push_skill_to_affected_sandboxes
@@ -505,34 +504,51 @@ class TestSkillPush:
         fresh_registry: BuiltinSkillRegistry,
         running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
-        """Per-user rendering: each user sees their own connector sources.
-
-        Visibility is gated purely by the user-group → cc_pair grant. The
-        cc_pairs are created with ``creator_id=None`` so the creator-id
-        OR-branch in ``_add_user_filters`` cannot match either user — the
-        rendered output differs strictly because their group memberships
-        differ.
+        """Each user's company-search SKILL.md reflects only connectors
+        they can access. Uses a baseline-diff approach: hydrate BEFORE
+        creating PRIVATE cc_pairs (baseline), then again AFTER. The diff
+        isolates our cc_pairs from any PUBLIC ones leaked by other tests.
         """
         handle = running_sandbox()
 
-        # Register only the company-search built-in (its real on-disk source).
-        fresh_registry.register(
-            slug="company-search",
-            source_dir=Path(SKILLS_TEMPLATE_PATH) / "company-search",
-        )
-
         user_a = make_user(db_session)
         user_b = make_user(db_session)
-
-        # Each user belongs to their own group; cc_pairs are PRIVATE with
-        # ``creator_id=None`` and mapped only to that group, so visibility
-        # is per-user via the group join alone.
         group_a = make_group(db_session, name=f"cs-a-{uuid4().hex[:6]}")
         group_b = make_group(db_session, name=f"cs-b-{uuid4().hex[:6]}")
         add_user_to_group(db_session, user_a, group_a)
         add_user_to_group(db_session, user_b, group_b)
         db_session.commit()
 
+        company_search_src = (
+            Path(__file__).resolve().parents[3]
+            / "onyx"
+            / "server"
+            / "features"
+            / "build"
+            / "sandbox"
+            / "kubernetes"
+            / "docker"
+            / "skills"
+            / "company-search"
+        )
+        fresh_registry.register(slug="company-search", source_dir=company_search_src)
+
+        ws_a = handle.provision_for(user_a)
+        ws_b = handle.provision_for(user_b)
+        row_a = db_session.query(Sandbox).filter(Sandbox.user_id == user_a.id).one()
+        row_b = db_session.query(Sandbox).filter(Sandbox.user_id == user_b.id).one()
+
+        # Baseline: hydrate with no PRIVATE cc_pairs for these users.
+        hydrate_sandbox_skills(sandbox_id=row_a.id, user=user_a, db_session=db_session)
+        hydrate_sandbox_skills(sandbox_id=row_b.id, user=user_b, db_session=db_session)
+        baseline_a = set(
+            _skill_file_path(ws_a, "company-search").read_text().splitlines()
+        )
+        baseline_b = set(
+            _skill_file_path(ws_b, "company-search").read_text().splitlines()
+        )
+
+        # Create PRIVATE cc_pairs, each linked to one group only.
         make_cc_pair(
             db_session,
             DocumentSource.SLACK,
@@ -545,32 +561,24 @@ class TestSkillPush:
             access_type=AccessType.PRIVATE,
             group=group_b,
         )
-        make_cc_pair(
-            db_session,
-            DocumentSource.LINEAR,
-            access_type=AccessType.PRIVATE,
-            group=group_b,
-        )
 
-        row_a, ws_a = _provision_with_status(handle, db_session, user_a)
-        row_b, ws_b = _provision_with_status(handle, db_session, user_b)
-
+        # Re-hydrate.
         hydrate_sandbox_skills(sandbox_id=row_a.id, user=user_a, db_session=db_session)
         hydrate_sandbox_skills(sandbox_id=row_b.id, user=user_b, db_session=db_session)
+        after_a = set(_skill_file_path(ws_a, "company-search").read_text().splitlines())
+        after_b = set(_skill_file_path(ws_b, "company-search").read_text().splitlines())
 
-        rendered_a = _skill_file_path(ws_a, "company-search").read_text()
-        rendered_b = _skill_file_path(ws_b, "company-search").read_text()
+        # Lines each user GAINED (diff cancels out leaked PUBLIC cc_pairs).
+        gained_a = after_a - baseline_a
+        gained_b = after_b - baseline_b
 
-        # The two users see different content (their own sources).
-        assert rendered_a != rendered_b
-        # A sees slack but not google_drive/linear.
-        assert "slack" in rendered_a
-        assert "google_drive" not in rendered_a
-        assert "linear" not in rendered_a
-        # B sees google_drive + linear but not slack.
-        assert "google_drive" in rendered_b
-        assert "linear" in rendered_b
-        assert "slack" not in rendered_b
+        # User A gained their PRIVATE source, not user B's.
+        assert any("slack" in line for line in gained_a)
+        assert not any("google_drive" in line for line in gained_a)
+
+        # User B gained their PRIVATE source, not user A's.
+        assert any("google_drive" in line for line in gained_b)
+        assert not any("slack" in line for line in gained_b)
 
     def test_template_files_never_shipped(
         self,

@@ -11,8 +11,10 @@ Admin-route auth (POST, list, etc.) is covered exhaustively in
 
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
+import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -76,6 +78,10 @@ def test_user_sees_public_skill(
     assert slug in custom_slugs
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User-group management requires EE features enabled.",
+)
 def test_user_sees_private_skill_with_grant(
     admin_user: DATestUser,
     basic_user: DATestUser,
