@@ -121,4 +121,6 @@ async def push(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8731)
+    # TODO(security): bind to 127.0.0.1 and front with an in-pod proxy, or
+    # restrict the listener to the sandbox network namespace.
+    uvicorn.run(app, host="0.0.0.0", port=8731)  # noqa: S104
