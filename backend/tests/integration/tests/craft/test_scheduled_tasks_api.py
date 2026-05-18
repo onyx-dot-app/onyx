@@ -1,4 +1,4 @@
-"""Cluster U — Scheduled tasks (integration / HTTP half).
+"""Scheduled tasks tests (integration / HTTP half).
 
 Integration tests for the user-facing scheduled-tasks HTTP API in
 ``onyx.server.features.build.scheduled_tasks.api``.
@@ -8,8 +8,6 @@ half is covered in
 ``tests/external_dependency_unit/craft/test_scheduled_task_executor.py``
 — this file deliberately stays at the HTTP boundary and never invokes
 the executor directly.
-
-See ``docs/craft/test-master-plan.md`` Part IV Cluster U.
 """
 
 from __future__ import annotations

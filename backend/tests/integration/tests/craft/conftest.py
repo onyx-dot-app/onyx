@@ -3,9 +3,6 @@
 Tests in this directory hit the running Onyx API server (build router) against
 real Postgres / Redis / file store. Sandboxes are real LocalSandboxManager
 sandboxes when the environment is configured that way.
-
-See ``docs/craft/test-master-plan.md`` Part V for the contract these fixtures
-honour and the broader test layer model.
 """
 
 from __future__ import annotations

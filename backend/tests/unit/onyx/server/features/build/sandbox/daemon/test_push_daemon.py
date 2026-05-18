@@ -1,4 +1,4 @@
-"""Cluster I - In-pod push daemon (the FastAPI side of Cluster G).
+"""In-pod push daemon tests.
 
 Behavior tests over the FastAPI push daemon using ``fastapi.testclient``.
 The daemon module is loaded dynamically under the ``push_daemon`` package
@@ -370,9 +370,8 @@ def test_push_missing_public_key_raises_onyx_error(
 
     Note: the in-pod daemon is standalone Python (no Onyx imports) so it
     surfaces this via ``HTTPException(status_code=500, ...)`` rather than
-    ``OnyxError``. The behavior asserted here matches the master plan's
-    intent (operator-facing error when key is missing) and what the
-    FastAPI TestClient can observe.
+    ``OnyxError``. The behavior asserted here is the operator-facing error
+    when the key is missing, as observed through the FastAPI TestClient.
     """
     _, server_mod, priv, allowed_root = configured_daemon
 

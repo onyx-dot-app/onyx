@@ -1,11 +1,8 @@
-"""Cluster K — Session lifecycle (HTTP boundary half).
+"""Session lifecycle tests (HTTP boundary half).
 
 These tests exercise the FE-visible session HTTP API at ``/build/sessions``.
 They run against a real Onyx deployment (Postgres + Redis + the local
 sandbox backend) using the :class:`BuildSessionManager` HTTP wrapper.
-
-See ``docs/craft/test-master-plan.md`` Cluster K (HTTP table) for the
-contract under test.
 """
 
 from __future__ import annotations

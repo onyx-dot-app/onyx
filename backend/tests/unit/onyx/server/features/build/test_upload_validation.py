@@ -1,11 +1,9 @@
-"""Cluster O - File upload (unit / pure-logic half).
+"""File upload validation tests (unit / pure-logic half).
 
 Tests pin the contract for the pure validation helpers in
 `onyx.server.features.build.utils`: extension allowlist, MIME allowlist,
 size cap, and filename sanitization. The HTTP boundary and manager-side
 collision/disk behavior live in ext-dep / integration tests.
-
-See `docs/craft/test-master-plan.md` Cluster O.
 """
 
 from __future__ import annotations

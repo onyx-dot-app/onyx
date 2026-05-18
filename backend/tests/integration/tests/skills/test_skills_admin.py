@@ -193,7 +193,7 @@ def test_patch_slug_to_duplicate(admin_user: DATestUser) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Create
+# Create
 # ---------------------------------------------------------------------------
 
 
@@ -229,7 +229,7 @@ def test_create_skill_201_persists_row_grants_bundle(
 def test_create_skill_triggers_push_pipeline(admin_user: DATestUser) -> None:
     """Single HTTP-level check that the push pipeline fires after POST.
 
-    The matrix of who-gets-what lives in Cluster B; here we just observe that
+    The matrix of who-gets-what lives in the push pipeline tests; here we just observe that
     *something* lands on disk for an `is_public=True` skill targeting the
     admin's own sandbox.
     """
@@ -377,7 +377,7 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Patch
+# Patch
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +493,7 @@ def test_patch_enabled_false_removes_from_all_sandboxes(
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Replace bundle
+# Replace bundle
 # ---------------------------------------------------------------------------
 
 
@@ -573,7 +573,7 @@ def test_replace_bundle_400_on_invalid(admin_user: DATestUser) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Grants
+# Grants
 # ---------------------------------------------------------------------------
 
 
@@ -663,7 +663,7 @@ def test_replace_grants_empty_list_revokes_all(
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Delete
+# Delete
 # ---------------------------------------------------------------------------
 
 
@@ -710,7 +710,7 @@ def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cluster Q — Authorization
+# Authorization
 # ---------------------------------------------------------------------------
 
 

@@ -1,6 +1,4 @@
-"""Cluster T — Snapshot + restore (K8s only).
-
-See ``docs/craft/test-master-plan.md`` §Cluster T.
+"""Snapshot + restore (K8s only).
 
 These tests exercise the real Kubernetes snapshot/restore flow:
 - Pods are provisioned via ``KubernetesSandboxManager``.

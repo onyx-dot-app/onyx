@@ -1,4 +1,4 @@
-"""Cluster U — Scheduled tasks (executor half, ext-dep).
+"""Scheduled tasks (executor half, ext-dep).
 
 Drives the real ``run_scheduled_task_logic`` end-to-end against Postgres
 with a stub ``SandboxManager``. The executor needs a ``SessionManager``,

@@ -14,11 +14,8 @@ import pytest
 from acp.schema import PromptResponse
 from acp.schema import ToolCallStart
 
-from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import SnapshotResult
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 
 
@@ -40,31 +37,22 @@ class TestTerminate:
 
 
 class TestCreateSnapshot:
-    """Tests for SandboxManager.create_snapshot()."""
+    """Tests for SandboxManager.create_snapshot().
 
+    Snapshot is K8s-only — ``LocalSandboxManager`` raises
+    ``NotImplementedError``. The real snapshot tests live in
+    ``test_snapshot_restore.py`` (K8s-gated).
+    """
+
+    @pytest.mark.skip(
+        reason="create_snapshot is not implemented on LocalSandboxManager; "
+        "covered by K8s-gated test_snapshot_restore.py"
+    )
     def test_create_snapshot_archives_outputs(
         self,
-        running_sandbox: Callable[..., SandboxHandle],
+        running_sandbox: Callable[..., SandboxHandle],  # noqa: ARG002
     ) -> None:
-        """Test that create_snapshot archives the session's outputs directory.
-
-        Note: Caller is responsible for creating DB record from the SnapshotResult.
-        """
-        get_default_file_store().initialize()
-        handle = running_sandbox(with_session=True)
-        assert handle.session_id is not None
-        outputs_dir = (
-            handle.workspace_path / "sessions" / str(handle.session_id) / "outputs"
-        )
-        (outputs_dir / "app.py").write_text("print('hello')")
-
-        result = handle.manager.create_snapshot(
-            handle.sandbox_id, handle.session_id, TEST_TENANT_ID
-        )
-
-        assert isinstance(result, SnapshotResult)
-        assert result.size_bytes > 0
-        assert result.storage_path is not None
+        """Test that create_snapshot archives the session's outputs directory."""
 
 
 class TestHealthCheck:

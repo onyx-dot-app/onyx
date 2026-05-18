@@ -1,18 +1,16 @@
-"""Cluster N — Stream error semantics (HTTP half).
+"""Stream error semantics tests (HTTP half).
 
 These tests drive the ``/build/sessions/{id}/send-message`` SSE endpoint and
 inspect the packet sequence the consumer actually sees. They run against a
 real Onyx deployment using :class:`BuildSessionManager`.
 
-The DB-bound (ext-dep) half of Cluster N lives in
+The DB-bound (ext-dep) half lives in
 ``backend/tests/external_dependency_unit/craft/test_streaming_persistence.py``
 where stub backends can inject arbitrary ACP events. Some behaviors — most
 notably the ACP timeout path and SSE keepalive emission — live inside the
 Kubernetes ACP client and are hard to reach through the local-backend HTTP
 boundary; those tests are skipped here with precise pointers to where the
 behavior is exercised instead.
-
-See ``docs/craft/test-master-plan.md`` Cluster N for the contract under test.
 """
 
 from __future__ import annotations
@@ -111,7 +109,7 @@ def test_session_not_found_emits_error_packet(
         "comes from inside ``_yield_acp_events`` — which only exists with a "
         "live ACP backend. The HTTP boundary in this file runs against the "
         "real local sandbox; we'd need a stub backend that raises mid-stream "
-        "to deterministically hit the path. The ext-dep half of Cluster N "
+        "to deterministically hit the path. The ext-dep half "
         "covers this at "
         "``tests/external_dependency_unit/craft/test_streaming_persistence.py``"
         " where the sandbox manager can be stubbed to raise."
@@ -133,7 +131,7 @@ def test_agent_exception_during_stream_emits_error_packet() -> None:
         "kubernetes (not available locally; see ``feedback_no_local_craft_"
         "k8s_tests``) or (2) inject a stub manager whose acp client respects "
         "an env-override for the timeout — both are out of scope for the "
-        "HTTP-only boundary half of Cluster N."
+        "HTTP-only boundary half."
     )
 )
 def test_acp_timeout_emits_error_packet() -> None:

@@ -1,4 +1,4 @@
-"""Cluster B — Skill push end-to-end.
+"""Skill push end-to-end tests (ext-dep).
 
 These tests pin the contract for the push pipeline:
 

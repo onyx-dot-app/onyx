@@ -1,4 +1,4 @@
-"""Ext-dep tests for ``build_skills_fileset_for_user`` (Cluster B prep)."""
+"""Ext-dep tests for ``build_skills_fileset_for_user``."""
 
 from __future__ import annotations
 

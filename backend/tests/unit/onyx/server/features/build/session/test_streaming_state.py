@@ -1,7 +1,6 @@
-"""Cluster L — BuildStreamingState pure logic.
+"""BuildStreamingState pure logic tests.
 
 Tests for chunk accumulation and finalize semantics — no DB required.
-See ``docs/craft/test-master-plan.md`` Part III, Cluster L for the test contract.
 """
 
 from __future__ import annotations

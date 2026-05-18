@@ -1,4 +1,4 @@
-"""Cluster J — Sandbox lifecycle (status state machine), DB-only half.
+"""Sandbox lifecycle (status state machine), DB-only half.
 
 DB-bound tests that pin the sandbox state machine: PROVISIONING → RUNNING,
 provision failures rolling back the row, idempotent provisioning, the
@@ -7,10 +7,8 @@ query shape, and the Redis lock that serializes concurrent provision
 attempts for the same user.
 
 The full ``cleanup_idle_sandboxes_task`` end-to-end behavior lives in
-``test_idle_cleanup.py`` (Cluster V) — this file only covers the selection
-query, not the task body.
-
-See ``docs/craft/test-master-plan.md`` Cluster J for the contract.
+``test_idle_cleanup.py`` — this file only covers the selection query, not
+the task body.
 """
 
 from __future__ import annotations

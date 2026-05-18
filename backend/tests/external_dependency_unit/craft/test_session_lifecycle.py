@@ -1,11 +1,9 @@
-"""Cluster K — Session lifecycle (DB-bound half).
+"""Session lifecycle (DB-bound half).
 
 Drives ``SessionManager`` end-to-end against a real Postgres + Redis with a
 ``StubSandboxManager`` standing in for the pod backend. Covers session create,
 empty-session reuse, delete cascade, snapshot blob cleanup, port allocation,
 the per-user Redis lock, idle-restore status flip, and the sandbox-reset path.
-
-See ``docs/craft/test-master-plan.md`` Cluster K for the contract.
 """
 
 from __future__ import annotations

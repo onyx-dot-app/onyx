@@ -1,11 +1,9 @@
-"""Cluster P - File ops security boundary (pure-logic half).
+"""File ops security boundary tests (pure-logic half).
 
 Tests pin the contract for `_sanitize_path` and `_is_path_allowed` on
 `LocalSandboxManager`. Both helpers are pure functions of their arguments
 (they don't read instance state), so we bypass the singleton's heavy
 `_initialize` by constructing via `object.__new__`.
-
-See `docs/craft/test-master-plan.md` Cluster P.
 """
 
 from __future__ import annotations

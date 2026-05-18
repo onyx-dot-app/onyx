@@ -1,11 +1,9 @@
-"""Cluster X — User Library.
+"""User library tests.
 
 Integration tests for the user-library HTTP endpoints in
 ``onyx.server.features.build.api.user_library``. Each test hits the real
 backend and either asserts the response shape or verifies the resulting
 document row + storage blob via the tree-listing endpoint.
-
-See ``docs/craft/test-master-plan.md`` Part IV Cluster X.
 """
 
 from __future__ import annotations
@@ -371,8 +369,10 @@ def test_upload_zip_extracts_and_applies_caps_recursively(
     # Known-failing: plan calls for 413 on cap violations; current impl
     # returns 400. Placed last so xfail absorbs only after the happy path
     # has been validated.
-    small_member = b"\x00" * 1024
-    zip_bytes = _make_zip({f"big-{uuid4().hex[:6]}.bin": small_member})
+    # Use 101 tiny members to exceed the batch count cap (default 100)
+    # rather than a single huge member that would OOM the test runner.
+    over_cap_members = {f"file-{i}-{uuid4().hex[:4]}.txt": b"x" for i in range(101)}
+    zip_bytes = _make_zip(over_cap_members)
     response = _upload_zip(admin_user, zip_bytes)
     assert response.status_code == 413
 
@@ -462,7 +462,7 @@ def test_cross_user_access_returns_404(
 def _ensure_admin_first(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
     """Force ``admin_user`` to materialise before each test.
 
-    Cluster X tests rely on the per-user tree being empty at the start of
+    User library tests rely on the per-user tree being empty at the start of
     each test; the shared session fixture in conftest already wipes the
     DB, but pytest evaluates fixtures lazily and the import order in this
     file otherwise leaves ``admin_user`` un-instantiated until the first

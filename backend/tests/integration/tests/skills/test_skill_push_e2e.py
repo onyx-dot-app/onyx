@@ -6,8 +6,6 @@ on the granted user's local sandbox workspace. They depend on the
 integration deployment running with ``SANDBOX_BACKEND=local`` — when the
 deployment is K8s-backed there's no host-filesystem to peek at, so the
 tests skip with a precise reason.
-
-See ``docs/craft/test-master-plan.md`` Part VI.3 (Phase 5).
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
@@ -27,10 +26,11 @@ from tests.integration.tests.skills.conftest import skills_dir_for_user
 # Local-only marker. K8s deployments push to pods, not to the host
 # filesystem; there's nothing observable from the test process there.
 _requires_local_backend = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.LOCAL,
+    SANDBOX_BACKEND != SandboxBackend.LOCAL or not ENABLE_CRAFT,
     reason=(
-        "Skill push on-disk verification requires SANDBOX_BACKEND=local; "
-        "K8s pushes go to the sandbox pod, not the test host."
+        "Skill push on-disk verification requires SANDBOX_BACKEND=local "
+        "and ENABLE_CRAFT=true; K8s pushes go to the sandbox pod, not "
+        "the test host, and Craft-disabled deployments reject session creation."
     ),
 )
 

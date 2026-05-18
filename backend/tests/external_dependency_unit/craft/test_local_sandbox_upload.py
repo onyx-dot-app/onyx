@@ -64,9 +64,9 @@ class TestUploadFile:
         """First upload injects the attachments section into AGENTS.md;
         subsequent uploads don't duplicate it.
 
-        Pins ``_ensure_agents_md_attachments_section`` (Cluster O — manager
-        side-effect on AGENTS.md). Observable via the session's AGENTS.md
-        file content before and after the first upload.
+        Pins ``_ensure_agents_md_attachments_section`` (manager side-effect
+        on AGENTS.md). Observable via the session's AGENTS.md file content
+        before and after the first upload.
         """
         handle = running_sandbox(with_session=True)
         assert handle.session_id is not None

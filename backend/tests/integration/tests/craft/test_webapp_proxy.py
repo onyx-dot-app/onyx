@@ -1,4 +1,4 @@
-"""Cluster W — Webapp proxy (security + UX).
+"""Webapp proxy tests (security + UX).
 
 The proxy lives at ``GET /api/build/sessions/{session_id}/webapp/{path:path}``
 and proxies to the per-session Next.js server inside the sandbox. The auth
@@ -13,8 +13,6 @@ process. Those tests instead assert the observable proxy fallback path
 (offline HTML / status code) which is what the proxy returns whenever
 the upstream is unreachable, which is the case for any session created
 purely via the HTTP API in this layer.
-
-See ``docs/craft/test-master-plan.md`` Part IV Cluster W.
 """
 
 from __future__ import annotations
@@ -203,7 +201,7 @@ def test_proxy_rewrites_nextjs_asset_paths_in_html(
     only triggered when ``_proxy_request`` succeeds, so a true end-to-end
     rewrite assertion belongs in Playwright / the dedicated unit test in
     ``tests/unit/build/test_rewrite_asset_paths.py`` (which the master
-    plan calls out as "KEEP" — see Cluster W). What we can assert at
+    plan calls out as "KEEP"). What we can assert at
     *this* layer is that the proxy returns HTML when invoked, the route
     resolves, and the offline page does not leak any unprefixed Next.js
     asset URL.
@@ -232,7 +230,7 @@ def test_proxy_injects_hmr_shim_in_html_response(
     shim is injected by ``_inject_hmr_fixer`` only on a successful
     upstream HTML proxy. The unit test in
     ``tests/unit/build/test_rewrite_asset_paths.py`` (KEEP per master
-    plan Cluster W) asserts the shim contents. At this layer we assert
+    plan) asserts the shim contents. At this layer we assert
     that no shim injection mistakenly happens on the offline page —
     i.e. the offline page is what it should be, and the shim path is
     only reached when a live upstream returns HTML.
@@ -260,10 +258,9 @@ def test_proxy_502_renders_branded_offline_page(
     running pod; that's exactly the condition the offline fallback was
     written for. The response is HTML with a 5xx status. The exact
     status (503 by ``_offline_html_response``) is what the proxy
-    returns when it can't reach the upstream — labelled "502 case" in
-    the master plan because the underlying ``HTTPException`` raised
-    inside ``_proxy_request`` carries 502 before the offline page
-    converts it to a 503 HTML response.
+    returns when it can't reach the upstream — the underlying
+    ``HTTPException`` raised inside ``_proxy_request`` carries 502
+    before the offline page converts it to a 503 HTML response.
     """
     session = _create_session(admin_user)
     session_id = UUID(session["id"])

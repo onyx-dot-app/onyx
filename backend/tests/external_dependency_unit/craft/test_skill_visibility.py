@@ -1,4 +1,4 @@
-"""Cluster D — skill visibility (user/admin access-control filter)."""
+"""Skill visibility (user/admin access-control filter)."""
 
 from __future__ import annotations
 

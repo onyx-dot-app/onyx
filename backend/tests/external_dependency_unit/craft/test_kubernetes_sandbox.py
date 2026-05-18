@@ -1,6 +1,4 @@
-"""Cluster H — K8s push contract + sandbox lifecycle (real K8s).
-
-See ``docs/craft/test-master-plan.md`` §Cluster H.
+"""K8s push contract + sandbox lifecycle (real K8s).
 
 The file-level ``pytestmark`` gates the entire module to the K8s CI lane.
 Per project memory: never run these locally — they touch the real cluster.
@@ -185,8 +183,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
                 f"{required} should exist in the provisioned pod. Got: {resp!r}"
             )
 
-        # Plan §Cluster H: ``test_health_check_returns_true_for_running_pod``
-        # is merged with this provision test.
+        # Health-check verification is merged with this provision test.
         assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
             "health_check() should return True for a freshly provisioned pod"
         )

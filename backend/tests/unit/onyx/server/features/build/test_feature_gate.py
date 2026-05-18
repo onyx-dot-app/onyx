@@ -1,12 +1,10 @@
-"""Cluster Y - Feature gating.
+"""Feature gating tests.
 
 `is_onyx_craft_enabled` decides whether a user sees Craft. The decision
 collapses two inputs: the `ENABLE_CRAFT` env var (used when no real feature
 flag provider is configured) and the PostHog `onyx-craft-enabled` flag
 (used otherwise). These tests pin the precedence: PostHog wins when present,
 env is the fallback when no provider is wired up.
-
-See `docs/craft/test-master-plan.md` Cluster Y.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Cluster V — Idle cleanup (Celery task).
+"""Idle cleanup (Celery task).
 
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
 Redis. The Kubernetes-only pod operations (``_list_session_directories``,

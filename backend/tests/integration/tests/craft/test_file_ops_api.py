@@ -1,4 +1,4 @@
-"""Cluster P — File ops security boundary (integration / HTTP boundary half).
+"""File ops security boundary tests (integration / HTTP boundary half).
 
 Pins the path-traversal, hidden-entry, cross-user, and content-type rules
 across the build session file-ops endpoints (list / read / delete /

@@ -1,14 +1,11 @@
-"""Clusters M + N — streaming persistence and stream error semantics.
+"""Streaming persistence and stream error semantics tests (ext-dep).
 
-Cluster M covers what ``_persist_acp_event`` actually writes to the DB
+The first half covers what ``_persist_acp_event`` actually writes to the DB
 (assistant/thought rows, tool-call gating, plan upsert, turn indexing, finalize
 semantics).
 
-Cluster N covers the user-observable error packets the streaming endpoint emits
-when the upstream agent / sandbox misbehaves.
-
-See ``docs/craft/test-master-plan.md`` Part III, Clusters M and N for the test
-contracts.
+The second half covers the user-observable error packets the streaming endpoint
+emits when the upstream agent / sandbox misbehaves.
 
 Tests drive ``SessionManager.send_message`` end-to-end against Postgres with a
 stubbed ``SandboxManager`` so every assertion is on observable DB state /
@@ -106,7 +103,7 @@ def _drain(gen: Generator[str, None, None]) -> list[str]:
 
 
 # =============================================================================
-# Cluster M — streaming persistence (DB-bound)
+# Streaming persistence (DB-bound)
 # =============================================================================
 
 
@@ -673,7 +670,7 @@ class TestStreamingPersistence:
 
 
 # =============================================================================
-# Cluster N — stream error semantics (DB-bound, observable)
+# Stream error semantics (DB-bound, observable)
 # =============================================================================
 
 

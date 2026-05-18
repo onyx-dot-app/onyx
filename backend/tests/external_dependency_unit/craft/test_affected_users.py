@@ -1,4 +1,4 @@
-"""Cluster C — affected-user join logic (regression net for SHA ``0d71db1b``)."""
+"""Affected-user join logic (regression net for SHA ``0d71db1b``)."""
 
 from __future__ import annotations
 

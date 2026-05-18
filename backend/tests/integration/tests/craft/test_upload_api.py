@@ -1,4 +1,4 @@
-"""Cluster O — File upload (integration / HTTP half).
+"""File upload tests (integration / HTTP half).
 
 Exercises the upload endpoint via the live API server so we pin both the
 happy-path response shape and the boundary error mapping (auth, foreign
@@ -94,7 +94,7 @@ def test_upload_over_per_file_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Per master plan Cluster O: per-file cap → 413.
+    # Per-file cap → 413.
     assert response.status_code == 413
 
 
@@ -125,7 +125,7 @@ def test_upload_at_count_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Per master plan Cluster O: count cap → 413.
+    # Count cap → 413.
     assert response.status_code == 413
 
 
@@ -157,7 +157,7 @@ def test_upload_over_cumulative_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Per master plan Cluster O: cumulative cap → 413.
+    # Cumulative cap → 413.
     assert response.status_code == 413
 
 

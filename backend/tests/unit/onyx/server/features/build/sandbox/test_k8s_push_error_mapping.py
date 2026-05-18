@@ -1,10 +1,10 @@
-"""Cluster G - K8s push error mapping (pure logic, no K8s needed).
+"""K8s push error mapping tests (pure logic, no K8s needed).
 
 Behavior assertions for ``KubernetesSandboxManager.write_files_to_sandbox``.
-The test sanctioned mocking exception per P3 is used here: we mock
-``httpx.Client`` (an external HTTP boundary) and ``CoreV1Api.read_namespaced_pod``
-(the K8s API boundary) to inject failure modes. All assertions target observable
-outcomes (raised exception types and tar byte equality), not call lists.
+We mock ``httpx.Client`` (an external HTTP boundary) and
+``CoreV1Api.read_namespaced_pod`` (the K8s API boundary) to inject failure
+modes. All assertions target observable outcomes (raised exception types and
+tar byte equality), not call lists.
 """
 
 from __future__ import annotations
@@ -160,8 +160,8 @@ def test_pod_has_no_ip_yet_raises_retriable() -> None:
 def test_pod_non_404_api_error_raises_retriable() -> None:
     """500 from the K8s API is transient -> retriable.
 
-    Not in the master plan but follows the same contract; kept under the
-    same file because it shares the read-pod seam.
+    Follows the same contract; kept under the same file because it shares
+    the read-pod seam.
     """
     mgr = _make_manager(read_pod_exc=ApiException(status=500, reason="Server Error"))
     with pytest.raises(RetriableWriteError, match="Failed to read pod"):
