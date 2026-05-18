@@ -56,6 +56,15 @@ class OnyxCeleryTaskCompletionStatus(str, Enum):
     RETRYABLE_EXCEPTION = "retryable_exception"
 
 
+class DocumentCleanupAction(str, Enum):
+    """What the cleanup task will do for a given document based on its remaining
+    cc_pair reference count after the current cc_pair is removed."""
+
+    SKIP = "skip"
+    DELETE = "delete"
+    UPDATE = "update"
+
+
 @shared_task(
     name=OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
@@ -90,7 +99,8 @@ def document_by_cc_pair_cleanup_task(
     start = time.monotonic()
 
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
-    action: str = "skip"
+    action: DocumentCleanupAction = DocumentCleanupAction.SKIP
+    count: int = 0
 
     try:
         # Phase 1: read DB state, then release the connection before the
@@ -102,20 +112,19 @@ def document_by_cc_pair_cleanup_task(
         update_request: MetadataUpdateRequest | None = None
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
-            # This flow is for updates and deletion so we get all indices.
-            document_indices = get_all_document_indices(
-                active_search_settings.primary,
-                active_search_settings.secondary,
-                httpx_client=HttpxPool.get("vespa"),
-            )
+            primary_search_settings = active_search_settings.primary
+            secondary_search_settings = active_search_settings.secondary
 
             count = get_document_connector_count(db_session, document_id)
             if count == 1:
+                action = DocumentCleanupAction.DELETE
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
             elif count > 1:
                 doc = get_document(document_id, db_session)
                 if not doc:
                     return False
+
+                action = DocumentCleanupAction.UPDATE
 
                 # the below functions do not include cc_pairs being deleted.
                 # i.e. they will correctly omit access for the current cc_pair
@@ -138,20 +147,27 @@ def document_by_cc_pair_cleanup_task(
                     hidden=doc.hidden,
                 )
 
+        # Build document-index clients outside the DB session — construction
+        # can take a few seconds to connect to the document index server,
+        # and we don't want to pin a pgbouncer slot while that happens.
+        # This flow is for updates and deletion so we get all indices.
+        document_indices = get_all_document_indices(
+            primary_search_settings,
+            secondary_search_settings,
+            httpx_client=HttpxPool.get("vespa"),
+        )
         retry_document_indices: list[RetryDocumentIndex] = [
             RetryDocumentIndex(document_index) for document_index in document_indices
         ]
 
         # Phase 2: document-index I/O — no DB connection held.
-        if count == 1:
-            action = "delete"
+        if action == DocumentCleanupAction.DELETE:
             for retry_document_index in retry_document_indices:
                 _ = retry_document_index.delete(
                     document_id,
                     chunk_count=chunk_count,
                 )
-        elif count > 1:
-            action = "update"
+        elif action == DocumentCleanupAction.UPDATE:
             assert update_request is not None
             for retry_document_index in retry_document_indices:
                 # TODO(andrei): Previously there was a comment here saying
@@ -161,7 +177,7 @@ def document_by_cc_pair_cleanup_task(
                 retry_document_index.update([update_request])
 
         # Phase 3: write back to PG in a fresh transaction.
-        if count == 1:
+        if action == DocumentCleanupAction.DELETE:
             with get_session_with_current_tenant() as db_session:
                 delete_document_references_from_kg(
                     db_session=db_session,
@@ -174,7 +190,7 @@ def document_by_cc_pair_cleanup_task(
                 )
 
             completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
-        elif count > 1:
+        elif action == DocumentCleanupAction.UPDATE:
             with get_session_with_current_tenant() as db_session:
                 # there are still other cc_pair references to the doc, so just resync to the document index
                 delete_document_by_connector_credential_pair__no_commit(
@@ -195,7 +211,7 @@ def document_by_cc_pair_cleanup_task(
 
         elapsed = time.monotonic() - start
         task_logger.info(
-            f"doc={document_id} action={action} refcount={count} elapsed={elapsed:.2f}"
+            f"doc={document_id} action={action.value} refcount={count} elapsed={elapsed:.2f}"
         )
     except SoftTimeLimitExceeded:
         task_logger.info(f"SoftTimeLimitExceeded exception. doc={document_id}")
