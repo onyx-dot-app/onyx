@@ -80,6 +80,17 @@ def build_litellm_passthrough_kwargs(
 
     Returns `model_kwargs` unchanged unless we need to add user/session metadata,
     in which case a copy is returned to avoid cross-request mutation.
+
+    Identity is forwarded two ways:
+    * Top-level ``user`` / ``metadata["session_id"]`` — preserved for callback
+      and tracing consumers that already read them, and for providers where
+      LiteLLM natively forwards ``user``.
+    * ``extra_body["user"]`` / ``extra_body["chat_session_id"]`` — needed for
+      OpenAI-compatible custom providers (e.g. on-prem proxies, bedrock/qwen
+      via ``custom_llm_provider="openai"``), where LiteLLM silently strips the
+      top-level ``user`` kwarg for non-whitelisted models and never serializes
+      top-level ``metadata`` onto the wire. See LiteLLM #25753. Caller-supplied
+      ``extra_body`` keys win — identity values are only set when absent.
     """
 
     if not (SEND_USER_METADATA_TO_LLM_PROVIDER and user_identity):
@@ -87,8 +98,14 @@ def build_litellm_passthrough_kwargs(
 
     passthrough_kwargs = copy.deepcopy(model_kwargs)
 
-    if user_identity.user_id:
-        passthrough_kwargs["user"] = truncate_litellm_user_id(user_identity.user_id)
+    truncated_user_id = (
+        truncate_litellm_user_id(user_identity.user_id)
+        if user_identity.user_id
+        else None
+    )
+
+    if truncated_user_id is not None:
+        passthrough_kwargs["user"] = truncated_user_id
 
     if user_identity.session_id:
         existing_metadata = passthrough_kwargs.get("metadata")
@@ -103,6 +120,25 @@ def build_litellm_passthrough_kwargs(
         if metadata is not None:
             metadata["session_id"] = user_identity.session_id
             passthrough_kwargs["metadata"] = metadata
+
+    existing_extra_body = passthrough_kwargs.get("extra_body")
+    extra_body: dict[str, Any] | None
+    if existing_extra_body is None:
+        extra_body = {}
+    elif isinstance(existing_extra_body, dict):
+        extra_body = existing_extra_body
+    else:
+        extra_body = None
+
+    if extra_body is not None:
+        if truncated_user_id is not None and "user" not in extra_body:
+            extra_body["user"] = truncated_user_id
+
+        if user_identity.session_id and "chat_session_id" not in extra_body:
+            extra_body["chat_session_id"] = user_identity.session_id
+
+        if extra_body:
+            passthrough_kwargs["extra_body"] = extra_body
 
     return passthrough_kwargs
 
