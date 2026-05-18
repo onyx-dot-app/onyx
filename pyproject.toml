@@ -278,23 +278,17 @@ order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]
-# alembic has a folder named `alembic` in backend/ which confuses import sorters
-"backend/alembic/**" = ["I", "S"]
-"backend/alembic_tenants/**" = ["I", "S"]
+# alembic has a folder named `alembic` in backend/ which confuses import sorters.
+# Migrations write raw DDL, so S608 (hardcoded-sql) is unavoidable.
+"backend/alembic/**" = ["I", "S608"]
+"backend/alembic_tenants/**" = ["I", "S608"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
 # Ops and developer scripts run by humans (kubectl exec payloads, one-off
-# data dumps, manual tenant cleanup). The bandit checks are aimed at server
-# code paths; these scripts are not in any request-handling path.
-"backend/scripts/**" = ["S"]
-# Sandbox skill / daemon / template code that gets baked into a separate
-# Docker image. Also excluded by ty / basedpyright for the same reason.
-"backend/onyx/server/features/build/sandbox/kubernetes/docker/**" = ["S"]
-# The Salesforce shelve module is a thin wrapper around `shelve` (which uses
-# pickle internally) used for connector-local persistence of data the
-# connector itself produced — not deserialization of untrusted input.
-"backend/onyx/connectors/salesforce/shelve_stuff/**" = ["S301"]
+# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads
+# and pipe shell commands. Other S rules still apply.
+"backend/scripts/**" = ["S108", "S602"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

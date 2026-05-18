@@ -30,7 +30,9 @@ class RedliningValidator:
         try:
             import xml.etree.ElementTree as ET
 
-            tree = ET.parse(modified_file)
+            # TODO(security): switch to defusedxml.ElementTree to harden against
+            # XXE / billion-laughs in user-supplied .docx files.
+            tree = ET.parse(modified_file)  # noqa: S314
             root = tree.getroot()
 
             del_elements = root.findall(".//w:del", self.namespaces)
@@ -75,9 +77,11 @@ class RedliningValidator:
             try:
                 import xml.etree.ElementTree as ET
 
-                modified_tree = ET.parse(modified_file)
+                # TODO(security): switch to defusedxml.ElementTree to harden
+                # against XXE / billion-laughs in user-supplied .docx files.
+                modified_tree = ET.parse(modified_file)  # noqa: S314
                 modified_root = modified_tree.getroot()
-                original_tree = ET.parse(original_file)
+                original_tree = ET.parse(original_file)  # noqa: S314
                 original_root = original_tree.getroot()
             except ET.ParseError as e:
                 print(f"FAILED - Error parsing XML files: {e}")
