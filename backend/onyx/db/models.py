@@ -976,6 +976,11 @@ class Document(Base):
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # MD5 hash of title + section text at last successful index.
+    # Used to skip re-indexing when content hasn't changed.
+    # Null for documents indexed before this column was added.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # last time any vespa relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(

@@ -1,3 +1,4 @@
+import hashlib
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -33,6 +34,7 @@ from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
+from onyx.db.document import update_docs_content_hash__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -153,6 +155,14 @@ class IndexingPipelineProtocol(Protocol):
     ) -> IndexingPipelineResult: ...
 
 
+def _document_content_hash(doc: Document) -> str:
+    content = " ".join(
+        s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+    )
+    raw = f"{doc.title or ''}||{content}"
+    return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
+
+
 def _upsert_documents_in_db(
     documents: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -182,6 +192,11 @@ def _upsert_documents_in_db(
         document_metadata_list.append(db_doc_metadata)
 
     upsert_documents(db_session, document_metadata_list)
+
+    update_docs_content_hash__no_commit(
+        ids_to_new_hash={doc.id: _document_content_hash(doc) for doc in documents},
+        db_session=db_session,
+    )
 
     # Insert document content metadata
     for doc in documents:
@@ -320,6 +335,7 @@ def get_doc_ids_to_update(
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
     }
+    id_to_db_doc_map = {doc.id: doc for doc in db_docs}
 
     updatable_docs: list[Document] = []
     for doc in documents:
@@ -329,6 +345,15 @@ def get_doc_ids_to_update(
             and doc.doc_updated_at <= id_update_time_map[doc.id]
         ):
             continue
+
+        # Secondary dedup gate: skip if content hash matches what's stored.
+        # Catches connectors (e.g. web) that don't provide reliable doc_updated_at.
+        db_doc = id_to_db_doc_map.get(doc.id)
+        if db_doc and db_doc.content_hash is not None:
+            if _document_content_hash(doc) == db_doc.content_hash:
+                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
+                continue
+
         updatable_docs.append(doc)
 
     return updatable_docs
