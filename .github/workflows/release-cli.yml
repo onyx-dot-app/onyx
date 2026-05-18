@@ -82,6 +82,8 @@ jobs:
           context: ./cli
           file: ./cli/Dockerfile
           platforms: linux/amd64
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
   docker-arm64:
@@ -135,6 +137,8 @@ jobs:
           context: ./cli
           file: ./cli/Dockerfile
           platforms: linux/arm64
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
   merge-docker:
