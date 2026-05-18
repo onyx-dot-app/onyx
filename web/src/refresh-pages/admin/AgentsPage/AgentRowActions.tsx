@@ -38,6 +38,8 @@ import {
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,9 +59,12 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
-  const { isAdmin, isCurator } = useUser();
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const { isAdmin, permissions } = useUser();
+ const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
   const shareModal = useCreateModal();
 

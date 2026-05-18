@@ -7,21 +7,48 @@ Test Suite:
 3. test_pat_expiration_flow - Expiration logic (end-of-day UTC, never-expiring)
 4. test_pat_validation_errors - Input validation and error handling
 5. test_pat_sorting_and_last_used - Sorting and last_used_at tracking
-6. test_pat_role_based_access_control - Admin vs Basic vs Curator permissions
+6. test_pat_role_based_access_control - Admin vs Basic permissions
 """
 
+import os
 import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
 import requests
 
-from onyx.auth.schemas import UserRole
+from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+
+
+def _grant_create_pat_permission(
+    user: DATestUser,
+    admin_user: DATestUser,
+) -> None:
+    """Grant CREATE_USER_API_KEYS to a non-admin user via a temp group.
+
+    PAT creation is gated by Permission.CREATE_USER_API_KEYS; non-admin test
+    users must be placed in a group that grants it before they can call
+    POST /user/pats.
+    """
+    group = UserGroupManager.create(
+        name=f"pat_creator_{user.id[:8]}",
+        user_ids=[user.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    response = UserGroupManager.set_permissions(
+        user_group=group,
+        permissions=[Permission.CREATE_USER_API_KEYS.value],
+        user_performing_action=admin_user,
+    )
+    response.raise_for_status()
 
 
 def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001
@@ -83,6 +110,11 @@ def test_pat_user_isolation_and_authentication(
     """
     user_a: DATestUser = UserManager.create(name="user_a")
     user_b: DATestUser = UserManager.create(name="user_b")
+
+    # user_a is the first registered user and lands in Admin → has
+    # FULL_ADMIN_PANEL_ACCESS which short-circuits the PAT-creation gate.
+    # user_b is basic and needs CREATE_USER_API_KEYS via a group grant.
+    _grant_create_pat_permission(user_b, user_a)
 
     # Create tokens for both users
     user_a_pats = []
@@ -309,175 +341,81 @@ def test_pat_sorting_and_last_used(reset: None) -> None:  # noqa: ARG001
 
 
 def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
+    """PATs inherit the issuing user's effective permissions.
+
+    - Admin PAT: full access to admin-only endpoints
+    - Basic PAT: denied on admin and management endpoints
     """
-    PATs inherit user roles and permissions:
-    - Admin PAT: Full access to admin-only endpoints
-    - Curator/Global Curator PATs: Access to management endpoints
-    - Basic PAT: Denied access to admin and management endpoints
-    """
-    # Create users with different roles
     admin_user: DATestUser = UserManager.create(name="admin_user")
-    assert admin_user.role == UserRole.ADMIN
+    assert admin_user.is_admin
 
     basic_user: DATestUser = UserManager.create(name="basic_user")
-    assert basic_user.role == UserRole.BASIC
+    assert not basic_user.is_admin
 
-    curator_user: DATestUser = UserManager.create(name="curator_user")
-    curator_user = UserManager.set_role(
-        user_to_set=curator_user,
-        target_role=UserRole.CURATOR,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
-    assert curator_user.role == UserRole.CURATOR
+    _grant_create_pat_permission(basic_user, admin_user)
 
-    global_curator_user: DATestUser = UserManager.create(name="global_curator_user")
-    global_curator_user = UserManager.set_role(
-        user_to_set=global_curator_user,
-        target_role=UserRole.GLOBAL_CURATOR,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
-    assert global_curator_user.role == UserRole.GLOBAL_CURATOR
-
-    # Create PATs for each user
     admin_pat = PATManager.create(
         name="Admin Token",
         expiration_days=7,
         user_performing_action=admin_user,
     )
-
     basic_pat = PATManager.create(
         name="Basic Token",
         expiration_days=7,
         user_performing_action=basic_user,
     )
 
-    curator_pat = PATManager.create(
-        name="Curator Token",
-        expiration_days=7,
-        user_performing_action=curator_user,
-    )
-
-    global_curator_pat = PATManager.create(
-        name="Global Curator Token",
-        expiration_days=7,
-        user_performing_action=global_curator_user,
-    )
-
-    # Verify all tokens are present (type narrowing for mypy)
     assert admin_pat.token is not None
     assert basic_pat.token is not None
-    assert curator_pat.token is not None
-    assert global_curator_pat.token is not None
 
-    # Test admin-only endpoint access
-    print("\n[Test] Admin PAT accessing admin-only endpoint...")
+    # Admin-only endpoint
     admin_endpoint_response = requests.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(admin_pat.token),
         timeout=60,
     )
     assert admin_endpoint_response.status_code == 200
-    print("[✓] Admin PAT successfully accessed /admin/api-key")
 
-    print("\n[Test] Basic PAT accessing admin endpoint...")
     basic_admin_response = requests.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(basic_pat.token),
         timeout=60,
     )
     assert basic_admin_response.status_code == 403
-    print("[✓] Basic PAT correctly denied access (403) to /admin/api-key")
 
-    print("\n[Test] Curator PAT accessing admin-only endpoint...")
-    curator_admin_response = requests.get(
-        f"{API_SERVER_URL}/admin/api-key",
-        headers=PATManager.get_auth_headers(curator_pat.token),
-        timeout=60,
-    )
-    assert curator_admin_response.status_code == 403
-    print("[✓] Curator PAT correctly denied access (403) to /admin/api-key")
-
-    print("\n[Test] Global Curator PAT accessing admin-only endpoint...")
-    global_curator_admin_response = requests.get(
-        f"{API_SERVER_URL}/admin/api-key",
-        headers=PATManager.get_auth_headers(global_curator_pat.token),
-        timeout=60,
-    )
-    assert global_curator_admin_response.status_code == 403
-    print("[✓] Global Curator PAT correctly denied access (403) to /admin/api-key")
-
-    # Test management endpoint access
-    print("\n[Test] Testing management endpoint access for curators...")
-
+    # Management endpoint
     admin_manage_response = requests.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(admin_pat.token),
         timeout=60,
     )
     assert admin_manage_response.status_code == 200
-    print("[✓] Admin PAT can access /manage/admin/connector")
-
-    curator_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/admin/connector",
-        headers=PATManager.get_auth_headers(curator_pat.token),
-        timeout=60,
-    )
-    assert curator_manage_response.status_code == 200
-    print("[✓] Curator PAT can access /manage/admin/connector")
-
-    global_curator_manage_response = requests.get(
-        f"{API_SERVER_URL}/manage/admin/connector",
-        headers=PATManager.get_auth_headers(global_curator_pat.token),
-        timeout=60,
-    )
-    assert global_curator_manage_response.status_code == 200
-    print("[✓] Global Curator PAT can access /manage/admin/connector")
 
     basic_manage_response = requests.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(basic_pat.token),
         timeout=60,
     )
-    assert basic_manage_response.status_code in [403, 401]
-    print(
-        f"[✓] Basic PAT correctly denied access ({basic_manage_response.status_code}) to /manage/admin/connector"
-    )
+    assert basic_manage_response.status_code in [401, 403]
 
-    # Verify PATs authenticate with correct identity and role
-    print("\n[Test] Verifying PATs authenticate as correct users with correct roles...")
-
+    # Identity + permission surface on /me
     admin_me = PATManager.authenticate(admin_pat.token)
     assert admin_me.status_code == 200
     assert admin_me.json()["email"] == admin_user.email
-    assert admin_me.json()["role"] == UserRole.ADMIN.value
+    assert (
+        Permission.FULL_ADMIN_PANEL_ACCESS.value
+        in admin_me.json()["effective_permissions"]
+    )
 
     basic_me = PATManager.authenticate(basic_pat.token)
     assert basic_me.status_code == 200
     assert basic_me.json()["email"] == basic_user.email
-    assert basic_me.json()["role"] == UserRole.BASIC.value
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in basic_me.json().get(
+        "effective_permissions", []
+    )
 
-    curator_me = PATManager.authenticate(curator_pat.token)
-    assert curator_me.status_code == 200
-    assert curator_me.json()["email"] == curator_user.email
-    assert curator_me.json()["role"] == UserRole.CURATOR.value
-
-    global_curator_me = PATManager.authenticate(global_curator_pat.token)
-    assert global_curator_me.status_code == 200
-    assert global_curator_me.json()["email"] == global_curator_user.email
-    assert global_curator_me.json()["role"] == UserRole.GLOBAL_CURATOR.value
-
-    print("[✓] All PATs authenticate with correct user identity and role")
-
-    # Verify all PATs can access basic endpoints
-    print("\n[Test] All PATs can access basic endpoints...")
-    for pat, user_name in [
-        (admin_pat, "Admin"),
-        (basic_pat, "Basic"),
-        (curator_pat, "Curator"),
-        (global_curator_pat, "Global Curator"),
-    ]:
+    # Both PATs can hit basic endpoints
+    for pat in (admin_pat, basic_pat):
         assert pat.token is not None
         persona_response = requests.get(
             f"{API_SERVER_URL}/persona",
@@ -485,19 +423,78 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
             timeout=60,
         )
         assert persona_response.status_code == 200
-        print(f"[✓] {user_name} PAT can access /persona endpoint")
 
-    print("\n[✓] All role-based access control tests passed!")
-    print("Summary:")
-    print(
-        "  - Admin PAT: Full access to admin-only endpoints (/admin/*, /manage/admin/*)"
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User-group permission wiring is enterprise only",
+)
+def test_pat_group_permission_access_control(reset: None) -> None:  # noqa: ARG001
+    """A PAT issued to a user in a group granting manage:connectors should
+    reach admin connector endpoints (the new-model replacement for the old
+    GLOBAL_CURATOR coverage)."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    assert admin_user.is_admin
+
+    group_user: DATestUser = UserManager.create(name="group_user")
+    assert not group_user.is_admin
+
+    connector_managers = UserGroupManager.create(
+        name="connector_managers",
+        user_ids=[group_user.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
     )
-    print(
-        "  - Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
+    set_perms_response = UserGroupManager.set_permissions(
+        user_group=connector_managers,
+        permissions=[
+            Permission.MANAGE_CONNECTORS.value,
+            Permission.MANAGE_USER_GROUPS.value,
+            Permission.CREATE_USER_API_KEYS.value,
+        ],
+        user_performing_action=admin_user,
     )
-    print(
-        "  - Global Curator PAT: Access to management endpoints (/manage/admin/*), denied on admin-only (/admin/*)"
+    set_perms_response.raise_for_status()
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[connector_managers],
+        user_performing_action=admin_user,
     )
-    print("  - Basic PAT: Denied access to admin and management endpoints")
-    print("  - All PATs: Can access basic endpoints (/persona, /me, etc.)")
-    print("  - All PATs: Authenticate with correct user identity and role")
+
+    group_pat = PATManager.create(
+        name="Group Token",
+        expiration_days=7,
+        user_performing_action=group_user,
+    )
+    assert group_pat.token is not None
+
+    # /me should reflect the group-granted permissions
+    me_response = PATManager.authenticate(group_pat.token)
+    assert me_response.status_code == 200
+    effective_permissions = me_response.json()["effective_permissions"]
+    assert Permission.MANAGE_CONNECTORS.value in effective_permissions
+    assert Permission.MANAGE_USER_GROUPS.value in effective_permissions
+    assert Permission.FULL_ADMIN_PANEL_ACCESS.value not in effective_permissions
+
+    # Admin connector management surface is reachable via the PAT
+    manage_response = requests.get(
+        f"{API_SERVER_URL}/manage/admin/connector",
+        headers=PATManager.get_auth_headers(group_pat.token),
+        timeout=60,
+    )
+    assert manage_response.status_code == 200
+
+    # Sanity: a plain basic user's PAT still cannot reach that endpoint
+    plain_basic: DATestUser = UserManager.create(name="plain_basic")
+    _grant_create_pat_permission(plain_basic, admin_user)
+    plain_pat = PATManager.create(
+        name="Plain Basic Token",
+        expiration_days=7,
+        user_performing_action=plain_basic,
+    )
+    assert plain_pat.token is not None
+    plain_response = requests.get(
+        f"{API_SERVER_URL}/manage/admin/connector",
+        headers=PATManager.get_auth_headers(plain_pat.token),
+        timeout=60,
+    )
+    assert plain_response.status_code in (401, 403)

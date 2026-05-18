@@ -5,185 +5,32 @@ import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
 import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarFolded } from "@/layouts/sidebar-layouts";
+import {
+  useSidebarFolded,
+  useSidebarState,
+} from "@/layouts/sidebar-layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
-import { UserRole } from "@/lib/types";
-import { CombinedSettings, Tier } from "@/interfaces/settings";
-import { tierAtLeast } from "@/lib/tiers";
+import { Tier } from "@/interfaces/settings";
 import { Divider, SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Spacer from "@/refresh-components/Spacer";
-import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
+import { SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { ADMIN_ROUTES, sidebarItem } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
-import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
 import { markdown } from "@opal/utils";
-
-const SECTIONS = {
-  UNLABELED: "",
-  AGENTS_AND_ACTIONS: "Agents & Actions",
-  DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
-  INTEGRATIONS: "Integrations",
-  PERMISSIONS: "Permissions",
-  ORGANIZATION: "Organization",
-  USAGE: "Usage",
-} as const;
-
-interface SidebarItemEntry {
-  section: string;
-  name: string;
-  icon: IconFunctionComponent;
-  link: string;
-  error?: boolean;
-  disabled?: boolean;
-  requiredTier?: Tier;
-}
-
-function buildItems(
-  isCurator: boolean,
-  enableCloud: boolean,
-  tier: Tier | undefined,
-  settings: CombinedSettings | null,
-  customAnalyticsEnabled: boolean,
-  hasSubscription: boolean,
-  hooksEnabled: boolean
-): SidebarItemEntry[] {
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
-  const enterpriseTier = tierAtLeast(tier, Tier.ENTERPRISE);
-  const items: SidebarItemEntry[] = [];
-
-  const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
-    items.push({ ...sidebarItem(route), section });
-  };
-
-  const addGated = (
-    section: string,
-    route: Parameters<typeof sidebarItem>[0],
-    requiredTier: Tier
-  ) => {
-    items.push({
-      ...sidebarItem(route),
-      section,
-      disabled: !tierAtLeast(tier, requiredTier),
-      requiredTier,
-    });
-  };
-
-  // 1. No header — core configuration (admin only)
-  if (!isCurator) {
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.LLM_MODELS);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.WEB_SEARCH);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
-    add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
-
-    if (!enableCloud && customAnalyticsEnabled) {
-      addGated(
-        SECTIONS.UNLABELED,
-        ADMIN_ROUTES.CUSTOM_ANALYTICS,
-        Tier.ENTERPRISE
-      );
-    }
-  }
-
-  // 2. Agents & Actions
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
-  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
-
-  // 3. Documents & Knowledge
-  if (vectorDbEnabled) {
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator) {
-      items.push({
-        ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
-        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
-        error: settings?.settings.needs_reindexing,
-      });
-    }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
-    }
-  }
-
-  // 4. Integrations (admin only)
-  if (!isCurator) {
-    addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS, Tier.BUSINESS);
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
-    if (hooksEnabled) {
-      addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS, Tier.ENTERPRISE);
-    }
-  }
-
-  // 5. Permissions
-  if (!isCurator) {
-    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
-    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, Tier.ENTERPRISE);
-  } else if (tierAtLeast(tier, Tier.BUSINESS)) {
-    add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
-  }
-
-  // 6. Organization (admin only)
-  if (!isCurator) {
-    if (hasSubscription) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    }
-    addGated(
-      SECTIONS.ORGANIZATION,
-      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
-      Tier.ENTERPRISE
-    );
-    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
-  }
-
-  // 7. Usage (admin only)
-  if (!isCurator) {
-    addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
-    if (settings?.settings.query_history_type !== "disabled") {
-      addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
-    }
-  }
-
-  // 8. Upgrade Plan (admin only, no subscription)
-  if (!isCurator && !hasSubscription) {
-    items.push({
-      section: SECTIONS.UNLABELED,
-      name: "Upgrade Plan",
-      icon: SvgArrowUpCircle,
-      link: ADMIN_ROUTES.BILLING.path,
-    });
-  }
-
-  return items;
-}
-
-/** Preserve section ordering while grouping consecutive items by section. */
-function groupBySection(items: SidebarItemEntry[]) {
-  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
-  for (const item of items) {
-    const last = groups[groups.length - 1];
-    if (last && last.section === item.section) {
-      last.items.push(item);
-    } else {
-      groups.push({ section: item.section, items: [item] });
-    }
-  }
-  return groups;
-}
+import {
+  buildItems,
+  groupBySection,
+  type FeatureFlags,
+  type SidebarItemEntry,
+} from "@/lib/admin-sidebar-utils";
 
 function AdminSidebarInner() {
   const { setFolded } = useSidebarState();
@@ -199,14 +46,12 @@ function AdminSidebarInner() {
   }, [focusSearch, folded]);
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
-  const { user } = useUser();
+  const { permissions } = useUser();
   const settings = useSettingsContext();
   const tier = settings?.settings.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
-  const isCurator =
-    user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
   // Default to true while loading to avoid flashing "Upgrade Plan"
   const hasSubscriptionOrLicense =
     billingLoading || licenseLoading
@@ -215,20 +60,19 @@ function AdminSidebarInner() {
           (billingData && hasActiveSubscription(billingData)) ||
           licenseData?.has_license
         );
-  // Hooks are ENTERPRISE-only and only available for self-hosted single-tenant.
-  const hooksEnabled =
-    tierAtLeast(tier, Tier.ENTERPRISE) &&
-    (settings?.settings.hooks_enabled ?? false);
 
-  const allItems = buildItems(
-    isCurator,
-    NEXT_PUBLIC_CLOUD_ENABLED,
+  const flags: FeatureFlags = {
+    vectorDbEnabled: settings?.settings.vector_db_enabled !== false,
+    enableCloud: NEXT_PUBLIC_CLOUD_ENABLED,
     tier,
-    settings,
     customAnalyticsEnabled,
-    hasSubscriptionOrLicense,
-    hooksEnabled
-  );
+    hasSubscription: hasSubscriptionOrLicense,
+    hooksEnabled: settings?.settings.hooks_enabled ?? false,
+    opensearchEnabled: settings?.settings.opensearch_indexing_enabled ?? false,
+    queryHistoryEnabled: settings?.settings.query_history_type !== "disabled",
+  };
+
+  const allItems = buildItems(permissions, flags, settings);
 
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
 

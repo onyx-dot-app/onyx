@@ -147,7 +147,7 @@ class ConfluenceCloudOAuth:
 def confluence_oauth_callback(
     code: str,
     state: str,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
@@ -259,7 +259,7 @@ def confluence_oauth_callback(
 @router.get("/connector/confluence/accessible-resources")
 def confluence_oauth_accessible_resources(
     credential_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:
@@ -326,7 +326,7 @@ def confluence_oauth_finalize(
     cloud_id: str,
     cloud_name: str,
     cloud_url: str,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str | None = Depends(get_current_tenant_id),  # noqa: ARG001
 ) -> JSONResponse:

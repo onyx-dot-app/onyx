@@ -23,6 +23,7 @@ def test_new_group_gets_basic_permission(reset: None) -> None:  # noqa: ARG001
     permissions = UserGroupManager.get_permissions(
         user_group=user_group,
         user_performing_action=admin_user,
+        include_non_toggleable=True,
     )
 
     assert "basic" in permissions, (

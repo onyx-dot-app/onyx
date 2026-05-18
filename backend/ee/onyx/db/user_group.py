@@ -2,17 +2,14 @@ from collections.abc import Sequence
 from operator import and_
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.user_group.models import SetCuratorRequest
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -38,7 +35,6 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
@@ -134,73 +130,6 @@ def _cleanup_document_set__user_group_relationships__no_commit(
     )
 
 
-def validate_object_creation_for_user(
-    db_session: Session,
-    user: User,
-    target_group_ids: list[int] | None = None,
-    object_is_public: bool | None = None,
-    object_is_perm_sync: bool | None = None,
-    object_is_owned_by_user: bool = False,
-    object_is_new: bool = False,
-) -> None:
-    """
-    All users can create/edit permission synced objects if they don't specify a group
-    All admin actions are allowed.
-    Curators and global curators can create public objects.
-    Prevents other non-admins from creating/editing:
-    - public objects
-    - objects with no groups
-    - objects that belong to a group they don't curate
-    """
-    if object_is_perm_sync and not target_group_ids:
-        return
-
-    # Admins are allowed
-    if user.role == UserRole.ADMIN:
-        return
-
-    # Allow curators and global curators to create public objects
-    # w/o associated groups IF the object is new/owned by them
-    if (
-        object_is_public
-        and user.role in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]
-        and (object_is_new or object_is_owned_by_user)
-    ):
-        return
-
-    if object_is_public and user.role == UserRole.BASIC:
-        detail = "User does not have permission to create public objects"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-    if not target_group_ids:
-        detail = "Curators must specify 1+ groups"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-    user_curated_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=user.id,
-        # Global curators can curate all groups they are member of
-        only_curator_groups=user.role != UserRole.GLOBAL_CURATOR,
-    )
-    user_curated_group_ids = set([group.id for group in user_curated_groups])
-    target_group_ids_set = set(target_group_ids)
-    if not target_group_ids_set.issubset(user_curated_group_ids):
-        detail = "Curators cannot control groups they don't curate"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     return db_session.scalar(stmt)
@@ -293,7 +222,6 @@ def fetch_user_groups(
 def fetch_user_groups_for_user(
     db_session: Session,
     user_id: UUID,
-    only_curator_groups: bool = False,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
 ) -> Sequence[UserGroup]:
@@ -306,8 +234,6 @@ def fetch_user_groups_for_user(
         )
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
     )
-    if only_curator_groups:
-        stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
@@ -533,169 +459,6 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
         user_group__cc_pair_relationship.is_current = False
 
 
-def _validate_curator_status__no_commit(
-    db_session: Session,
-    users: list[User],
-) -> None:
-    for user in users:
-        # Check if the user is a curator in any of their groups
-        curator_relationships = (
-            db_session.query(User__UserGroup)
-            .filter(
-                User__UserGroup.user_id == user.id,
-                User__UserGroup.is_curator == True,  # noqa: E712
-            )
-            .all()
-        )
-
-        # if the user is a curator in any of their groups, set their role to CURATOR
-        # otherwise, set their role to BASIC only if they were previously a CURATOR
-        if curator_relationships:
-            user.role = UserRole.CURATOR
-        elif user.role == UserRole.CURATOR:
-            user.role = UserRole.BASIC
-        db_session.add(user)
-
-
-def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
-    stmt = (
-        update(User__UserGroup)
-        .where(User__UserGroup.user_id == user.id)
-        .values(is_curator=False)
-    )
-    db_session.execute(stmt)
-    _validate_curator_status__no_commit(db_session, [user])
-
-
-def _validate_curator_relationship_update_requester(
-    db_session: Session,
-    user_group_id: int,
-    user_making_change: User,
-) -> None:
-    """
-    This function validates that the user making the change has the necessary permissions
-    to update the curator relationship for the target user in the given user group.
-    """
-
-    # Admins can update curator relationships for any group
-    if user_making_change.role == UserRole.ADMIN:
-        return
-
-    # check if the user making the change is a curator in the group they are changing the curator relationship for
-    user_making_change_curator_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=user_making_change.id,
-        # only check if the user making the change is a curator if they are a curator
-        # otherwise, they are a global_curator and can update the curator relationship
-        # for any group they are a member of
-        only_curator_groups=user_making_change.role == UserRole.CURATOR,
-    )
-    requestor_curator_group_ids = [
-        group.id for group in user_making_change_curator_groups
-    ]
-    if user_group_id not in requestor_curator_group_ids:
-        raise ValueError(
-            f"user making change {user_making_change.email} is not a curator,"
-            f" admin, or global_curator for group '{user_group_id}'"
-        )
-
-
-def _validate_curator_relationship_update_request(
-    db_session: Session,
-    user_group_id: int,
-    target_user: User,
-) -> None:
-    """
-    This function validates that the curator_relationship_update request itself is valid.
-    """
-    if target_user.role == UserRole.ADMIN:
-        raise ValueError(
-            f"User '{target_user.email}' is an admin and therefore has all permissions "
-            "of a curator. If you'd like this user to only have curator permissions, "
-            "you must update their role to BASIC then assign them to be CURATOR in the "
-            "appropriate groups."
-        )
-    elif target_user.role == UserRole.GLOBAL_CURATOR:
-        raise ValueError(
-            f"User '{target_user.email}' is a global_curator and therefore has all "
-            "permissions of a curator for all groups. If you'd like this user to only "
-            "have curator permissions for a specific group, you must update their role "
-            "to BASIC then assign them to be CURATOR in the appropriate groups."
-        )
-    elif target_user.role not in [UserRole.CURATOR, UserRole.BASIC]:
-        raise ValueError(
-            f"This endpoint can only be used to update the curator relationship for "
-            "users with the CURATOR or BASIC role. \n"
-            f"Target user: {target_user.email} \n"
-            f"Target user role: {target_user.role} \n"
-        )
-
-    # check if the target user is in the group they are changing the curator relationship for
-    requested_user_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=target_user.id,
-        only_curator_groups=False,
-    )
-    group_ids = [group.id for group in requested_user_groups]
-    if user_group_id not in group_ids:
-        raise ValueError(
-            f"target user {target_user.email} is not in group '{user_group_id}'"
-        )
-
-
-def update_user_curator_relationship(
-    db_session: Session,
-    user_group_id: int,
-    set_curator_request: SetCuratorRequest,
-    user_making_change: User,
-) -> None:
-    target_user = fetch_user_by_id(db_session, set_curator_request.user_id)
-    if not target_user:
-        raise ValueError(f"User with id '{set_curator_request.user_id}' not found")
-
-    _validate_curator_relationship_update_request(
-        db_session=db_session,
-        user_group_id=user_group_id,
-        target_user=target_user,
-    )
-
-    _validate_curator_relationship_update_requester(
-        db_session=db_session,
-        user_group_id=user_group_id,
-        user_making_change=user_making_change,
-    )
-
-    logger.info(
-        "user_making_change=%s is updating the curator relationship for user=%s in group=%s to is_curator=%s",
-        user_making_change.email if user_making_change else "None",
-        target_user.email,
-        user_group_id,
-        set_curator_request.is_curator,
-    )
-
-    relationship_to_update = (
-        db_session.query(User__UserGroup)
-        .filter(
-            User__UserGroup.user_group_id == user_group_id,
-            User__UserGroup.user_id == set_curator_request.user_id,
-        )
-        .first()
-    )
-
-    if relationship_to_update:
-        relationship_to_update.is_curator = set_curator_request.is_curator
-    else:
-        relationship_to_update = User__UserGroup(
-            user_group_id=user_group_id,
-            user_id=set_curator_request.user_id,
-            is_curator=True,
-        )
-        db_session.add(relationship_to_update)
-
-    _validate_curator_status__no_commit(db_session, [target_user])
-    db_session.commit()
-
-
 def add_users_to_user_group(
     db_session: Session,
     user: User,
@@ -771,13 +534,6 @@ def update_user_group(
                 f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
             )
 
-    # LEAVING THIS HERE FOR NOW FOR GIVING DIFFERENT ROLES
-    # ACCESS TO DIFFERENT PERMISSIONS
-    # if (removed_user_ids or added_user_ids) and (
-    #     not user or user.role != UserRole.ADMIN
-    # ):
-    #     raise ValueError("Only admins can add or remove users from user groups")
-
     if removed_user_ids:
         _cleanup_user__user_group_relationships__no_commit(
             db_session=db_session,
@@ -807,22 +563,6 @@ def update_user_group(
 
     if cc_pairs_updated and not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
-
-    removed_users = db_session.scalars(
-        select(User).where(
-            User.id.in_(removed_user_ids)  # ty: ignore[unresolved-attribute]
-        )
-    ).unique()
-
-    # Filter out admin and global curator users before validating curator status
-    users_to_validate = [
-        user
-        for user in removed_users
-        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
-    ]
-
-    if users_to_validate:
-        _validate_curator_status__no_commit(db_session, users_to_validate)
 
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()
@@ -1003,3 +743,72 @@ def set_group_permission__no_commit(
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
+
+
+def set_group_permissions_bulk__no_commit(
+    group_id: int,
+    desired_permissions: set[Permission],
+    granted_by: UUID,
+    db_session: Session,
+) -> list[Permission]:
+    """Set the full desired permission state for a group in one pass.
+
+    Enables permissions in `desired_permissions`, disables any toggleable
+    permission not in the set. Non-toggleable permissions are ignored.
+    Calls recompute once at the end. Does NOT commit.
+
+    Returns the resulting list of enabled permissions.
+    """
+
+    existing_grants = (
+        db_session.execute(
+            select(PermissionGrant)
+            .where(PermissionGrant.group_id == group_id)
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+
+    grant_map: dict[Permission, PermissionGrant] = {
+        g.permission: g for g in existing_grants
+    }
+
+    # Enable desired permissions
+    for perm in desired_permissions:
+        existing = grant_map.get(perm)
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.granted_by = granted_by
+                existing.granted_at = func.now()
+        else:
+            db_session.add(
+                PermissionGrant(
+                    group_id=group_id,
+                    permission=perm,
+                    grant_source=GrantSource.USER,
+                    granted_by=granted_by,
+                )
+            )
+
+    # Disable toggleable permissions not in the desired set
+    for perm, grant in grant_map.items():
+        if perm not in desired_permissions and not grant.is_deleted:
+            grant.is_deleted = True
+
+    db_session.flush()
+    recompute_permissions_for_group__no_commit(group_id, db_session)
+
+    # Return the resulting enabled set
+    return [
+        g.permission
+        for g in db_session.execute(
+            select(PermissionGrant).where(
+                PermissionGrant.group_id == group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+        .scalars()
+        .all()
+    ]

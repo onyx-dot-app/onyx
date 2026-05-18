@@ -30,7 +30,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
-import { MemoryItem, ThemePreference } from "@/lib/types";
+import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
@@ -71,6 +71,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { hasPermission } from "@/lib/permissions";
 
 interface PAT {
   id: number;
@@ -1119,7 +1120,7 @@ function ChatPreferencesSettings() {
 }
 
 function AccountsAccessSettings() {
-  const { user, authTypeMetadata } = useUser();
+  const { user, authTypeMetadata, permissions } = useUser();
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -1146,18 +1147,21 @@ function AccountsAccessSettings() {
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
 
   const canCreateTokens = useCloudSubscription();
+  const canCreatePAT = hasPermission(
+    permissions,
+    Permission.CREATE_USER_API_KEYS
+  );
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null;
 
-  // Fetch PATs with SWR
+  // Fetch PATs with SWR — always fetch when auth is available
   const {
     data: pats = [],
     mutate,
     error,
     isLoading,
   } = useSWR<PAT[]>(
-    showTokensSection ? SWR_KEYS.userPats : null,
+    authType !== null ? SWR_KEYS.userPats : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: true,
@@ -1165,6 +1169,10 @@ function AccountsAccessSettings() {
       fallbackData: [],
     }
   );
+
+  // Hide the section entirely if user has no permission AND no existing tokens
+  const showTokensSection =
+    authType !== null && (isLoading || canCreatePAT || pats.length > 0);
 
   // Use filter hook for searching tokens
   const {
@@ -1485,16 +1493,19 @@ function AccountsAccessSettings() {
                         variant="internal"
                       />
                     )}
-                    <div className="shrink-0">
-                      <Button
-                        rightIcon={SvgPlusCircle}
-                        prominence="internal"
-                        interaction={showCreateModal ? "active" : "rest"}
-                        onClick={() => setShowCreateModal(true)}
-                      >
-                        New Access Token
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={() => setShowCreateModal(true)}
+                      prominence="secondary"
+                      rightIcon={SvgPlusCircle}
+                      disabled={!canCreatePAT}
+                      tooltip={
+                        !canCreatePAT
+                          ? "You don't have permission to create access tokens"
+                          : undefined
+                      }
+                    >
+                      New Access Token
+                    </Button>
                   </Section>
 
                   <Section gap={0.25}>

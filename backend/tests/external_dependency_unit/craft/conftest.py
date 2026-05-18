@@ -13,7 +13,6 @@ from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import User
-from onyx.db.models import UserRole
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
@@ -59,7 +58,6 @@ def test_user(db_session: Session, tenant_context: None) -> User:  # noqa: ARG00
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)

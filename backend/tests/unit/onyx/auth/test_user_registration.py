@@ -146,7 +146,7 @@ class TestDisposableEmailValidation:
 class TestMultiTenantInviteLogic:
     """Test invite logic for multi-tenant environments."""
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -194,7 +194,7 @@ class TestMultiTenantInviteLogic:
         # Verify invite check was NOT called (user_count = 0)
         mock_verify_invited.assert_not_called()
 
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.is_disposable_email", return_value=False)
     @patch("onyx.auth.users.verify_email_domain")
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
@@ -488,7 +488,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio
@@ -548,7 +548,7 @@ class TestCaseInsensitiveEmailMatching:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
     @patch("onyx.auth.users.verify_email_is_invited")
-    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
     @patch("onyx.auth.users.MULTI_TENANT", True)
     @patch("onyx.auth.users.CURRENT_TENANT_ID_CONTEXTVAR")
     @pytest.mark.asyncio

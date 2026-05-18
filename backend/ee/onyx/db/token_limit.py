@@ -1,69 +1,14 @@
 from collections.abc import Sequence
 
-from sqlalchemy import exists
 from sqlalchemy import Row
-from sqlalchemy import Select
 from sqlalchemy import select
-from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-
-
-def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
-        return stmt
-
-    # If anonymous user, only show global/public token_rate_limits
-    if user.is_anonymous:
-        where_clause = TokenRateLimit.scope == TokenRateLimitScope.GLOBAL
-        return stmt.where(where_clause)
-
-    stmt = stmt.distinct()
-    TRLimit_UG = aliased(TokenRateLimit__UserGroup)
-    User__UG = aliased(User__UserGroup)
-
-    """
-    Here we select token_rate_limits by relation:
-    User -> User__UserGroup -> TokenRateLimit__UserGroup ->
-    TokenRateLimit
-    """
-    stmt = stmt.outerjoin(TRLimit_UG).outerjoin(
-        User__UG,
-        User__UG.user_group_id == TRLimit_UG.user_group_id,
-    )
-
-    """
-    Filter token_rate_limits by:
-    - if the user is in the user_group that owns the token_rate_limit
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out token_rate_limits that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all token_rate_limits in the groups the user curates
-    """
-
-    where_clause = User__UG.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UG.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(
-                User__UserGroup.is_curator == True  # noqa: E712
-            )
-        where_clause &= ~exists().where(
-            TRLimit_UG.rate_limit_id == TokenRateLimit.id
-        ).where(~TRLimit_UG.user_group_id.in_(user_groups)).correlate(TokenRateLimit)
-
-    return stmt.where(where_clause)
 
 
 def fetch_all_user_group_token_rate_limits_by_group(
@@ -104,13 +49,11 @@ def insert_user_group_token_rate_limit(
     return token_limit
 
 
-def fetch_user_group_token_rate_limits_for_user(
+def fetch_user_group_token_rate_limits_for_group(
     db_session: Session,
     group_id: int,
-    user: User,
     enabled_only: bool = False,
     ordered: bool = True,
-    get_editable: bool = True,
 ) -> Sequence[TokenRateLimit]:
     stmt = (
         select(TokenRateLimit)
@@ -120,7 +63,6 @@ def fetch_user_group_token_rate_limits_for_user(
         )
         .where(TokenRateLimit__UserGroup.user_group_id == group_id)
     )
-    stmt = _add_user_filters(stmt, user, get_editable)
 
     if enabled_only:
         stmt = stmt.where(TokenRateLimit.enabled.is_(True))

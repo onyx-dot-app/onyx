@@ -7,7 +7,6 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.models import SavedSearchDoc
@@ -58,7 +57,7 @@ class DATestAPIKey(BaseModel):
     api_key_display: str
     api_key: str | None = None  # only present on initial creation
     api_key_name: str | None = None
-    api_key_role: UserRole
+    groups: list[dict] = []
 
     user_id: UUID
     headers: dict
@@ -69,7 +68,7 @@ class DATestUser(BaseModel):
     email: str
     password: str
     headers: dict
-    role: UserRole
+    is_admin: bool
     is_active: bool
     cookies: dict = {}
 

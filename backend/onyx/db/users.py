@@ -3,11 +3,12 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import case
+from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
@@ -16,11 +17,11 @@ from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.expression import or_
 
 from onyx.auth.invited_users import remove_user_from_invited_users
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import NO_AUTH_PLACEHOLDER_USER_EMAIL
 from onyx.db.enums import AccountType
+from onyx.db.enums import Permission
 from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__User
 from onyx.db.models import Persona
@@ -29,6 +30,8 @@ from onyx.db.models import SamlAccount
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -54,82 +57,15 @@ def is_limited_user(user: User) -> bool:
     return False
 
 
-def validate_user_role_update(
-    requested_role: UserRole,
-    current_account_type: AccountType,
-    explicit_override: bool = False,
-) -> None:
+def user_is_admin(user: User) -> bool:
+    """Return True if the user holds the full admin permission.
+
+    Derived from effective_permissions, which is itself maintained from
+    group membership — Admin-group members carry FULL_ADMIN_PANEL_ACCESS.
     """
-    Validate that a user role update is valid.
-    Assumed only admins can hit this endpoint.
-    raise if:
-    - requested role is a curator
-    - requested role is a slack user
-    - requested role is an external permissioned user
-    - requested role is a limited user
-    - current account type is BOT (slack user)
-    - current account type is EXT_PERM_USER
-    - current account type is ANONYMOUS or SERVICE_ACCOUNT
-    """
-
-    if current_account_type == AccountType.BOT:
-        raise HTTPException(
-            status_code=400,
-            detail="To change a Slack User's role, they must first login to Onyx via the web app.",
-        )
-
-    if current_account_type == AccountType.EXT_PERM_USER:
-        raise HTTPException(
-            status_code=400,
-            detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
-        )
-
-    if current_account_type in (AccountType.ANONYMOUS, AccountType.SERVICE_ACCOUNT):
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot change the role of an anonymous or service account user.",
-        )
-
-    if explicit_override:
-        return
-
-    if requested_role == UserRole.CURATOR:
-        # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail="Curator role must be set via the User Group Menu",
-        )
-
-    if requested_role == UserRole.LIMITED:
-        # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to a Limited User role. "
-                "This role is automatically assigned to users through certain endpoints in the API."
-            ),
-        )
-
-    if requested_role == UserRole.SLACK_USER:
-        # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to a Slack User role. "
-                "This role is automatically assigned to users who only use Onyx via Slack."
-            ),
-        )
-
-    if requested_role == UserRole.EXT_PERM_USER:
-        # This shouldn't happen, but just in case
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "A user cannot be set to an External Permissioned User role. "
-                "This role is automatically assigned to users who have been "
-                "pulled in to the system via an external permissions system."
-            ),
-        )
+    return Permission.FULL_ADMIN_PANEL_ACCESS.value in (
+        user.effective_permissions or []
+    )
 
 
 def get_all_users(
@@ -150,7 +86,7 @@ def get_all_users(
     )
 
     if not include_external:
-        stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
+        stmt = stmt.where(User.account_type != AccountType.EXT_PERM_USER)
 
     if email_filter_string is not None:
         stmt = stmt.where(
@@ -164,9 +100,9 @@ def get_all_users(
 
 def _get_accepted_user_where_clause(
     email_filter_string: str | None = None,
-    roles_filter: list[UserRole] = [],
     include_external: bool = False,
     is_active_filter: bool | None = None,
+    account_type_filter: list[AccountType] | None = None,
 ) -> list[ColumnElement[bool]]:
     """
     Generates a SQLAlchemy where clause for filtering users based on the provided parameters.
@@ -175,8 +111,8 @@ def _get_accepted_user_where_clause(
     Parameters:
     - email_filter_string: A substring to filter user emails. Only users whose emails contain this substring will be included.
     - is_active_filter: When True, only active users will be included. When False, only inactive users will be included.
-    - roles_filter: A list of user roles to filter by. Only users with roles in this list will be included.
     - include_external: If False, external permissioned users will be excluded.
+    - account_type_filter: If provided and non-empty, only users whose ``account_type`` is in the list will be included.
 
     Returns:
     - list: A list of conditions to be used in a SQLAlchemy query to filter users.
@@ -195,7 +131,7 @@ def _get_accepted_user_where_clause(
     ]
 
     if not include_external:
-        where_clause.append(User.role != UserRole.EXT_PERM_USER)
+        where_clause.append(User.account_type != AccountType.EXT_PERM_USER)
 
     if email_filter_string is not None:
         personal_name_col: KeyedColumnElement[Any] = User.__table__.c.personal_name
@@ -206,11 +142,11 @@ def _get_accepted_user_where_clause(
             )
         )
 
-    if roles_filter:
-        where_clause.append(User.role.in_(roles_filter))
-
     if is_active_filter is not None:
         where_clause.append(is_active_col.is_(is_active_filter))
+
+    if account_type_filter:
+        where_clause.append(User.account_type.in_(account_type_filter))
 
     return where_clause
 
@@ -221,7 +157,7 @@ def get_all_accepted_users(
 ) -> Sequence[User]:
     """Returns all accepted users without pagination.
     Uses the same filtering as the paginated endpoint but without
-    search, role, or active filters."""
+    search or active filters."""
     stmt = select(User)
     where_clause = _get_accepted_user_where_clause(
         include_external=include_external,
@@ -236,16 +172,16 @@ def get_page_of_filtered_users(
     page_num: int,
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
-    roles_filter: list[UserRole] = [],
     include_external: bool = False,
+    account_type_filter: list[AccountType] | None = None,
 ) -> Sequence[User]:
     users_stmt = select(User)
 
     where_clause = _get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
-        roles_filter=roles_filter,
         include_external=include_external,
         is_active_filter=is_active_filter,
+        account_type_filter=account_type_filter,
     )
     # Apply pagination
     users_stmt = users_stmt.offset((page_num) * page_size).limit(page_size)
@@ -259,14 +195,14 @@ def get_total_filtered_users_count(
     db_session: Session,
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
-    roles_filter: list[UserRole] = [],
     include_external: bool = False,
+    account_type_filter: list[AccountType] | None = None,
 ) -> int:
     where_clause = _get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
-        roles_filter=roles_filter,
         include_external=include_external,
         is_active_filter=is_active_filter,
+        account_type_filter=account_type_filter,
     )
     total_count_stmt = select(func.count()).select_from(User)
     # Apply filtering
@@ -275,39 +211,46 @@ def get_total_filtered_users_count(
     return db_session.scalar(total_count_stmt) or 0
 
 
-def get_user_counts_by_role_and_status(
+def get_user_counts_by_account_type_and_status(
     db_session: Session,
 ) -> dict[str, dict[str, int]]:
-    """Returns user counts grouped by role and by active/inactive status.
+    """Returns user counts grouped by account_type and by active/inactive status.
 
     Excludes API key users, anonymous users, and no-auth placeholder users.
     Uses a single query with conditional aggregation.
     """
     base_where = _get_accepted_user_where_clause()
-    role_col = User.__table__.c.role
+    account_type_col = User.__table__.c.account_type
     is_active_col = User.__table__.c.is_active
 
     stmt = (
         select(
-            role_col,
+            account_type_col,
             func.count().label("total"),
             func.sum(case((is_active_col.is_(True), 1), else_=0)).label("active"),
             func.sum(case((is_active_col.is_(False), 1), else_=0)).label("inactive"),
         )
         .where(*base_where)
-        .group_by(role_col)
+        .group_by(account_type_col)
     )
 
-    role_counts: dict[str, int] = {}
+    account_type_counts: dict[str, int] = {}
     status_counts: dict[str, int] = {"active": 0, "inactive": 0}
 
-    for role_val, total, active, inactive in db_session.execute(stmt).all():
-        key = role_val.value if hasattr(role_val, "value") else str(role_val)
-        role_counts[key] = total
+    for account_type_val, total, active, inactive in db_session.execute(stmt).all():
+        key = (
+            account_type_val.value
+            if hasattr(account_type_val, "value")
+            else str(account_type_val)
+        )
+        account_type_counts[key] = total
         status_counts["active"] += active or 0
         status_counts["inactive"] += inactive or 0
 
-    return {"role_counts": role_counts, "status_counts": status_counts}
+    return {
+        "account_type_counts": account_type_counts,
+        "status_counts": status_counts,
+    }
 
 
 def get_user_by_email(email: str, db_session: Session) -> User | None:
@@ -334,7 +277,6 @@ def _generate_slack_user(email: str) -> User:
     return User(
         email=email,
         hashed_password=hashed_pass,
-        role=UserRole.SLACK_USER,
         account_type=AccountType.BOT,
     )
 
@@ -358,7 +300,6 @@ def add_slack_user_if_not_exists(
         if user.account_type == AccountType.EXT_PERM_USER:
             if enforce_seat_check is not None:
                 enforce_seat_check(db_session, 1)
-            user.role = UserRole.SLACK_USER
             user.account_type = AccountType.BOT
             db_session.commit()
         return user
@@ -397,7 +338,6 @@ def _generate_ext_permissioned_user(email: str) -> User:
     return User(
         email=email,
         hashed_password=hashed_pass,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
 
@@ -580,21 +520,49 @@ def batch_get_user_groups(
     return result
 
 
-def get_active_admin_users(db_session: Session) -> list[User]:
-    """Active human admins, excluding API-key dummy users and system placeholders.
+def get_user_groups(
+    db_session: Session,
+    user_id: UUID,
+    include_default: bool = False,
+) -> list[UserGroupInfo]:
+    """Lightweight group info for a single user."""
+    return [
+        UserGroupInfo(id=gid, name=gname)
+        for gid, gname in batch_get_user_groups(
+            db_session, [user_id], include_default=include_default
+        ).get(user_id, [])
+    ]
 
-    Mirrors `_add_live_user_count_where_clause(only_admin_users=True)` in
-    `onyx/db/auth.py` so callers that email or surface UI to admins reuse
-    the same filter set.
-    """
-    email_col: KeyedColumnElement[Any] = User.__table__.c.email
-    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
 
-    stmt = select(User).where(
-        is_active_col.is_(True),
-        User.role == UserRole.ADMIN,
-        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
-        email_col != ANONYMOUS_USER_EMAIL,
-        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+def set_user_groups__no_commit(
+    db_session: Session,
+    user_id: UUID,
+    group_ids: list[int],
+) -> None:
+    """Replace all group memberships for a user with the given group_ids.
+    Does NOT commit."""
+    if group_ids:
+        existing_ids = set(
+            db_session.scalars(
+                select(UserGroup.id).where(UserGroup.id.in_(group_ids))
+            ).all()
+        )
+        missing = set(group_ids) - existing_ids
+        if missing:
+            raise ValueError(f"Group IDs do not exist: {sorted(missing)}")
+
+    db_session.execute(
+        delete(User__UserGroup).where(User__UserGroup.user_id == user_id)
     )
-    return list(db_session.execute(stmt).unique().scalars().all())
+
+    if group_ids:
+        insert_stmt = (
+            pg_insert(User__UserGroup)
+            .values([{"user_id": user_id, "user_group_id": gid} for gid in group_ids])
+            .on_conflict_do_nothing(
+                index_elements=[User__UserGroup.user_group_id, User__UserGroup.user_id]
+            )
+        )
+        db_session.execute(insert_stmt)
+
+    recompute_user_permissions__no_commit(user_id, db_session)

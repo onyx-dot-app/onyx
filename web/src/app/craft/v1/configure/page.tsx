@@ -35,9 +35,9 @@ import {
 } from "@/app/craft/onboarding/constants";
 
 export default function BuildConfigPage() {
+  const { isAdmin, hasAdminAccess } = useUser();
   const { llmProviders } = useLLMProviders();
-  const { isAdmin, isCurator } = useUser();
-  const canManageConnectors = isAdmin || isCurator;
+  const canManageConnectors = isAdmin || hasAdminAccess;
   const { openUserInfoEditor, openLlmSetup } = useOnboarding();
   const [showUserLibraryModal, setShowUserLibraryModal] = useState(false);
 
@@ -49,6 +49,7 @@ export default function BuildConfigPage() {
   const [originalLlmSelection, setOriginalLlmSelection] =
     useState<BuildLlmSelection | null>(null);
 
+  const isBasicUser = !hasAdminAccess;
   const isPreProvisioning = useIsPreProvisioning();
 
   const { selection: llmSelection, updateSelection: updateLlmSelection } =

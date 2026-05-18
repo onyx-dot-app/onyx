@@ -25,7 +25,7 @@ logger = setup_logger()
 def prepare_authorization_request(
     connector: DocumentSource,
     redirect_on_success: str | None,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     """Used by the frontend to generate the url for the user's browser during auth request.

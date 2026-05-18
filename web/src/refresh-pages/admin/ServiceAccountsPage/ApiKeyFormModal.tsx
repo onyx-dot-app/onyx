@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo, useCallback } from "react";
 import { Form, Formik } from "formik";
 import { toast } from "@/hooks/useToast";
 import {
@@ -10,11 +11,15 @@ import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interface
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { InputVertical } from "@opal/layouts";
-import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
-import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
+import { SvgCheck, SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
+import useGroups from "@/hooks/useGroups";
+import Popover from "@/refresh-components/Popover";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { cn } from "@opal/utils";
+import { Section } from "@/layouts/general-layouts";
 
 interface ApiKeyFormModalProps {
   onClose: () => void;
@@ -28,10 +33,25 @@ export default function ApiKeyFormModal({
   apiKey,
 }: ApiKeyFormModalProps) {
   const isUpdate = apiKey !== undefined;
+  const { data: allGroups, isLoading: groupsLoading } = useGroups();
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+  const contentRef = useCallback((node: HTMLDivElement | null) => {
+    setContentEl(node);
+  }, []);
+
+  const dropdownGroups = useMemo(() => {
+    if (!allGroups) return [];
+    if (searchTerm.length === 0) return allGroups;
+    const lower = searchTerm.toLowerCase();
+    return allGroups.filter((g) => g.name.toLowerCase().includes(lower));
+  }, [allGroups, searchTerm]);
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content width="sm" height="lg">
+      <Modal.Content width="sm" height="lg" ref={contentRef}>
         <Modal.Header
           icon={SvgKey}
           title={isUpdate ? "Update Service Account" : "Create Service Account"}
@@ -45,14 +65,14 @@ export default function ApiKeyFormModal({
         <Formik
           initialValues={{
             name: apiKey?.api_key_name || "",
-            role: apiKey?.api_key_role || UserRole.BASIC.toString(),
+            group_ids: apiKey?.groups.map((g) => g.id) || ([] as number[]),
           }}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
             const payload = {
-              ...values,
-              role: values.role as UserRole,
+              name: values.name || undefined,
+              group_ids: values.group_ids,
             };
 
             try {
@@ -90,74 +110,170 @@ export default function ApiKeyFormModal({
             }
           }}
         >
-          {({ isSubmitting, values }) => (
-            <Form className="w-full overflow-visible">
-              <Modal.Body>
-                <InputVertical withLabel="name" title="Name">
-                  <FormikField<string>
-                    name="name"
-                    render={(field, helper) => (
-                      <InputTypeIn
-                        {...field}
-                        placeholder="Enter a name"
-                        onClear={() => helper.setValue("")}
-                        showClearButton={false}
-                      />
-                    )}
-                  />
-                </InputVertical>
+          {({ isSubmitting, values, setFieldValue }) => {
+            const memberGroupIds = new Set(values.group_ids);
+            const joinedGroups = (allGroups ?? []).filter((g) =>
+              memberGroupIds.has(g.id)
+            );
 
-                <InputVertical withLabel="role" title="Account Permissions">
-                  <FormikField<string>
-                    name="role"
-                    render={(field, helper) => (
-                      <InputSelect
-                        value={field.value}
-                        onValueChange={(value) => helper.setValue(value)}
+            const toggleGroup = (groupId: number) => {
+              const next = new Set(memberGroupIds);
+              if (next.has(groupId)) {
+                next.delete(groupId);
+              } else {
+                next.add(groupId);
+              }
+              setFieldValue("group_ids", Array.from(next));
+            };
+
+            return (
+              <Form className="w-full overflow-visible">
+                <Modal.Body>
+                  <InputVertical withLabel="name" title="Name">
+                    <FormikField<string>
+                      name="name"
+                      render={(field, helper) => (
+                        <InputTypeIn
+                          {...field}
+                          placeholder="Enter a name"
+                          onClear={() => helper.setValue("")}
+                          showClearButton={false}
+                        />
+                      )}
+                    />
+                  </InputVertical>
+
+                  <InputVertical withLabel="group_ids" title="Groups">
+                    <Section
+                      gap={0.5}
+                      padding={0.25}
+                      height={
+                        joinedGroups.length === 0 && !popoverOpen
+                          ? "auto"
+                          : 14.5
+                      }
+                      alignItems="stretch"
+                      justifyContent="start"
+                      className="bg-background-tint-02 rounded-08"
+                    >
+                      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                        <Popover.Trigger asChild>
+                          <div>
+                            <InputTypeIn
+                              data-testid="groups-search-input"
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              placeholder="Search groups..."
+                              leftSearchIcon
+                            />
+                          </div>
+                        </Popover.Trigger>
+                        <Popover.Content
+                          width="trigger"
+                          align="start"
+                          container={contentEl}
+                        >
+                          {groupsLoading ? (
+                            <LineItem skeleton description="Loading groups...">
+                              Loading...
+                            </LineItem>
+                          ) : dropdownGroups.length === 0 ? (
+                            <LineItem
+                              skeleton
+                              description="Try a different search term."
+                            >
+                              No groups found
+                            </LineItem>
+                          ) : (
+                            <ShadowDiv
+                              shadowHeight="0.75rem"
+                              className={cn(
+                                "flex flex-col gap-1 max-h-[15rem] rounded-08"
+                              )}
+                            >
+                              {dropdownGroups.map((group) => {
+                                const isMember = memberGroupIds.has(group.id);
+                                return (
+                                  <LineItem
+                                    key={group.id}
+                                    icon={isMember ? SvgCheck : SvgUsers}
+                                    description={`${group.users.length} ${
+                                      group.users.length === 1
+                                        ? "user"
+                                        : "users"
+                                    }`}
+                                    selected={isMember}
+                                    emphasized={isMember}
+                                    onClick={() => toggleGroup(group.id)}
+                                  >
+                                    {group.name}
+                                  </LineItem>
+                                );
+                              })}
+                            </ShadowDiv>
+                          )}
+                        </Popover.Content>
+                      </Popover>
+
+                      <ShadowDiv
+                        className={cn(
+                          "max-h-[11rem] flex flex-col gap-1 rounded-08"
+                        )}
+                        shadowHeight="0.75rem"
                       >
-                        <InputSelect.Trigger placeholder="Select permissions" />
-                        <InputSelect.Content>
-                          <InputSelect.Item
-                            value={UserRole.ADMIN.toString()}
-                            icon={SvgUserManage}
-                            description="Unrestricted admin access to all endpoints."
+                        {joinedGroups.length === 0 ? (
+                          <LineItem
+                            icon={SvgUsers}
+                            skeleton
+                            interactive={false}
+                            description="No groups assigned to this service account."
                           >
-                            {USER_ROLE_LABELS[UserRole.ADMIN]}
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={UserRole.BASIC.toString()}
-                            icon={SvgUser}
-                            description="Standard user-level access to non-admin endpoints."
-                          >
-                            {USER_ROLE_LABELS[UserRole.BASIC]}
-                          </InputSelect.Item>
-                          <InputSelect.Item
-                            value={UserRole.LIMITED.toString()}
-                            icon={SvgLock}
-                            description="For agents: chat posting and read-only access to other endpoints."
-                          >
-                            {USER_ROLE_LABELS[UserRole.LIMITED]}
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    )}
-                  />
-                </InputVertical>
-              </Modal.Body>
+                            No groups
+                          </LineItem>
+                        ) : (
+                          joinedGroups.map((group) => (
+                            <div
+                              key={group.id}
+                              className="bg-background-tint-01 rounded-08"
+                            >
+                              <LineItem
+                                icon={SvgUsers}
+                                description={`${group.users.length} ${
+                                  group.users.length === 1 ? "user" : "users"
+                                }`}
+                                rightChildren={
+                                  <SvgLogOut height={16} width={16} />
+                                }
+                                onClick={() => toggleGroup(group.id)}
+                              >
+                                {group.name}
+                              </LineItem>
+                            </div>
+                          ))
+                        )}
+                      </ShadowDiv>
+                    </Section>
+                  </InputVertical>
+                </Modal.Body>
 
-              <Modal.Footer>
-                <Button prominence="secondary" type="button" onClick={onClose}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={isSubmitting || !values.name.trim()}
-                  type="submit"
-                >
-                  {isUpdate ? "Update" : "Create Account"}
-                </Button>
-              </Modal.Footer>
-            </Form>
-          )}
+                <Modal.Footer>
+                  <Button
+                    prominence="secondary"
+                    type="button"
+                    onClick={onClose}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={isSubmitting || !values.name.trim()}
+                    type="submit"
+                  >
+                    {isUpdate ? "Update" : "Create Account"}
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            );
+          }}
         </Formik>
       </Modal.Content>
     </Modal>

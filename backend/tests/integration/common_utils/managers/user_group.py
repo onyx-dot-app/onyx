@@ -87,45 +87,30 @@ class UserGroupManager:
         return user_group
 
     @staticmethod
-    def set_curator_status(
-        test_user_group: DATestUserGroup,
-        user_to_set_as_curator: DATestUser,
-        user_performing_action: DATestUser,
-        is_curator: bool = True,
-    ) -> None:
-        set_curator_request = {
-            "user_id": user_to_set_as_curator.id,
-            "is_curator": is_curator,
-        }
-        response = requests.post(
-            f"{API_SERVER_URL}/manage/admin/user-group/{test_user_group.id}/set-curator",
-            json=set_curator_request,
-            headers=user_performing_action.headers,
-        )
-        response.raise_for_status()
-
-    @staticmethod
     def get_permissions(
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
+        include_non_toggleable: bool = False,
     ) -> list[str]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
+            params=(
+                {"include_non_toggleable": "true"} if include_non_toggleable else None
+            ),
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
         return response.json()
 
     @staticmethod
-    def set_permission(
+    def set_permissions(
         user_group: DATestUserGroup,
-        permission: str,
-        enabled: bool,
+        permissions: list[str],
         user_performing_action: DATestUser,
     ) -> requests.Response:
         response = requests.put(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
-            json={"permission": permission, "enabled": enabled},
+            json={"permissions": permissions},
             headers=user_performing_action.headers,
         )
         return response
@@ -145,6 +130,23 @@ class UserGroupManager:
         )
         response.raise_for_status()
         return [UserGroup(**ug) for ug in response.json()]
+
+    @staticmethod
+    def get_default(
+        user_performing_action: DATestUser,
+        name: str,
+    ) -> UserGroup:
+        """Fetch a seeded default group ("Admin" or "Basic") by name."""
+        all_groups = UserGroupManager.get_all(
+            user_performing_action=user_performing_action,
+            include_default=True,
+        )
+        match = next((g for g in all_groups if g.name == name and g.is_default), None)
+        assert match is not None, (
+            f"Default group {name!r} not found. "
+            "Ensure the seed_default_groups migration has run."
+        )
+        return match
 
     @staticmethod
     def verify(

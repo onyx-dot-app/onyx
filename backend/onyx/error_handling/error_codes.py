@@ -41,6 +41,7 @@ class OnyxErrorCode(Enum):
     # ------------------------------------------------------------------
     # Validation / Bad Request (400)
     # ------------------------------------------------------------------
+    BAD_REQUEST = ("BAD_REQUEST", 400)
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
@@ -56,6 +57,7 @@ class OnyxErrorCode(Enum):
     DOCUMENT_NOT_FOUND = ("DOCUMENT_NOT_FOUND", 404)
     SESSION_NOT_FOUND = ("SESSION_NOT_FOUND", 404)
     USER_NOT_FOUND = ("USER_NOT_FOUND", 404)
+    DOCUMENT_SET_NOT_FOUND = ("DOCUMENT_SET_NOT_FOUND", 404)
 
     # ------------------------------------------------------------------
     # Conflict (409)

@@ -1,9 +1,7 @@
 from datetime import datetime
-from http import HTTPStatus
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
@@ -12,13 +10,16 @@ from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
 from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
     try_creating_external_group_sync_task,
 )
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.models import StatusResponse
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/manage")
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
 def get_cc_pair_latest_sync(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -42,9 +43,9 @@ def get_cc_pair_latest_sync(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
         )
 
     return cc_pair.last_time_perm_sync
@@ -53,7 +54,7 @@ def get_cc_pair_latest_sync(
 @router.post("/admin/cc-pair/{cc_pair_id}/sync-permissions")
 def sync_cc_pair(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[None]:
     """Triggers permissions sync on a particular cc_pair immediately"""
@@ -66,18 +67,18 @@ def sync_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.permissions.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Permissions sync task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Permissions sync task already in progress.",
         )
 
     logger.info(
@@ -91,9 +92,9 @@ def sync_cc_pair(
         client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Permissions sync task creation failed.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Permissions sync task creation failed.",
         )
 
     logger.info("Permissions sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
@@ -107,7 +108,7 @@ def sync_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-groups")
 def get_cc_pair_latest_group_sync(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -117,9 +118,9 @@ def get_cc_pair_latest_group_sync(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
         )
 
     return cc_pair.last_time_external_group_sync
@@ -128,7 +129,7 @@ def get_cc_pair_latest_group_sync(
 @router.post("/admin/cc-pair/{cc_pair_id}/sync-groups")
 def sync_cc_pair_groups(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[None]:
     """Triggers group sync on a particular cc_pair immediately"""
@@ -141,18 +142,18 @@ def sync_cc_pair_groups(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.external_group_sync.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="External group sync task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "External group sync task already in progress.",
         )
 
     logger.info(
@@ -166,9 +167,9 @@ def sync_cc_pair_groups(
         client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="External group sync task creation failed.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "External group sync task creation failed.",
         )
 
     logger.info("External group sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)

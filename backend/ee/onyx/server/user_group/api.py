@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,28 +12,26 @@ from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from ee.onyx.db.user_group import rename_user_group
-from ee.onyx.db.user_group import set_group_permission__no_commit
-from ee.onyx.db.user_group import update_user_curator_relationship
+from ee.onyx.db.user_group import set_group_permissions_bulk__no_commit
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
+from ee.onyx.server.user_group.models import BulkSetPermissionsRequest
 from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
-from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import SetPermissionRequest
-from ee.onyx.server.user_group.models import SetPermissionResponse
 from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
+from onyx.auth.permissions import PERMISSION_REGISTRY
+from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.models import UserRole
 from onyx.db.persona import get_persona_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -48,24 +45,15 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
-    user: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    if user.role == UserRole.ADMIN:
-        user_groups = fetch_user_groups(
-            db_session,
-            only_up_to_date=False,
-            eager_load_for_snapshot=True,
-            include_default=include_default,
-        )
-    else:
-        user_groups = fetch_user_groups_for_user(
-            db_session=db_session,
-            user_id=user.id,
-            only_curator_groups=user.role == UserRole.CURATOR,
-            eager_load_for_snapshot=True,
-            include_default=include_default,
-        )
+    user_groups = fetch_user_groups(
+        db_session,
+        only_up_to_date=False,
+        eager_load_for_snapshot=True,
+        include_default=include_default,
+    )
     return [UserGroup.from_model(user_group) for user_group in user_groups]
 
 
@@ -75,7 +63,7 @@ def list_minimal_user_groups(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserGroupSnapshot]:
-    if user.role == UserRole.ADMIN:
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         user_groups = fetch_user_groups(
             db_session,
             only_up_to_date=False,
@@ -92,62 +80,75 @@ def list_minimal_user_groups(
     ]
 
 
+@router.get("/admin/permissions/registry")
+def get_permission_registry(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[PermissionRegistryEntry]:
+    return PERMISSION_REGISTRY
+
+
 @router.get("/admin/user-group/{user_group_id}/permissions")
 def get_user_group_permissions(
     user_group_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    include_non_toggleable: bool = False,
+    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> list[Permission]:
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
     return [
-        grant.permission for grant in group.permission_grants if not grant.is_deleted
+        grant.permission
+        for grant in group.permission_grants
+        if not grant.is_deleted
+        and (
+            include_non_toggleable or grant.permission not in NON_TOGGLEABLE_PERMISSIONS
+        )
     ]
 
 
 @router.put("/admin/user-group/{user_group_id}/permissions")
-def set_user_group_permission(
+def set_user_group_permissions(
     user_group_id: int,
-    request: SetPermissionRequest,
+    request: BulkSetPermissionsRequest,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> SetPermissionResponse:
+) -> list[Permission]:
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 
-    if request.permission in NON_TOGGLEABLE_PERMISSIONS:
+    non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
+    if non_toggleable:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Permission '{request.permission}' cannot be toggled via this endpoint",
+            f"Permissions {non_toggleable} cannot be toggled via this endpoint",
         )
 
-    set_group_permission__no_commit(
+    result = set_group_permissions_bulk__no_commit(
         group_id=user_group_id,
-        permission=request.permission,
-        enabled=request.enabled,
+        desired_permissions=set(request.permissions),
         granted_by=user.id,
         db_session=db_session,
     )
     db_session.commit()
 
-    return SetPermissionResponse(permission=request.permission, enabled=request.enabled)
+    return result
 
 
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
         db_user_group = insert_user_group(db_session, user_group)
     except IntegrityError:
-        raise HTTPException(
-            400,
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
             f"User group with name '{user_group.name}' already exists. Please "
-            + "choose a different name.",
+            "choose a different name.",
         )
     return UserGroup.from_model(db_user_group)
 
@@ -155,7 +156,7 @@ def create_user_group(
 @router.patch("/admin/user-group/rename")
 def rename_user_group_endpoint(
     rename_request: UserGroupRename,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     group = fetch_user_group(db_session, rename_request.id)
@@ -185,7 +186,7 @@ def rename_user_group_endpoint(
 def patch_user_group(
     user_group_id: int,
     user_group_update: UserGroupUpdate,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -198,14 +199,14 @@ def patch_user_group(
             )
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.post("/admin/user-group/{user_group_id}/add-users")
 def add_users(
     user_group_id: int,
     add_users_request: AddUsersToUserGroupRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -218,32 +219,13 @@ def add_users(
             )
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.post("/admin/user-group/{user_group_id}/set-curator")
-def set_user_curator(
-    user_group_id: int,
-    set_curator_request: SetCuratorRequest,
-    user: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    try:
-        update_user_curator_relationship(
-            db_session=db_session,
-            user_group_id=user_group_id,
-            set_curator_request=set_curator_request,
-            user_making_change=user,
-        )
-    except ValueError as e:
-        logger.error("Error setting user curator: %s", e)
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
 
 @router.delete("/admin/user-group/{user_group_id}")
 def delete_user_group(
     user_group_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     group = fetch_user_group(db_session, user_group_id)
@@ -252,7 +234,7 @@ def delete_user_group(
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
     if DISABLE_VECTOR_DB:
         user_group = fetch_user_group(db_session, user_group_id)
@@ -264,7 +246,7 @@ def delete_user_group(
 def update_group_agents(
     user_group_id: int,
     request: UpdateGroupAgentsRequest,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     for agent_id in request.added_agent_ids:
