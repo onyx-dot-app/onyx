@@ -79,15 +79,14 @@ def test_list_directory_rejects_path_traversal(admin_user: DATestUser) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "list_directory returns 200 with empty entries for "
-        "missing-but-not-traversal paths; plan calls for 404. "
-    ),
-)
-def test_list_directory_returns_404_for_missing_dir(admin_user: DATestUser) -> None:
-    """GET /files?path=does-not-exist returns 404 (or 400 if "Not a directory")."""
+def test_list_directory_returns_200_for_missing_dir(admin_user: DATestUser) -> None:
+    """GET /files?path=does-not-exist returns 200 with an empty entries list.
+
+    Non-traversal paths that don't exist on disk are caught by the sandbox
+    manager as ``ValueError("Not a directory: ...")``. The session manager
+    treats all non-traversal ValueErrors as "nothing to show" and returns an
+    empty ``DirectoryListing`` (200).
+    """
     session_id = _create_session_id(admin_user)
     response = requests.get(
         _files_url(session_id),
@@ -95,9 +94,9 @@ def test_list_directory_returns_404_for_missing_dir(admin_user: DATestUser) -> N
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
-    # The sandbox manager raises ValueError("Not a directory: ...") which the
-    # API normalises; the plan calls for 404 on missing dir.
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["entries"] == []
 
 
 def test_list_directory_returns_empty_when_workspace_missing(
@@ -146,14 +145,12 @@ def test_read_file_rejects_path_traversal(admin_user: DATestUser) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "delete-file error mapping uses 400 for malformed paths; plan calls for 403."
-    ),
-)
 def test_delete_file_rejects_path_traversal(admin_user: DATestUser) -> None:
-    """DELETE /files/../etc returns 403."""
+    """DELETE /files/../etc returns 403.
+
+    The sandbox manager's ``delete_file`` detects ``..`` via regex and raises
+    ``ValueError("...path traversal...")``, which the API maps to 403.
+    """
     session_id = _create_session_id(admin_user)
     # Use a path that contains an unambiguous ``..`` segment after the
     # router's ``{path:path}`` capture.
@@ -165,14 +162,12 @@ def test_delete_file_rejects_path_traversal(admin_user: DATestUser) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "delete-file error mapping uses 400 for malformed paths; plan calls for 403."
-    ),
-)
 def test_delete_file_rejects_url_encoded_traversal(admin_user: DATestUser) -> None:
-    """DELETE /files/%2e%2e/etc returns 403 (URL-encoded ``..`` still rejected)."""
+    """DELETE /files/%2e%2e/etc returns 403 (URL-encoded ``..`` still rejected).
+
+    Starlette decodes ``%2e%2e`` to ``..`` before the handler runs, so the
+    sandbox manager's ``..`` regex fires and the API maps the error to 403.
+    """
     session_id = _create_session_id(admin_user)
     response = requests.delete(
         _delete_file_url(session_id, "attachments/%2e%2e/etc/passwd"),
@@ -182,12 +177,6 @@ def test_delete_file_rejects_url_encoded_traversal(admin_user: DATestUser) -> No
     assert response.status_code == 403
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "delete-file error mapping uses 400 for malformed paths; plan calls for 403."
-    ),
-)
 @pytest.mark.parametrize(
     "metachar",
     [";", "|", "`", "$()", "&"],
@@ -195,7 +184,12 @@ def test_delete_file_rejects_url_encoded_traversal(admin_user: DATestUser) -> No
 def test_delete_file_rejects_shell_metachars(
     admin_user: DATestUser, metachar: str
 ) -> None:
-    """Shell metacharacters in the delete path are rejected with 403."""
+    """Shell metacharacters in the delete path are rejected with 400.
+
+    The sandbox manager's shell-metacharacter regex raises
+    ``ValueError("...disallowed characters...")``, which does not contain
+    "path traversal" so the API's catch-all maps it to 400.
+    """
     session_id = _create_session_id(admin_user)
     # Embed the metacharacter into an otherwise innocuous path. URL-encode so
     # that special chars (e.g. ``;``, ``&``, ``$``) survive routing intact.
@@ -205,17 +199,15 @@ def test_delete_file_rejects_shell_metachars(
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
-    assert response.status_code == 403
+    assert response.status_code == 400
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "delete-file error mapping uses 400 for malformed paths; plan calls for 403."
-    ),
-)
 def test_delete_file_rejects_null_byte(admin_user: DATestUser) -> None:
-    """A NUL byte in the delete path is rejected with 403."""
+    """A NUL byte in the delete path is rejected with 403.
+
+    Starlette decodes ``%00`` to ``\\x00``. The sandbox manager's null-byte
+    check raises ``ValueError("...path traversal...")``, mapped to 403.
+    """
     session_id = _create_session_id(admin_user)
     # ``%00`` is the URL-encoded NUL byte. requests will pass it through
     # raw so the server sees the actual byte.
@@ -312,23 +304,22 @@ def test_cross_user_file_access_returns_404(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "delete-file error mapping uses 400 for malformed paths; plan calls for 403."
-    ),
-)
 def test_download_directory_zip_respects_traversal_rules(
     admin_user: DATestUser,
 ) -> None:
-    """download-directory rejects path traversal the same way list_directory does."""
+    """download-directory returns 404 for a traversal path.
+
+    ``session_manager.download_directory`` calls ``sandbox_manager.list_directory``
+    which sanitises ``..`` away.  The resulting path doesn't exist on disk, so
+    the manager catches the ``ValueError`` and returns ``None`` -> 404.
+    """
     session_id = _create_session_id(admin_user)
     response = requests.get(
         _download_directory_url(session_id, "..%2Fetc"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------

@@ -314,6 +314,21 @@ def test_push_signed_tarball_lands_under_mount_path(
     slug = f"push-test-{uuid4().hex[:8]}"
     body = f"---\nname: {slug}\ndescription: pushed bundle\n---\n# v1\n"
 
+    # Wait for the push daemon (port 8731) to be ready before pushing.
+    for _ in range(15):
+        try:
+            resp = pod_exec(
+                k8s_client,
+                pod_name,
+                SANDBOX_NAMESPACE,
+                f"curl -sf http://localhost:{PUSH_DAEMON_PORT}/health || echo DOWN",
+            )
+            if "DOWN" not in resp:
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+
     k8s_manager.write_files_to_sandbox(
         sandbox_id=sandbox_id,
         mount_path=f"/workspace/managed/skills/{slug}",

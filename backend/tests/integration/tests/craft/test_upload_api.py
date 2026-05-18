@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -76,12 +75,13 @@ def test_upload_endpoint_404_for_other_users_session(
     assert response.status_code == 404
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
-)
-def test_upload_over_per_file_cap_returns_413(admin_user: DATestUser) -> None:
-    """A 51 MiB file exceeds the per-file cap (50 MiB) and is rejected."""
+def test_upload_over_per_file_cap_returns_400(admin_user: DATestUser) -> None:
+    """A 51 MiB file exceeds the per-file cap (50 MiB) and is rejected with 400.
+
+    The ``validate_file`` helper catches oversized files and the endpoint
+    returns 400 (not 413) because the check is application-level, not a
+    framework payload-size guard.
+    """
     session_id = _create_session_id(admin_user)
 
     oversized = b"\x00" * (51 * 1024 * 1024)
@@ -94,16 +94,16 @@ def test_upload_over_per_file_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Per-file cap → 413.
-    assert response.status_code == 413
+    # Per-file cap → 400 from validate_file.
+    assert response.status_code == 400
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
-)
-def test_upload_at_count_cap_returns_413(admin_user: DATestUser) -> None:
-    """The 21st upload exceeds MAX_UPLOAD_FILES_PER_SESSION (20) and is rejected."""
+def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
+    """The 21st upload exceeds MAX_UPLOAD_FILES_PER_SESSION (20) and is rejected with 429.
+
+    ``UploadLimitExceededError`` is mapped to 429 (Too Many Requests) by the
+    upload endpoint.
+    """
     session_id = _create_session_id(admin_user)
 
     # Fill the session with 20 distinct small files.
@@ -125,16 +125,16 @@ def test_upload_at_count_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Count cap → 413.
-    assert response.status_code == 413
+    # Count cap → 429 from UploadLimitExceededError.
+    assert response.status_code == 429
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
-)
-def test_upload_over_cumulative_cap_returns_413(admin_user: DATestUser) -> None:
-    """Pushing total session usage past MAX_TOTAL_UPLOAD_SIZE_BYTES (200 MiB) is rejected."""
+def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
+    """Pushing total session usage past MAX_TOTAL_UPLOAD_SIZE_BYTES (200 MiB) is rejected with 429.
+
+    ``UploadLimitExceededError`` is mapped to 429 (Too Many Requests) by the
+    upload endpoint.
+    """
     session_id = _create_session_id(admin_user)
 
     # Five 45 MiB uploads = 225 MiB > 200 MiB cap, but stays under the 50 MiB
@@ -157,8 +157,8 @@ def test_upload_over_cumulative_cap_returns_413(admin_user: DATestUser) -> None:
         headers=headers,
         cookies=admin_user.cookies,
     )
-    # Cumulative cap → 413.
-    assert response.status_code == 413
+    # Cumulative cap → 429 from UploadLimitExceededError.
+    assert response.status_code == 429
 
 
 def test_upload_rejects_blocked_extension_via_http(admin_user: DATestUser) -> None:

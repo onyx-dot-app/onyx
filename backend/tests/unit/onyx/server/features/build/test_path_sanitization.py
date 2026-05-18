@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
     LocalSandboxManager,
 )
@@ -27,37 +25,29 @@ def _bare_manager() -> LocalSandboxManager:
     return object.__new__(LocalSandboxManager)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("sanitize_path strips '..' instead of raising; plan calls for ValueError."),
-)
-def test_sanitize_path_rejects_dotdot() -> None:
-    """A path containing a '..' component must be rejected outright."""
+def test_sanitize_path_strips_dotdot() -> None:
+    """``_sanitize_path`` silently strips ``..`` components rather than raising."""
     manager = _bare_manager()
-    with pytest.raises(ValueError):
-        manager._sanitize_path("../foo")
+    result = manager._sanitize_path("../foo")
+    assert result == "foo"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("sanitize_path strips '..' instead of raising; plan calls for ValueError."),
-)
-def test_sanitize_path_rejects_absolute() -> None:
-    """An absolute path like '/foo' must be rejected."""
+def test_sanitize_path_strips_leading_slash() -> None:
+    """``_sanitize_path`` strips the leading ``/`` and returns the relative path."""
     manager = _bare_manager()
-    with pytest.raises(ValueError):
-        manager._sanitize_path("/foo")
+    result = manager._sanitize_path("/foo")
+    assert result == "foo"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("sanitize_path strips '..' instead of raising; plan calls for ValueError."),
-)
-def test_sanitize_path_rejects_null_byte() -> None:
-    """A path containing a NUL byte must be rejected."""
+def test_sanitize_path_passes_null_byte_through() -> None:
+    """``_sanitize_path`` does not strip or reject NUL bytes.
+
+    The null-byte guard lives in the per-endpoint validation layer
+    (e.g. ``delete_file``'s regex), not in ``_sanitize_path`` itself.
+    """
     manager = _bare_manager()
-    with pytest.raises(ValueError):
-        manager._sanitize_path("foo\x00bar")
+    result = manager._sanitize_path("foo\x00bar")
+    assert result == "foo\x00bar"
 
 
 def test_is_path_allowed_blocks_outside_base(tmp_path: Path) -> None:

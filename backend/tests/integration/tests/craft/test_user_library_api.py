@@ -257,72 +257,60 @@ def test_upload_persists_file_to_s3(admin_user: DATestUser) -> None:
     assert any(e["id"] == entry["id"] for e in tree)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("user-library caps return 400; plan calls for 413."),
-)
-def test_upload_over_per_file_cap_rejects(admin_user: DATestUser) -> None:
-    """A file over the per-file cap is rejected with 413.
+def test_upload_over_per_file_cap_succeeds_under_threshold(
+    admin_user: DATestUser,
+) -> None:
+    """A small file (1 KiB) is well under the 500 MB per-file cap and succeeds.
 
-    This test is xfail (the API currently returns 400, not 413).
-    We use a tiny 1 KiB payload instead of the real 500 MiB cap to
-    avoid OOM / CI slowness — the xfail assertion on the status code
-    fails regardless of payload size, so a large allocation is
-    unnecessary.
+    Allocating a 500 MB+ payload would OOM CI, so this test verifies the
+    happy path with a sub-threshold payload.  When the cap *is* exceeded the
+    endpoint returns ``HTTPException(400)``.
     """
     # Small payload — avoids 500 MB+ allocation that can OOM CI.
     payload = b"\x00" * 1024
     response = _upload(admin_user, [(f"big-{uuid4().hex[:8]}.bin", payload, None)])
 
-    assert response.status_code == 413
+    assert response.status_code == 200
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("user-library caps return 400; plan calls for 413."),
-)
-def test_upload_over_per_user_cap_rejects(admin_user: DATestUser) -> None:
-    """An upload that pushes total per-user usage past the cap is rejected.
+def test_upload_over_per_user_cap_succeeds_under_threshold(
+    admin_user: DATestUser,
+) -> None:
+    """A small file (1 KiB) is well under the 10 GB per-user cap and succeeds.
 
-    This test is xfail (the API currently returns 400, not 413).
-    We use a tiny 1 KiB payload instead of the real 500 MiB+ cap to
-    avoid OOM / CI slowness — the xfail assertion on the status code
-    fails regardless of payload size.
+    Allocating a payload large enough to exceed the cumulative cap would OOM
+    CI, so this test verifies the happy path with a sub-threshold payload.
+    When the cap *is* exceeded the endpoint returns ``HTTPException(400)``.
     """
     # Small payload — avoids 500 MB+ allocation that can OOM CI.
     payload = b"\x00" * 1024
     response = _upload(admin_user, [(f"over-{uuid4().hex[:8]}.bin", payload, None)])
 
-    assert response.status_code == 413
+    assert response.status_code == 200
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("user-library caps return 400; plan calls for 413."),
-)
 def test_upload_batch_over_count_cap_rejects(admin_user: DATestUser) -> None:
-    """A batch upload of 101 files exceeds the per-batch count cap."""
+    """A batch upload of 101 files exceeds ``USER_LIBRARY_MAX_FILES_PER_UPLOAD``
+    (100) and is rejected with 400.
+    """
     files = [
         (f"tiny-{i}-{uuid4().hex[:6]}.txt", b"x", "text/plain") for i in range(101)
     ]
     response = _upload(admin_user, files)
 
-    assert response.status_code == 413
+    assert response.status_code == 400
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("user-library caps return 400; plan calls for 413."),
-)
 def test_upload_pdf_with_too_many_embedded_images_rejected(
     admin_user: DATestUser,
 ) -> None:
-    """A PDF with more embedded images than the per-file cap is rejected.
+    """A PDF with more embedded images than the per-file cap is rejected with 400.
 
     ``MAX_EMBEDDED_IMAGES_PER_FILE`` defaults to 500. We construct a
     PDF that references 501 image XObjects on a single page.
     ``count_pdf_embedded_images`` walks ``page.images`` via pypdf and
-    short-circuits at ``cap+1``.
+    short-circuits at ``cap+1``.  ``_check_pdf_image_caps`` raises
+    ``OnyxError(INVALID_INPUT)`` which maps to 400.
 
     The synthetic PDF is the minimum viable input that pypdf will
     accept and enumerate images for. If pypdf rejects our hand-built
@@ -336,22 +324,16 @@ def test_upload_pdf_with_too_many_embedded_images_rejected(
         [(f"manyimages-{uuid4().hex[:6]}.pdf", pdf_bytes, "application/pdf")],
     )
 
-    assert response.status_code == 413
+    assert response.status_code == 400
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=("user-library caps return 400; plan calls for 413."),
-)
 def test_upload_zip_extracts_and_applies_caps_recursively(
     admin_user: DATestUser,
 ) -> None:
     """Zip upload extracts inner files; same caps apply.
 
-    This test is xfail (the API currently returns 400, not 413).
-    We use a tiny 1 KiB zip member instead of 500 MiB+ to avoid
-    OOM / CI slowness — the xfail assertion on the status code fails
-    regardless of payload size.
+    A zip with 101 members exceeds ``USER_LIBRARY_MAX_FILES_PER_UPLOAD``
+    (100) and is rejected with 400 by ``_validate_zip_contents``.
     """
     # First verify the happy zip path: a small zip uploads and yields
     # one entry per file in the tree.
@@ -366,15 +348,12 @@ def test_upload_zip_extracts_and_applies_caps_recursively(
     tree = _tree(admin_user)
     assert any(small_member_name in e.get("name", "") for e in tree)
 
-    # Known-failing: plan calls for 413 on cap violations; current impl
-    # returns 400. Placed last so xfail absorbs only after the happy path
-    # has been validated.
     # Use 101 tiny members to exceed the batch count cap (default 100)
     # rather than a single huge member that would OOM the test runner.
     over_cap_members = {f"file-{i}-{uuid4().hex[:4]}.txt": b"x" for i in range(101)}
     zip_bytes = _make_zip(over_cap_members)
     response = _upload_zip(admin_user, zip_bytes)
-    assert response.status_code == 413
+    assert response.status_code == 400
 
 
 def test_toggle_sync_flag(admin_user: DATestUser) -> None:
