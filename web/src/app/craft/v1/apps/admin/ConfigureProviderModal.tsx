@@ -61,7 +61,7 @@ export default function ConfigureProviderModal({
       // Merge so future non-credential metadata on the row (region,
       // instance URL, …) survives a credential edit.
       const merged = {
-        ...(existingApp?.organization_credentials ?? {}),
+        ...existingApp?.organization_credentials,
         ...credentialValues,
       };
       await upsertExternalApp({
