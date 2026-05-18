@@ -86,11 +86,11 @@ sync_user_files_to_      hydrate_user_files()
 
 Replace all `get_persistent_document_writer()` calls with `get_default_file_store()`:
 
-- `upload_files()`: Replace `writer.write_raw_file(content, path)` with `file_store.save_file(content, display_name, file_origin=FileOrigin.USER_LIBRARY, file_type=mime)`. Store the returned `file_id` in `Document.link`.
+- `upload_files()`: Replace `writer.write_raw_file(content, path)` with `file_store.save_file(content, display_name, file_origin=FileOrigin.USER_FILE, file_type=mime)`. Store the returned `file_id` in `Document.link`.
 - `upload_zip()`: Same pattern for each extracted file.
 - `delete_files()`: Replace `writer.delete_raw_file_by_path()` with `file_store.delete_file(file_id)`.
 
-**Add `FileOrigin.USER_LIBRARY`** to the `FileOrigin` enum in `configs/constants.py`.
+`FileOrigin.USER_FILE` already exists in the enum — no change needed.
 
 **Update `doc_metadata` schema:** Replace `storage_key` with `file_id`. Keep `file_path` (relative path for display/sync), `file_size`, `mime_type`, `is_directory`, `sync_disabled`.
 
@@ -135,8 +135,7 @@ The push daemon already supports `/workspace/managed/` prefix. No new endpoints 
 | `api/user_library.py` | Replace PersistentDocumentWriter with default file store; enqueue sync task after mutations |
 | `sandbox/user_files.py` | New — `build_user_files_fileset`, `hydrate_user_files`, `sync_user_files_to_active_sandboxes` |
 | `session/manager.py` | Call `hydrate_user_files()` on session creation |
-| `configs/constants.py` | Add `FileOrigin.USER_LIBRARY` |
-| `indexing/persistent_document_writer.py` | Remove or reduce (check for other consumers first) |
+| `skills/push.py` | Per-failure logging (matching user_files pattern) |
 
 ## 5. Important notes
 
