@@ -320,15 +320,27 @@ def embed_and_stream(
 def get_docs_to_update(
     documents: list[Document], db_docs: list[DBDocument]
 ) -> _DocsToUpdateResult:
-    """Figures out which documents actually need to be updated. If a document is already present
-    and the `updated_at` hasn't changed, we shouldn't need to do anything with it.
+    """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
-    NB: Still need to associate the document in the DB if multiple connectors are
-    indexing the same doc.
+    Two-gate dedup:
 
-    Returns the list of documents to update and a pre-computed content hash map
-    for those documents (used later to persist hashes after successful indexing,
-    avoiding a second hash computation pass).
+    Gate 1 — timestamp skip (fast path):
+      If the connector supplies doc_updated_at and it hasn't advanced past what we
+      already indexed, skip immediately. No hash computation needed.
+
+    Gate 2 — content hash skip (fallback):
+      Only applied when doc_updated_at is absent (e.g. web connector, which never
+      provides a modification timestamp). Computes DocumentBase.content_hash() and
+      compares it to the stored hash. If equal, skip.
+
+      NOT applied when doc_updated_at is present and advanced, even if the hash
+      would match — a timestamp advance is authoritative evidence of a change and
+      must not be overridden (e.g. GDrive in-place image replacement: same
+      image_file_id, but image bytes changed; hash would incorrectly say "skip").
+
+    The returned doc_id_to_content_hash map contains hashes for all documents that
+    will be indexed. These are persisted to the DB after successful vector DB writes
+    so the next sync can use gate 2 without recomputing.
     """
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
@@ -345,11 +357,8 @@ def get_docs_to_update(
         ):
             continue
 
-        # Hash-based skip: fallback for connectors without reliable doc_updated_at
-        # (e.g. web connector). When a reliable timestamp IS available and the
-        # document passed the time check above, trust the timestamp — the content
-        # may have changed in a way the hash can't detect (e.g. in-place image
-        # replacement on GDrive keeps the same image_file_id).
+        # Gate 2: hash-based skip, only for connectors with no doc_updated_at.
+        # When a timestamp IS present and advanced, skip the hash check — see docstring.
         content_hash = doc.content_hash()
         if not doc.doc_updated_at:
             db_doc = id_to_db_doc_map.get(doc.id)
