@@ -90,7 +90,7 @@ def document_by_cc_pair_cleanup_task(
     start = time.monotonic()
 
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
-    action = "skip"
+    action: str = "skip"
 
     try:
         # Phase 1: read DB state, then release the connection before the
