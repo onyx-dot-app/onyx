@@ -860,7 +860,7 @@ def test_content_hash_owner_order_is_irrelevant() -> None:
     assert _document_content_hash(doc1) == _document_content_hash(doc2)
 
 
-def test_content_hash_ignores_image_sections() -> None:
+def test_content_hash_includes_image_sections() -> None:
     doc_text_only = _doc_with_text("T", "text")
     doc_with_image = Document(
         id="x",
@@ -873,8 +873,24 @@ def test_content_hash_ignores_image_sections() -> None:
         source=DocumentSource.WEB,
         metadata={},
     )
-    assert _document_content_hash(doc_text_only) == _document_content_hash(
+    assert _document_content_hash(doc_text_only) != _document_content_hash(
         doc_with_image
+    )
+
+
+def test_content_hash_changes_when_image_file_id_changes() -> None:
+    def _image_doc(file_id: str) -> Document:
+        return Document(
+            id="x",
+            title="T",
+            semantic_identifier="x",
+            sections=[ImageSection(image_file_id=file_id)],
+            source=DocumentSource.WEB,
+            metadata={},
+        )
+
+    assert _document_content_hash(_image_doc("img-v1")) != _document_content_hash(
+        _image_doc("img-v2")
     )
 
 
