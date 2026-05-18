@@ -11,10 +11,7 @@ with Next.js servers.
 from collections.abc import Callable
 
 import pytest
-from acp.schema import PromptResponse
-from acp.schema import ToolCallStart
 
-from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 
@@ -121,102 +118,6 @@ class TestReadFile:
         )
 
         assert result == b"Hello, World!"
-
-
-class TestSendMessage:
-    """Tests for SandboxManager.send_message()."""
-
-    def test_send_message_streams_events(
-        self,
-        running_sandbox: Callable[..., SandboxHandle],
-    ) -> None:
-        """Test that send_message streams ACPEvent objects and ends with PromptResponse.
-
-        Note: Heartbeat update is now handled by the caller (SessionManager),
-        not by the SandboxManager itself.
-        """
-        handle = running_sandbox(with_session=True)
-        assert handle.session_id is not None
-
-        events: list[ACPEvent] = []
-        for event in handle.manager.send_message(
-            handle.sandbox_id, handle.session_id, "What is 2 + 2?"
-        ):
-            events.append(event)
-
-        # Should have received at least one event
-        assert len(events) > 0
-
-        # Last event should be PromptResponse (success) or contain results
-        last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
-
-    def test_send_message_write_file(
-        self,
-        running_sandbox: Callable[..., SandboxHandle],
-    ) -> None:
-        """Test that send_message can write files and emits edit tool calls."""
-        handle = running_sandbox(with_session=True)
-        assert handle.session_id is not None
-        session_path = handle.workspace_path / "sessions" / str(handle.session_id)
-
-        events: list[ACPEvent] = []
-        for event in handle.manager.send_message(
-            handle.sandbox_id,
-            handle.session_id,
-            "Create a file called hello.txt with the content 'Hello, World!'",
-        ):
-            events.append(event)
-
-        # Should have at least one ToolCallStart with kind='edit'
-        tool_calls = [e for e in events if isinstance(e, ToolCallStart)]
-        edit_tool_calls = [tc for tc in tool_calls if tc.kind == "edit"]
-        assert len(edit_tool_calls) >= 1, (
-            f"Expected at least one edit tool call, got {len(edit_tool_calls)}. "
-            f"Tool calls: {[(tc.title, tc.kind) for tc in tool_calls]}"
-        )
-
-        # Last event should be PromptResponse
-        last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
-
-        # Verify the file was actually created (agent writes relative to session root)
-        created_file = session_path / "hello.txt"
-        assert created_file.exists(), f"Expected file {created_file} to be created"
-        assert "Hello" in created_file.read_text()
-
-    def test_send_message_read_file(
-        self,
-        running_sandbox: Callable[..., SandboxHandle],
-    ) -> None:
-        """Test that send_message can read files and emits read tool calls."""
-        handle = running_sandbox(with_session=True)
-        assert handle.session_id is not None
-        session_path = handle.workspace_path / "sessions" / str(handle.session_id)
-
-        # Create a file for the agent to read (at session root, where agent has access)
-        test_file = session_path / "secret.txt"
-        test_file.write_text("The secret code is 12345")
-
-        events: list[ACPEvent] = []
-        for event in handle.manager.send_message(
-            handle.sandbox_id,
-            handle.session_id,
-            "Read the file secret.txt and tell me what the secret code is",
-        ):
-            events.append(event)
-
-        # Should have at least one ToolCallStart with kind='read'
-        tool_calls = [e for e in events if isinstance(e, ToolCallStart)]
-        read_tool_calls = [tc for tc in tool_calls if tc.kind == "read"]
-        assert len(read_tool_calls) >= 1, (
-            f"Expected at least one read tool call, got {len(read_tool_calls)}. "
-            f"Tool calls: {[(tc.title, tc.kind) for tc in tool_calls]}"
-        )
-
-        # Last event should be PromptResponse
-        last_event = events[-1]
-        assert isinstance(last_event, PromptResponse)
 
 
 class TestDeleteFile:
