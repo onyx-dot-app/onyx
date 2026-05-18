@@ -397,7 +397,6 @@ const MemoizedBuildSidebarInner = memo(
       [folded, pathname]
     );
 
-<<<<<<< HEAD
     const scheduledTasksPanel = useMemo(
       () => (
         <SidebarTab
@@ -407,7 +406,11 @@ const MemoizedBuildSidebarInner = memo(
           selected={pathname.startsWith(CRAFT_TASKS_PATH)}
         >
           Scheduled Tasks
-=======
+        </SidebarTab>
+      ),
+      [folded, pathname]
+    );
+
     const myAppsTab = useMemo(
       () => (
         <SidebarTab
@@ -421,14 +424,11 @@ const MemoizedBuildSidebarInner = memo(
           }
         >
           My Apps
->>>>>>> 83860a8431 (Changes)
         </SidebarTab>
       ),
       [folded, pathname]
     );
 
-<<<<<<< HEAD
-=======
     const manageAppsTab = useMemo(
       () =>
         isAdmin ? (
@@ -444,7 +444,6 @@ const MemoizedBuildSidebarInner = memo(
       [folded, pathname, isAdmin]
     );
 
->>>>>>> 83860a8431 (Changes)
     const backToChatButton = useMemo(
       () => (
         <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
@@ -471,12 +470,9 @@ const MemoizedBuildSidebarInner = memo(
             <div className="flex flex-col gap-0.5">
               {newBuildButton}
               {buildConfigurePanel}
-<<<<<<< HEAD
               {scheduledTasksPanel}
-=======
               {myAppsTab}
               {manageAppsTab}
->>>>>>> 83860a8431 (Changes)
             </div>
           }
           footer={footer}
