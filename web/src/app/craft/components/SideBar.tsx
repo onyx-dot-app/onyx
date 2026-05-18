@@ -408,7 +408,7 @@ const MemoizedBuildSidebarInner = memo(
           selected={pathname.startsWith(CRAFT_TASKS_PATH)}
         >
           Scheduled Tasks
-          </SidebarTab>
+        </SidebarTab>
       ),
       [folded, pathname]
     );
