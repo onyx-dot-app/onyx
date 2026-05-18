@@ -10,7 +10,9 @@ from sqlalchemy import select
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
 from onyx.server.features.build.configs import SANDBOX_BASE_PATH
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -23,6 +25,18 @@ def _reset_db(reset: None) -> None:  # noqa: ARG001
 @pytest.fixture(autouse=True)
 def _ensure_llm_provider(llm_provider: DATestLLMProvider) -> None:  # noqa: ARG001
     """Seed a default LLM provider after each DB reset."""
+
+
+@pytest.fixture
+def admin_user(reset: None) -> DATestUser:  # noqa: ARG001
+    """Override root conftest's admin_user to depend on reset.
+
+    Without this, pytest may schedule the root admin_user fixture BEFORE
+    the autouse _reset_db fixture, leaving a stale admin object after the
+    DB wipe.  Any fixture that depends on admin_user (e.g. basic_user)
+    then creates the first post-reset user and gets ADMIN instead of BASIC.
+    """
+    return UserManager.create(name=ADMIN_USER_NAME)
 
 
 def get_sandbox_id_for_user(user: DATestUser) -> UUID:

@@ -41,5 +41,5 @@ COPY --from=openapi-client /local/onyx_openapi_client /app/generated/onyx_openap
 
 ENV PYTHONPATH=/app
 
-ENTRYPOINT ["pytest", "-s", "-rs"]
+ENTRYPOINT ["pytest", "-s", "-v", "--tb=long", "-rs"]
 CMD ["/app/tests/integration", "--ignore=/app/tests/integration/multitenant_tests"]

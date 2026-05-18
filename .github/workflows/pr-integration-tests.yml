@@ -359,10 +359,26 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          # Export ENABLE_CRAFT so docker-compose variable interpolation
-          # picks it up for the environment: sections in docker-compose.yml
+
+          # Write a compose override that hardcodes ENABLE_CRAFT=true for
+          # both api_server and background.  This bypasses ${} interpolation
+          # entirely — the .env / export path proved unreliable in CI.
+          cat > docker-compose.ci-craft.yml <<'CRAFT_OVERRIDE'
+          services:
+            api_server:
+              environment:
+                - ENABLE_CRAFT=true
+            background:
+              environment:
+                - ENABLE_CRAFT=true
+          CRAFT_OVERRIDE
+
           export ENABLE_CRAFT=true
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            -f docker-compose.ci-craft.yml \
+            up \
             relational_db \
             index \
             cache \
@@ -439,6 +455,19 @@ jobs:
             exit 1
           fi
           echo "Background worker is healthy — all critical processes running."
+
+          # Verify ENABLE_CRAFT reached the API server container
+          API_CRAFT=$(docker exec onyx-api_server-1 \
+            python -c "import os; print(os.environ.get('ENABLE_CRAFT', 'NOT_SET'))" 2>&1)
+          echo "API server ENABLE_CRAFT=${API_CRAFT}"
+          if [ "$API_CRAFT" != "true" ]; then
+            echo "ERROR: ENABLE_CRAFT is not 'true' in API server (got '${API_CRAFT}')"
+            echo "--- .env file content ---"
+            cat deployment/docker_compose/.env
+            echo "--- docker inspect api_server env ---"
+            docker inspect onyx-api_server-1 --format='{{range .Config.Env}}{{println .}}{{end}}' | grep -i craft || true
+            exit 1
+          fi
 
           echo "Finished waiting for services."
 
