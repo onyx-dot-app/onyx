@@ -331,6 +331,7 @@ def get_last_successful_attempt_poll_range_end(
     earliest_index: float,
     search_settings: SearchSettings,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
@@ -339,7 +340,7 @@ def get_last_successful_attempt_poll_range_end(
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
     """
-    latest_successful_index_attempt = (
+    query = (
         db_session.query(IndexAttempt)
         .join(
             ConnectorCredentialPair,
@@ -350,9 +351,12 @@ def get_last_successful_attempt_poll_range_end(
             IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
-        .order_by(IndexAttempt.poll_range_end.desc())
-        .first()
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    latest_successful_index_attempt = query.order_by(
+        IndexAttempt.poll_range_end.desc()
+    ).first()
     if (
         not latest_successful_index_attempt
         or not latest_successful_index_attempt.poll_range_end
@@ -728,6 +732,7 @@ def resync_cc_pair(
                 ConnectorCredentialPair.connector_id == connector_id,
                 ConnectorCredentialPair.credential_id == credential_id,
                 IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
         )
 
