@@ -158,9 +158,15 @@ class IndexingPipelineProtocol(Protocol):
 
 
 def _document_content_hash(doc: Document) -> str:
-    content = " ".join(
-        s.text for s in doc.sections if isinstance(s, TextSection) and s.text
-    )
+    parts = []
+    for s in doc.sections:
+        if isinstance(s, TextSection) and s.text:
+            parts.append(s.text)
+        elif isinstance(s, ImageSection):
+            parts.append(f"[img:{s.image_file_id}]")
+        elif s.link:
+            parts.append(f"[section:{s.link}]")
+    content = " ".join(parts)
     meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
 
     def _owner_key(o: BasicExpertInfo) -> str:
