@@ -211,11 +211,6 @@ def _upsert_documents_in_db(
 
     upsert_documents(db_session, document_metadata_list)
 
-    update_docs_content_hash__no_commit(
-        ids_to_new_hash={doc.id: _document_content_hash(doc) for doc in documents},
-        db_session=db_session,
-    )
-
     # Insert document content metadata
     for doc in documents:
         upsert_document_tags(
@@ -1420,6 +1415,24 @@ def index_doc_batch(
                     updatable_chunk_data=updatable_chunk_data,
                     filtered_documents=filtered_documents,
                     enrichment=enricher,
+                    db_session=db_session,
+                )
+
+            # Persist content hash only for documents confirmed written to the
+            # vector DB. Doing this here (after the write) prevents a failed
+            # index from storing a hash that would permanently skip the document
+            # on the next sync.
+            if primary_doc_idx_insertion_records is not None:
+                successfully_indexed_ids = {
+                    r.document_id for r in primary_doc_idx_insertion_records
+                }
+                id_to_doc = {doc.id: doc for doc in context.updatable_docs}
+                update_docs_content_hash__no_commit(
+                    ids_to_new_hash={
+                        doc_id: _document_content_hash(id_to_doc[doc_id])
+                        for doc_id in successfully_indexed_ids
+                        if doc_id in id_to_doc
+                    },
                     db_session=db_session,
                 )
 
