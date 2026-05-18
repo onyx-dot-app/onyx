@@ -1,7 +1,13 @@
-"""Prometheus metrics for OpenSearch search latency and throughput.
+"""Prometheus metrics for OpenSearch search latency, throughput, and errors.
 
 Tracks client-side round-trip latency, server-side execution time (from
-OpenSearch's ``took`` field), total search count, and in-flight concurrency.
+OpenSearch's ``took`` field), total search attempts, in-flight concurrency, and
+per-error-type failure counts.
+
+``onyx_opensearch_search_total`` counts attempts (incremented on entry to the
+``track_opensearch_search`` context manager that wraps every request), so
+``onyx_opensearch_search_errors_total / onyx_opensearch_search_total`` is a
+meaningful failure rate.
 """
 
 import logging
@@ -47,8 +53,16 @@ _server_duration = Histogram(
 
 _search_total = Counter(
     "onyx_opensearch_search_total",
-    "Total number of search requests sent to OpenSearch",
+    "Total number of OpenSearch search attempts (incremented before send, so this "
+    "counts both successes and failures)",
     ["search_type"],
+)
+
+_search_errors = Counter(
+    "onyx_opensearch_search_errors_total",
+    "Total number of OpenSearch search attempts that errored, labeled by the error "
+    "type",
+    ["search_type", "error_type"],
 )
 
 _searches_in_progress = Gauge(
@@ -58,12 +72,31 @@ _searches_in_progress = Gauge(
 )
 
 
+def record_opensearch_search_error(
+    search_type: OpenSearchSearchType, exc: BaseException
+) -> None:
+    """Increments the search-error counter, labeled by exception class name."""
+    try:
+        _search_errors.labels(
+            search_type=search_type.value, error_type=type(exc).__name__
+        ).inc()
+    except Exception:
+        logger.warning(
+            "Failed to record OpenSearch search error metric.", exc_info=True
+        )
+
+
 def observe_opensearch_search(
     search_type: OpenSearchSearchType,
     client_duration_s: float,
     server_took_ms: int | None,
 ) -> None:
-    """Records latency and throughput metrics for a completed OpenSearch search.
+    """
+    Records latency histograms for a successfully-completed OpenSearch search.
+
+    The attempt counter is incremented on entry to ``track_opensearch_search``
+    so that failures count toward the denominator. This function should only be
+    called on the success path.
 
     Args:
         search_type: The type of search.
@@ -74,7 +107,6 @@ def observe_opensearch_search(
     """
     try:
         label = search_type.value
-        _search_total.labels(search_type=label).inc()
         _client_duration.labels(search_type=label).observe(client_duration_s)
         if server_took_ms is not None:
             _server_duration.labels(search_type=label).observe(server_took_ms / 1000.0)
@@ -83,12 +115,24 @@ def observe_opensearch_search(
 
 
 @contextmanager
-def track_opensearch_search_in_progress(
+def track_opensearch_search(
     search_type: OpenSearchSearchType,
 ) -> Generator[None, None, None]:
-    """Context manager that tracks in-flight OpenSearch searches via a Gauge."""
-    incremented = False
+    """Wraps an OpenSearch search call.
+
+    On entry: increments ``onyx_opensearch_search_total`` (the attempt
+    counter) and ``onyx_opensearch_searches_in_progress`` (the in-flight
+    gauge). On exit: decrements the gauge. Both increments are best-effort —
+    a metrics failure must not break the underlying search.
+    """
     label = search_type.value
+    try:
+        _search_total.labels(search_type=label).inc()
+    except Exception:
+        logger.warning(
+            "Failed to record OpenSearch search attempt metric.", exc_info=True
+        )
+    incremented = False
     try:
         _searches_in_progress.labels(search_type=label).inc()
         incremented = True
