@@ -374,6 +374,7 @@ def _build_sources_blocks(
             )
         )
 
+        included_docs += 1
         if included_docs >= num_docs_to_display:
             break
 
@@ -382,13 +383,19 @@ def _build_sources_blocks(
 
 def _priority_ordered_documents_blocks(
     answer: ChatBasicResponse,
+    exclude_doc_ids: set[str] | None = None,
 ) -> list[Block]:
     top_docs = answer.top_documents if answer.top_documents else None
     if not top_docs:
         return []
 
+    exclude = exclude_doc_ids or set()
+    docs_to_show = [d for d in top_docs if d.document_id not in exclude]
+    if not docs_to_show:
+        return []
+
     document_blocks = _build_documents_blocks(
-        documents=top_docs,
+        documents=docs_to_show,
         message_id=answer.message_id,
     )
     if document_blocks:
@@ -592,8 +599,14 @@ def build_slack_response_blocks(
         )
 
     citations_blocks = []
+    cited_doc_ids: set[str] = set()
     if answer.citation_info:
         citations_blocks = _build_citations_blocks(answer)
+        cited_doc_ids = {c.document_id for c in answer.citation_info}
+
+    retrieved_documents_blocks = _priority_ordered_documents_blocks(
+        answer, exclude_doc_ids=cited_doc_ids
+    )
 
     citations_divider = [DividerBlock()] if citations_blocks else []
     buttons_divider = [DividerBlock()] if web_follow_up_block or follow_up_block else []
@@ -605,6 +618,7 @@ def build_slack_response_blocks(
         + ai_feedback_block
         + citations_divider
         + citations_blocks
+        + retrieved_documents_blocks
         + buttons_divider
         + web_follow_up_block
         + follow_up_block
