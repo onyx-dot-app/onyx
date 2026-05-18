@@ -143,6 +143,13 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
+          # ENABLE_CRAFT=true bakes Node.js, npm, opencode, and pre-built
+          # sandbox templates (venv + outputs) into the image so the Craft
+          # router's session-creation code can succeed at runtime.  Without
+          # this, the runtime falls through to "templates missing" / "npm
+          # not found" 500s.
+          build-args: |
+            ENABLE_CRAFT=true
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
