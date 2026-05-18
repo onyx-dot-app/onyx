@@ -117,7 +117,7 @@ class TestReadFile:
         (outputs_dir / "test.txt").write_bytes(b"Hello, World!")
 
         result = handle.manager.read_file(
-            handle.sandbox_id, handle.session_id, "test.txt"
+            handle.sandbox_id, handle.session_id, "outputs/test.txt"
         )
 
         assert result == b"Hello, World!"
