@@ -22,9 +22,6 @@ const nextConfig = {
   transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
   reactCompiler: true,
-  allowedDevOrigins: [
-    "cataract-brunette-icon.ngrok-free.dev",
-  ],
   images: {
     // Used to fetch favicons
     remotePatterns: [
