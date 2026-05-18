@@ -793,8 +793,11 @@ def cloud_check_alembic() -> bool | None:
 
             with get_session_with_shared_schema() as session:
                 try:
+                    # tenant_id is a schema name from information_schema, filtered by
+                    # TENANT_ID_PREFIX in get_all_tenant_ids(); cannot bind a schema
+                    # identifier via parameters.
                     result = session.execute(
-                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
+                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608
                     )
                     result_scalar: str | None = result.scalar_one_or_none()
                     if result_scalar is None:

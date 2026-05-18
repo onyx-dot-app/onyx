@@ -1156,7 +1156,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
         for parent_object_type in self.parent_object_list:
-            query = f"SELECT Id FROM {parent_object_type}"
+            # parent_object_type is a Salesforce object name from connector config;
+            # SOQL has no parameter binding for table identifiers.
+            query = f"SELECT Id FROM {parent_object_type}"  # noqa: S608
             query_result = self.sf_client.safe_query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(

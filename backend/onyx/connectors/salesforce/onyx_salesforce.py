@@ -136,7 +136,8 @@ class OnyxSalesforce(Salesforce):
             #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
             fields = relationships_to_fields[child_relationship]
             fields_fragment = ",".join(fields)
-            query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "
+            # SF schema identifiers from internal discovery; SOQL cannot bind table/column names.
+            query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "  # noqa: S608
 
         query = query.rstrip(", ")
         query += f" FROM {sf_type} WHERE Id = '{object_id}'"

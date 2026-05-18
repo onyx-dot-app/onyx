@@ -104,11 +104,12 @@ def get_all_tenant_ids() -> list[str]:
     with get_session_with_shared_schema() as session:
         result = session.execute(
             text(
-                f"""
+                """
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', '{POSTGRES_DEFAULT_SCHEMA}')"""
-            )
+                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', :default_schema)"""
+            ),
+            {"default_schema": POSTGRES_DEFAULT_SCHEMA},
         )
         tenant_ids = [row[0] for row in result]
 
