@@ -168,6 +168,31 @@ def create_deletion_attempt_for_connector_id(
         cc_pair_id=cc_pair.id, db_session=db_session, include_secondary_index=True
     )
 
+    # Pre-flight size check to prevent accidental mass deletions
+    from sqlalchemy import func
+
+    from onyx.db.models import DocumentByConnectorCredentialPair
+
+    doc_count = (
+        db_session.query(func.count(DocumentByConnectorCredentialPair.id))
+        .filter(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+        .scalar()
+        or 0
+    )
+
+    if doc_count > 100_000:
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.error_handling.exceptions import OnyxError
+
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Cannot delete connector with {doc_count:,} documents. "
+            f"This operation requires manual coordination. Please contact support.",
+        )
+
     # TODO(rkuo): 2024-10-24 - check_deletion_attempt_is_allowed shouldn't be necessary
     # any more due to background locking improvements.
     # Remove the below permanently if everything is behaving for 30 days.
