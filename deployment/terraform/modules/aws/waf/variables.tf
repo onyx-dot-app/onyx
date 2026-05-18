@@ -47,6 +47,6 @@ variable "enable_logging" {
 
 variable "log_retention_days" {
   type        = number
-  description = "Number of days to retain WAF logs"
-  default     = 90
+  description = "Number of days to retain WAF logs. Default 365 = 12 months + some buffer for compliance."
+  default     = 365
 }
