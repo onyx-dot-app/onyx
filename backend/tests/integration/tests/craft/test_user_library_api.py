@@ -257,12 +257,9 @@ def test_upload_persists_file_to_s3(admin_user: DATestUser) -> None:
 
 
 def test_upload_batch_over_count_cap_rejects(admin_user: DATestUser) -> None:
-    """A batch upload of 101 files exceeds ``USER_LIBRARY_MAX_FILES_PER_UPLOAD``
-    (100) and is rejected with 400.
-    """
-    files = [
-        (f"tiny-{i}-{uuid4().hex[:6]}.txt", b"x", "text/plain") for i in range(101)
-    ]
+    """A batch upload exceeding ``USER_LIBRARY_MAX_FILES_PER_UPLOAD`` is rejected with 400."""
+    # CI lowers USER_LIBRARY_MAX_FILES_PER_UPLOAD to 5.
+    files = [(f"tiny-{i}-{uuid4().hex[:6]}.txt", b"x", "text/plain") for i in range(6)]
     response = _upload(admin_user, files)
 
     assert response.status_code == 400
@@ -273,8 +270,6 @@ def test_upload_pdf_with_too_many_embedded_images_rejected(
 ) -> None:
     """A PDF with more embedded images than the per-file cap is rejected with 400.
 
-    ``MAX_EMBEDDED_IMAGES_PER_FILE`` defaults to 500. We construct a
-    PDF that references 501 image XObjects on a single page.
     ``count_pdf_embedded_images`` walks ``page.images`` via pypdf and
     short-circuits at ``cap+1``.  ``_check_pdf_image_caps`` raises
     ``OnyxError(INVALID_INPUT)`` which maps to 400.
@@ -285,7 +280,8 @@ def test_upload_pdf_with_too_many_embedded_images_rejected(
     handler returns 0 from ``count_pdf_embedded_images`` and the
     upload succeeds — which is the wrong outcome for this test.
     """
-    pdf_bytes = _build_pdf_with_n_images(501)
+    # CI lowers MAX_EMBEDDED_IMAGES_PER_FILE to 5; a 6-image PDF trips it.
+    pdf_bytes = _build_pdf_with_n_images(6)
     response = _upload(
         admin_user,
         [(f"manyimages-{uuid4().hex[:6]}.pdf", pdf_bytes, "application/pdf")],
@@ -297,11 +293,7 @@ def test_upload_pdf_with_too_many_embedded_images_rejected(
 def test_upload_zip_extracts_and_applies_caps_recursively(
     admin_user: DATestUser,
 ) -> None:
-    """Zip upload extracts inner files; same caps apply.
-
-    A zip with 101 members exceeds ``USER_LIBRARY_MAX_FILES_PER_UPLOAD``
-    (100) and is rejected with 400 by ``_validate_zip_contents``.
-    """
+    """Zip upload extracts inner files; same caps apply."""
     # First verify the happy zip path: a small zip uploads and yields
     # one entry per file in the tree.
     small_member_name = f"inner-{uuid4().hex[:6]}.txt"
@@ -315,9 +307,8 @@ def test_upload_zip_extracts_and_applies_caps_recursively(
     tree = _tree(admin_user)
     assert any(small_member_name in e.get("name", "") for e in tree)
 
-    # Use 101 tiny members to exceed the batch count cap (default 100)
-    # rather than a single huge member that would OOM the test runner.
-    over_cap_members = {f"file-{i}-{uuid4().hex[:4]}.txt": b"x" for i in range(101)}
+    # CI lowers USER_LIBRARY_MAX_FILES_PER_UPLOAD to 5; a 6-member zip trips it.
+    over_cap_members = {f"file-{i}-{uuid4().hex[:4]}.txt": b"x" for i in range(6)}
     zip_bytes = _make_zip(over_cap_members)
     response = _upload_zip(admin_user, zip_bytes)
     assert response.status_code == 400

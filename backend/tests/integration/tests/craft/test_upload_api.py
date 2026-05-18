@@ -76,7 +76,7 @@ def test_upload_endpoint_404_for_other_users_session(
 
 
 def test_upload_over_per_file_cap_returns_400(admin_user: DATestUser) -> None:
-    """A 51 MiB file exceeds the per-file cap (50 MiB) and is rejected with 400.
+    """A file exceeding the per-file cap is rejected with 400.
 
     The ``validate_file`` helper catches oversized files and the endpoint
     returns 400 (not 413) because the check is application-level, not a
@@ -84,7 +84,8 @@ def test_upload_over_per_file_cap_returns_400(admin_user: DATestUser) -> None:
     """
     session_id = _create_session_id(admin_user)
 
-    oversized = b"\x00" * (51 * 1024 * 1024)
+    # CI lowers BUILD_MAX_UPLOAD_FILE_SIZE_MB to 2; a 3 MiB payload trips it.
+    oversized = b"\x00" * (3 * 1024 * 1024)
     headers = {
         k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
     }
@@ -99,15 +100,15 @@ def test_upload_over_per_file_cap_returns_400(admin_user: DATestUser) -> None:
 
 
 def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
-    """The 21st upload exceeds MAX_UPLOAD_FILES_PER_SESSION (20) and is rejected with 429.
+    """An upload exceeding MAX_UPLOAD_FILES_PER_SESSION is rejected with 429.
 
     ``UploadLimitExceededError`` is mapped to 429 (Too Many Requests) by the
     upload endpoint.
     """
     session_id = _create_session_id(admin_user)
 
-    # Fill the session with 20 distinct small files.
-    for i in range(20):
+    # CI lowers BUILD_MAX_UPLOAD_FILES_PER_SESSION to 5.
+    for i in range(5):
         BuildSessionManager.upload_file(
             admin_user,
             session_id,
@@ -115,13 +116,13 @@ def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
             content=b"x",
         )
 
-    # 21st upload should hit the count cap.
+    # 6th upload should hit the count cap.
     headers = {
         k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
     }
     response = requests.post(
         _upload_url(session_id),
-        files={"file": ("file_21.txt", b"x", "application/octet-stream")},
+        files={"file": ("file_overflow.txt", b"x", "application/octet-stream")},
         headers=headers,
         cookies=admin_user.cookies,
     )
@@ -130,17 +131,17 @@ def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
 
 
 def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
-    """Pushing total session usage past MAX_TOTAL_UPLOAD_SIZE_BYTES (200 MiB) is rejected with 429.
+    """Pushing total session usage past MAX_TOTAL_UPLOAD_SIZE_BYTES is rejected with 429.
 
     ``UploadLimitExceededError`` is mapped to 429 (Too Many Requests) by the
     upload endpoint.
     """
     session_id = _create_session_id(admin_user)
 
-    # Five 45 MiB uploads = 225 MiB > 200 MiB cap, but stays under the 50 MiB
-    # per-file cap and the 20 file count cap. The fifth one should fail.
-    chunk = b"\x00" * (45 * 1024 * 1024)
-    for i in range(4):
+    # CI lowers per-file cap to 2 MiB and total cap to 4 MiB.
+    # Two 1.5 MiB uploads (3 MiB) succeed; the third tips total past 4 MiB.
+    chunk = b"\x00" * (1024 * 1024 + 512 * 1024)  # 1.5 MiB
+    for i in range(2):
         BuildSessionManager.upload_file(
             admin_user,
             session_id,
@@ -153,7 +154,7 @@ def test_upload_over_cumulative_cap_returns_429(admin_user: DATestUser) -> None:
     }
     response = requests.post(
         _upload_url(session_id),
-        files={"file": ("chunk_4.bin", chunk, "application/octet-stream")},
+        files={"file": ("chunk_overflow.bin", chunk, "application/octet-stream")},
         headers=headers,
         cookies=admin_user.cookies,
     )

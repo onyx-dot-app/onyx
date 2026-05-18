@@ -350,6 +350,14 @@ jobs:
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           ENABLE_CRAFT=true
           SANDBOX_TEMPLATE_MODE=symlink
+          # Lowered upload/bundle caps so cap-enforcement tests can use
+          # small payloads instead of multi-MiB allocations.
+          BUILD_MAX_UPLOAD_FILE_SIZE_MB=2
+          BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4
+          BUILD_MAX_UPLOAD_FILES_PER_SESSION=5
+          MAX_EMBEDDED_IMAGES_PER_FILE=5
+          USER_LIBRARY_MAX_FILES_PER_UPLOAD=5
+          SKILL_BUNDLE_PER_FILE_MAX_BYTES=1048576
           EOF
 
           # EE-only config
@@ -363,7 +371,8 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
+            --wait --wait-timeout 300 \
             relational_db \
             index \
             cache \
@@ -371,50 +380,14 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            background \
-            -d
+            background
         id: start_docker
 
-      - name: Wait for services to be ready
+      - name: Verify background worker (supervisord)
         run: |
-          echo "Starting wait-for-service script..."
-
-          wait_for_service() {
-            local url=$1
-            local label=$2
-            local timeout=${3:-300}  # default 5 minutes
-            local start_time
-            start_time=$(date +%s)
-
-            while true; do
-              local current_time
-              current_time=$(date +%s)
-              local elapsed_time=$((current_time - start_time))
-
-              if [ $elapsed_time -ge $timeout ]; then
-                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
-                exit 1
-              fi
-
-              local response
-              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
-
-              if [ "$response" = "200" ]; then
-                echo "${label} is ready!"
-                break
-              elif [ "$response" = "curl_error" ]; then
-                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
-              else
-                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
-              fi
-
-              sleep 5
-            done
-          }
-
-          wait_for_service "http://localhost:8080/health" "API server"
-
-          # Fail fast if the background container or its Celery workers are down.
+          # --wait above blocks on healthchecks, but the background container
+          # has no healthcheck — verify supervisord-managed Celery workers
+          # are actually up.
           echo "Checking background worker health..."
           if ! docker inspect --format='{{.State.Running}}' onyx-background-1 2>/dev/null | grep -q true; then
             echo "ERROR: Background worker container is not running!"
@@ -441,6 +414,7 @@ jobs:
           echo "Finished waiting for services."
 
       - name: Start Mock Services
+        if: matrix.test-dir.path == 'tests/indexing'
         run: |
           cd backend/tests/integration/mock_services
           docker compose -f docker-compose.mock-it-services.yml \

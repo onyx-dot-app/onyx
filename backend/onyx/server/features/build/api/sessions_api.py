@@ -138,6 +138,7 @@ def create_session(
             user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
+            headless=request.headless,
         )
         db_session.commit()
 

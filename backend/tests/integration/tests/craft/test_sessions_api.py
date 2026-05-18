@@ -34,20 +34,17 @@ def _create_session(user: DATestUser) -> dict[str, Any]:
 
 
 def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
-    """Drive the stream to completion for a single message so a USER row lands.
+    """Send a message and wait only until the USER row is persisted.
 
-    The send-message endpoint persists the user message synchronously before
-    any streaming work; iterating the stream guarantees the request has been
-    accepted server-side. We swallow connection errors because the agent
-    side of the stream may emit an ErrorPacket and close — that's fine for
-    tests that only care about the resulting user message row.
+    The send-message endpoint commits the USER message row BEFORE the SSE
+    stream yields its first ``data:`` packet, so we break out as soon as
+    we receive one packet. Tests using this helper must not depend on
+    assistant-message rows being persisted.
     """
     try:
         for _ in BuildSessionManager.send_message(user, session_id, "hello"):
-            pass
+            break
     except requests.exceptions.ChunkedEncodingError:
-        # Server closed the SSE stream mid-flight; the user row was
-        # written before the first yield, which is all we need.
         pass
 
 

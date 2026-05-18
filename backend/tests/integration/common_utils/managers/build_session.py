@@ -53,11 +53,14 @@ class BuildSessionManager:
     @staticmethod
     def create(
         user: DATestUser,
+        *,
+        headless: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        body: dict[str, Any] = {"headless": headless, **kwargs}
         response = requests.post(
             _sessions_url(),
-            json=kwargs,
+            json=body,
             headers=user.headers,
             cookies=user.cookies,
         )

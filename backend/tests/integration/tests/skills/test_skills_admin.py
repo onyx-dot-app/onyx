@@ -303,13 +303,14 @@ def test_create_skill_400_on_invalid_bundle_zip(admin_user: DATestUser) -> None:
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     """An oversized bundle is rejected with 413.
 
-    The skill-bundle validator enforces a per-file cap of 25 MiB. A single
-    26 MiB highly-compressible file exceeds that limit but compresses to
-    ~25 KB with ZIP_DEFLATED, so the multipart upload is tiny and passes
-    the HTTP parser without issue. The validator's streaming size check
-    sees the uncompressed size and raises ``PAYLOAD_TOO_LARGE`` (413).
+    A single highly-compressible file exceeds the per-file cap but
+    compresses to a tiny payload with ZIP_DEFLATED, so the multipart
+    upload passes the HTTP parser without issue. The validator's
+    streaming size check sees the uncompressed size and raises
+    ``PAYLOAD_TOO_LARGE`` (413).
     """
-    oversized_payload = b"A" * (26 * 1024 * 1024)
+    # CI lowers SKILL_BUNDLE_PER_FILE_MAX_BYTES to 1 MiB; a 2 MiB file trips it.
+    oversized_payload = b"A" * (2 * 1024 * 1024)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
