@@ -1,17 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Table, Tag, createTableColumns } from "@opal/components";
+import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
-import { SvgBlocks, SvgGlobe, SvgLock, SvgUser, SvgUsers } from "@opal/icons";
+import { SvgBlocks, SvgUser } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
-import {
-  formatRelativeTime,
-  summarizeVisibility,
-} from "@/refresh-pages/admin/SkillsPage/helpers";
+import { summarizeVisibility } from "@/refresh-pages/admin/SkillsPage/helpers";
 import { Section } from "@/layouts/general-layouts";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import CustomSkillRowActions from "@/refresh-pages/admin/SkillsPage/CustomSkillRowActions";
@@ -22,52 +20,35 @@ import CustomSkillRowActions from "@/refresh-pages/admin/SkillsPage/CustomSkillR
 
 interface CustomSkillsTableProps {
   skills: CustomSkill[];
-  /**
-   * When true, the row actions menu shows admin-only actions
-   * (promote / demote, disable any skill, delete any skill).
-   */
-  adminMode: boolean;
-  /** Show the "Author" column. Hidden on the user-facing /skills page. */
-  showAuthor?: boolean;
-  /** Optional: override what the row "open" affordance does. */
-  onOpenSkill?: (skill: CustomSkill) => void;
-  /** Mutators (wireframe-only — no real backend). */
-  onShareSkill?: (skill: CustomSkill) => void;
-  onReplaceBundle?: (skill: CustomSkill) => void;
-  onToggleEnabled?: (skill: CustomSkill) => void;
-  onDeleteSkill?: (skill: CustomSkill) => void;
-  onPromoteSkill?: (skill: CustomSkill) => void;
-  onDemoteSkill?: (skill: CustomSkill) => void;
+  onShareSkill: (skill: CustomSkill) => void;
+  onReplaceBundle: (skill: CustomSkill) => void;
+  onToggleEnabled: (skill: CustomSkill) => void;
+  onDeleteSkill: (skill: CustomSkill) => void;
 }
 
 // ---------------------------------------------------------------------------
-// Visibility cell
+// Column renderers
 // ---------------------------------------------------------------------------
 
-function VisibilityCell({ skill }: { skill: CustomSkill }) {
-  const summary = summarizeVisibility(skill);
-  const icon = (() => {
-    switch (skill.visibility) {
-      case "private":
-        return SvgLock;
-      case "users":
-        return SvgUser;
-      case "groups":
-        return SvgUsers;
-      case "users_and_groups":
-        return SvgUsers;
-      case "org_wide":
-        return SvgGlobe;
-    }
-  })();
-
+function renderCreatedByColumn(value: string | null) {
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      icon={icon}
+      icon={SvgUser}
+      title={value ?? "—"}
+    />
+  );
+}
+
+function renderAccessColumn(_value: boolean, row: CustomSkill) {
+  const summary = summarizeVisibility(row);
+  return (
+    <Content
+      sizePreset="main-ui"
+      variant="section"
       title={summary.label}
-      description={summary.description}
+      description={!row.enabled ? "Disabled" : summary.description}
     />
   );
 }
@@ -78,24 +59,17 @@ function VisibilityCell({ skill }: { skill: CustomSkill }) {
 
 export default function CustomSkillsTable({
   skills,
-  adminMode,
-  showAuthor = true,
-  onOpenSkill,
   onShareSkill,
   onReplaceBundle,
   onToggleEnabled,
   onDeleteSkill,
-  onPromoteSkill,
-  onDemoteSkill,
 }: CustomSkillsTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const columns = useMemo(() => {
     const tc = createTableColumns<CustomSkill>();
 
-    const cols: ReturnType<
-      typeof tc.column | typeof tc.qualifier | typeof tc.actions
-    >[] = [
+    return [
       tc.qualifier({
         content: "icon",
         background: true,
@@ -103,95 +77,45 @@ export default function CustomSkillsTable({
       }),
       tc.column("name", {
         header: "Name",
-        weight: showAuthor ? 22 : 28,
-        cell: (value, row) => (
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            title={value}
-            description={row.slug}
-          />
+        weight: 25,
+        cell: (value) => (
+          <Text as="span" mainUiBody text05>
+            {value}
+          </Text>
         ),
       }),
       tc.column("description", {
         header: "Description",
-        weight: showAuthor ? 30 : 38,
+        weight: 35,
         cell: (value) => (
-          <Text as="span" mainUiBody text03>
+          <Truncated mainUiBody text03>
             {value || "—"}
-          </Text>
+          </Truncated>
         ),
       }),
-    ];
-
-    if (showAuthor) {
-      cols.push(
-        tc.column("author", {
-          header: "Author",
-          weight: 16,
-          cell: (author) => (
-            <Content
-              sizePreset="main-ui"
-              variant="section"
-              icon={SvgUser}
-              title={author.name}
-              description={author.is_admin ? "Admin" : "Member"}
-            />
-          ),
-        })
-      );
-    }
-
-    cols.push(
-      tc.column("visibility", {
-        header: "Visibility",
-        weight: 16,
-        cell: (_value, row) => <VisibilityCell skill={row} />,
+      tc.column("author_email", {
+        header: "Created By",
+        weight: 20,
+        cell: renderCreatedByColumn,
       }),
-      tc.column("updated_at", {
-        header: "Updated",
-        weight: 10,
-        cell: (value, row) => (
-          <div className="flex flex-col gap-0.5">
-            <Text as="span" mainUiBody text03>
-              {formatRelativeTime(value)}
-            </Text>
-            {!row.enabled && <Tag title="Disabled" color="amber" />}
-            {row.promotion_requested && !row.promoted_by_admin && (
-              <Tag title="Promotion requested" color="blue" />
-            )}
-          </div>
-        ),
+      tc.column("is_public", {
+        header: "Access",
+        weight: 12,
+        cell: renderAccessColumn,
       }),
       tc.actions({
         cell: (row) => (
           <CustomSkillRowActions
             skill={row}
-            adminMode={adminMode}
-            onShare={() => onShareSkill?.(row)}
-            onReplaceBundle={() => onReplaceBundle?.(row)}
-            onToggleEnabled={() => onToggleEnabled?.(row)}
-            onDelete={() => onDeleteSkill?.(row)}
-            onPromote={() => onPromoteSkill?.(row)}
-            onDemote={() => onDemoteSkill?.(row)}
-            onOpen={() => onOpenSkill?.(row)}
+            onShare={() => onShareSkill(row)}
+            onReplaceBundle={() => onReplaceBundle(row)}
+            onToggleEnabled={() => onToggleEnabled(row)}
+            onDelete={() => onDeleteSkill(row)}
           />
         ),
-      })
-    );
-
-    return cols;
-  }, [
-    adminMode,
-    showAuthor,
-    onShareSkill,
-    onReplaceBundle,
-    onToggleEnabled,
-    onDeleteSkill,
-    onPromoteSkill,
-    onDemoteSkill,
-    onOpenSkill,
-  ]);
+      }),
+    ];
+  }, [onShareSkill, onReplaceBundle, onToggleEnabled, onDeleteSkill]);
 
   return (
     <Section gap={0.75} alignItems="stretch">

@@ -5,71 +5,79 @@ import { Button } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Section } from "@/layouts/general-layouts";
-import VisibilityPicker from "@/refresh-pages/admin/SkillsPage/VisibilityPicker";
-import type { SkillVisibility } from "@/refresh-pages/admin/SkillsPage/interfaces";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+import SkillSharePicker from "@/refresh-pages/admin/SkillsPage/SkillSharePicker";
+import { createCustomSkill } from "@/lib/skills/api";
+import { toast } from "@/hooks/useToast";
 
 interface UploadSkillModalProps {
   open: boolean;
   onClose: () => void;
-  /** Whether the user can pick org-wide visibility (admin only). */
-  canSetOrgWide: boolean;
-  /** Wireframe-only callback. */
-  onUpload: (input: {
-    file: File | null;
-    slug: string;
-    name: string;
-    description: string;
-    visibility: SkillVisibility;
-  }) => void;
+  /** Invoked after a successful upload so callers can refresh their list. */
+  onUploaded: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function UploadSkillModal({
   open,
   onClose,
-  canSetOrgWide,
-  onUpload,
+  onUploaded,
 }: UploadSkillModalProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [slug, setSlug] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<SkillVisibility>("private");
+  const [isPublic, setIsPublic] = useState(true);
+  const [groupIds, setGroupIds] = useState<number[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  function reset() {
+    setFile(null);
+    setIsPublic(true);
+    setGroupIds([]);
+  }
+
+  function handleClose() {
+    if (submitting) return;
+    reset();
+    onClose();
+  }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setFile(selected);
   }
 
-  function handleSubmit() {
-    onUpload({ file, slug, name, description, visibility });
-    setFile(null);
-    setSlug("");
-    setName("");
-    setDescription("");
-    setVisibility("private");
+  async function handleSubmit() {
+    if (!file) return;
+    setSubmitting(true);
+    try {
+      const created = await createCustomSkill({
+        bundle: file,
+        is_public: isPublic,
+        // Org-wide skills don't carry group grants — keep the DB clean of
+        // grants that would be ignored by the visibility filter anyway.
+        group_ids: isPublic ? [] : groupIds,
+      });
+      toast.success(`Uploaded "${created.name}"`);
+      reset();
+      onUploaded();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed", {
+        description: "Skill bundle was not saved.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const submitDisabled = !file || slug.trim() === "" || name.trim() === "";
+  const submitDisabled = submitting || !file;
 
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Modal.Content width="md">
         <Modal.Header
           icon={SvgUploadCloud}
           title="Upload skill"
-          description="Upload a zip bundle. SKILL.md must be at the root with name + description in frontmatter."
-          onClose={onClose}
+          description="Upload a zip bundle. The zip filename becomes the slug, and SKILL.md frontmatter provides the name + description."
+          onClose={handleClose}
         />
         <Modal.Body>
           <Section gap={1} alignItems="stretch">
@@ -102,62 +110,21 @@ export default function UploadSkillModal({
               </div>
             </Section>
 
-            <Section gap={0.25} alignItems="stretch">
-              <Text as="span" mainUiAction text05>
-                Slug
-              </Text>
-              <InputTypeIn
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="deal-summary"
-              />
-              <Text as="span" secondaryBody text03>
-                Lowercase letters, numbers, and hyphens. Must match the
-                frontmatter `name` in SKILL.md.
-              </Text>
-            </Section>
-
-            <Section gap={0.25} alignItems="stretch">
-              <Text as="span" mainUiAction text05>
-                Name
-              </Text>
-              <InputTypeIn
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Deal summary"
-              />
-            </Section>
-
-            <Section gap={0.25} alignItems="stretch">
-              <Text as="span" mainUiAction text05>
-                Description
-              </Text>
-              <InputTextArea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this skill does, in one or two sentences."
-                rows={3}
-              />
-              <Text as="span" secondaryBody text03>
-                The agent reads this to decide whether to invoke the skill. Be
-                specific about when it applies.
-              </Text>
-            </Section>
-
             <Section gap={0.5} alignItems="stretch">
               <Text as="span" mainUiAction text05>
-                Visibility
+                Share
               </Text>
-              <VisibilityPicker
-                visibility={visibility}
-                onChange={setVisibility}
-                canSetOrgWide={canSetOrgWide}
+              <SkillSharePicker
+                isPublic={isPublic}
+                onIsPublicChange={setIsPublic}
+                groupIds={groupIds}
+                onGroupIdsChange={setGroupIds}
               />
             </Section>
           </Section>
         </Modal.Body>
         <Modal.Footer>
-          <Button prominence="secondary" onClick={onClose}>
+          <Button prominence="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button
@@ -165,7 +132,7 @@ export default function UploadSkillModal({
             onClick={handleSubmit}
             icon={SvgUploadCloud}
           >
-            Upload
+            {submitting ? "Uploading…" : "Upload"}
           </Button>
         </Modal.Footer>
       </Modal.Content>

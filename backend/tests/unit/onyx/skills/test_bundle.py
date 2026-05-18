@@ -13,6 +13,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _safe_unzip
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
+from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
 
 # ---------------------------------------------------------------------------
@@ -382,3 +384,83 @@ def test_validation_violation_returns_400() -> None:
     with pytest.raises(OnyxError) as exc_info:
         validate_custom_bundle(b"not a zip", slug="hello")
     assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# slug_from_filename
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        ("deal-summary.zip", "deal-summary"),
+        ("hello.ZIP", "hello"),
+        ("plain", "plain"),
+    ],
+)
+def test_slug_from_filename_strips_zip_extension(filename: str, expected: str) -> None:
+    assert slug_from_filename(filename) == expected
+
+
+@pytest.mark.parametrize("bad", [None, "", "Bad-Caps.zip", "with space.zip"])
+def test_slug_from_filename_rejects_invalid(bad: str | None) -> None:
+    with pytest.raises(OnyxError):
+        slug_from_filename(bad)
+
+
+# ---------------------------------------------------------------------------
+# parse_skill_md_metadata
+# ---------------------------------------------------------------------------
+
+
+def _bundle_with_skill_md(body: bytes) -> bytes:
+    return _build_zip([("SKILL.md", body)])
+
+
+def test_parse_skill_md_metadata_happy_path() -> None:
+    body = b"---\nname: My Skill\ndescription: Helpful description\n---\n\nbody\n"
+    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
+    assert name == "My Skill"
+    assert description == "Helpful description"
+
+
+def test_parse_skill_md_metadata_strips_whitespace() -> None:
+    body = b"---\nname: '  spaced  '\ndescription: ' desc '\n---\n\nbody\n"
+    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
+    assert name == "spaced"
+    assert description == "desc"
+
+
+def test_parse_skill_md_metadata_rejects_missing_frontmatter() -> None:
+    with pytest.raises(OnyxError, match="frontmatter"):
+        parse_skill_md_metadata(_bundle_with_skill_md(b"no frontmatter here\n"))
+
+
+def test_parse_skill_md_metadata_rejects_missing_name() -> None:
+    body = b"---\ndescription: only a description\n---\n\nbody\n"
+    with pytest.raises(OnyxError, match="name"):
+        parse_skill_md_metadata(_bundle_with_skill_md(body))
+
+
+def test_parse_skill_md_metadata_rejects_missing_description() -> None:
+    body = b"---\nname: only a name\n---\n\nbody\n"
+    with pytest.raises(OnyxError, match="description"):
+        parse_skill_md_metadata(_bundle_with_skill_md(body))
+
+
+def test_parse_skill_md_metadata_rejects_empty_name() -> None:
+    body = b"---\nname: ''\ndescription: desc\n---\n\nbody\n"
+    with pytest.raises(OnyxError, match="name"):
+        parse_skill_md_metadata(_bundle_with_skill_md(body))
+
+
+def test_parse_skill_md_metadata_rejects_missing_skill_md() -> None:
+    zip_bytes = _build_zip([("other.txt", b"hi")])
+    with pytest.raises(OnyxError, match="SKILL.md missing"):
+        parse_skill_md_metadata(zip_bytes)
+
+
+def test_parse_skill_md_metadata_rejects_bad_zip() -> None:
+    with pytest.raises(OnyxError, match="not a valid zip"):
+        parse_skill_md_metadata(b"not a zip")

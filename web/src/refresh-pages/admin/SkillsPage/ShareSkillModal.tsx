@@ -2,51 +2,72 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@opal/components";
-import { SvgGlobe, SvgShare } from "@opal/icons";
+import { SvgShare } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import VisibilityPicker from "@/refresh-pages/admin/SkillsPage/VisibilityPicker";
-import type {
-  CustomSkill,
-  SkillVisibility,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+import SkillSharePicker from "@/refresh-pages/admin/SkillsPage/SkillSharePicker";
+import { patchCustomSkill, replaceCustomSkillGrants } from "@/lib/skills/api";
+import { toast } from "@/hooks/useToast";
+import type { CustomSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 
 interface ShareSkillModalProps {
   skill: CustomSkill | null;
   open: boolean;
   onClose: () => void;
-  /** True iff the current user is an admin for this skill (admin or author). */
-  canSetOrgWide: boolean;
-  onSave: (visibility: SkillVisibility) => void;
-  onRequestOrgWide?: () => void;
+  /** Called after a successful save so callers can revalidate. */
+  onSaved: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export default function ShareSkillModal({
   skill,
   open,
   onClose,
-  canSetOrgWide,
-  onSave,
-  onRequestOrgWide,
+  onSaved,
 }: ShareSkillModalProps) {
-  const [visibility, setVisibility] = useState<SkillVisibility>(
-    skill?.visibility ?? "private"
+  const [isPublic, setIsPublic] = useState(skill?.is_public ?? false);
+  const [groupIds, setGroupIds] = useState<number[]>(
+    skill?.granted_group_ids ?? []
   );
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (skill) setVisibility(skill.visibility);
+    if (skill) {
+      setIsPublic(skill.is_public);
+      setGroupIds(skill.granted_group_ids);
+    }
   }, [skill]);
 
   if (!skill) return null;
+
+  async function handleSave() {
+    if (!skill) return;
+    setSaving(true);
+    try {
+      if (isPublic !== skill.is_public) {
+        await patchCustomSkill(skill.id, { is_public: isPublic });
+      }
+
+      // Org-wide skills don't keep group grants — the visibility filter
+      // ignores them, so clear the list to keep the DB tidy.
+      const targetGroups = isPublic ? [] : groupIds;
+      const groupsChanged =
+        targetGroups.length !== skill.granted_group_ids.length ||
+        targetGroups.some((id) => !skill.granted_group_ids.includes(id));
+      if (groupsChanged) {
+        await replaceCustomSkillGrants(skill.id, targetGroups);
+      }
+
+      toast.success(`Updated "${skill.name}" visibility`);
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update visibility"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -59,54 +80,20 @@ export default function ShareSkillModal({
         />
         <Modal.Body>
           <Section gap={1} alignItems="stretch">
-            <VisibilityPicker
-              visibility={visibility}
-              onChange={setVisibility}
-              canSetOrgWide={canSetOrgWide}
+            <SkillSharePicker
+              isPublic={isPublic}
+              onIsPublicChange={setIsPublic}
+              groupIds={groupIds}
+              onGroupIdsChange={setGroupIds}
             />
-
-            {/*
-              In a real implementation, "Specific users" / "Groups" /
-              "Users + groups" would render multi-select pickers here.
-              For the wireframe we keep it simple.
-            */}
-            {(visibility === "users" ||
-              visibility === "groups" ||
-              visibility === "users_and_groups") && (
-              <div className="rounded-md border border-dashed border-border-02 p-4 bg-background-tint-01">
-                <Text as="p" mainUiBody text03>
-                  Picker for individual users / groups would render here.
-                  Wireframe-only — no live data binding yet.
-                </Text>
-              </div>
-            )}
           </Section>
         </Modal.Body>
         <Modal.Footer>
-          {!canSetOrgWide && onRequestOrgWide && (
-            <Button
-              prominence="secondary"
-              icon={SvgGlobe}
-              onClick={() => {
-                onRequestOrgWide();
-                onClose();
-              }}
-            >
-              {skill.promotion_requested
-                ? "Org-wide requested"
-                : "Request org-wide"}
-            </Button>
-          )}
           <Button prominence="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={() => {
-              onSave(visibility);
-              onClose();
-            }}
-          >
-            Save
+          <Button disabled={saving} onClick={handleSave}>
+            {saving ? "Saving…" : "Save"}
           </Button>
         </Modal.Footer>
       </Modal.Content>

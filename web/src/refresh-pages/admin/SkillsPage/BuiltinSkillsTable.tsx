@@ -5,6 +5,7 @@ import { Table, Tag, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import type { BuiltinSkill } from "@/refresh-pages/admin/SkillsPage/interfaces";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
@@ -44,16 +45,16 @@ const COLUMNS = [
     header: "Description",
     weight: 50,
     cell: (value) => (
-      <Text as="span" mainUiBody text03>
+      <Truncated mainUiBody text03>
         {value}
-      </Text>
+      </Truncated>
     ),
   }),
-  tc.column("available", {
+  tc.column("is_available", {
     header: "Status",
     weight: 28,
-    cell: (available, row) =>
-      available ? (
+    cell: (isAvailable, row) =>
+      isAvailable ? (
         <Tag title="Available" color="green" />
       ) : (
         <div className="flex flex-col gap-0.5">

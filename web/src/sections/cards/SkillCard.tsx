@@ -2,59 +2,40 @@
 
 import { useCallback } from "react";
 import { Tag } from "@opal/components";
-import { SvgBlocks, SvgEdit, SvgShare, SvgTrash, SvgUser } from "@opal/icons";
-import IconButton from "@/refresh-components/buttons/IconButton";
-import { noProp } from "@/lib/utils";
-import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
+import { SvgBlocks, SvgUser } from "@opal/icons";
+import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
-import type {
-  CustomSkill,
-  SkillAuthor,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
-import { summarizeVisibility } from "@/refresh-pages/admin/SkillsPage/helpers";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 
-export type SkillCardSource = "builtin" | "owned" | "shared";
+export type SkillCardSource = "builtin" | "custom";
 
 export interface SkillCardItem {
   id: string;
   name: string;
   description: string;
-  author: SkillAuthor;
   source: SkillCardSource;
   // Built-in only
-  available?: boolean;
-  unavailable_reason?: string;
-  // Custom skill passthrough (used for handler invocations)
-  customSkill?: CustomSkill;
+  is_available?: boolean;
+  unavailable_reason?: string | null;
+  // Custom only
+  author_email?: string | null;
 }
 
 export interface SkillCardProps {
   item: SkillCardItem;
-  onInspect?: (item: SkillCardItem) => void;
-  onShare?: (skill: CustomSkill) => void;
-  onReplaceBundle?: (skill: CustomSkill) => void;
-  onDelete?: (skill: CustomSkill) => void;
+  onClick?: (item: SkillCardItem) => void;
 }
 
-export default function SkillCard({
-  item,
-  onInspect,
-  onShare,
-  onReplaceBundle,
-  onDelete,
-}: SkillCardProps) {
-  const customSkill = item.customSkill;
-  const isOwned = item.source === "owned";
+export default function SkillCard({ item, onClick }: SkillCardProps) {
   const isBuiltin = item.source === "builtin";
+  const { enterpriseSettings } = useSettingsContext();
+  const appName = enterpriseSettings?.application_name || "Onyx";
 
   const handleClick = useCallback(() => {
-    onInspect?.(item);
-  }, [onInspect, item]);
-
-  const visibilitySummary =
-    customSkill && !isBuiltin ? summarizeVisibility(customSkill) : null;
+    onClick?.(item);
+  }, [onClick, item]);
 
   return (
     <Interactive.Simple onClick={handleClick} group="group/SkillCard">
@@ -69,41 +50,14 @@ export default function SkillCard({
             icon={SvgBlocks}
             title={item.name}
             description={item.description}
-            rightChildren={
-              isOwned && customSkill ? (
-                <>
-                  <IconButton
-                    icon={SvgEdit}
-                    tertiary
-                    onClick={noProp(() => onReplaceBundle?.(customSkill))}
-                    tooltip="Replace Bundle"
-                    className="hidden group-hover/SkillCard:flex"
-                  />
-                  <IconButton
-                    icon={SvgShare}
-                    tertiary
-                    onClick={noProp(() => onShare?.(customSkill))}
-                    tooltip="Share Skill"
-                    className="hidden group-hover/SkillCard:flex"
-                  />
-                  <IconButton
-                    icon={SvgTrash}
-                    tertiary
-                    onClick={noProp(() => onDelete?.(customSkill))}
-                    tooltip="Delete Skill"
-                    className="hidden group-hover/SkillCard:flex"
-                  />
-                </>
-              ) : null
-            }
           />
         </div>
 
         <div className="bg-background-tint-01 p-1 flex flex-row items-center justify-between w-full">
-          <div className="flex flex-col gap-1 py-1 px-2">
+          <div className="py-1 px-2 min-w-0 flex-1">
             <Content
               icon={SvgUser}
-              title={item.author.email || item.author.name}
+              title={isBuiltin ? appName : item.author_email || appName}
               sizePreset="secondary"
               variant="body"
               color="muted"
@@ -111,7 +65,7 @@ export default function SkillCard({
           </div>
           <div className="p-0.5 pr-1.5">
             {isBuiltin ? (
-              item.available ? (
+              item.is_available ? (
                 <Tag title="Built-in" color="blue" />
               ) : (
                 <Tag
@@ -123,9 +77,9 @@ export default function SkillCard({
                   color="amber"
                 />
               )
-            ) : visibilitySummary ? (
-              <Tag title={visibilitySummary.label} color="gray" />
-            ) : null}
+            ) : (
+              <Tag title="Custom" color="gray" />
+            )}
           </div>
         </div>
       </Card>
