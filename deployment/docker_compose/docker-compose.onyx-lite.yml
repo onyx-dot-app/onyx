@@ -54,6 +54,8 @@ services:
         required: false
     environment:
       - DISABLE_VECTOR_DB=true
+      - DISABLE_MODEL_SERVER=true
+      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false
       - FILE_STORE_BACKEND=postgres
       - CACHE_BACKEND=postgres
       - AUTH_BACKEND=postgres
