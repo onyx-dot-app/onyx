@@ -10,6 +10,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     noticeHeader: "Important Notice",
     noticeContent: "Please read and agree to continue",
     consentPrompt: "I agree to the terms",
+    customHelpLinkUrl: "https://help.example.com",
+    customHelpLinkLabel: "Support Portal",
   };
 
   test.beforeEach(async ({ page, eeEnabled }) => {
@@ -66,6 +68,39 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     if (isChecked === "true") {
       await noticeToggle.click();
       await page.waitForTimeout(300);
+    }
+
+    // Clear custom help link URL + label
+    const helpLinkUrlInput = page.locator(
+      '[data-label="custom-help-link-url-input"]'
+    );
+    if (await helpLinkUrlInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await helpLinkUrlInput.clear();
+    }
+    const helpLinkLabelInput = page.locator(
+      '[data-label="custom-help-link-label-input"]'
+    );
+    if (
+      await helpLinkLabelInput.isVisible({ timeout: 1000 }).catch(() => false)
+    ) {
+      await helpLinkLabelInput.clear();
+    }
+
+    // Disable hide-onyx-branding toggle if enabled
+    const hideBrandingToggle = page.locator(
+      '[data-label="hide-onyx-branding-toggle"]'
+    );
+    if (
+      await hideBrandingToggle
+        .isVisible({ timeout: 1000 })
+        .catch(() => false)
+    ) {
+      const hideBrandingState =
+        await hideBrandingToggle.getAttribute("aria-checked");
+      if (hideBrandingState === "true") {
+        await hideBrandingToggle.click();
+        await page.waitForTimeout(300);
+      }
     }
 
     // Save reset
@@ -207,5 +242,126 @@ test.describe("Appearance Theme Settings @exclusive", () => {
 
     // 20. Verify chat footer content
     await expect(page.getByText(TEST_VALUES.chatFooter)).toBeVisible();
+  });
+
+  test("custom help link appears in the profile popover with the configured label", async ({
+    page,
+  }) => {
+    const urlInput = page.locator('[data-label="custom-help-link-url-input"]');
+    const labelInput = page.locator(
+      '[data-label="custom-help-link-label-input"]'
+    );
+    await urlInput.fill(TEST_VALUES.customHelpLinkUrl);
+    await labelInput.fill(TEST_VALUES.customHelpLinkLabel);
+
+    const saveButton = page.getByRole("button", { name: "Apply Changes" });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    const response = await page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/enterprise-settings") &&
+        r.request().method() === "PUT",
+      { timeout: 10000 }
+    );
+    expect(response.status()).toBe(200);
+    await expect(page.getByText(/successfully/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Open the profile popover from the sidebar
+    await page.locator("#onyx-user-dropdown").click();
+
+    const customHelpItem = page.getByTestId("Settings/custom-help-link");
+    await expect(customHelpItem).toBeVisible({ timeout: 5000 });
+    await expect(customHelpItem).toContainText(
+      TEST_VALUES.customHelpLinkLabel
+    );
+    // LineItemButton with href renders an <a> with that href under the hood
+    await expect(
+      customHelpItem.locator(`a[href="${TEST_VALUES.customHelpLinkUrl}"]`)
+    ).toHaveCount(1);
+  });
+
+  test("custom help link uses the URL as the title when the label is empty", async ({
+    page,
+  }) => {
+    const urlInput = page.locator('[data-label="custom-help-link-url-input"]');
+    await urlInput.fill(TEST_VALUES.customHelpLinkUrl);
+
+    const saveButton = page.getByRole("button", { name: "Apply Changes" });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    const response = await page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/enterprise-settings") &&
+        r.request().method() === "PUT",
+      { timeout: 10000 }
+    );
+    expect(response.status()).toBe(200);
+    await expect(page.getByText(/successfully/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    await page.locator("#onyx-user-dropdown").click();
+    const customHelpItem = page.getByTestId("Settings/custom-help-link");
+    await expect(customHelpItem).toBeVisible({ timeout: 5000 });
+    // Falls back to URL itself as the displayed title
+    await expect(customHelpItem).toContainText(TEST_VALUES.customHelpLinkUrl);
+  });
+
+  test("validation fails when the label is set but the URL is empty", async ({
+    page,
+  }) => {
+    const labelInput = page.locator(
+      '[data-label="custom-help-link-label-input"]'
+    );
+    await labelInput.fill(TEST_VALUES.customHelpLinkLabel);
+
+    const saveButton = page.getByRole("button", { name: "Apply Changes" });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+
+    // Should NOT trigger a PUT — assert error message becomes visible and form
+    // didn't post by checking for the validation copy
+    await expect(page.getByText("URL is required when a label is set")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Clean up: clear the orphan label before afterEach runs
+    await labelInput.clear();
+  });
+
+  test("Hide Onyx Branding toggle removes the 'Powered by Onyx' tagline", async ({
+    page,
+  }) => {
+    // Sanity: tagline should be visible by default in the sidebar
+    await expect(page.getByText("Powered by Onyx").first()).toBeVisible({
+      timeout: 5000,
+    });
+
+    const hideBrandingToggle = page.locator(
+      '[data-label="hide-onyx-branding-toggle"]'
+    );
+    await hideBrandingToggle.scrollIntoViewIfNeeded();
+    await hideBrandingToggle.click();
+
+    const saveButton = page.getByRole("button", { name: "Apply Changes" });
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    const response = await page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/admin/enterprise-settings") &&
+        r.request().method() === "PUT",
+      { timeout: 10000 }
+    );
+    expect(response.status()).toBe(200);
+    await expect(page.getByText(/successfully/i)).toBeVisible({
+      timeout: 5000,
+    });
+
+    // After SWR revalidation the tagline should be gone from the sidebar
+    await expect(page.getByText("Powered by Onyx")).toHaveCount(0, {
+      timeout: 5000,
+    });
   });
 });

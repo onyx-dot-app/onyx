@@ -39,6 +39,7 @@ from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -89,6 +90,15 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
 
 
 def _self_hosted_tier() -> Tier:
+    if not LICENSE_ENFORCEMENT_ENABLED:
+        # Mirrors apply_license_status_to_settings (settings/api.py:87-92):
+        # legacy / dev-mode self-host where EE code is loaded via
+        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES but no license is required.
+        # Treat as ENTERPRISE so tier_gate doesn't 402 EE endpoints.
+        return (
+            Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
+        )
+
     try:
         metadata = get_cached_license_metadata()
     except RedisError as e:

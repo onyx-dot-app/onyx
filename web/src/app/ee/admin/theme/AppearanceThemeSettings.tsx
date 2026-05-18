@@ -56,6 +56,7 @@ export const AppearanceThemeSettings = forwardRef<
   const noticeHeaderInputRef = useRef<HTMLInputElement>(null);
   const noticeContentInputRef = useRef<HTMLTextAreaElement>(null);
   const consentPromptTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const customHelpLinkUrlInputRef = useRef<HTMLInputElement>(null);
   const prevShowFirstVisitNoticeRef = useRef<boolean>(
     Boolean(values.show_first_visit_notice)
   );
@@ -96,6 +97,7 @@ export const AppearanceThemeSettings = forwardRef<
         { name: "custom_popup_header", ref: noticeHeaderInputRef },
         { name: "custom_popup_content", ref: noticeContentInputRef },
         { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
+        { name: "custom_help_link_url", ref: customHelpLinkUrlInputRef },
       ];
       for (const field of fieldRefs) {
         if (errors[field.name] && field.ref.current) {
@@ -439,6 +441,72 @@ export const AppearanceThemeSettings = forwardRef<
         <FormField.Message
           messages={{ error: errors.custom_lower_disclaimer_content as string }}
         />
+      </FormField>
+
+      <div className="flex gap-2 items-start">
+        <FormField
+          state={errors.custom_help_link_url ? "error" : "idle"}
+          className="flex-1"
+        >
+          <FormField.Label>Custom Help Link</FormField.Label>
+          <FormField.Control asChild>
+            <InputTypeIn
+              ref={customHelpLinkUrlInputRef}
+              data-label="custom-help-link-url-input"
+              showClearButton
+              placeholder="https://docs.onyx.app"
+              variant={errors.custom_help_link_url ? "error" : undefined}
+              value={values.custom_help_link_url}
+              onChange={(e) =>
+                setFieldValue("custom_help_link_url", e.target.value)
+              }
+            />
+          </FormField.Control>
+          <FormField.Description>
+            Add a custom help link in the user menu in addition to the Onyx
+            documentation.
+          </FormField.Description>
+          <FormField.Message
+            messages={{ error: errors.custom_help_link_url as string }}
+          />
+        </FormField>
+        <FormField state="idle" className="flex-1">
+          <FormField.Label className="invisible" aria-hidden="true">
+            Custom Help Link Label
+          </FormField.Label>
+          <FormField.Control asChild>
+            <InputTypeIn
+              aria-label="Custom Help Link Label"
+              data-label="custom-help-link-label-input"
+              showClearButton
+              placeholder="Link label"
+              value={values.custom_help_link_label}
+              onChange={(e) =>
+                setFieldValue("custom_help_link_label", e.target.value)
+              }
+            />
+          </FormField.Control>
+        </FormField>
+      </div>
+
+      <FormField state="idle" className="gap-0">
+        <div className="flex justify-between items-center">
+          <FormField.Label>Hide Onyx Branding</FormField.Label>
+          <FormField.Control>
+            <Switch
+              aria-label="Hide Onyx Branding"
+              data-label="hide-onyx-branding-toggle"
+              checked={values.hide_onyx_branding}
+              onCheckedChange={(checked) =>
+                setFieldValue("hide_onyx_branding", checked)
+              }
+            />
+          </FormField.Control>
+        </div>
+        <FormField.Description>
+          Remove &ldquo;powered by Onyx&rdquo; and other Onyx branding presence
+          in the app.
+        </FormField.Description>
       </FormField>
 
       <Divider />

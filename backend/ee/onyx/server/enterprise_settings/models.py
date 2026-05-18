@@ -54,6 +54,14 @@ class EnterpriseSettings(BaseModel):
     show_first_visit_notice: bool | None = None
     custom_greeting_message: str | None = None
 
+    # custom help link surfaced in the profile dropdown alongside the
+    # built-in "Help & FAQ" item
+    custom_help_link_url: str | None = None
+    custom_help_link_label: str | None = None
+
+    # hide the "Powered by Onyx" tagline under the sidebar logo
+    hide_onyx_branding: bool | None = None
+
     def check_validity(self) -> None:
         return
 

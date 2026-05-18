@@ -17,6 +17,7 @@ import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
+  SvgExternalLink,
   SvgHelpCircle,
   SvgLogOut,
   SvgSliders,
@@ -130,6 +131,22 @@ function SettingsPopover({
           href="https://docs.onyx.app"
           target="_blank"
         />,
+        settings?.enterpriseSettings?.custom_help_link_url && (
+          <LineItemButton
+            key="custom-help-link"
+            data-testid="Settings/custom-help-link"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgExternalLink}
+            title={
+              settings.enterpriseSettings.custom_help_link_label ||
+              settings.enterpriseSettings.custom_help_link_url
+            }
+            href={settings.enterpriseSettings.custom_help_link_url}
+            target="_blank"
+          />
+        ),
         showLogin && (
           <LineItemButton
             key="log-in"
