@@ -1,0 +1,213 @@
+"""Cluster O — File upload (integration / HTTP half).
+
+Exercises the upload endpoint via the live API server so we pin both the
+happy-path response shape and the boundary error mapping (auth, foreign
+session, size/count/cumulative caps, blocked extensions, Unicode filenames).
+"""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+import pytest
+import requests
+
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from tests.integration.common_utils.test_models import DATestUser
+
+
+def _create_session_id(user: DATestUser) -> UUID:
+    """Create a build session and return its UUID."""
+    session = BuildSessionManager.create(user)
+    return UUID(session["id"])
+
+
+def _upload_url(session_id: UUID) -> str:
+    return f"{API_SERVER_URL}/build/sessions/{session_id}/upload"
+
+
+def test_upload_endpoint_201(admin_user: DATestUser) -> None:
+    """POST returns 201 with a body containing {filename, path, size_bytes}."""
+    session_id = _create_session_id(admin_user)
+    body = BuildSessionManager.upload_file(
+        admin_user,
+        session_id,
+        filename="hello.txt",
+        content=b"hello world",
+    )
+
+    assert body["filename"] == "hello.txt"
+    assert isinstance(body["path"], str) and body["path"].endswith("hello.txt")
+    assert body["size_bytes"] == len(b"hello world")
+
+
+def test_upload_endpoint_requires_auth(admin_user: DATestUser) -> None:
+    """POST with no auth token returns 401 (or 403)."""
+    # admin_user is just used to ensure a session exists; we then strip auth.
+    session_id = _create_session_id(admin_user)
+
+    response = requests.post(
+        _upload_url(session_id),
+        files={"file": ("hello.txt", b"hello", "application/octet-stream")},
+        headers={},
+        cookies=None,
+    )
+    # Onyx auth middleware returns either 401 or 403 for unauthenticated
+    # requests against BASIC_ACCESS endpoints.
+    assert response.status_code in (401, 403)
+
+
+def test_upload_endpoint_404_for_other_users_session(
+    admin_user: DATestUser, basic_user: DATestUser
+) -> None:
+    """Uploading to another user's session returns 404."""
+    foreign_session_id = _create_session_id(admin_user)
+
+    headers = {
+        k: v for k, v in basic_user.headers.items() if k.lower() != "content-type"
+    }
+    response = requests.post(
+        _upload_url(foreign_session_id),
+        files={"file": ("hello.txt", b"hi", "application/octet-stream")},
+        headers=headers,
+        cookies=basic_user.cookies,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
+)
+def test_upload_over_per_file_cap_returns_413(admin_user: DATestUser) -> None:
+    """A 51 MiB file exceeds the per-file cap (50 MiB) and is rejected."""
+    session_id = _create_session_id(admin_user)
+
+    oversized = b"\x00" * (51 * 1024 * 1024)
+    headers = {
+        k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
+    }
+    response = requests.post(
+        _upload_url(session_id),
+        files={"file": ("big.txt", oversized, "application/octet-stream")},
+        headers=headers,
+        cookies=admin_user.cookies,
+    )
+    # Per master plan Cluster O: per-file cap → 413.
+    assert response.status_code == 413
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
+)
+def test_upload_at_count_cap_returns_413(admin_user: DATestUser) -> None:
+    """The 21st upload exceeds MAX_UPLOAD_FILES_PER_SESSION (20) and is rejected."""
+    session_id = _create_session_id(admin_user)
+
+    # Fill the session with 20 distinct small files.
+    for i in range(20):
+        BuildSessionManager.upload_file(
+            admin_user,
+            session_id,
+            filename=f"file_{i}.txt",
+            content=b"x",
+        )
+
+    # 21st upload should hit the count cap.
+    headers = {
+        k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
+    }
+    response = requests.post(
+        _upload_url(session_id),
+        files={"file": ("file_21.txt", b"x", "application/octet-stream")},
+        headers=headers,
+        cookies=admin_user.cookies,
+    )
+    # Per master plan Cluster O: count cap → 413.
+    assert response.status_code == 413
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=("upload caps return 400/429; plan calls for 413 PAYLOAD_TOO_LARGE. "),
+)
+def test_upload_over_cumulative_cap_returns_413(admin_user: DATestUser) -> None:
+    """Pushing total session usage past MAX_TOTAL_UPLOAD_SIZE_BYTES (200 MiB) is rejected."""
+    session_id = _create_session_id(admin_user)
+
+    # Five 45 MiB uploads = 225 MiB > 200 MiB cap, but stays under the 50 MiB
+    # per-file cap and the 20 file count cap. The fifth one should fail.
+    chunk = b"\x00" * (45 * 1024 * 1024)
+    for i in range(4):
+        BuildSessionManager.upload_file(
+            admin_user,
+            session_id,
+            filename=f"chunk_{i}.bin",
+            content=chunk,
+        )
+
+    headers = {
+        k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
+    }
+    response = requests.post(
+        _upload_url(session_id),
+        files={"file": ("chunk_4.bin", chunk, "application/octet-stream")},
+        headers=headers,
+        cookies=admin_user.cookies,
+    )
+    # Per master plan Cluster O: cumulative cap → 413.
+    assert response.status_code == 413
+
+
+def test_upload_rejects_blocked_extension_via_http(admin_user: DATestUser) -> None:
+    """Uploading evil.exe is rejected with a 4xx (blocked extension)."""
+    session_id = _create_session_id(admin_user)
+
+    headers = {
+        k: v for k, v in admin_user.headers.items() if k.lower() != "content-type"
+    }
+    response = requests.post(
+        _upload_url(session_id),
+        files={"file": ("evil.exe", b"MZ\x90\x00", "application/octet-stream")},
+        headers=headers,
+        cookies=admin_user.cookies,
+    )
+    assert 400 <= response.status_code < 500
+    # Sanity check: this must NOT silently succeed.
+    assert response.status_code != 201
+
+
+def test_upload_with_unicode_filename_persists_correctly(
+    admin_user: DATestUser,
+) -> None:
+    """A Unicode filename round-trips through upload + download.
+
+    The Content-Disposition response header for download uses RFC 5987 for
+    non-Latin-1 filenames; here we confirm the file is reachable and its
+    bytes survive the round trip.
+    """
+    session_id = _create_session_id(admin_user)
+
+    original_bytes = "héllo wörld 你好 🌍".encode("utf-8")
+    # The upload endpoint sanitizes filenames (replaces non [a-zA-Z0-9._-]
+    # with underscores), so we focus the round-trip assertion on the bytes;
+    # the response also tells us where the file ended up.
+    upload_response = BuildSessionManager.upload_file(
+        admin_user,
+        session_id,
+        filename="héllo wörld 你好.txt",
+        content=original_bytes,
+    )
+    sanitized_name = upload_response["filename"]
+    relative_path = upload_response["path"]
+
+    # The sanitizer keeps the .txt suffix.
+    assert sanitized_name.endswith(".txt")
+    assert relative_path.endswith(sanitized_name)
+
+    downloaded = BuildSessionManager.download_artifact(
+        admin_user, session_id, relative_path
+    )
+    assert downloaded == original_bytes

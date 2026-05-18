@@ -10,14 +10,32 @@ from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def build_minimal_bundle(slug: str) -> bytes:
-    """Build a minimal valid skill bundle zip with SKILL.md."""
+def build_minimal_bundle(
+    slug: str,
+    *,
+    body: str | None = None,
+    extra_files: dict[str, bytes] | None = None,
+) -> bytes:
+    """Build a minimal valid skill bundle zip.
+
+    - ``body``: contents of ``SKILL.md``. When None, a minimal frontmatter-
+      only SKILL.md is generated so the bundle parses.
+    - ``extra_files``: additional ``{path: bytes}`` entries to include in
+      the zip alongside ``SKILL.md``.
+    """
+    skill_md = (
+        body
+        if body is not None
+        else (
+            f"---\nname: {slug}\ndescription: Test skill {slug}\n---\n"
+            "\nSkill instructions."
+        )
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "SKILL.md",
-            f"---\nname: {slug}\ndescription: Test skill {slug}\n---\n\nSkill instructions.",
-        )
+        zf.writestr("SKILL.md", skill_md)
+        for path, content in (extra_files or {}).items():
+            zf.writestr(path, content)
     return buf.getvalue()
 
 

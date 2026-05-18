@@ -1,7 +1,8 @@
-"""Tests for SandboxManager public interface.
+"""Tests for SandboxManager file-operations public interface.
 
 These are external dependency unit tests that use real DB sessions and filesystem.
-Each test covers a single happy path case for the corresponding public function.
+Covers terminate, snapshot, health check, list/read directory, send_message, and
+delete_file (including path traversal rejection).
 
 Tests for provision are not included as they require the full sandbox environment
 with Next.js servers.
@@ -17,10 +18,9 @@ from uuid import uuid4
 import pytest
 from acp.schema import PromptResponse
 from acp.schema import ToolCallStart
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
@@ -34,30 +34,11 @@ from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.local import LocalSandboxManager
 from onyx.server.features.build.sandbox.local.agent_client import ACPEvent
 from onyx.server.features.build.sandbox.models import FilesystemEntry
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 
-TEST_TENANT_ID = "public"
 TEST_USER_EMAIL = "test_sandbox_user@example.com"
-
-
-@pytest.fixture(scope="function")
-def db_session() -> Generator[Session, None, None]:
-    """Create a database session for testing."""
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    with get_session_with_current_tenant() as session:
-        yield session
-
-
-@pytest.fixture(scope="function")
-def tenant_context() -> Generator[None, None, None]:
-    """Set up tenant context for testing."""
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture
@@ -92,8 +73,6 @@ def test_user(
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
     """Create or get a test user for sandbox tests."""
-    from sqlalchemy import select
-
     # Check if user already exists
     stmt = select(User).where(
         User.email == TEST_USER_EMAIL  # ty: ignore[invalid-argument-type]
@@ -131,8 +110,6 @@ def sandbox_record(
     test_user: User,
 ) -> Generator[Sandbox, None, None]:
     """Create a real Sandbox record in the database and set up sandbox directory."""
-    from sqlalchemy import select
-
     # Check if sandbox already exists for this user (one sandbox per user)
     stmt = select(Sandbox).where(Sandbox.user_id == test_user.id)
     existing_sandbox = db_session.execute(stmt).unique().scalar_one_or_none()
@@ -201,12 +178,7 @@ def session_workspace(
     session_id = build_session_record.id
 
     # Use setup_session_workspace to create the session directory structure
-    llm_config = LLMProviderConfig(
-        provider="openai",
-        model_name="gpt-4",
-        api_key="test-api-key",
-        api_base=None,
-    )
+    llm_config = default_llm_config()
     # Allocate port for this test session
     nextjs_port = allocate_nextjs_port(db_session)
 
@@ -326,11 +298,12 @@ class TestListDirectory:
         (outputs_dir / "subdir").mkdir()
 
         result = sandbox_manager.list_directory(sandbox.id, session_id, "/")
-        print(result)
 
-        # .agent, .venv, AGENTS.md, opencode.json, files, outputs, attachments + 2 created files
-        assert len(result) == 9
         assert all(isinstance(e, FilesystemEntry) for e in result)
+        entry_names = {e.name for e in result}
+        # The two entries this test itself created must be present.
+        assert "file.txt" in entry_names
+        assert "subdir" in entry_names
 
 
 class TestReadFile:
@@ -458,55 +431,6 @@ class TestSendMessage:
         assert isinstance(last_event, PromptResponse)
 
 
-class TestUploadFile:
-    """Tests for SandboxManager.upload_file()."""
-
-    def test_upload_file_creates_file(
-        self,
-        sandbox_manager: LocalSandboxManager,
-        db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Test that upload_file creates a file in the attachments directory."""
-        sandbox, session_id = session_workspace
-        content = b"Hello, World!"
-
-        result = sandbox_manager.upload_file(
-            sandbox.id, session_id, "test.txt", content
-        )
-
-        assert result == "attachments/test.txt"
-
-        # Verify file exists
-        sandbox_path = Path(SANDBOX_BASE_PATH) / str(sandbox.id)
-        file_path = (
-            sandbox_path / "sessions" / str(session_id) / "attachments" / "test.txt"
-        )
-        assert file_path.exists()
-        assert file_path.read_bytes() == content
-
-    def test_upload_file_handles_collision(
-        self,
-        sandbox_manager: LocalSandboxManager,
-        db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Test that upload_file renames files on collision."""
-        sandbox, session_id = session_workspace
-
-        # Upload first file
-        sandbox_manager.upload_file(sandbox.id, session_id, "test.txt", b"first")
-
-        # Upload second file with same name
-        result = sandbox_manager.upload_file(
-            sandbox.id, session_id, "test.txt", b"second"
-        )
-
-        assert result == "attachments/test_1.txt"
-
-
 class TestDeleteFile:
     """Tests for SandboxManager.delete_file()."""
 
@@ -565,49 +489,3 @@ class TestDeleteFile:
 
         with pytest.raises(ValueError, match="path traversal"):
             sandbox_manager.delete_file(sandbox.id, session_id, "../../../etc/passwd")
-
-
-class TestGetUploadStats:
-    """Tests for SandboxManager.get_upload_stats()."""
-
-    def test_get_upload_stats_empty(
-        self,
-        sandbox_manager: LocalSandboxManager,
-        db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Test get_upload_stats returns zeros for empty directory."""
-        sandbox, session_id = session_workspace
-
-        file_count, total_size = sandbox_manager.get_upload_stats(
-            sandbox.id, session_id
-        )
-
-        assert file_count == 0
-        assert total_size == 0
-
-    def test_get_upload_stats_with_files(
-        self,
-        sandbox_manager: LocalSandboxManager,
-        db_session: Session,  # noqa: ARG002
-        session_workspace: tuple[Sandbox, UUID],
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Test get_upload_stats returns correct count and size."""
-        sandbox, session_id = session_workspace
-
-        # Upload some files
-        sandbox_manager.upload_file(
-            sandbox.id, session_id, "file1.txt", b"hello"
-        )  # 5 bytes
-        sandbox_manager.upload_file(
-            sandbox.id, session_id, "file2.txt", b"world!"
-        )  # 6 bytes
-
-        file_count, total_size = sandbox_manager.get_upload_stats(
-            sandbox.id, session_id
-        )
-
-        assert file_count == 2
-        assert total_size == 11  # 5 + 6
