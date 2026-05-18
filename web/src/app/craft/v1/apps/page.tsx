@@ -16,6 +16,7 @@ import {
   disconnectUserFromApp,
   startExternalAppOAuth,
 } from "@/app/craft/services/externalAppsService";
+import { toast } from "@/hooks/useToast";
 
 export default function ExternalAppsUserPage() {
   // keepPreviousData so revalidations don't blank the cards.
@@ -74,7 +75,9 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
       const { authorize_url } = await startExternalAppOAuth(userApp.id);
       window.location.href = authorize_url;
     } catch (e) {
-      console.error("Failed to start OAuth:", e);
+      toast.error(
+        e instanceof Error ? e.message : "Failed to start authorization"
+      );
       setIsStarting(false);
     }
   }
@@ -85,11 +88,11 @@ function ProviderConnectRow({ userApp, onChange }: ProviderConnectRowProps) {
     setIsStarting(true);
     try {
       await disconnectUserFromApp(userApp.id);
+      onChange();
     } catch (e) {
-      console.error("Failed to disconnect:", e);
+      toast.error(e instanceof Error ? e.message : "Failed to disconnect");
     } finally {
       setIsStarting(false);
-      onChange();
     }
   }
 
