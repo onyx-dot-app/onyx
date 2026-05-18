@@ -1,0 +1,15 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.sandboxJobs.namespace }}
+  annotations:
+    # Keep the namespace across helm upgrade/uninstall — otherwise disabling
+    # the feature flag or uninstalling the chart cascade-deletes every
+    # in-flight sandbox Job and its session PVC. Cleanup is a deliberate
+    # `kubectl delete namespace` step instead.
+    "helm.sh/resource-policy": keep
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-execution
+{{- end }}

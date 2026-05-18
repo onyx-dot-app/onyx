@@ -1,0 +1,15 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sandbox-jobs-pdb
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-policy
+spec:
+  maxUnavailable: {{ .Values.sandboxJobs.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{ .Values.sandboxJobs.networkPolicy.podSelectorLabel.key }}: {{ .Values.sandboxJobs.networkPolicy.podSelectorLabel.value }}
+{{- end }}

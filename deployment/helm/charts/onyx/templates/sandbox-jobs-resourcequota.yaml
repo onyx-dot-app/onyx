@@ -1,0 +1,20 @@
+{{- if .Values.sandboxJobs.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-jobs-quota
+  namespace: {{ .Values.sandboxJobs.namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-policy
+spec:
+  hard:
+    pods: {{ .Values.sandboxJobs.resourceQuota.pods | quote }}
+    requests.cpu: {{ .Values.sandboxJobs.resourceQuota.requestsCpu | quote }}
+    requests.memory: {{ .Values.sandboxJobs.resourceQuota.requestsMemory | quote }}
+    limits.cpu: {{ .Values.sandboxJobs.resourceQuota.limitsCpu | quote }}
+    limits.memory: {{ .Values.sandboxJobs.resourceQuota.limitsMemory | quote }}
+    persistentvolumeclaims: {{ .Values.sandboxJobs.resourceQuota.persistentVolumeClaims | quote }}
+    services: {{ .Values.sandboxJobs.resourceQuota.services | quote }}
+    count/jobs.batch: {{ .Values.sandboxJobs.resourceQuota.jobsBatch | quote }}
+{{- end }}
