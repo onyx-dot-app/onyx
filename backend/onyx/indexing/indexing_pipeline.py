@@ -1,4 +1,5 @@
 import hashlib
+import json
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -159,7 +160,8 @@ def _document_content_hash(doc: Document) -> str:
     content = " ".join(
         s.text for s in doc.sections if isinstance(s, TextSection) and s.text
     )
-    raw = f"{doc.title or ''}||{content}"
+    meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
+    raw = f"{doc.title or ''}||{content}||{doc.semantic_identifier}||{meta}"
     return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 

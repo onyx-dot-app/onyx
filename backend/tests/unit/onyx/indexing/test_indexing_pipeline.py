@@ -802,6 +802,42 @@ def test_content_hash_none_title_treated_as_empty() -> None:
     assert _document_content_hash(doc_none) == _document_content_hash(doc_empty)
 
 
+def test_content_hash_changes_with_metadata() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"author": "Alice"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"author": "Bob"}
+    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+
+
+def test_content_hash_metadata_key_order_is_irrelevant() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"a": "1", "b": "2"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"b": "2", "a": "1"}
+    assert _document_content_hash(doc1) == _document_content_hash(doc2)
+
+
+def test_content_hash_changes_with_semantic_identifier() -> None:
+    doc1 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="old-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    doc2 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="new-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    assert _document_content_hash(doc1) != _document_content_hash(doc2)
+
+
 def test_content_hash_ignores_image_sections() -> None:
     doc_text_only = _doc_with_text("T", "text")
     doc_with_image = Document(
