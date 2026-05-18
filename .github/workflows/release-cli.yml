@@ -36,7 +36,6 @@ jobs:
       - runs-on
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-cli-amd64
-      - extras=ecr-cache
     environment: deploy
     permissions:
       id-token: write
@@ -83,8 +82,6 @@ jobs:
           context: ./cli
           file: ./cli/Dockerfile
           platforms: linux/amd64
-          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
   docker-arm64:
@@ -92,7 +89,6 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-cli-arm64
-      - extras=ecr-cache
     environment: deploy
     permissions:
       id-token: write
@@ -139,8 +135,6 @@ jobs:
           context: ./cli
           file: ./cli/Dockerfile
           platforms: linux/arm64
-          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
   merge-docker:
