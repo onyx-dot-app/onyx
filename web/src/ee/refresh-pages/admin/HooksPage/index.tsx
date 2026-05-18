@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
@@ -449,7 +450,7 @@ function ConnectedHookCard({
 export default function HooksPage() {
   const router = useRouter();
   const { settings, settingsLoading } = useSettingsContext();
-  const isEE = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
   const [editHook, setEditHook] = useState<HookResponse | null>(null);
@@ -507,16 +508,16 @@ export default function HooksPage() {
 
   useEffect(() => {
     if (settingsLoading) return;
-    if (!isEE) {
+    if (!enterpriseTier) {
       toast.info("Hook Extensions require an Enterprise license.");
       router.replace("/");
     } else if (!settings.hooks_enabled) {
       toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
-  }, [settingsLoading, isEE, settings.hooks_enabled, router]);
+  }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
 
-  if (settingsLoading || !isEE || !settings.hooks_enabled) {
+  if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
     return <SimpleLoader />;
   }
 

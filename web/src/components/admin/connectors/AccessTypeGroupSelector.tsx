@@ -1,4 +1,5 @@
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
@@ -34,7 +35,7 @@ export function AccessTypeGroupSelector({
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const [shouldHideContent, setShouldHideContent] = useState(false);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
 
@@ -43,9 +44,9 @@ export function AccessTypeGroupSelector({
   const [groups, groups_meta, groups_helpers] = useField<number[]>("groups");
 
   useEffect(() => {
-    if (user && userGroups && isPaidEnterpriseFeaturesEnabled) {
+    if (user && userGroups && businessTier) {
       const isUserAdmin = user.role === UserRole.ADMIN;
-      if (!isPaidEnterpriseFeaturesEnabled) {
+      if (!businessTier) {
         access_type_helpers.setValue("public");
         return;
       }
@@ -77,14 +78,14 @@ export function AccessTypeGroupSelector({
     access_type.value,
     access_type_helpers,
     groups_helpers,
-    isPaidEnterpriseFeaturesEnabled,
+    businessTier,
     isAutoSyncSupported,
   ]);
 
   if (userGroupsIsLoading) {
     return <div>Loading...</div>;
   }
-  if (!isPaidEnterpriseFeaturesEnabled) {
+  if (!businessTier) {
     return null;
   }
 

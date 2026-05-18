@@ -15,7 +15,8 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 
@@ -58,7 +59,7 @@ const footerMarkdownComponents = {
  * extension doesn't need.
  */
 export default function NRFChrome() {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
@@ -76,7 +77,7 @@ export default function NRFChrome() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   const showModeToggle =
-    isPaidEnterpriseFeaturesEnabled &&
+    businessTier &&
     settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
     state.phase === "idle";

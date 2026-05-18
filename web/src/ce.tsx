@@ -1,6 +1,7 @@
 "use client";
 
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { ComponentType, ReactNode, createElement } from "react";
 
 /**
@@ -12,28 +13,33 @@ function Invisible({ children }: { children?: ReactNode }) {
 }
 
 /**
- * Gates a component behind Enterprise. Returns the real component for EE,
- * or Invisible (passthrough) for CE.
+ * Gates a component behind any paid tier (BUSINESS or ENTERPRISE).
+ * Returns the real component on a paid tier, or `Invisible` (passthrough)
+ * on Community.
  *
  * For providers: Community renders Invisible, so children pass through
  * and downstream hooks fall back to their context defaults.
  *
  * For leaf components: Community renders Invisible with no children,
  * so nothing is rendered.
+ *
+ * Note: this is a coarse outer gate ("is the tenant paying?"). For
+ * Enterprise-only features, callers should also gate on
+ * `useTierAtLeast(Tier.ENTERPRISE)` downstream.
  */
-export function eeGated<P extends {}>(
-  EEComponent: ComponentType<P>
+export function paidTierGated<P extends {}>(
+  Component: ComponentType<P>
 ): ComponentType<P> {
-  function EEGatedWrapper(props: P) {
-    const isEnterprise = usePaidEnterpriseFeaturesEnabled();
-    if (!isEnterprise)
+  function PaidTierGatedWrapper(props: P) {
+    const isPaidTier = useTierAtLeast(Tier.BUSINESS);
+    if (!isPaidTier)
       return (
         <Invisible>{(props as { children?: ReactNode }).children}</Invisible>
       );
-    return createElement(EEComponent, props);
+    return createElement(Component, props);
   }
-  EEGatedWrapper.displayName = `eeGated(${
-    EEComponent.displayName || EEComponent.name || "Component"
+  PaidTierGatedWrapper.displayName = `paidTierGated(${
+    Component.displayName || Component.name || "Component"
   })`;
-  return EEGatedWrapper;
+  return PaidTierGatedWrapper;
 }
