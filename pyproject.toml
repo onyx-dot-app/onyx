@@ -268,7 +268,6 @@ ignore = [
     # Tracked in kanban ticket #491 — to be removed once existing violations are
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
-    "S608", # hardcoded-sql-expression (~67 existing violations).
 ]
 select = ["ARG", "E", "F", "I", "S", "W"]
 
@@ -286,9 +285,10 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
 # Ops and developer scripts run by humans (kubectl exec payloads, one-off
-# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads
-# and pipe shell commands. Other S rules still apply.
-"backend/scripts/**" = ["S108", "S602"]
+# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
+# pipe shell commands, and build ad-hoc SQL against trusted internal inputs
+# (tenant IDs, schema names). Other S rules still apply.
+"backend/scripts/**" = ["S108", "S602", "S608"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

@@ -74,9 +74,9 @@ class RedliningValidator:
                 )
                 return False
 
-            try:
-                import xml.etree.ElementTree as ET
+            import xml.etree.ElementTree as ET
 
+            try:
                 # TODO(security): switch to defusedxml.ElementTree to harden
                 # against XXE / billion-laughs in user-supplied .docx files.
                 modified_tree = ET.parse(modified_file)  # noqa: S314

@@ -1100,7 +1100,7 @@ class VespaDocumentIndex(DocumentIndex):
         where_clause = (
             f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
         )
-        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"
+        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"  # noqa: S608 - Vespa YQL with internal index_name/tenant_id
         params: dict[str, str | int] = {
             "yql": yql,
             "ranking.profile": "unranked",
