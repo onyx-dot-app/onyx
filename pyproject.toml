@@ -182,6 +182,7 @@ ee = ["posthog==3.7.4"]
 model_server = [
     "accelerate==1.6.0",
     "einops==0.8.1",
+    "peft>=0.13.0",
     "numpy==2.4.1",
     "safetensors==0.5.3",
     "sentence-transformers==5.4.1",
