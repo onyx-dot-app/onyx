@@ -280,8 +280,10 @@ def test_upload_pdf_with_too_many_embedded_images_rejected(
     handler returns 0 from ``count_pdf_embedded_images`` and the
     upload succeeds — which is the wrong outcome for this test.
     """
-    # CI lowers MAX_EMBEDDED_IMAGES_PER_FILE to 5; a 6-image PDF trips it.
-    pdf_bytes = _build_pdf_with_n_images(6)
+    # CI lowers MAX_EMBEDDED_IMAGES_PER_FILE to 50. Use 51 images — pypdf
+    # struggles to enumerate the synthetic PDF reliably at very low image
+    # counts, so we stay well above the cap.
+    pdf_bytes = _build_pdf_with_n_images(51)
     response = _upload(
         admin_user,
         [(f"manyimages-{uuid4().hex[:6]}.pdf", pdf_bytes, "application/pdf")],

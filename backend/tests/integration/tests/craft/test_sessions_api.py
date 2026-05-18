@@ -195,13 +195,6 @@ def test_set_sharing_scope_changes_webapp_visibility(
     assert public_response.status_code not in (302, 401, 403)
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Local backend completes restore too fast for the Redis lock to cause "
-        "contention between two threads. Meaningful only against K8s backend."
-    ),
-    strict=False,
-)
 def test_restore_session_returns_409_when_lock_held(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001

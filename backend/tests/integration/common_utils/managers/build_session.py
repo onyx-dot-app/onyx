@@ -57,7 +57,23 @@ class BuildSessionManager:
         headless: bool = True,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        # The endpoint returns the user's pre-provisioned empty session if
+        # one exists. Tests need isolation per call, so delete any existing
+        # empty session before creating fresh.
         body: dict[str, Any] = {"headless": headless, **kwargs}
+        pre = requests.post(
+            _sessions_url(),
+            json=body,
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        if pre.ok:
+            requests.delete(
+                f"{_sessions_url()}/{pre.json()['id']}",
+                headers=user.headers,
+                cookies=user.cookies,
+            )
+
         response = requests.post(
             _sessions_url(),
             json=body,
