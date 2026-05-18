@@ -345,6 +345,7 @@ jobs:
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+          ENABLE_CRAFT=true
           EOF
 
           # EE-only config

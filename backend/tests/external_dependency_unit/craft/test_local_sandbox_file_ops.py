@@ -58,18 +58,22 @@ class TestCreateSnapshot:
 class TestHealthCheck:
     """Tests for SandboxManager.health_check()."""
 
-    def test_health_check_returns_false_when_no_processes(
+    def test_health_check_returns_true_for_provisioned_sandbox(
         self,
         running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
-        """Test that health_check returns False when no processes are running.
-
-        Note: nextjs_port is now passed by the caller instead of being fetched from DB.
-        """
+        """A provisioned sandbox is healthy (directory exists on disk)."""
         handle = running_sandbox()
-        result = handle.manager.health_check(handle.sandbox_id)
+        assert handle.manager.health_check(handle.sandbox_id) is True
 
-        assert result is False
+    def test_health_check_returns_false_after_terminate(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        """After terminate, health_check returns False (directory removed)."""
+        handle = running_sandbox()
+        handle.manager.terminate(handle.sandbox_id)
+        assert handle.manager.health_check(handle.sandbox_id) is False
 
 
 class TestListDirectory:
