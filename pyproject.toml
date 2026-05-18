@@ -255,8 +255,21 @@ target-version = "py311"
 [tool.ruff.lint]
 ignore = [
     "E501", # Long lines are handled by `ruff format`.
+    # flake8-bandit (S) rules ignored as noisy / low-signal:
+    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
+    "S105", # Hardcoded password string — very high false-positive rate.
+    "S106", # Hardcoded password func arg — very high false-positive rate.
+    "S107", # Hardcoded password default — very high false-positive rate.
+    "S110", # try/except/pass — intentional pattern.
+    "S112", # try/except/continue — intentional pattern.
+    "S311", # Non-crypto random — used for jitter/sampling/non-security purposes.
+    "S603", # subprocess without shell=True — this is the *correct* invocation form.
+    "S607", # Start-process with partial path — common and low signal.
+    # Tracked in kanban ticket #491 — to be removed once existing violations are
+    # cleaned up:
+    "S113", # request-without-timeout (~463 existing violations).
 ]
-select = ["ARG", "E", "F", "I", "S324", "W"]
+select = ["ARG", "E", "F", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
@@ -264,9 +277,18 @@ order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]
-# alembic has a folder named `alembic` in backend/ which confuses import sorters
-"backend/alembic/**" = ["I"]
-"backend/alembic_tenants/**" = ["I"]
+# alembic has a folder named `alembic` in backend/ which confuses import sorters.
+# Migrations write raw DDL, so S608 (hardcoded-sql) is unavoidable.
+"backend/alembic/**" = ["I", "S608"]
+"backend/alembic_tenants/**" = ["I", "S608"]
+# Tests use asserts, mock credentials, and lots of patterns the bandit rules
+# flag as suspicious. Disable the full S rule set in tests.
+"backend/tests/**" = ["S"]
+# Ops and developer scripts run by humans (kubectl exec payloads, one-off
+# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
+# pipe shell commands, and build ad-hoc SQL against trusted internal inputs
+# (tenant IDs, schema names). Other S rules still apply.
+"backend/scripts/**" = ["S108", "S602", "S608"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

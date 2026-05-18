@@ -85,7 +85,18 @@ def add_tier_gate_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
         # CP round-trip on cache miss. Offload to a worker so the event loop
         # is not held while serving other requests.
         tenant_id = get_current_tenant_id()
-        current_tier = await asyncio.to_thread(get_tier, tenant_id)
+        try:
+            current_tier = await asyncio.to_thread(get_tier, tenant_id)
+        except Exception as e:
+            logger.error(
+                "[tier_gate] Tier resolution failed for %s; denying request: %s",
+                path,
+                e,
+            )
+            # Fail closed: on any tier resolution error, treat as COMMUNITY (most restrictive)
+            # to prevent authorization bypass. The request will be gated below if required > COMMUNITY.
+            current_tier = Tier.COMMUNITY
+
         if tier_at_least(current_tier, required):
             return await call_next(request)
 

@@ -30,6 +30,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncStatus
@@ -43,8 +44,8 @@ from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.utils.platform import is_running_in_container
-from onyx.utils.platform import is_running_in_kubernetes
+from onyx.utils.platform_utils import is_running_in_container
+from onyx.utils.platform_utils import is_running_in_kubernetes
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.configs import MULTI_TENANT
@@ -791,10 +792,20 @@ def cloud_check_alembic() -> bool | None:
             if tenant_id is None:
                 continue
 
+            # Defense in depth: get_all_tenant_ids() already filters with this
+            # regex, but PostgreSQL cannot bind a schema identifier, so we
+            # re-check at the interpolation site to keep the SQL string safe
+            # even if upstream filtering ever loosens.
+            if not validate_tenant_id(tenant_id):
+                task_logger.warning(
+                    "Skipping tenant with malformed schema name: %s", tenant_id
+                )
+                continue
+
             with get_session_with_shared_schema() as session:
                 try:
                     result = session.execute(
-                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
+                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608
                     )
                     result_scalar: str | None = result.scalar_one_or_none()
                     if result_scalar is None:

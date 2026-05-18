@@ -1,4 +1,5 @@
 from simple_salesforce import Salesforce
+from simple_salesforce.format import format_soql
 from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -44,13 +45,19 @@ def get_any_salesforce_client_for_doc_id(
 
 
 def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
-    query = f"SELECT Id FROM User WHERE Username = '{user_email}' AND IsActive = true"
+    query = format_soql(
+        "SELECT Id FROM User WHERE Username = {email} AND IsActive = true",
+        email=user_email,
+    )
     result = sf_client.query(query)
     if len(result["records"]) > 0:
         return result["records"][0]["Id"]
 
     # try emails
-    query = f"SELECT Id FROM User WHERE Email = '{user_email}' AND IsActive = true"
+    query = format_soql(
+        "SELECT Id FROM User WHERE Email = {email} AND IsActive = true",
+        email=user_email,
+    )
     result = sf_client.query(query)
     if len(result["records"]) > 0:
         return result["records"][0]["Id"]
@@ -123,13 +130,19 @@ def get_objects_access_for_user_id(
     should be in parallel so query time doesn't get too long.
     """
     truncated_record_ids = record_ids[:_MAX_RECORD_IDS_PER_QUERY]
-    record_ids_str = "'" + "','".join(truncated_record_ids) + "'"
-    access_query = f"""
+    # SOQL `IN ()` with an empty list is a malformed query, so short-circuit.
+    if not truncated_record_ids:
+        return {}
+    access_query = format_soql(
+        """
     SELECT RecordId, HasReadAccess
     FROM UserRecordAccess
-    WHERE RecordId IN ({record_ids_str})
-    AND UserId = '{user_id}'
-    """
+    WHERE RecordId IN {record_ids}
+    AND UserId = {user_id}
+    """,
+        record_ids=truncated_record_ids,
+        user_id=user_id,
+    )
     result = salesforce_client.query_all(access_query)
     return {record["RecordId"]: record["HasReadAccess"] for record in result["records"]}
 

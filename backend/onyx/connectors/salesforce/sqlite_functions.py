@@ -200,7 +200,8 @@ class OnyxSalesforceSQLite:
                 index_name: str, create_statement: str
             ) -> None:
                 cursor.execute(
-                    f"SELECT name FROM sqlite_master WHERE type='index' AND name='{index_name}'"
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+                    (index_name,),
                 )
                 if not cursor.fetchone():
                     cursor.execute(create_statement)
@@ -370,17 +371,19 @@ class OnyxSalesforceSQLite:
                     affected_ids: set[str] = set()
 
                     # Get directly updated objects of parent types - using index on object_type
+                    # id_placeholders is a string of '?' placeholders; values bind via the tuple.
                     cursor.execute(
                         f"""
                         SELECT id FROM salesforce_objects
                         WHERE id IN ({id_placeholders})
                         AND object_type = ?
-                        """,
+                        """,  # noqa: S608
                         batch_ids + [parent_type],
                     )
                     affected_ids.update(row[0] for row in cursor.fetchall())
 
                     # Get parent objects of updated objects - using optimized relationship_types table
+                    # id_placeholders is a string of '?' placeholders; values bind via the tuple.
                     cursor.execute(
                         f"""
                         SELECT DISTINCT parent_id
@@ -388,7 +391,7 @@ class OnyxSalesforceSQLite:
                         INDEXED BY idx_relationship_types_lookup
                         WHERE parent_type = ?
                         AND child_id IN ({id_placeholders})
-                        """,
+                        """,  # noqa: S608
                         [parent_type] + batch_ids,
                     )
                     affected_ids.update(row[0] for row in cursor.fetchall())
