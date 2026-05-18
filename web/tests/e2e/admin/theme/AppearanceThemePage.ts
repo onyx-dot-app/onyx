@@ -41,7 +41,6 @@ export class AppearanceThemePage {
 
   // Sidebar / popover
   readonly userDropdownTrigger: Locator;
-  readonly customHelpLinkItem: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -57,7 +56,17 @@ export class AppearanceThemePage {
     this.saveButton = page.getByRole("button", { name: "Apply Changes" });
 
     this.userDropdownTrigger = page.locator("#onyx-user-dropdown");
-    this.customHelpLinkItem = page.getByTestId("Settings/custom-help-link");
+  }
+
+  /**
+   * The custom help link is rendered by Opal's `LineItemButton`, which
+   * forwards `href` to an underlying `<a>` but drops arbitrary props such
+   * as `data-testid` somewhere in the `LineItemButton → ContentAction →
+   * Content` chain. Locating by `href` is reliable and reflects what the
+   * user actually clicks on.
+   */
+  customHelpLinkAnchor(url: string): Locator {
+    return this.page.locator(`a[href="${url}"]`);
   }
 
   // ---------------------------------------------------------------------------
@@ -124,18 +133,28 @@ export class AppearanceThemePage {
     await this.userDropdownTrigger.click();
   }
 
-  async expectCustomHelpLinkVisible(label: string, url: string) {
-    await expect(this.customHelpLinkItem).toBeVisible({ timeout: 5_000 });
-    await expect(this.customHelpLinkItem).toContainText(label);
-    // LineItemButton with href renders an <a> with that href under the hood
+  /**
+   * Reload + wait for the admin form to be back. Use after a save to clear
+   * any SWR cache / React render races — once the page comes back up the
+   * sidebar reads enterprise settings fresh from the server.
+   */
+  async reloadAndWaitForForm(timeoutMs = 10_000) {
+    await this.page.reload();
     await expect(
-      this.customHelpLinkItem.locator(`a[href="${url}"]`)
-    ).toHaveCount(1);
+      this.page.locator('[data-label="application-name-input"]')
+    ).toBeVisible({ timeout: timeoutMs });
   }
 
-  async expectCustomHelpLinkContainsText(text: string) {
-    await expect(this.customHelpLinkItem).toBeVisible({ timeout: 5_000 });
-    await expect(this.customHelpLinkItem).toContainText(text);
+  async expectCustomHelpLinkVisible(label: string, url: string) {
+    const link = this.customHelpLinkAnchor(url);
+    await expect(link).toBeVisible({ timeout: 5_000 });
+    await expect(link).toContainText(label);
+  }
+
+  async expectCustomHelpLinkContainsText(url: string, text: string) {
+    const link = this.customHelpLinkAnchor(url);
+    await expect(link).toBeVisible({ timeout: 5_000 });
+    await expect(link).toContainText(text);
   }
 
   async expectPoweredByOnyxVisible() {

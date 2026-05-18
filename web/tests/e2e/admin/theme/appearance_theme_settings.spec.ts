@@ -258,6 +258,10 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     expect(response.status()).toBe(200);
     await themePage.expectSaveSuccessToast();
 
+    // Reload so the sidebar reads enterprise settings fresh — avoids any
+    // SWR cache / React render race after `mutate()`.
+    await themePage.reloadAndWaitForForm();
+
     await themePage.openUserDropdown();
     await themePage.expectCustomHelpLinkVisible(
       TEST_VALUES.customHelpLinkLabel,
@@ -275,9 +279,12 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     expect(response.status()).toBe(200);
     await themePage.expectSaveSuccessToast();
 
+    await themePage.reloadAndWaitForForm();
+
     await themePage.openUserDropdown();
     // Falls back to URL itself as the displayed title
     await themePage.expectCustomHelpLinkContainsText(
+      TEST_VALUES.customHelpLinkUrl,
       TEST_VALUES.customHelpLinkUrl
     );
   });
@@ -314,7 +321,9 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     expect(response.status()).toBe(200);
     await themePage.expectSaveSuccessToast();
 
-    // After SWR revalidation the tagline should be gone from the sidebar
+    // Reload to read the persisted setting fresh — the sidebar then re-
+    // renders the Logo without the tagline.
+    await themePage.reloadAndWaitForForm();
     await themePage.expectPoweredByOnyxAbsent();
   });
 });

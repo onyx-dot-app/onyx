@@ -134,7 +134,6 @@ function SettingsPopover({
         settings?.enterpriseSettings?.custom_help_link_url && (
           <LineItemButton
             key="custom-help-link"
-            data-testid="Settings/custom-help-link"
             sizePreset="main-ui"
             variant="section"
             rounding="sm"

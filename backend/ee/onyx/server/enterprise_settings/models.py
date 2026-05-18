@@ -70,8 +70,10 @@ class EnterpriseSettings(BaseModel):
         if not v:
             return v
         parsed = urlparse(v)
-        if parsed.scheme not in ("http", "https"):
-            raise ValueError("custom_help_link_url must use http or https")
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(
+                "custom_help_link_url must be an absolute http or https URL"
+            )
         return v
 
     def check_validity(self) -> None:
