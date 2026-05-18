@@ -1,0 +1,37 @@
+import logging
+from typing import List
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.models import Section
+from onyx.configs.constants import DocumentSource
+
+logger = logging.getLogger(__name__)
+
+class JiraServiceManagementConnector(JiraConnector):
+    """
+    Dedicated JSM Connector. 
+    Focuses on Service Desk endpoints and SLA metadata.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+    def load_from_checkpoint(self, checkpoint: str):
+        # This uses the Service Desk API to pull tickets instead of standard Jira
+        logger.info("Starting JSM indexing...")
+        jsm_endpoint = f"{self.base_url}/rest/servicedeskapi/request"
+        
+        # We use the authenticated session from the base JiraConnector
+        response = self.session.get(jsm_endpoint)
+        response.raise_for_status()
+        
+        sections = []
+        for issue in response.json().get("values", []):
+            sections.append(Section(
+                link=issue["_links"]["web"],
+                text=f"JSM Ticket: {issue['issueKey']} - {issue['currentStatus']['status']}",
+                metadata={
+                    "request_type": issue.get("requestTypeId"),
+                    "sla_info": issue.get("sla", {}).get("completedCycles", [])
+                }
+            ))
+        return sections
