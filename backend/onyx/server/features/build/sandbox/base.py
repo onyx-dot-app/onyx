@@ -276,6 +276,15 @@ class SandboxManager(ABC):
         """
         ...
 
+    def supports_idle_cleanup(self) -> bool:
+        """Whether this backend supports idle cleanup + sleep/snapshot flows."""
+        return False
+
+    @abstractmethod
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List valid session workspace IDs currently present in the sandbox."""
+        ...
+
     @abstractmethod
     def send_message(
         self,

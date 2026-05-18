@@ -677,6 +677,22 @@ class LocalSandboxManager(SandboxManager):
         outputs_path = session_path / "outputs"
         return outputs_path.exists()
 
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List valid session workspace IDs under this sandbox."""
+        sessions_path = self._get_sandbox_path(sandbox_id) / "sessions"
+        if not sessions_path.exists():
+            return []
+
+        session_ids: list[UUID] = []
+        for entry in sessions_path.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                session_ids.append(UUID(entry.name))
+            except ValueError:
+                continue
+        return session_ids
+
     def ensure_nextjs_running(
         self,
         sandbox_id: UUID,
