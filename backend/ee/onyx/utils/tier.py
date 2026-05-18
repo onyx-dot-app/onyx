@@ -20,6 +20,7 @@ from datetime import timezone
 
 import requests
 from redis.exceptions import RedisError
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.exc import SQLAlchemyError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
@@ -101,6 +102,10 @@ def _self_hosted_tier() -> Tier:
         try:
             with get_session_with_current_tenant() as db_session:
                 metadata = refresh_license_cache(db_session)
+        except ProgrammingError as e:
+            # Missing table in incomplete schema (e.g. missing license table)
+            logger.warning("Self-hosted tier: license table missing: %s", e)
+            return Tier.COMMUNITY
         except SQLAlchemyError as e:
             logger.warning("Self-hosted tier: license DB read failed: %s", e)
             return Tier.COMMUNITY
