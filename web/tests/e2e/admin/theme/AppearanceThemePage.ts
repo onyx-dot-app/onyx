@@ -7,11 +7,28 @@
  * should drive the page through this class.
  */
 
-import { expect, type Locator, type Page, type Response } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Response,
+} from "@playwright/test";
 
 const ENTERPRISE_SETTINGS_PUT = (r: Response) =>
   r.url().includes("/api/admin/enterprise-settings") &&
   r.request().method() === "PUT";
+
+/**
+ * SWR revalidation `GET /api/enterprise-settings` fired by `mutate()` after
+ * a successful save. The popover renders straight from this SWR cache, so
+ * waiting for this GET (in addition to the PUT) guarantees the sidebar
+ * popover reflects the new values before we assert on them.
+ */
+const ENTERPRISE_SETTINGS_GET = (r: Response) => {
+  if (r.request().method() !== "GET") return false;
+  const pathname = new URL(r.url()).pathname;
+  return pathname === "/api/enterprise-settings";
+};
 
 export class AppearanceThemePage {
   readonly page: Page;
@@ -68,18 +85,23 @@ export class AppearanceThemePage {
   }
 
   /**
-   * Click "Apply Changes" while a `waitForResponse` is already armed.
+   * Click "Apply Changes" and wait for both the PUT and the subsequent SWR
+   * revalidation GET. Both promises MUST be armed before the click — a
+   * post-click `waitForResponse` can miss fast responses and flake.
    *
-   * The promise MUST be created before the click to avoid a race where the
-   * response lands before Playwright registers the listener.
+   * Returns the PUT response so callers can assert on the status code.
    */
   async saveAndWaitForPut(timeoutMs = 10_000): Promise<Response> {
-    const responsePromise = this.page.waitForResponse(ENTERPRISE_SETTINGS_PUT, {
+    const putPromise = this.page.waitForResponse(ENTERPRISE_SETTINGS_PUT, {
+      timeout: timeoutMs,
+    });
+    const getPromise = this.page.waitForResponse(ENTERPRISE_SETTINGS_GET, {
       timeout: timeoutMs,
     });
     await expect(this.saveButton).toBeEnabled();
     await this.saveButton.click();
-    return responsePromise;
+    const [putResponse] = await Promise.all([putPromise, getPromise]);
+    return putResponse;
   }
 
   /** Click Apply Changes without waiting for a PUT — for validation failure paths. */

@@ -29,9 +29,17 @@ def _metadata(
     return m
 
 
+@patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
 @patch("ee.onyx.utils.tier.MULTI_TENANT", False)
 class TestSelfHostedTierCacheFailure:
-    """`_self_hosted_tier` must not leak RedisError to callers."""
+    """`_self_hosted_tier` must not leak RedisError to callers.
+
+    `LICENSE_ENFORCEMENT_ENABLED` is patched to True so the legacy
+    no-enforcement bypass (which short-circuits to ENTERPRISE) doesn't
+    mask the cache/db code paths under test. CI sets the env var to
+    False by default, so without this patch the assertions accidentally
+    pass-by-luck on the cache-hit path and fail on every other path.
+    """
 
     @patch("ee.onyx.utils.tier.get_cached_license_metadata")
     def test_cache_hit_returns_cached_tier(self, mock_get_cached: MagicMock) -> None:

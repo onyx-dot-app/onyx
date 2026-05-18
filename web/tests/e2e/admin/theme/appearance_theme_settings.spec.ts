@@ -75,7 +75,9 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     const helpLinkUrlInput = page.locator(
       '[data-label="custom-help-link-url-input"]'
     );
-    if (await helpLinkUrlInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (
+      await helpLinkUrlInput.isVisible({ timeout: 1000 }).catch(() => false)
+    ) {
       await helpLinkUrlInput.clear();
     }
     const helpLinkLabelInput = page.locator(
@@ -92,9 +94,7 @@ test.describe("Appearance Theme Settings @exclusive", () => {
       '[data-label="hide-onyx-branding-toggle"]'
     );
     if (
-      await hideBrandingToggle
-        .isVisible({ timeout: 1000 })
-        .catch(() => false)
+      await hideBrandingToggle.isVisible({ timeout: 1000 }).catch(() => false)
     ) {
       const hideBrandingState =
         await hideBrandingToggle.getAttribute("aria-checked");
@@ -286,7 +286,9 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     page,
   }) => {
     const themePage = new AppearanceThemePage(page);
-    await themePage.fillCustomHelpLinkLabelOnly(TEST_VALUES.customHelpLinkLabel);
+    await themePage.fillCustomHelpLinkLabelOnly(
+      TEST_VALUES.customHelpLinkLabel
+    );
 
     // Should NOT trigger a PUT — assert error message becomes visible
     await themePage.clickSave();

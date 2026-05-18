@@ -140,7 +140,9 @@ export default function ThemePage() {
             "optional-url",
             "Must be a valid URL",
             (value) =>
-              value == null || value === "" || Yup.string().url().isValidSync(value)
+              value == null ||
+              value === "" ||
+              Yup.string().url().isValidSync(value)
           ),
       }),
     hide_onyx_branding: Yup.boolean().nullable(),
@@ -214,8 +216,7 @@ export default function ThemePage() {
           enable_consent_screen: values.enable_consent_screen || null,
           consent_screen_prompt: values.consent_screen_prompt || null,
           custom_help_link_url: values.custom_help_link_url?.trim() || null,
-          custom_help_link_label:
-            values.custom_help_link_label?.trim() || null,
+          custom_help_link_label: values.custom_help_link_label?.trim() || null,
           hide_onyx_branding: values.hide_onyx_branding ?? null,
         });
 

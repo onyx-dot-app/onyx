@@ -95,9 +95,7 @@ def _self_hosted_tier() -> Tier:
         # legacy / dev-mode self-host where EE code is loaded via
         # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES but no license is required.
         # Treat as ENTERPRISE so tier_gate doesn't 402 EE endpoints.
-        return (
-            Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
-        )
+        return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
 
     try:
         metadata = get_cached_license_metadata()
