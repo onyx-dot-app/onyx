@@ -289,8 +289,6 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
-# LLM prompt strings that contain SQL examples, not executed queries.
-"backend/onyx/prompts/kg_prompts.py" = ["S608"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]
