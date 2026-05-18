@@ -10,6 +10,10 @@ container_port = 3000
 label = "start frontend (docker backend)"
 container_port = 3001
 
+[[task]]
+label = "start frontend (remote backend)"
+container_port = 3002
+
 [sync]
 allow_rebase = true
 allow_merge = false
