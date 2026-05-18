@@ -61,7 +61,14 @@ class BuildSessionManager:
             headers=user.headers,
             cookies=user.cookies,
         )
-        response.raise_for_status()
+        if not response.ok:
+            # Surface the response body so CI logs explain *which* 4xx/5xx
+            # this is (auth vs. feature flag vs. permission vs. server error)
+            # instead of just "403 Forbidden".
+            raise AssertionError(
+                f"POST /build/sessions failed: {response.status_code} {response.reason} "
+                f"— body: {response.text!r} (user_id={user.id}, role={user.role})"
+            )
         return response.json()
 
     @staticmethod
