@@ -19,6 +19,7 @@ import {
   deleteExternalApp,
   setExternalAppEnabled,
 } from "@/app/craft/services/externalAppsService";
+import { toast } from "@/hooks/useToast";
 
 interface ModalState {
   descriptor: BuiltInExternalAppDescriptor;
@@ -165,11 +166,15 @@ function ConfiguredAppCard({
     setIsMutating(true);
     try {
       await setExternalAppEnabled(app, !app.enabled);
+      onChange();
     } catch (e) {
-      console.error("Failed to toggle enabled state:", e);
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : `Failed to ${app.enabled ? "disable" : "enable"} "${app.name}"`
+      );
     } finally {
       setIsMutating(false);
-      onChange();
     }
   }
 
@@ -177,11 +182,13 @@ function ConfiguredAppCard({
     setIsMutating(true);
     try {
       await deleteExternalApp(app.id);
+      onChange();
     } catch (e) {
-      console.error("Failed to delete app:", e);
+      toast.error(
+        e instanceof Error ? e.message : `Failed to delete "${app.name}"`
+      );
     } finally {
       setIsMutating(false);
-      onChange();
     }
   }
 
