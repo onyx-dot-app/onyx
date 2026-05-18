@@ -369,20 +369,25 @@ class TestDocumentIndexNew:
             )
             document_index.update([update_request])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
-            time.sleep(1)
-
-            # Postcondition.
+            # Postcondition. Poll until the eventually-consistent indexes
+            # reflect the updates rather than racing a fixed sleep against
+            # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=TEST_TENANT_ID,
             )
-            retrieved_doc1 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc1,
+                expected_chunk_count=3,
+                expected_boost=7,
                 filters=filters,
             )
-            retrieved_doc2 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc2,
+                expected_chunk_count=2,
+                expected_boost=7,
                 filters=filters,
             )
             assert len(retrieved_doc1) == 3
