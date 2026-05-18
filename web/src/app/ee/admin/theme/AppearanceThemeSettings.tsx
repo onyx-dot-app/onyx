@@ -8,7 +8,8 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, Tag } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
 import {
   forwardRef,
@@ -20,6 +21,9 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
+import { planTagProps } from "@/lib/tier-badge";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -48,6 +52,7 @@ export const AppearanceThemeSettings = forwardRef<
   ref
 ) {
   const { values, errors, setFieldValue } = useFormikContext<any>();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applicationNameInputRef = useRef<HTMLInputElement>(null);
   const greetingMessageInputRef = useRef<HTMLInputElement>(null);
@@ -443,71 +448,99 @@ export const AppearanceThemeSettings = forwardRef<
         />
       </FormField>
 
-      <div className="flex gap-2 items-start">
-        <FormField
-          state={errors.custom_help_link_url ? "error" : "idle"}
-          className="flex-1"
-        >
-          <FormField.Label>Custom Help Link</FormField.Label>
-          <FormField.Control asChild>
-            <InputTypeIn
-              ref={customHelpLinkUrlInputRef}
-              data-label="custom-help-link-url-input"
-              showClearButton
-              placeholder="https://docs.onyx.app"
-              variant={errors.custom_help_link_url ? "error" : undefined}
-              value={values.custom_help_link_url}
-              onChange={(e) =>
-                setFieldValue("custom_help_link_url", e.target.value)
-              }
+      <Disabled
+        disabled={!enterpriseTier}
+        tooltip="Custom help link is an Enterprise Plan feature."
+      >
+        <div className="flex gap-2 items-start">
+          <FormField
+            state={errors.custom_help_link_url ? "error" : "idle"}
+            className="flex-1"
+          >
+            <FormField.Label>
+              Custom Help Link
+              {!enterpriseTier && (
+                <Tag {...planTagProps("enterprise")} size="sm" />
+              )}
+            </FormField.Label>
+            <FormField.Control asChild>
+              <InputTypeIn
+                ref={customHelpLinkUrlInputRef}
+                data-label="custom-help-link-url-input"
+                showClearButton
+                placeholder="https://docs.onyx.app"
+                variant={
+                  !enterpriseTier
+                    ? "disabled"
+                    : errors.custom_help_link_url
+                      ? "error"
+                      : undefined
+                }
+                value={values.custom_help_link_url}
+                onChange={(e) =>
+                  setFieldValue("custom_help_link_url", e.target.value)
+                }
+              />
+            </FormField.Control>
+            <FormField.Description>
+              Add a custom help link in the user menu in addition to the Onyx
+              documentation.
+            </FormField.Description>
+            <FormField.Message
+              messages={{ error: errors.custom_help_link_url as string }}
             />
-          </FormField.Control>
-          <FormField.Description>
-            Add a custom help link in the user menu in addition to the Onyx
-            documentation.
-          </FormField.Description>
-          <FormField.Message
-            messages={{ error: errors.custom_help_link_url as string }}
-          />
-        </FormField>
-        <FormField state="idle" className="flex-1">
-          <FormField.Label className="invisible" aria-hidden="true">
-            Custom Help Link Label
-          </FormField.Label>
-          <FormField.Control asChild>
-            <InputTypeIn
-              aria-label="Custom Help Link Label"
-              data-label="custom-help-link-label-input"
-              showClearButton
-              placeholder="Link label"
-              value={values.custom_help_link_label}
-              onChange={(e) =>
-                setFieldValue("custom_help_link_label", e.target.value)
-              }
-            />
-          </FormField.Control>
-        </FormField>
-      </div>
-
-      <FormField state="idle" className="gap-0">
-        <div className="flex justify-between items-center">
-          <FormField.Label>Hide Onyx Branding</FormField.Label>
-          <FormField.Control>
-            <Switch
-              aria-label="Hide Onyx Branding"
-              data-label="hide-onyx-branding-toggle"
-              checked={values.hide_onyx_branding}
-              onCheckedChange={(checked) =>
-                setFieldValue("hide_onyx_branding", checked)
-              }
-            />
-          </FormField.Control>
+          </FormField>
+          <FormField state="idle" className="flex-1">
+            <FormField.Label className="invisible" aria-hidden="true">
+              Custom Help Link Label
+            </FormField.Label>
+            <FormField.Control asChild>
+              <InputTypeIn
+                aria-label="Custom Help Link Label"
+                data-label="custom-help-link-label-input"
+                showClearButton
+                placeholder="Link label"
+                variant={!enterpriseTier ? "disabled" : undefined}
+                value={values.custom_help_link_label}
+                onChange={(e) =>
+                  setFieldValue("custom_help_link_label", e.target.value)
+                }
+              />
+            </FormField.Control>
+          </FormField>
         </div>
-        <FormField.Description>
-          Remove &ldquo;powered by Onyx&rdquo; and other Onyx branding presence
-          in the app.
-        </FormField.Description>
-      </FormField>
+      </Disabled>
+
+      <Disabled
+        disabled={!enterpriseTier}
+        tooltip="Hiding Onyx branding is an Enterprise Plan feature."
+      >
+        <FormField state="idle" className="gap-0">
+          <div className="flex justify-between items-center">
+            <FormField.Label>
+              Hide Onyx Branding
+              {!enterpriseTier && (
+                <Tag {...planTagProps("enterprise")} size="sm" />
+              )}
+            </FormField.Label>
+            <FormField.Control>
+              <Switch
+                aria-label="Hide Onyx Branding"
+                data-label="hide-onyx-branding-toggle"
+                checked={values.hide_onyx_branding}
+                onCheckedChange={(checked) =>
+                  setFieldValue("hide_onyx_branding", checked)
+                }
+                disabled={!enterpriseTier}
+              />
+            </FormField.Control>
+          </div>
+          <FormField.Description>
+            Remove &ldquo;powered by Onyx&rdquo; and other Onyx branding
+            presence in the app.
+          </FormField.Description>
+        </FormField>
+      </Disabled>
 
       <Divider />
 
