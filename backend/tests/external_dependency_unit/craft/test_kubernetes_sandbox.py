@@ -582,6 +582,20 @@ def test_acp_resumes_existing_session_when_present(
         f".opencode-data should exist after first send_message, got: {data_dir_check!r}"
     )
 
+    # Snapshot opencode state files so we can prove the second send resumes
+    # rather than recreates the session.
+    files_before = set(
+        pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"find {session_path}/.opencode-data -type f | sort",
+        )
+        .strip()
+        .splitlines()
+    )
+    assert files_before, ".opencode-data should contain state files after first send"
+
     # Second send should resume the existing session — not error out.
     events: list[ACPEvent] = []
     for event in k8s_manager.send_message(sandbox_id, session_id, "second message"):
@@ -594,6 +608,23 @@ def test_acp_resumes_existing_session_when_present(
     ]
     assert not non_timeout_errors, (
         f"second send_message should not produce non-timeout errors: {non_timeout_errors}"
+    )
+
+    # First-send state files must still exist — if the session was recreated
+    # from scratch, these would be wiped.
+    files_after = set(
+        pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"find {session_path}/.opencode-data -type f | sort",
+        )
+        .strip()
+        .splitlines()
+    )
+    assert files_before <= files_after, (
+        f"Session state lost after second send — session may have been recreated "
+        f"instead of resumed. Missing: {files_before - files_after}"
     )
 
 

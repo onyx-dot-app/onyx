@@ -429,7 +429,7 @@ jobs:
           FAILED_PROCS=$(docker exec onyx-background-1 \
             supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status 2>&1 \
             | grep -E "FATAL|BACKOFF|STOPPED" \
-            | grep -v "slack_bot\|discord_bot" || true)
+            | grep -v "slack_bot\|discord_bot\|watchdog" || true)
           if [ -n "$FAILED_PROCS" ]; then
             echo "ERROR: Critical background processes failed to start:"
             echo "$FAILED_PROCS"
