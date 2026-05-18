@@ -57,16 +57,25 @@ class TestRecordOpenSearchSearchError:
 
     def test_exceptions_do_not_propagate(self) -> None:
         # Precondition.
+        # _search_errors has two labels (search_type, error_type), so we can't
+        # call .labels() with a single label in the test setup — that itself
+        # raises ValueError before patching takes effect. Instead, patch .labels
+        # on the counter and have the returned child's .inc() raise when the
+        # production code reaches it.
         search_type = OpenSearchSearchType.RANDOM
-        with patch.object(
-            _search_errors.labels(search_type=search_type.value),
-            "inc",
-            side_effect=RuntimeError("boom"),
-        ):
+        with patch.object(_search_errors, "labels") as labels_mock:
+            labels_mock.return_value.inc.side_effect = RuntimeError("boom")
+
             # Under test and postcondition.
             # Should not raise.
             record_opensearch_search_error(
                 search_type, ValueError("simulated search failure")
+            )
+
+            # Sanity check: the production code reached the fully-labeled child
+            # for this specific error_type.
+            labels_mock.assert_called_once_with(
+                search_type=search_type.value, error_type="ValueError"
             )
 
 

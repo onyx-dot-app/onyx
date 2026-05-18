@@ -359,13 +359,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "(sum(rate(onyx_opensearch_search_errors_total[5m])) / sum(rate(onyx_opensearch_search_total[5m]))) or vector(0)",
+          "expr": "((sum(rate(onyx_opensearch_search_errors_total[5m])) / sum(rate(onyx_opensearch_search_total[5m]))) > 0) or vector(0)",
           "legendFormat": "overall",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "(sum by (search_type) (rate(onyx_opensearch_search_errors_total[5m])) or (0 * sum by (search_type) (rate(onyx_opensearch_search_total[5m])))) / sum by (search_type) (rate(onyx_opensearch_search_total[5m]))",
+          "expr": "((sum by (search_type) (rate(onyx_opensearch_search_errors_total[5m])) / sum by (search_type) (rate(onyx_opensearch_search_total[5m]))) > 0) or (sum by (search_type) (rate(onyx_opensearch_search_total[5m])) * 0)",
           "legendFormat": "{{ search_type }}",
           "refId": "B"
         }
