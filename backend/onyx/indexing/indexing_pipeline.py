@@ -362,12 +362,9 @@ def get_docs_to_update(
         content_hash = doc.content_hash()
         if not doc.doc_updated_at:
             db_doc = id_to_db_doc_map.get(doc.id)
-            if db_doc and db_doc.content_hash is not None:
-                if content_hash == db_doc.content_hash:
-                    logger.debug(
-                        f"Skipping document {doc.id!r} — content hash unchanged"
-                    )
-                    continue
+            if db_doc and db_doc.content_hash == content_hash:
+                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
+                continue
 
         doc_id_to_content_hash[doc.id] = content_hash
         updatable_docs.append(doc)
