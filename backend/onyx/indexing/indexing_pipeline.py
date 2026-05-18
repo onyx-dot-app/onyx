@@ -158,14 +158,16 @@ class IndexingPipelineProtocol(Protocol):
 
 
 def _document_content_hash(doc: Document) -> str:
-    # Only text sections are hashed. Non-text sections (images, attachments) are
-    # excluded: image_file_id can be reassigned across syncs (e.g. sequential
-    # indexing), which would produce spurious hash mismatches for unchanged content.
-    # The web connector — the primary motivation for this dedup — strips images
-    # entirely, so this exclusion has no practical effect there.
-    content = " ".join(
-        s.text for s in doc.sections if isinstance(s, TextSection) and s.text
-    )
+    # Hashed before process_image_sections() runs, so image_file_id is the
+    # connector-assigned identifier (not the LLM summary). IDs are stable across
+    # syncs for unchanged documents (derived from source attachment/file IDs).
+    parts = []
+    for s in doc.sections:
+        if isinstance(s, TextSection) and s.text:
+            parts.append(s.text)
+        elif isinstance(s, ImageSection) and s.image_file_id:
+            parts.append(f"[img:{s.image_file_id}]")
+    content = " ".join(parts)
     meta = json.dumps(doc.doc_metadata or {}, sort_keys=True)
 
     def _owner_key(o: BasicExpertInfo) -> str:
