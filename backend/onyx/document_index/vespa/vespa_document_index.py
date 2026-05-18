@@ -197,7 +197,7 @@ def deploy_vespa_schemas(
         )
         return
 
-    jinja_env = jinja2.Environment()
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
     logger.notice("Deploying Vespa application package to %s", deploy_url)
@@ -303,7 +303,7 @@ def register_multitenant_vespa_indices(
         vespa_schema_path, "validation-overrides.xml.jinja"
     )
 
-    jinja_env = jinja2.Environment()
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     with open(services_jinja_file, "r") as services_f:
         schema_names = list(indices)

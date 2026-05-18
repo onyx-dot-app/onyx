@@ -28,7 +28,7 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 _THIS_FILE = Path(__file__)
 
 # Sandbox filesystem paths
-SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
+SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")  # noqa: S108 — default sandbox root, override via env in production
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
 VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 SKILLS_TEMPLATE_PATH = str(

@@ -21,7 +21,7 @@ class LongTermLogger:
     def __init__(
         self,
         metadata: dict[str, str] | None = None,
-        log_file_path: str = "/tmp/long_term_log",
+        log_file_path: str = "/tmp/long_term_log",  # noqa: S108 — default path, callers override in production
         max_files_per_category: int = 1000,
     ):
         self.metadata = metadata
