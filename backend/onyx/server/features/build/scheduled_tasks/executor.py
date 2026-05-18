@@ -54,7 +54,6 @@ from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.session.manager import BuildStreamingState
-from onyx.server.features.build.session.manager import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger
 
@@ -70,6 +69,8 @@ DEFAULT_EXECUTOR_BUDGET_SECONDS = 30 * 60
 # Summary length on the run row (per spec: ~120 chars of final agent
 # message).
 SUMMARY_MAX_CHARS = 120
+
+PROVISIONING_WAIT_SECONDS = 120
 
 
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
@@ -211,23 +212,11 @@ def run_scheduled_task_logic(
         # and recovers a RUNNING-but-unhealthy pod.
         try:
             session_manager = SessionManager(db_session)
-            sandbox = session_manager.ensure_sandbox_running(task_user_id)
-            db_session.commit()
-        except SandboxProvisioningError:
-            # Concurrent provisioner didn't finish in the wait window;
-            # let the next scheduled fire try again.
-            mark_run_status(
-                db_session=db_session,
-                run_id=run_id,
-                status=ScheduledTaskRunStatus.SKIPPED,
-                skip_reason="sandbox_provisioning",
+            sandbox = session_manager.ensure_sandbox_running(
+                task_user_id,
+                provisioning_wait_seconds=PROVISIONING_WAIT_SECONDS,
             )
             db_session.commit()
-            logger.info(
-                "Scheduled run %s skipped — sandbox still PROVISIONING after wait",
-                run_id,
-            )
-            return
         except Exception as exc:
             logger.exception("Failed to ensure sandbox for scheduled run %s", run_id)
             error_class = type(exc).__name__
