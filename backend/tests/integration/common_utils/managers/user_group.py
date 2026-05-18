@@ -5,6 +5,7 @@ import requests
 
 from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
@@ -29,6 +30,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group",
             json=request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         test_user_group = DATestUserGroup(
@@ -48,6 +50,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             json=user_group.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -59,6 +62,7 @@ class UserGroupManager:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -76,6 +80,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
             json=request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -101,6 +106,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group/{test_user_group.id}/set-curator",
             json=set_curator_request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -112,6 +118,7 @@ class UserGroupManager:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -127,6 +134,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             json={"permission": permission, "enabled": enabled},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response
 
@@ -142,6 +150,7 @@ class UserGroupManager:
             f"{API_SERVER_URL}/manage/admin/user-group",
             headers=user_performing_action.headers,
             params=params,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [UserGroup(**ug) for ug in response.json()]

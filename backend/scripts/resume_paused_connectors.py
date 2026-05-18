@@ -20,6 +20,7 @@ def resume_paused_connectors(
         f"{api_server_url}/api/manage/admin/connector/indexing-status",
         headers=headers,
         json={"get_all_connectors": True},
+        timeout=60,
     )
     response.raise_for_status()
 
@@ -42,6 +43,7 @@ def resume_paused_connectors(
                         f"{api_server_url}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
                         json={"status": "ACTIVE"},
                         headers=headers,
+                        timeout=60,
                     )
                     response.raise_for_status()
                     print(f"Resumed connector: {connector['name']}")

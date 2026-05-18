@@ -5,6 +5,7 @@ from typing import Optional
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -20,6 +21,7 @@ class SettingsManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/settings",
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if not response.ok:
@@ -43,6 +45,7 @@ class SettingsManager:
             f"{API_SERVER_URL}/admin/settings",
             json=payload,
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if not response.ok:

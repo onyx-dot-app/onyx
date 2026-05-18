@@ -69,7 +69,7 @@ def set_is_list_for_known_tags() -> None:
                 SET is_list = true
                 WHERE tag_key = '{key}'
                 AND source = '{source}'
-                """)
+                """)  # noqa: S608 - source/key come from hardcoded LIST_METADATA above
         )
 
 
@@ -154,7 +154,7 @@ def remove_old_tags() -> None:
                     DELETE FROM document__tag
                     WHERE document_id = '{document_id}'
                     AND tag_id IN ({",".join(to_delete)})
-                    """)
+                    """)  # noqa: S608 - document_id/tag_id values read from internal tables in this migration
             )
             n_deleted += result.rowcount
         logger.info("Processed %s documents and deleted %s tags", len(batch), n_deleted)
@@ -221,7 +221,7 @@ def _get_batch_documents_with_multiple_tags(
                 HAVING count(*) > 1 {offset_clause}
                 ORDER BY document__tag.document_id
                 LIMIT {batch_size}
-                """)
+                """)  # noqa: S608 - offset_clause/batch_size built internally; document_id pagination from prior rows in same migration
         ).fetchall()
         if not batch:
             break
@@ -267,7 +267,7 @@ def _get_document_tags(document_id: str) -> list[tuple[int, str, str]]:
             FROM tag
             JOIN document__tag ON tag.id = document__tag.tag_id
             WHERE document__tag.document_id = '{document_id}'
-            """)
+            """)  # noqa: S608 - document_id read from internal tables in this migration
     ).fetchall()
     return cast(list[tuple[int, str, str]], result)
 

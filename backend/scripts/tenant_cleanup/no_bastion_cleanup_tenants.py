@@ -361,18 +361,18 @@ def cleanup_control_plane(
     delete_queries = [
         (
             "tenant_notification",
-            f"DELETE FROM tenant_notification WHERE tenant_id = '{tenant_id}'",
+            f"DELETE FROM tenant_notification WHERE tenant_id = '{tenant_id}'",  # noqa: S608 - ops script; tenant_id is a UUID arg
         ),
-        ("tenant_config", f"DELETE FROM tenant_config WHERE tenant_id = '{tenant_id}'"),
-        ("subscription", f"DELETE FROM subscription WHERE tenant_id = '{tenant_id}'"),
-        ("tenant", f"DELETE FROM tenant WHERE tenant_id = '{tenant_id}'"),
+        ("tenant_config", f"DELETE FROM tenant_config WHERE tenant_id = '{tenant_id}'"),  # noqa: S608 - ops script; tenant_id is a UUID arg
+        ("subscription", f"DELETE FROM subscription WHERE tenant_id = '{tenant_id}'"),  # noqa: S608 - ops script; tenant_id is a UUID arg
+        ("tenant", f"DELETE FROM tenant WHERE tenant_id = '{tenant_id}'"),  # noqa: S608 - ops script; tenant_id is a UUID arg
     ]
 
     try:
         for table_name, query in delete_queries:
             print(f"  Deleting from {table_name}...")
 
-            if not confirm_step(f"Delete from {table_name}?", force):
+            if not confirm_step(f"Delete from {table_name}?", force):  # noqa: S608 - confirmation prompt, not SQL
                 print(f"  Skipping deletion from {table_name}")
                 continue
 

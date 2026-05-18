@@ -14,6 +14,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestIndexAttempt
 from tests.integration.common_utils.test_models import DATestUser
@@ -98,6 +99,7 @@ class IndexAttemptManager:
         response = requests.get(
             url=url,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -223,6 +225,7 @@ class IndexAttemptManager:
         response = requests.get(
             url=url,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()

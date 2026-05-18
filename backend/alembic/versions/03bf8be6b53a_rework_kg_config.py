@@ -63,7 +63,7 @@ def upgrade() -> None:
         }
     )
     op.execute(
-        f"INSERT INTO key_value_store (key, value) VALUES ('kg_config', '{kg_config_settings}')"
+        f"INSERT INTO key_value_store (key, value) VALUES ('kg_config', '{kg_config_settings}')"  # noqa: S608 - one-off migration, value built from internal config rows only
     )
 
     # drop kg config table

@@ -34,7 +34,7 @@ def wipe_vespa_index() -> bool:
 
         for attempt in range(RETRIES):
             try:
-                response = requests.delete(endpoint, params=params)
+                response = requests.delete(endpoint, params=params, timeout=60)
                 response.raise_for_status()
 
                 response_json = response.json()

@@ -11,6 +11,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -58,6 +59,7 @@ def test_create_chat_session_with_unauthorized_persona_returns_403(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": restricted_persona.id, "description": "Attempted bypass"},
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 403
@@ -86,6 +88,7 @@ def test_create_chat_session_with_authorized_persona_succeeds(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": allowed_persona.id, "description": "Authorized"},
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 200
@@ -108,6 +111,7 @@ def test_create_chat_session_with_public_persona_succeeds(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": public_persona.id, "description": "Public access"},
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 200
@@ -122,6 +126,7 @@ def test_create_chat_session_with_default_persona_succeeds(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": 0, "description": "Default persona"},
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 200
@@ -158,6 +163,7 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
         },
         headers=basic_user.headers,
         stream=True,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Streaming endpoint always returns 200 and emits an error packet inside the stream.

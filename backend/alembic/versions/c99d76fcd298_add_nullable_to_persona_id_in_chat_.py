@@ -41,13 +41,13 @@ def downgrade() -> None:
         WHERE chat_message_id IN (
             {chat_messages_query}
         )
-    """)
+    """)  # noqa: S608 - chat_messages_query is a hardcoded constant above
     op.execute(f"""
         DELETE FROM chat_message__search_doc
         WHERE chat_message_id IN (
             {chat_messages_query}
         )
-    """)
+    """)  # noqa: S608 - chat_messages_query is a hardcoded constant above
 
     # Delete chat messages
     op.execute("""

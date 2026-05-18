@@ -11,6 +11,7 @@ import requests
 
 from onyx.configs.constants import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_file_utils import create_test_text_file
@@ -27,6 +28,7 @@ def _get_minimal_persona(
         f"{API_SERVER_URL}/persona",
         params={"persona_ids": persona_id},
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     personas = response.json()

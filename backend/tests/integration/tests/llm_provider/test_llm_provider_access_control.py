@@ -23,6 +23,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -469,6 +470,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     response = requests.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     providers = response.json()["providers"]
@@ -484,6 +486,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     admin_response = requests.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert admin_response.status_code == 200
     admin_providers = admin_response.json()["providers"]
@@ -532,6 +535,7 @@ def test_provider_delete_clears_persona_references(
     persona_response = requests.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert persona_response.status_code == 200
     updated_persona = persona_response.json()

@@ -17,6 +17,7 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
@@ -87,6 +88,7 @@ class ChatSessionManager:
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -130,6 +132,7 @@ class ChatSessionManager:
             headers=user_performing_action.headers,
             stream=True,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         streamed_response = ChatSessionManager.analyze_response(response)
@@ -207,6 +210,7 @@ class ChatSessionManager:
             headers=user_performing_action.headers,
             stream=True,
             cookies=user_performing_action.cookies,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         ) as response:
             for line in response.iter_lines():
                 if not line:
@@ -361,6 +365,7 @@ class ChatSessionManager:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -393,6 +398,7 @@ class ChatSessionManager:
                 "predefined_feedback": predefined_feedback,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -410,6 +416,7 @@ class ChatSessionManager:
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.ok
 
@@ -428,6 +435,7 @@ class ChatSessionManager:
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.ok
 
@@ -444,6 +452,7 @@ class ChatSessionManager:
         response = requests.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.ok
 
@@ -460,6 +469,7 @@ class ChatSessionManager:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         # Chat session should return 404 if it doesn't exist or is deleted
         return response.status_code == 404
@@ -478,6 +488,7 @@ class ChatSessionManager:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -500,6 +511,7 @@ class ChatSessionManager:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         # For hard delete, even with include_deleted=true, the record should not exist

@@ -63,7 +63,7 @@ def _make_time_filter_for_sf_type(
 def _make_time_filtered_query(
     queryable_fields: set[str], sf_type: str, time_filter: str
 ) -> str:
-    query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
+    query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"  # noqa: S608 - SOQL query to external Salesforce API; field/type names from Salesforce schema
     return query
 
 
@@ -71,7 +71,7 @@ def get_object_by_id_query(
     object_id: str, sf_type: str, queryable_fields: set[str]
 ) -> str:
     query = (
-        f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"
+        f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"  # noqa: S608 - SOQL query to external Salesforce API; field/type names from Salesforce schema
     )
     return query
 
@@ -91,7 +91,7 @@ def _object_type_has_api_data(
     Use the rest api to check to make sure the query will result in a non-empty response.
     """
     try:
-        query = f"SELECT Count() FROM {sf_type}{time_filter} LIMIT 1"
+        query = f"SELECT Count() FROM {sf_type}{time_filter} LIMIT 1"  # noqa: S608 - SOQL query to external Salesforce API; sf_type from Salesforce schema
         result = sf_client.query(query)
         if result["totalSize"] == 0:
             return False

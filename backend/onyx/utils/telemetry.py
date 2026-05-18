@@ -8,6 +8,7 @@ import requests
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
 from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
 from onyx.configs.constants import MilestoneRecordType
@@ -131,6 +132,7 @@ def optional_telemetry(
                     _DANSWER_TELEMETRY_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json=payload,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
                 )
 
             except Exception:

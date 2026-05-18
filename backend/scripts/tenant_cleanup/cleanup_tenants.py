@@ -384,7 +384,7 @@ def cleanup_control_plane(tenant_id: str, force: bool = False) -> None:
             formatted_query = query.format(tenant_id=tenant_id)
             print(f"  Deleting from {table_name}...")
 
-            if not confirm_step(f"Delete from {table_name}?", force):
+            if not confirm_step(f"Delete from {table_name}?", force):  # noqa: S608 - confirmation prompt, not SQL
                 print(f"  Skipping deletion from {table_name}")
                 continue
 

@@ -12,6 +12,7 @@ from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -21,6 +22,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     providers = response.json()["providers"]
@@ -161,6 +163,7 @@ def test_create_llm_provider(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert_response_is_equivalent(
@@ -259,6 +262,7 @@ def test_update_model_configurations(
             "groups": [],
             "api_key_changed": True,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     created_provider = response.json()
     assert_response_is_equivalent(
@@ -274,6 +278,7 @@ def test_update_model_configurations(
             "provider_id": created_provider["id"],
             "model_name": updated_default_model_name,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -292,6 +297,7 @@ def test_update_model_configurations(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert_response_is_equivalent(
         admin_user,
@@ -307,6 +313,7 @@ def test_update_model_configurations(
             "provider_id": created_provider["id"],
             "model_name": updated_default_model_name,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -326,6 +333,7 @@ def test_update_model_configurations(
             "groups": [],
             "api_key_changed": True,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert_response_is_equivalent(
         admin_user,
@@ -370,6 +378,7 @@ def test_delete_llm_provider(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     created_provider = response.json()
     assert response.status_code == 200
@@ -378,6 +387,7 @@ def test_delete_llm_provider(
     response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -408,6 +418,7 @@ def test_delete_default_llm_provider_rejected(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     created_provider = response.json()
@@ -420,6 +431,7 @@ def test_delete_default_llm_provider_rejected(
             "provider_id": created_provider["id"],
             "model_name": "gpt-4o-mini",
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert set_default_response.status_code == 200
 
@@ -427,6 +439,7 @@ def test_delete_default_llm_provider_rejected(
     delete_response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_response.status_code == 400
     assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
@@ -458,6 +471,7 @@ def test_delete_non_default_llm_provider_with_default_set(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response_default.status_code == 200
     default_provider = response_default.json()
@@ -477,6 +491,7 @@ def test_delete_non_default_llm_provider_with_default_set(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response_other.status_code == 200
     other_provider = response_other.json()
@@ -489,6 +504,7 @@ def test_delete_non_default_llm_provider_with_default_set(
             "provider_id": default_provider["id"],
             "model_name": "gpt-4o-mini",
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert set_default_response.status_code == 200
 
@@ -496,6 +512,7 @@ def test_delete_non_default_llm_provider_with_default_set(
     delete_response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{other_provider['id']}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_response.status_code == 200
 
@@ -530,6 +547,7 @@ def test_force_delete_default_llm_provider(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     created_provider = response.json()
@@ -542,6 +560,7 @@ def test_force_delete_default_llm_provider(
             "provider_id": created_provider["id"],
             "model_name": "gpt-4o-mini",
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert set_default_response.status_code == 200
 
@@ -549,6 +568,7 @@ def test_force_delete_default_llm_provider(
     delete_response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_response.status_code == 400
 
@@ -556,6 +576,7 @@ def test_force_delete_default_llm_provider(
     force_delete_response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}?force=true",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert force_delete_response.status_code == 200
 
@@ -586,6 +607,7 @@ def test_delete_default_vision_provider_clears_vision_default(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert text_response.status_code == 200
     text_provider = text_response.json()
@@ -609,6 +631,7 @@ def test_delete_default_vision_provider_clears_vision_default(
             "is_public": True,
             "groups": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert vision_response.status_code == 200
     vision_provider = vision_response.json()
@@ -625,6 +648,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     delete_response = requests.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{vision_provider['id']}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert delete_response.status_code == 200
 
@@ -669,6 +693,7 @@ def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=base_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     first_id = response.json()["id"]
@@ -678,6 +703,7 @@ def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=base_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     second_id = response.json()["id"]
@@ -708,6 +734,7 @@ def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=create_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     provider_id = response.json()["id"]
@@ -719,6 +746,7 @@ def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json=update_payload,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     assert response.json()["name"] == new_name
@@ -781,6 +809,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response.status_code == 200
     created_provider = create_response.json()
@@ -832,6 +861,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert edit_response_1.status_code == 200
 
@@ -880,6 +910,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert edit_response_2.status_code == 200
 
@@ -928,6 +959,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert edit_response_3.status_code == 200
 
@@ -962,6 +994,7 @@ def _get_providers_admin(
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     resp_json = response.json()
@@ -983,6 +1016,7 @@ def _get_providers_basic(
     response = requests.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     resp_json = response.json()
@@ -1010,6 +1044,7 @@ def _get_provider_by_name_admin(
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     providers = response.json()
@@ -1021,6 +1056,7 @@ def _get_provider_by_name_basic(user: DATestUser, provider_name: str) -> dict | 
     response = requests.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     providers = response.json()["providers"]
@@ -1169,6 +1205,7 @@ def test_default_model_persistence_and_update(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response.status_code == 200
 
@@ -1245,6 +1282,7 @@ def test_default_model_persistence_and_update(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert update_response.status_code == 200
 
@@ -1255,6 +1293,7 @@ def test_default_model_persistence_and_update(
             "model_name": updated_default_model,
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert default_provider_response.status_code == 200
 
@@ -1328,6 +1367,7 @@ def _get_all_providers_basic(user: DATestUser) -> list[dict]:
     response = requests.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     return response.json()["providers"]
@@ -1338,6 +1378,7 @@ def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
     response = requests.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     return response.json()["providers"]
@@ -1354,6 +1395,7 @@ def _set_default_provider(
             "model_name": model_name,
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -1369,6 +1411,7 @@ def _set_default_vision_provider(
             "model_name": vision_model,
         },
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -1449,6 +1492,7 @@ def test_multiple_providers_default_switching(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response_1.status_code == 200
     provider_1 = create_response_1.json()
@@ -1468,6 +1512,7 @@ def test_multiple_providers_default_switching(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response_2.status_code == 200
     provider_2 = create_response_2.json()
@@ -1558,6 +1603,7 @@ def test_multiple_providers_default_switching(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert update_response.status_code == 200
 
@@ -1647,6 +1693,7 @@ def test_multiple_providers_default_switching(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert update_response.status_code == 200
 
@@ -1819,6 +1866,7 @@ def test_default_provider_and_vision_provider_selection(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response_1.status_code == 200
     provider_1 = create_response_1.json()
@@ -1836,6 +1884,7 @@ def test_default_provider_and_vision_provider_selection(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response_2.status_code == 200
     provider_2 = create_response_2.json()
@@ -2011,6 +2060,7 @@ def test_default_provider_is_not_default_vision_provider(
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_response.status_code == 200
     created_provider = create_response.json()
@@ -2064,6 +2114,7 @@ def _get_all_image_gen_configs(admin_user: DATestUser) -> list[dict]:
     response = requests.get(
         f"{API_SERVER_URL}/admin/image-generation/config",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     return response.json()
@@ -2086,6 +2137,7 @@ def _create_image_gen_config(
             "source_llm_provider_id": source_llm_provider_id,
             "is_default": is_default,
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, (
         f"Failed to create image gen config: {response.text}"
@@ -2100,6 +2152,7 @@ def _set_image_gen_config_default(
     response = requests.post(
         f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -2109,6 +2162,7 @@ def _delete_image_gen_config(admin_user: DATestUser, image_provider_id: str) -> 
     response = requests.delete(
         f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
 
@@ -2171,6 +2225,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_regular_response.status_code == 200
     regular_provider = create_regular_response.json()
@@ -2192,6 +2247,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
             "groups": [],
             "personas": [],
         },
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert create_vision_response.status_code == 200
     vision_provider = create_vision_response.json()

@@ -6,6 +6,7 @@ import requests
 from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -36,6 +37,7 @@ class CredentialManager:
             url=f"{API_SERVER_URL}/manage/credential",
             json=credential_request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
 
         response.raise_for_status()
@@ -59,6 +61,7 @@ class CredentialManager:
             url=f"{API_SERVER_URL}/manage/admin/credential/{credential.id}",
             json=request,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -70,6 +73,7 @@ class CredentialManager:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/credential/{credential.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -81,6 +85,7 @@ class CredentialManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/credential/{credential_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return CredentialSnapshot(**response.json())
@@ -92,6 +97,7 @@ class CredentialManager:
         response = requests.get(
             f"{API_SERVER_URL}/manage/credential",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [CredentialSnapshot(**cred) for cred in response.json()]

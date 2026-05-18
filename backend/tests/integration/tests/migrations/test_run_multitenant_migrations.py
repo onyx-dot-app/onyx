@@ -134,7 +134,7 @@ def tenant_schema_at_head(
             )
         )
         conn.execute(
-            text(f'INSERT INTO "{schema}".alembic_version (version_num) VALUES (:rev)'),
+            text(f'INSERT INTO "{schema}".alembic_version (version_num) VALUES (:rev)'),  # noqa: S608 - test fixture; schema name from test-local UUID
             {"rev": current_head_rev},
         )
         conn.commit()
@@ -176,7 +176,7 @@ def tenant_schema_bad_rev(engine: Engine) -> Generator[str, None, None]:
         )
         conn.execute(
             text(
-                f"INSERT INTO \"{schema}\".alembic_version (version_num) VALUES ('00000bad0000')"
+                f"INSERT INTO \"{schema}\".alembic_version (version_num) VALUES ('00000bad0000')"  # noqa: S608 - test fixture; schema name from test-local UUID
             )
         )
         conn.commit()

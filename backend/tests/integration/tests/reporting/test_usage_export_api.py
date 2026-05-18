@@ -16,6 +16,7 @@ from ee.onyx.db.usage_export import UsageReportMetadata
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -42,6 +43,7 @@ class TestUsageExportAPI:
         initial_response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert initial_response.status_code == 200
         initial_reports = initial_response.json()
@@ -52,6 +54,7 @@ class TestUsageExportAPI:
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 204
 
@@ -64,6 +67,7 @@ class TestUsageExportAPI:
             check_response = requests.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert check_response.status_code == 200
             current_reports = check_response.json()
@@ -100,6 +104,7 @@ class TestUsageExportAPI:
         initial_response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert initial_response.status_code == 200
         initial_reports = initial_response.json()
@@ -116,6 +121,7 @@ class TestUsageExportAPI:
                 "period_to": period_to.isoformat(),
             },
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 204
 
@@ -128,6 +134,7 @@ class TestUsageExportAPI:
             check_response = requests.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert check_response.status_code == 200
             current_reports = check_response.json()
@@ -161,6 +168,7 @@ class TestUsageExportAPI:
                 "period_to": datetime.now(tz=timezone.utc).isoformat(),
             },
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 400
 
@@ -182,6 +190,7 @@ class TestUsageExportAPI:
         initial_response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert initial_response.status_code == 200
         initial_count = len(initial_response.json())
@@ -191,6 +200,7 @@ class TestUsageExportAPI:
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert generate_response.status_code == 204
 
@@ -203,6 +213,7 @@ class TestUsageExportAPI:
             response = requests.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert response.status_code == 200
             reports = response.json()
@@ -246,6 +257,7 @@ class TestUsageExportAPI:
         initial_response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert initial_response.status_code == 200
         initial_count = len(initial_response.json())
@@ -254,6 +266,7 @@ class TestUsageExportAPI:
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert generate_response.status_code == 204
 
@@ -266,6 +279,7 @@ class TestUsageExportAPI:
             list_response = requests.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert list_response.status_code == 200
             reports = list_response.json()
@@ -284,6 +298,7 @@ class TestUsageExportAPI:
             f"{API_SERVER_URL}/admin/usage-report/{report_name}",
             headers=admin_user.headers,
             stream=True,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert download_response.status_code == 200
         assert download_response.headers["Content-Type"] == "application/zip"
@@ -356,6 +371,7 @@ class TestUsageExportAPI:
         response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report/nonexistent_report.zip",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 404
 
@@ -369,6 +385,7 @@ class TestUsageExportAPI:
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=basic_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 403
 
@@ -381,6 +398,7 @@ class TestUsageExportAPI:
         response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=basic_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 403
 
@@ -393,6 +411,7 @@ class TestUsageExportAPI:
         response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report/some_report.zip",
             headers=basic_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 403
 
@@ -414,6 +433,7 @@ class TestUsageExportAPI:
         initial_response = requests.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert initial_response.status_code == 200
         initial_count = len(initial_response.json())
@@ -425,6 +445,7 @@ class TestUsageExportAPI:
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert response.status_code == 204
 
@@ -437,6 +458,7 @@ class TestUsageExportAPI:
             response = requests.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             assert response.status_code == 200
             reports = response.json()

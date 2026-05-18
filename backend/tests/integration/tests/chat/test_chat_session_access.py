@@ -7,6 +7,7 @@ from requests import HTTPError
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
@@ -86,6 +87,7 @@ def _get_chat_session(
         params=params,
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 
@@ -97,6 +99,7 @@ def _set_sharing_status(
         json={"sharing_status": sharing_status},
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 
@@ -190,6 +193,7 @@ def _stop_chat_session(chat_session_id: str, user: DATestUser) -> requests.Respo
         f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 

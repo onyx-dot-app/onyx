@@ -48,7 +48,7 @@ def wipe_all_rows(database: str) -> None:
             continue
 
         print(f"Deleting all rows from {table_name}...")
-        cur.execute(f'DELETE FROM "{table_name}"')
+        cur.execute(f'DELETE FROM "{table_name}"')  # noqa: S608 - dev reset script; table_name from information_schema
 
     # Re-enable triggers
     cur.execute("SET session_replication_role = 'origin';")

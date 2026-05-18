@@ -10,6 +10,7 @@ import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.reset import reset_file_store
 from tests.integration.common_utils.reset import reset_postgres
@@ -23,6 +24,7 @@ def _server_has_vector_db_disabled() -> bool:
         resp = requests.get(
             f"{API_SERVER_URL}/settings",
             headers=GENERAL_HEADERS,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if resp.ok:
             return resp.json().get("vector_db_enabled") is False

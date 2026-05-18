@@ -397,7 +397,9 @@ class SelectionAnalysis:
             "favor_recent": True,
         }
         try:
-            response = requests.post(endpoint, json=query_json, cookies=cookies)
+            response = requests.post(
+                endpoint, json=query_json, cookies=cookies, timeout=60
+            )
             if response.status_code != 200:
                 color_output(
                     (

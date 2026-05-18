@@ -794,7 +794,7 @@ def cloud_check_alembic() -> bool | None:
             with get_session_with_shared_schema() as session:
                 try:
                     result = session.execute(
-                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
+                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608 - tenant_id from internal tenant registry, not user input
                     )
                     result_scalar: str | None = result.scalar_one_or_none()
                     if result_scalar is None:

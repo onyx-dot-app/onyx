@@ -131,7 +131,7 @@ def create_new_chat_session(onyx_url: str, api_key: str | None) -> int:
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
     session_endpoint = onyx_url + "/api/chat/create-chat-session"
 
-    response = requests.get(session_endpoint, headers=headers)
+    response = requests.get(session_endpoint, headers=headers, timeout=60)
     response.raise_for_status()
 
     new_session_id = response.json()["chat_session_id"]
@@ -144,6 +144,7 @@ def manage_users(onyx_url: str, headers: dict[str, str] | None) -> AllUsersRespo
     response = requests.get(
         endpoint,
         headers=headers,
+        timeout=60,
     )
     response.raise_for_status()
 
@@ -161,6 +162,7 @@ def get_chat_sessions(
         endpoint,
         params=params,
         headers=headers,
+        timeout=60,
     )
     response.raise_for_status()
 
@@ -176,6 +178,7 @@ def get_session_history(
     response = requests.get(
         endpoint,
         headers=headers,
+        timeout=60,
     )
     response.raise_for_status()
 

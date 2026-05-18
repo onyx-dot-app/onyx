@@ -10,6 +10,7 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -57,6 +58,7 @@ class LLMProviderManager:
             f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
             json=llm_provider.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         llm_response.raise_for_status()
         response_data = llm_response.json()
@@ -94,6 +96,7 @@ class LLMProviderManager:
                     if user_performing_action
                     else GENERAL_HEADERS
                 ),
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             set_default_response.raise_for_status()
 
@@ -107,6 +110,7 @@ class LLMProviderManager:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return True
@@ -118,6 +122,7 @@ class LLMProviderManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/llm/provider",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [LLMProviderView(**p) for p in response.json()["providers"]]
@@ -167,6 +172,7 @@ class LLMProviderManager:
                 if user_performing_action
                 else GENERAL_HEADERS
             ),
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         default_text = response.json().get("default_text")

@@ -7,6 +7,7 @@ from uuid import UUID
 import requests
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import UserFile
@@ -236,7 +237,7 @@ def validate_user_files_ownership(
 
 
 def save_file_from_url(url: str) -> str:
-    response = requests.get(url)
+    response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
 
     file_io = BytesIO(response.content)

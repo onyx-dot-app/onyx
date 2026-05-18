@@ -73,7 +73,8 @@ def downgrade() -> None:
                 WHERE ccp.connector_id = c.id
                   AND c.source = 'SLACK'
                   AND ccp.credential_id = {credential_id}
-            """)
+            """)  # noqa: S608 - workspace from Slack auth_test response, credential_id is internal int
+
         except Exception:
             print(
                 f"We were unable to get the workspace url for your Slack Connector with id {credential_id}."

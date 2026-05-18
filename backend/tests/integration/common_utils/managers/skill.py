@@ -6,6 +6,7 @@ from uuid import uuid4
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -56,6 +57,7 @@ class SkillManager:
                 )
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -79,6 +81,7 @@ class SkillManager:
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
             json=fields,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -108,6 +111,7 @@ class SkillManager:
                 )
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -131,6 +135,7 @@ class SkillManager:
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/grants",
             json={"group_ids": group_ids},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -152,6 +157,7 @@ class SkillManager:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -162,6 +168,7 @@ class SkillManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/skills",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -173,6 +180,7 @@ class SkillManager:
         response = requests.get(
             f"{API_SERVER_URL}/skills",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()

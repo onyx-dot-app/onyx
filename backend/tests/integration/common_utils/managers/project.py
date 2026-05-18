@@ -6,6 +6,7 @@ from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -20,6 +21,7 @@ class ProjectManager:
             f"{API_SERVER_URL}/user/projects/create",
             params={"name": name},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return UserProjectSnapshot.model_validate(response.json())
@@ -32,6 +34,7 @@ class ProjectManager:
         response = requests.get(
             f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [UserProjectSnapshot.model_validate(obj) for obj in response.json()]
@@ -45,6 +48,7 @@ class ProjectManager:
         response = requests.delete(
             f"{API_SERVER_URL}/user/projects/{project_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.status_code == 204
 
@@ -57,6 +61,7 @@ class ProjectManager:
         response = requests.get(
             f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         projects = [UserProjectSnapshot.model_validate(obj) for obj in response.json()]
@@ -71,6 +76,7 @@ class ProjectManager:
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return True
@@ -88,6 +94,7 @@ class ProjectManager:
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/{project_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return True
@@ -128,6 +135,7 @@ class ProjectManager:
             data=data,
             files=files_payload,
             headers=headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return CategorizedFilesSnapshot.model_validate(response.json())
@@ -141,6 +149,7 @@ class ProjectManager:
         response = requests.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
             return []
@@ -158,6 +167,7 @@ class ProjectManager:
             f"{API_SERVER_URL}/user/projects/{project_id}/instructions",
             json={"instructions": instructions},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return (response.json() or {}).get("instructions") or ""

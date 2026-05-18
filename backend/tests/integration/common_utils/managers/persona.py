@@ -6,6 +6,7 @@ import requests
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
@@ -58,6 +59,7 @@ class PersonaManager:
             f"{API_SERVER_URL}/persona",
             json=persona_creation_request.model_dump(mode="json"),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         persona_data = response.json()
@@ -122,6 +124,7 @@ class PersonaManager:
             f"{API_SERVER_URL}/persona/{persona.id}",
             json=persona_update_request.model_dump(mode="json"),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         updated_persona_data = response.json()
@@ -152,6 +155,7 @@ class PersonaManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/persona",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**persona) for persona in response.json()]
@@ -164,6 +168,7 @@ class PersonaManager:
         response = requests.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**response.json())]
@@ -319,6 +324,7 @@ class PersonaManager:
         response = requests.delete(
             f"{API_SERVER_URL}/persona/{persona.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.ok
 
@@ -335,6 +341,7 @@ class PersonaLabelManager:
                 "name": label.name,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         response_data = response.json()
@@ -348,6 +355,7 @@ class PersonaLabelManager:
         response = requests.get(
             f"{API_SERVER_URL}/persona/labels",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [DATestPersonaLabel(**label) for label in response.json()]
@@ -363,6 +371,7 @@ class PersonaLabelManager:
                 "label_name": label.name,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return label
@@ -375,6 +384,7 @@ class PersonaLabelManager:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         return response.ok
 

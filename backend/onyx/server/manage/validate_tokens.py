@@ -9,7 +9,7 @@ SLACK_CONNECTIONS_OPEN_URL = "https://slack.com/api/apps.connections.open"
 
 def validate_bot_token(bot_token: str) -> bool:
     headers = {"Authorization": f"Bearer {bot_token}"}
-    response = requests.post(SLACK_API_URL, headers=headers)
+    response = requests.post(SLACK_API_URL, headers=headers, timeout=30)
 
     if response.status_code != 200:
         raise HTTPException(
@@ -28,7 +28,7 @@ def validate_bot_token(bot_token: str) -> bool:
 
 def validate_app_token(app_token: str) -> bool:
     headers = {"Authorization": f"Bearer {app_token}"}
-    response = requests.post(SLACK_CONNECTIONS_OPEN_URL, headers=headers)
+    response = requests.post(SLACK_CONNECTIONS_OPEN_URL, headers=headers, timeout=30)
 
     if response.status_code != 200:
         raise HTTPException(
@@ -68,7 +68,7 @@ def validate_user_token(user_token: str | None) -> None:
 
     # Test the token with Slack API to ensure it's valid
     headers = {"Authorization": f"Bearer {user_token}"}
-    response = requests.post(SLACK_API_URL, headers=headers)
+    response = requests.post(SLACK_API_URL, headers=headers, timeout=30)
 
     if response.status_code != 200:
         raise HTTPException(

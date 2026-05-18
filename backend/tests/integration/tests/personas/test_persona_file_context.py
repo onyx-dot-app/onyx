@@ -19,6 +19,7 @@ import requests
 
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
@@ -48,6 +49,7 @@ def _poll_file_statuses(
             f"{API_SERVER_URL}/user/projects/file/statuses",
             json={"file_ids": user_file_ids},
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         statuses = response.json()

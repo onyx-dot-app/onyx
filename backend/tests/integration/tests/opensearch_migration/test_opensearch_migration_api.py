@@ -1,6 +1,7 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -13,6 +14,7 @@ def test_migration_status_returns_defaults_when_no_record(
     response = requests.get(
         f"{API_SERVER_URL}/admin/opensearch-migration/status",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Postcondition.
@@ -33,6 +35,7 @@ def test_retrieval_status_returns_false_when_no_record(
     response = requests.get(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Postcondition.
@@ -52,6 +55,7 @@ def test_set_and_get_retrieval_status(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         json={"enable_opensearch_retrieval": True},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Postcondition.
@@ -61,6 +65,7 @@ def test_set_and_get_retrieval_status(
     response = requests.get(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     assert response.json()["enable_opensearch_retrieval"] is True
@@ -71,6 +76,7 @@ def test_set_and_get_retrieval_status(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         json={"enable_opensearch_retrieval": False},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Postcondition.
@@ -80,6 +86,7 @@ def test_set_and_get_retrieval_status(
     response = requests.get(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200
     assert response.json()["enable_opensearch_retrieval"] is False
@@ -97,12 +104,14 @@ def test_migration_status_after_record_created(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         json={"enable_opensearch_retrieval": False},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Under test.
     response = requests.get(
         f"{API_SERVER_URL}/admin/opensearch-migration/status",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Postcondition.
@@ -123,11 +132,12 @@ def test_endpoints_require_admin(
         f"{API_SERVER_URL}/admin/opensearch-migration/status",
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
     ]:
-        response = requests.get(url)
+        response = requests.get(url, timeout=GENERAL_REQUEST_TIMEOUT)
         assert response.status_code == 403
 
     response = requests.put(
         f"{API_SERVER_URL}/admin/opensearch-migration/retrieval",
         json={"enable_opensearch_retrieval": True},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 403

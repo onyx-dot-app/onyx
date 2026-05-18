@@ -58,7 +58,7 @@ def get_tenant_activity_summary(session: Session) -> list[dict[str, Any]]:
                     ) AS last_query_text,
                     (SELECT COUNT(*) FROM "{schema}".document) AS num_documents,
                     (SELECT COUNT(*) FROM "{schema}".user) AS num_users
-            """)
+            """)  # noqa: S608 - ops script; schema name comes from pg_namespace
 
             result = session.execute(query, {"tenant_id": schema}).mappings().first()
 

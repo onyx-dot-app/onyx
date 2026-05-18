@@ -17,6 +17,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -45,6 +46,7 @@ def _upload_persona_avatar(user: DATestUser) -> str:
             "file": ("avatar.png", io.BytesIO(_AVATAR_PNG_BYTES), "image/png"),
         },
         headers={k: v for k, v in user.headers.items() if k.lower() != "content-type"},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()["file_id"]
@@ -75,6 +77,7 @@ def _create_persona_with_avatar(
         f"{API_SERVER_URL}/persona",
         json=payload,
         headers=owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()["id"]
@@ -126,6 +129,7 @@ def test_persona_owner_can_fetch_their_avatar(
     response = requests.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.public_persona_id}/avatar",
         headers=persona_avatar_setup.owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("image/")
@@ -138,6 +142,7 @@ def test_public_persona_avatar_is_accessible_to_other_users(
     response = requests.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.public_persona_id}/avatar",
         headers=persona_avatar_setup.other_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, response.text
     assert response.content == _AVATAR_PNG_BYTES
@@ -149,6 +154,7 @@ def test_private_persona_avatar_is_denied_to_other_users(
     response = requests.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.private_persona_id}/avatar",
         headers=persona_avatar_setup.other_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 404, (
         f"Non-member should not be able to read a private persona's avatar, "
@@ -163,6 +169,7 @@ def test_persona_avatar_returns_404_when_no_avatar_configured(
     response = requests.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.no_avatar_persona_id}/avatar",
         headers=persona_avatar_setup.owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 404, response.text
 
@@ -174,5 +181,6 @@ def test_persona_avatar_returns_404_for_missing_persona(
     response = requests.get(
         f"{API_SERVER_URL}/persona/99999999/avatar",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 404, response.text

@@ -6,6 +6,7 @@ from uuid import uuid4
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -53,6 +54,7 @@ class ImageGenerationConfigManager:
                 "is_default": is_default,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -92,6 +94,7 @@ class ImageGenerationConfigManager:
                 "is_default": is_default,
             },
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -113,6 +116,7 @@ class ImageGenerationConfigManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/image-generation/config",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return [DATestImageGenerationConfig(**config) for config in response.json()]
@@ -126,6 +130,7 @@ class ImageGenerationConfigManager:
         response = requests.get(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/credentials",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
@@ -165,6 +170,7 @@ class ImageGenerationConfigManager:
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             json=payload,
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         if not response.ok:
             print(f"Update failed with status {response.status_code}: {response.text}")
@@ -189,6 +195,7 @@ class ImageGenerationConfigManager:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 
@@ -201,6 +208,7 @@ class ImageGenerationConfigManager:
         response = requests.post(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
 

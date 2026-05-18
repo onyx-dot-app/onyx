@@ -5,6 +5,7 @@ import pytest
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -64,6 +65,7 @@ def test_add_users_to_group_invalid_user(reset: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
         json={"user_ids": [invalid_user_id]},
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     assert response.status_code == 404

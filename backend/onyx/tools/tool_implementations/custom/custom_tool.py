@@ -194,7 +194,7 @@ class CustomTool(Tool[None]):
         method = self._method_spec.method
 
         response = requests.request(
-            method, url, json=request_body, headers=self.headers
+            method, url, json=request_body, headers=self.headers, timeout=30
         )
         content_type = response.headers.get("Content-Type", "")
 

@@ -143,7 +143,7 @@ def get_tenant_status(tenant_id: str) -> str | None:
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
-    query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}';"
+    query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}';"  # noqa: S608 - ops script; tenant_id is a UUID arg
 
     try:
         result = execute_control_plane_query(query, tuple_only=True)

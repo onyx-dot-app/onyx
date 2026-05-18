@@ -82,7 +82,7 @@ FULL_CHUNK_EMBEDDING_KEY = "full_chunk"
 
 
 YQL_BASE = (
-    f"select "
+    f"select "  # noqa: S608 - YQL query to Vespa (not our DB); all interpolated values are hardcoded constants above
     f"documentid, "
     f"{DOCUMENT_ID}, "
     f"{CHUNK_ID}, "

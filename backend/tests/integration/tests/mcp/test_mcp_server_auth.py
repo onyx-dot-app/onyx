@@ -2,6 +2,7 @@
 
 import requests
 
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -19,7 +20,7 @@ def test_mcp_server_health_check(reset: None) -> None:  # noqa: ARG001
 
 def test_mcp_server_auth_missing_token(reset: None) -> None:  # noqa: ARG001
     """Test MCP server rejects requests without credentials."""
-    response = requests.post(STREAMABLE_HTTP_URL)
+    response = requests.post(STREAMABLE_HTTP_URL, timeout=GENERAL_REQUEST_TIMEOUT)
     assert response.status_code == 401
 
 
@@ -29,6 +30,7 @@ def test_mcp_server_auth_invalid_token(reset: None) -> None:  # noqa: ARG001
         STREAMABLE_HTTP_URL,
         headers={"Authorization": "Bearer invalid-token"},
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 401
 
@@ -55,6 +57,7 @@ def test_mcp_server_auth_valid_token(
             "MCP-Protocol-Version": "2025-03-26",
         },
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should be authenticated (may return MCP protocol response or error)

@@ -12,6 +12,7 @@ from onyx.configs.constants import QAFeedbackType
 from onyx.db.enums import TaskStatus
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -40,6 +41,7 @@ class QueryHistoryManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -56,6 +58,7 @@ class QueryHistoryManager:
         response = requests.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history/{chat_session_id}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return ChatSessionSnapshot(**response.json())
@@ -75,6 +78,7 @@ class QueryHistoryManager:
         start_response = requests.post(
             url=f"{API_SERVER_URL}/admin/query-history/start-export?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         start_response.raise_for_status()
         request_id = start_response.json()["request_id"]
@@ -85,6 +89,7 @@ class QueryHistoryManager:
                 url=f"{API_SERVER_URL}/admin/query-history/export-status",
                 params={"request_id": request_id},
                 headers=user_performing_action.headers,
+                timeout=GENERAL_REQUEST_TIMEOUT,
             )
             status_response.raise_for_status()
             status = status_response.json()["status"]
@@ -102,6 +107,7 @@ class QueryHistoryManager:
             url=f"{API_SERVER_URL}/admin/query-history/download",
             params={"request_id": request_id},
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         download_response.raise_for_status()
 

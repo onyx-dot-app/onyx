@@ -1,6 +1,7 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -10,6 +11,7 @@ def _list_minimal_personas(user: DATestUser) -> list[dict]:
         f"{API_SERVER_URL}/persona",
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -23,6 +25,7 @@ def _share_persona(
         json={"user_ids": user_ids},
         headers=acting_user.headers,
         cookies=acting_user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 

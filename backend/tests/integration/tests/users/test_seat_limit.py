@@ -20,6 +20,7 @@ from onyx.configs.app_configs import REDIS_PORT
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 
 # TenantRedis prefixes every key with "{tenant_id}:".
@@ -78,6 +79,7 @@ def test_registration_blocked_when_seats_full(
                 "password": "TestPassword123!",
             },
             headers=GENERAL_HEADERS,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 402
     finally:
@@ -102,6 +104,7 @@ def test_invite_blocked_when_seats_full(reset: None) -> None:  # noqa: ARG001
             url=f"{API_SERVER_URL}/manage/admin/users",
             json={"emails": ["newuser@example.com"]},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 402
     finally:
@@ -135,6 +138,7 @@ def test_reactivation_blocked_when_seats_full(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
             json={"user_email": basic_user.email},
             headers=admin_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 402
     finally:

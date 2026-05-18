@@ -30,6 +30,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -160,6 +161,7 @@ def test_public_assistant_attached_file_downloadable_by_non_owner(
     owner_response = requests.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=user_file_setup.user1_file_owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert owner_response.status_code == 200
     assert owner_response.content, "Owner should receive the file contents"
@@ -168,6 +170,7 @@ def test_public_assistant_attached_file_downloadable_by_non_owner(
         non_owner_response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user_file_setup.user2_non_owner.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert non_owner_response.status_code == 200, (
             "Non-owner should be able to download a file attached to a "
@@ -211,6 +214,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
     owner_response = requests.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=file_owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert owner_response.status_code == 200
     assert owner_response.content, "Owner should receive the file contents"
@@ -219,6 +223,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
         shared_response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=shared_user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert shared_response.status_code == 200, (
             "User on Persona.users should be able to download a file "
@@ -230,6 +235,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
         outsider_response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=outsider.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert outsider_response.status_code in (403, 404), (
             "Outsider not on Persona.users must not access a private "
@@ -263,6 +269,7 @@ def test_cannot_download_unattached_file_via_chat_file_endpoint(
     owner_response = requests.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert owner_response.status_code == 200
 
@@ -270,6 +277,7 @@ def test_cannot_download_unattached_file_via_chat_file_endpoint(
         intruder_response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=intruder.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert intruder_response.status_code in (403, 404), (
             f"Expected access denied for non-owner of an unattached file, "
@@ -366,6 +374,7 @@ def test_owner_can_download_image_gen_file(
     response = requests.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.owner.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, (
         f"Owner should receive image-gen file, got {response.status_code}: "
@@ -385,6 +394,7 @@ def test_non_owner_cannot_download_image_gen_file_in_private_session(
     response = requests.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code in (403, 404), (
         f"Non-owner should be denied on a private session, got "
@@ -410,6 +420,7 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
     response = requests.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 200, (
         f"Non-owner should be able to read image-gen file on public session, "
@@ -486,6 +497,7 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{storage_id}",
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, (
             f"User {user.email} must be able to fetch a PUBLIC connector file "
@@ -523,6 +535,7 @@ def test_connector_file_denied_for_users_without_access(
     basic_response = requests.get(
         f"{API_SERVER_URL}/chat/file/{storage_id}",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert basic_response.status_code in (403, 404), (
         f"Non-member should be denied on PRIVATE connector file "
@@ -612,6 +625,7 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         assert response.status_code == 200, (
             f"User {user.email} must access a PUBLIC File-connector non-tabular "
@@ -648,6 +662,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     basic_response = requests.get(
         f"{API_SERVER_URL}/chat/file/{file_id}",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert basic_response.status_code in (403, 404), (
         f"Non-member should be denied on PRIVATE non-tabular connector file "

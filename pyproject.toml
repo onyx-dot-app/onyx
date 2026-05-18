@@ -256,7 +256,7 @@ target-version = "py311"
 ignore = [
     "E501", # Long lines are handled by `ruff format`.
 ]
-select = ["ARG", "E", "F", "I", "S324", "W"]
+select = ["ARG", "E", "F", "I", "S113", "S324", "S608", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true

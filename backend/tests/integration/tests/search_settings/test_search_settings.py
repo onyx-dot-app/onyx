@@ -1,6 +1,7 @@
 import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -12,6 +13,7 @@ def _get_current_search_settings(user: DATestUser) -> dict:
     response = requests.get(
         f"{SEARCH_SETTINGS_URL}/get-current-search-settings",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -21,6 +23,7 @@ def _get_all_search_settings(user: DATestUser) -> dict:
     response = requests.get(
         f"{SEARCH_SETTINGS_URL}/get-all-search-settings",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -30,6 +33,7 @@ def _get_secondary_search_settings(user: DATestUser) -> dict | None:
     response = requests.get(
         f"{SEARCH_SETTINGS_URL}/get-secondary-search-settings",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()
@@ -40,6 +44,7 @@ def _update_inference_settings(user: DATestUser, settings: dict) -> None:
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
         json=settings,
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 
@@ -69,6 +74,7 @@ def _set_new_search_settings(
         f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
         json=payload,
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
 
@@ -76,6 +82,7 @@ def _cancel_new_embedding(user: DATestUser) -> None:
     response = requests.post(
         f"{SEARCH_SETTINGS_URL}/cancel-new-embedding",
         headers=user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
 
@@ -256,6 +263,7 @@ def test_update_contextual_rag_nonexistent_model_configuration(
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
         json=settings,
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert response.status_code == 400
     assert "999999" in response.json()["detail"]

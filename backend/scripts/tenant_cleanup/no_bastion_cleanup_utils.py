@@ -233,7 +233,7 @@ def get_tenant_status(pod_name: str, tenant_id: str, context: str) -> str | None
     """
     print(f"Fetching tenant status for tenant: {tenant_id}")
 
-    query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}'"
+    query = f"SELECT application_status FROM tenant WHERE tenant_id = '{tenant_id}'"  # noqa: S608 - ops script; tenant_id is a UUID arg
 
     result = execute_control_plane_query_from_pod(pod_name, query, context)
 

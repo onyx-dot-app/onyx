@@ -14,6 +14,7 @@ import requests
 
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.evals.eval import run_eval
@@ -164,7 +165,9 @@ def run_remote(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(
+        url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     response.raise_for_status()
     return response.json()

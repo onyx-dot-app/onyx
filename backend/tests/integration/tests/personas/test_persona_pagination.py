@@ -3,6 +3,7 @@ import requests
 from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
 from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -27,6 +28,7 @@ def _get_agents_paginated(
         },
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     return response.json(), response.status_code
 
@@ -51,6 +53,7 @@ def _get_agents_admin_paginated(
         },
         headers=user.headers,
         cookies=user.cookies,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json(), response.status_code

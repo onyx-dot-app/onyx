@@ -3,6 +3,7 @@ import requests
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -31,6 +32,7 @@ class DocumentSearchManager:
             url=f"{API_SERVER_URL}/search/send-search-message",
             json=search_request.model_dump(),
             headers=user_performing_action.headers,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         result.raise_for_status()
         result_json = result.json()

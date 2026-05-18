@@ -5,6 +5,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingStatus
 from onyx.server.documents.models import ConnectorBase
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.regression.answer_quality.cli_utils import get_api_server_host_port
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
@@ -22,7 +23,10 @@ def check_indexing_status(env_name: str) -> tuple[int, bool]:
     url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
     try:
         indexing_status_dict = requests.post(
-            url, headers=GENERAL_HEADERS, json={"get_all_connectors": True}
+            url,
+            headers=GENERAL_HEADERS,
+            json={"get_all_connectors": True},
+            timeout=GENERAL_REQUEST_TIMEOUT,
         ).json()
     except Exception as e:
         print("Failed to check indexing status, API server is likely starting up:")
@@ -62,7 +66,9 @@ def run_cc_once(env_name: str, connector_id: int, credential_id: int) -> None:
         "from_beginning": True,
     }
     print("body:", body)
-    response = requests.post(url, headers=GENERAL_HEADERS, json=body)
+    response = requests.post(
+        url, headers=GENERAL_HEADERS, json=body, timeout=GENERAL_REQUEST_TIMEOUT
+    )
     if response.status_code == 200:
         print("Connector created successfully:", response.json())
     else:
@@ -77,7 +83,9 @@ def create_cc_pair(env_name: str, connector_id: int, credential_id: int) -> None
 
     body = {"name": "zip_folder_contents", "is_public": True, "groups": []}
     print("body:", body)
-    response = requests.put(url, headers=GENERAL_HEADERS, json=body)
+    response = requests.put(
+        url, headers=GENERAL_HEADERS, json=body, timeout=GENERAL_REQUEST_TIMEOUT
+    )
     if response.status_code == 200:
         print("Connector created successfully:", response.json())
     else:
@@ -92,7 +100,9 @@ def _get_existing_connector_names(env_name: str) -> list[str]:
         "credential_json": {},
         "admin_public": True,
     }
-    response = requests.get(url, headers=GENERAL_HEADERS, json=body)
+    response = requests.get(
+        url, headers=GENERAL_HEADERS, json=body, timeout=GENERAL_REQUEST_TIMEOUT
+    )
     if response.status_code == 200:
         connectors = response.json()
         return [connector["name"] for connector in connectors]
@@ -125,7 +135,9 @@ def create_connector(env_name: str, file_paths: list[str]) -> int:
     )
 
     body = connector.model_dump()
-    response = requests.post(url, headers=GENERAL_HEADERS, json=body)
+    response = requests.post(
+        url, headers=GENERAL_HEADERS, json=body, timeout=GENERAL_REQUEST_TIMEOUT
+    )
     if response.status_code == 200:
         return response.json()["id"]
     else:
@@ -139,7 +151,9 @@ def create_credential(env_name: str) -> int:
         "admin_public": True,
         "source": DocumentSource.FILE,
     }
-    response = requests.post(url, headers=GENERAL_HEADERS, json=body)
+    response = requests.post(
+        url, headers=GENERAL_HEADERS, json=body, timeout=GENERAL_REQUEST_TIMEOUT
+    )
     if response.status_code == 200:
         print("credential created successfully:", response.json())
         return response.json()["id"]
@@ -155,7 +169,7 @@ def upload_file(env_name: str, zip_file_path: str) -> list[str]:
 
     api_path = _api_url_builder(env_name, "/manage/admin/connector/file/upload")
     try:
-        response = requests.post(api_path, files=files)
+        response = requests.post(api_path, files=files, timeout=GENERAL_REQUEST_TIMEOUT)
         response.raise_for_status()  # Raises an HTTPError for bad responses
         print("file uploaded successfully:", response.json())
         return response.json()["file_paths"]

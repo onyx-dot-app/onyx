@@ -1,6 +1,7 @@
 import requests
 
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 
 
 class vespa_fixture:
@@ -22,6 +23,7 @@ class vespa_fixture:
         response = requests.get(
             self.vespa_document_url,
             params=params,
+            timeout=GENERAL_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()

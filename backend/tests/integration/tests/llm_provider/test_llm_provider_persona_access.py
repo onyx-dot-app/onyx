@@ -9,6 +9,7 @@ import requests
 
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -64,6 +65,7 @@ def test_unauthorized_persona_access_returns_403(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/{restricted_persona.id}/providers",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should return 403 Forbidden
@@ -102,6 +104,7 @@ def test_authorized_persona_access_returns_filtered_providers(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/{accessible_persona.id}/providers",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should succeed
@@ -135,6 +138,7 @@ def test_persona_id_zero_applies_rbac(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/0/providers",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should succeed (persona_id=0 refers to default persona, which is public)
@@ -177,6 +181,7 @@ def test_admin_can_query_any_persona(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/{restricted_persona.id}/providers",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should succeed - admins can access any persona
@@ -218,6 +223,7 @@ def test_public_persona_accessible_to_all(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/{public_persona.id}/providers",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should succeed
@@ -240,6 +246,7 @@ def test_nonexistent_persona_returns_404(
     response = requests.get(
         f"{API_SERVER_URL}/llm/persona/99999/providers",
         headers=basic_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
 
     # Should return 404

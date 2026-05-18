@@ -29,6 +29,7 @@ def create_connector(
         url=f"{API_SERVER_URL}/api/manage/admin/connector",
         json=connector_update_request,
         headers=HEADERS,
+        timeout=60,
     )
     response.raise_for_status()
     return response.json()
@@ -53,6 +54,7 @@ def create_credential(
         url=f"{API_SERVER_URL}/api/manage/credential",
         json=credential_request,
         headers=HEADERS,
+        timeout=60,
     )
     response.raise_for_status()
     return response.json()
@@ -75,6 +77,7 @@ def create_cc_pair(
         url=f"{API_SERVER_URL}/api/manage/connector/{connector_id}/credential/{credential_id}",
         json=cc_pair_request,
         headers=HEADERS,
+        timeout=60,
     )
     response.raise_for_status()
     return response.json()

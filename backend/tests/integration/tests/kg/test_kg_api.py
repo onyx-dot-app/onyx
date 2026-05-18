@@ -19,6 +19,7 @@ from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import GENERAL_REQUEST_TIMEOUT
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 
@@ -69,6 +70,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res1.status_code == HTTPStatus.OK, (
         f"Error response: {res1.status_code} - {res1.text}"
@@ -78,6 +80,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res2.status_code == HTTPStatus.OK, (
         f"Error response: {res2.status_code} - {res2.text}"
@@ -98,6 +101,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req3,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res3.status_code == HTTPStatus.OK, (
         f"Error response: {res3.status_code} - {res3.text}"
@@ -107,6 +111,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
     res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res4.status_code == HTTPStatus.OK, (
         f"Error response: {res4.status_code} - {res4.text}"
@@ -137,6 +142,7 @@ def test_kg_enable_with_missing_fields_should_fail() -> None:
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res.status_code == HTTPStatus.BAD_REQUEST
 
@@ -157,6 +163,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res1.status_code == HTTPStatus.OK, (
         f"Error response: {res1.status_code} - {res1.text}"
@@ -166,6 +173,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res2.status_code == HTTPStatus.OK, (
         f"Error response: {res2.status_code} - {res2.text}"
@@ -190,6 +198,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res3.status_code == HTTPStatus.OK, (
         f"Error response: {res3.status_code} - {res3.text}"
@@ -208,6 +217,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
     res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res4.status_code == HTTPStatus.OK, (
         f"Error response: {res4.status_code} - {res4.text}"
@@ -252,6 +262,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res1.status_code == HTTPStatus.OK, (
         f"Error response: {res1.status_code} - {res1.text}"
@@ -261,6 +272,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
     res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res2.status_code == HTTPStatus.OK, (
         f"Error response: {res2.status_code} - {res2.text}"
@@ -274,6 +286,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res3.status_code == HTTPStatus.OK, (
         f"Error response: {res3.status_code} - {res3.text}"
@@ -283,6 +296,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
     res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
+        timeout=GENERAL_REQUEST_TIMEOUT,
     )
     assert res4.status_code == HTTPStatus.OK, (
         f"Error response: {res4.status_code} - {res4.text}"
