@@ -312,7 +312,16 @@ test.describe("Appearance Theme Settings @exclusive", () => {
   }) => {
     const themePage = new AppearanceThemePage(page);
 
-    // Sanity: tagline should be visible by default in the sidebar
+    // The sidebar's "Powered by Onyx" tagline only renders alongside an
+    // application name (the Logo's logo_and_name fall-through path), so
+    // first set a name and save a baseline that we can then assert against.
+    await themePage.setApplicationName(TEST_VALUES.applicationName);
+    const baselineResponse = await themePage.saveAndWaitForPut();
+    expect(baselineResponse.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+    await themePage.reloadAndWaitForForm();
+
+    // Sanity: tagline now visible alongside the application name
     await themePage.expectPoweredByOnyxVisible();
 
     await themePage.toggleHideBranding();

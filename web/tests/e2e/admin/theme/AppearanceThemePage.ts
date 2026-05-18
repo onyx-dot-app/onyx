@@ -34,6 +34,7 @@ export class AppearanceThemePage {
   readonly page: Page;
 
   // Form inputs
+  readonly applicationNameInput: Locator;
   readonly customHelpLinkUrlInput: Locator;
   readonly customHelpLinkLabelInput: Locator;
   readonly hideBrandingToggle: Locator;
@@ -44,6 +45,9 @@ export class AppearanceThemePage {
 
   constructor(page: Page) {
     this.page = page;
+    this.applicationNameInput = page.locator(
+      '[data-label="application-name-input"]'
+    );
     this.customHelpLinkUrlInput = page.locator(
       '[data-label="custom-help-link-url-input"]'
     );
@@ -72,6 +76,10 @@ export class AppearanceThemePage {
   // ---------------------------------------------------------------------------
   // Form interactions
   // ---------------------------------------------------------------------------
+
+  async setApplicationName(name: string) {
+    await this.applicationNameInput.fill(name);
+  }
 
   async fillCustomHelpLink(url: string, label?: string) {
     await this.customHelpLinkUrlInput.fill(url);
@@ -157,16 +165,23 @@ export class AppearanceThemePage {
     await expect(link).toContainText(text);
   }
 
+  /**
+   * Locator for the Logo's tagline, scoped exactly so it doesn't also match
+   * the toggle's helper text on the same page ("Remove 'powered by Onyx'
+   * and other Onyx branding..."). `getByText` is case-insensitive +
+   * substring by default; `exact: true` makes it strict equality on the
+   * element's full text content.
+   */
+  private get poweredByOnyxTagline(): Locator {
+    return this.page.getByText("Powered by Onyx", { exact: true });
+  }
+
   async expectPoweredByOnyxVisible() {
-    await expect(this.page.getByText("Powered by Onyx").first()).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(this.poweredByOnyxTagline).toBeVisible({ timeout: 5_000 });
   }
 
   async expectPoweredByOnyxAbsent() {
-    await expect(this.page.getByText("Powered by Onyx")).toHaveCount(0, {
-      timeout: 5_000,
-    });
+    await expect(this.poweredByOnyxTagline).toHaveCount(0, { timeout: 5_000 });
   }
 
   // ---------------------------------------------------------------------------
