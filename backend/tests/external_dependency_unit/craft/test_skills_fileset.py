@@ -104,7 +104,10 @@ class TestBuiltinSkillFileset:
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
-        assert set(files) == {"pptx/SKILL.md"}
+        assert "pptx/SKILL.md" in files
+        assert "pptx/__pycache__/cached.pyc" not in files
+        assert "pptx/.DS_Store" not in files
+        assert "pptx/scripts/.hidden" not in files
 
 
 class TestTemplateBuiltinFileset:

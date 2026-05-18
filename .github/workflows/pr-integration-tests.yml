@@ -412,6 +412,34 @@ jobs:
           }
 
           wait_for_service "http://localhost:8080/health" "API server"
+
+          # Verify background worker started and critical Celery processes are up.
+          # Without this, a crashed background container causes 20-min timeout
+          # failures across every test suite that depends on async tasks.
+          echo "Checking background worker health..."
+          if ! docker inspect --format='{{.State.Running}}' onyx-background-1 2>/dev/null | grep -q true; then
+            echo "ERROR: Background worker container is not running!"
+            docker logs onyx-background-1 2>&1 | tail -50
+            exit 1
+          fi
+
+          # Wait for supervisord to start all programs (startsecs=10 in conf)
+          sleep 15
+
+          FAILED_PROCS=$(docker exec onyx-background-1 \
+            supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status 2>&1 \
+            | grep -E "FATAL|BACKOFF|STOPPED" \
+            | grep -v "slack_bot\|discord_bot" || true)
+          if [ -n "$FAILED_PROCS" ]; then
+            echo "ERROR: Critical background processes failed to start:"
+            echo "$FAILED_PROCS"
+            docker exec onyx-background-1 \
+              supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status
+            docker logs onyx-background-1 2>&1 | tail -80
+            exit 1
+          fi
+          echo "Background worker is healthy — all critical processes running."
+
           echo "Finished waiting for services."
 
       - name: Start Mock Services
