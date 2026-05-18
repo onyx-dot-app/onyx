@@ -66,7 +66,12 @@ function SkillPickerPopover({
         e.stopPropagation();
         setSelectedIndex((i) => (i - 1 + filtered.length) % filtered.length);
       } else if (e.key === "Enter" || e.key === "Tab") {
-        if (filtered.length === 0) return;
+        if (filtered.length === 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         const skill = filtered[selectedIndex] ?? filtered[0];
