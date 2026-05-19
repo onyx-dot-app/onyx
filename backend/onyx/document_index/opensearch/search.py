@@ -320,7 +320,21 @@ class DocumentQuery:
 
         Filters via `attached_document_ids` so OpenSearch can use a
         Lucene-optimized terms query in one delete_by_query round-trip.
+
+        Raises:
+            ValueError: document_ids is empty. An empty list would cause
+                `_get_search_filters` to omit the document filter entirely
+                (no knowledge_scope trigger), which on a delete_by_query
+                path would broaden the delete to every chunk in the tenant.
+            ValueError: len(document_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY
+                (raised from `_get_attached_document_id_filter`).
         """
+        if not document_ids:
+            raise ValueError(
+                "delete_from_document_ids_query requires a non-empty document_ids "
+                "list — an empty list would broaden delete_by_query to every chunk "
+                "in the tenant."
+            )
         filter_clauses = DocumentQuery._get_search_filters(
             tenant_state=tenant_state,
             include_hidden=True,

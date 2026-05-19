@@ -287,6 +287,11 @@ class Deletable(abc.ABC):
         that batch cost is far below `len(doc_id_to_chunk_count)` calls to
         `delete()`. Missing document IDs are treated as no-ops.
 
+        Callers are responsible for bounding batch size. The OpenSearch
+        backend caps a single batch at MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY
+        (65,536 doc ids) and will raise ValueError above that. An empty
+        mapping is always a no-op (returns 0).
+
         Args:
             doc_id_to_chunk_count: Per-doc chunk counts. Used by backends that
                 benefit from knowing the count up front (Vespa's chunk-id
