@@ -264,8 +264,8 @@
       ]
     },
     {
-      "title": "Client vs Server Latency Overhead (P50)",
-      "description": "Difference between client-side and server-side P50 latency. Reveals network, serialization, and untracked OpenSearch overhead.",
+      "title": "Client vs Server Latency Overhead (P50 / P95)",
+      "description": "Per-request overhead (client wall-clock minus server 'took'), sampled when both are known. Reveals network, serialization, and untracked OpenSearch overhead. Quantiles are computed from the dedicated overhead histogram so the values reflect actual per-request differences rather than subtracting two independent quantile series.",
       "type": "timeseries",
       "gridPos": { "h": 10, "w": 12, "x": 12, "y": 20 },
       "id": 6,
@@ -298,21 +298,15 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_client_duration_seconds_bucket[5m]))) - histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_server_duration_seconds_bucket[5m])))",
-          "legendFormat": "Client - Server overhead (P50)",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_overhead_seconds_bucket[5m])))",
+          "legendFormat": "Overhead P50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_client_duration_seconds_bucket[5m])))",
-          "legendFormat": "Client P50",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(onyx_opensearch_search_overhead_seconds_bucket[5m])))",
+          "legendFormat": "Overhead P95",
           "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(onyx_opensearch_search_server_duration_seconds_bucket[5m])))",
-          "legendFormat": "Server P50",
-          "refId": "C"
         }
       ]
     },
