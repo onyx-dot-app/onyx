@@ -4,6 +4,7 @@ import fnmatch
 import html
 import io
 import os
+import random
 import re
 import time
 from collections import deque
@@ -283,17 +284,26 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
 
-def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
+def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
     """Honor a numeric Retry-After header when the server provides one,
-    otherwise fall back to capped exponential backoff (5s, 10s, 20s, …,
-    max 30s). The HTTP-date form of Retry-After is rare from SharePoint /
-    Graph in practice and falls through to exponential backoff."""
+    otherwise fall back to capped exponential backoff with equal jitter.
+
+    Base sequence is 5s, 10s, 20s, capped at 30s. The actual sleep is drawn
+    from ``[base/2, base]`` so that many documents failing at the same instant
+    (e.g. during a Graph throttling window) don't all retry on the same tick
+    and re-create the thundering herd. Server-provided Retry-After values are
+    used verbatim — those are an explicit instruction, not a guess.
+
+    The HTTP-date form of Retry-After is rare from SharePoint / Graph in
+    practice and falls through to the jittered exponential backoff.
+    """
     if retry_after:
         try:
-            return int(retry_after)
+            return float(retry_after)
         except ValueError:
             pass
-    return min(30, (2**attempt) * 5)
+    base = min(30, (2**attempt) * 5)
+    return base / 2 + random.uniform(0, base / 2)
 
 
 def sleep_and_retry(
@@ -320,7 +330,7 @@ def sleep_and_retry(
             sleep_time = _backoff_seconds(attempt, retry_after=None)
             logger.warning(
                 "Transport error on %s, attempt %s/%s: %s: %s. "
-                "Sleeping %ss before retry.",
+                "Sleeping %.1fs before retry.",
                 method_name,
                 attempt + 1,
                 max_retries + 1,
@@ -351,7 +361,7 @@ def sleep_and_retry(
                 sleep_time = _backoff_seconds(attempt, retry_after)
                 logger.warning(
                     "Retryable error on %s, attempt %s/%s: status=%s. "
-                    "Sleeping %ss before retry.",
+                    "Sleeping %.1fs before retry.",
                     method_name,
                     attempt + 1,
                     max_retries + 1,
@@ -643,7 +653,7 @@ def _stream_response_to_buffer_with_cap(
             sleep_time = _backoff_seconds(attempt, retry_after=None)
             logger.warning(
                 "Streaming download for %s hit transport error on attempt %s/%s: "
-                "%s: %s. Sleeping %ss before retry.",
+                "%s: %s. Sleeping %.1fs before retry.",
                 description,
                 attempt + 1,
                 max_retries + 1,

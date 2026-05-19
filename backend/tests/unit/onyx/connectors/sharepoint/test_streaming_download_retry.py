@@ -199,3 +199,43 @@ def test_connection_error_before_iter_content_is_retried(
     assert result == b"ok"
     assert mock_get.call_count == 2
     mock_time.sleep.assert_called_once()
+
+
+def test_backoff_seconds_uses_equal_jitter() -> None:
+    """Exponential backoff falls in [base/2, base] (equal jitter).
+
+    Base sequence: 5, 10, 20, 30 (capped). Each draw must respect the bounds
+    so retries spread out without violating the floor or the cap.
+    """
+    expected_bases = [5, 10, 20, 30, 30]
+    for attempt, base in enumerate(expected_bases):
+        samples = [
+            sp_connector._backoff_seconds(attempt, retry_after=None) for _ in range(50)
+        ]
+        for s in samples:
+            assert base / 2 <= s <= base, (
+                f"attempt={attempt} base={base} produced out-of-range sleep {s}"
+            )
+        # Sanity: with 50 samples we should see at least two distinct values
+        # (otherwise jitter isn't actually being applied).
+        assert len(set(samples)) > 1, (
+            f"attempt={attempt} produced no jitter spread: {samples[:5]}..."
+        )
+
+
+def test_backoff_seconds_respects_retry_after_header_verbatim() -> None:
+    """Server-provided Retry-After is an instruction; jitter must not be applied."""
+    for raw in ("0", "1", "12", "120"):
+        # Repeat to make sure we don't accidentally jitter on this path.
+        for _ in range(10):
+            assert sp_connector._backoff_seconds(0, retry_after=raw) == float(raw)
+
+
+def test_backoff_seconds_falls_back_when_retry_after_unparseable() -> None:
+    """Non-numeric Retry-After (HTTP-date) falls through to jittered backoff."""
+    base = 5  # attempt=0
+    for _ in range(20):
+        s = sp_connector._backoff_seconds(
+            0, retry_after="Wed, 21 Oct 2026 07:28:00 GMT"
+        )
+        assert base / 2 <= s <= base
