@@ -134,10 +134,6 @@ export const SWR_KEYS = {
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
 
-  // ── OpenSearch Migration ──────────────────────────────────────────────────
-  opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
-  opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
-
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
   userTokenRateLimits: "/api/admin/token-rate-limits/users",
