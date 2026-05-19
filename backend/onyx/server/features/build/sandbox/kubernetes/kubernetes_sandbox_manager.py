@@ -381,7 +381,10 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
-            image_pull_policy="IfNotPresent",
+            # No explicit imagePullPolicy: kubelet picks the right default based
+            # on the tag — `Always` for `:latest`/untagged, `IfNotPresent` for
+            # pinned tags. Hardcoding `IfNotPresent` made nodes serve stale
+            # `:latest` images after the registry tag moved.
             command=["/workspace/entrypoint.sh"],
             ports=sandbox_ports,
             env=[
@@ -414,7 +417,8 @@ class KubernetesSandboxManager(SandboxManager):
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
-            image_pull_policy="IfNotPresent",
+            # See sandbox_container above — kubelet's default picks the right
+            # policy from the tag.
             command=["/workspace/sidecar-entrypoint.sh"],
             ports=[
                 client.V1ContainerPort(
