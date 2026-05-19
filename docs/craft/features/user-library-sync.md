@@ -80,7 +80,8 @@ Empty filesets push too (clears stale files via the swap).
 | `build_document_id(user_id, path)` | Deterministic doc_id |
 | `list_user_files(db, user_id)` | All CRAFT_FILE docs for the user |
 | `fetch_user_file_for_user(db, doc_id, user_id)` | Lookup + ownership check; raises `OnyxError(NOT_FOUND)` on miss |
-| `store_user_file(db, user_id, connector_id, credential_id, file_path, content, mime_type)` | Save to file store + upsert Document. On overwrite: saves new blob first, then deletes the old one only after upsert succeeds (failure-safe). |
+| `store_user_file(db, ..., file_path, content, mime_type)` | Save to file store + upsert Document. Returns `(doc_id, file_id, old_blob_id_to_delete)`. The new blob is saved first; the caller must pass `old_blob_id_to_delete` to `cleanup_old_blobs` after their final commit. |
+| `cleanup_old_blobs(blob_ids)` | Delete superseded blobs. Must be called after the final DB commit — if called before and the commit fails, the document rolls back to point at the now-deleted blob. |
 | `create_directory_record(db, user_id, connector_id, credential_id, dir_path)` | Virtual directory document (no file store object) |
 | `set_sync_disabled(db, user_id, doc, sync_disabled)` | Toggle file or directory (recursive into children) |
 | `delete_user_file(db, doc)` | Delete blob from file store + Document row |

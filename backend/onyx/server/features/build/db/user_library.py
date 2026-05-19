@@ -209,12 +209,7 @@ def delete_user_file(db_session: Session, doc: DbDocument) -> None:
 
 
 def get_user_storage_bytes(db_session: Session, user_id: UUID) -> int:
-    """Get total storage usage for a user's library files.
-
-    Uses SQL aggregation to sum file_size from doc_metadata JSONB for all
-    CRAFT_FILE documents owned by this user, avoiding loading all documents
-    into Python memory.
-    """
+    """Total storage usage (bytes) for a user's library files."""
     stmt = (
         select(
             func.coalesce(
@@ -253,17 +248,10 @@ def get_user_storage_bytes(db_session: Session, user_id: UUID) -> int:
 
 
 def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int, int]:
-    """Get or create the CRAFT_FILE connector for a user.
+    """Idempotent: return the user's CRAFT_FILE (connector_id, credential_id).
 
-    Returns:
-        Tuple of (connector_id, credential_id)
-
-    Note: We need to create a credential even though CRAFT_FILE doesn't require
-    authentication. This is because Onyx's connector-credential pair system
-    requires a credential for all connectors. The credential is empty ({}).
-
-    This function handles recovery from partial creation failures by detecting
-    orphaned connectors (connectors without cc_pairs) and completing their setup.
+    A no-auth credential is created if needed since cc_pairs require one.
+    Commits internally — pre-existing convention, not aligned with skill.py.
     """
     # Check if user already has a complete CRAFT_FILE cc_pair
     cc_pairs = get_connector_credential_pairs_for_user(
