@@ -8,7 +8,7 @@ import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   Collapsible,
   CollapsibleContent,

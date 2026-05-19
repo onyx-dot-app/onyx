@@ -8,7 +8,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
   useInitialValues,

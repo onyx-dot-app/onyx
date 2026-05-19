@@ -3244,6 +3244,10 @@ class ModelConfiguration(Base):
     # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Admin-specified override for the display name. When set, this takes precedence
+    # over both display_name and the LiteLLM-derived name everywhere in the UI.
+    custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",

@@ -10,7 +10,10 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
-import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
+import type {
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/lib/languageModels/types";
 import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -470,6 +473,15 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
+  function setCustomDisplayName(modelName: string, value: string | undefined) {
+    const updated = models.map((m) =>
+      m.name === modelName
+        ? { ...m, custom_display_name: value || undefined }
+        : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
@@ -537,7 +549,18 @@ export function ModelSelectionField({
                         selectVariant="select-heavy"
                         state="selected"
                         icon={() => <Checkbox checked />}
-                        title={model.display_name || model.name}
+                        title={
+                          model.custom_display_name ||
+                          model.display_name ||
+                          model.name
+                        }
+                        editable
+                        onTitleChange={(newTitle) =>
+                          setCustomDisplayName(
+                            model.name,
+                            newTitle || undefined
+                          )
+                        }
                       />
                     ) : (
                       <LineItemButton
@@ -547,9 +570,20 @@ export function ModelSelectionField({
                         selectVariant="select-heavy"
                         state={model.is_visible ? "selected" : "empty"}
                         icon={() => <Checkbox checked={model.is_visible} />}
-                        title={model.name}
+                        title={
+                          model.custom_display_name ||
+                          model.display_name ||
+                          model.name
+                        }
                         onClick={() =>
                           setVisibility(model.name, !model.is_visible)
+                        }
+                        editable
+                        onTitleChange={(newTitle) =>
+                          setCustomDisplayName(
+                            model.name,
+                            newTitle || undefined
+                          )
                         }
                       />
                     )
