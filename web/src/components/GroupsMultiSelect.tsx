@@ -1,7 +1,8 @@
 import { FormikProps } from "formik";
 import { Label } from "@/components/Field";
 import { useUserGroups } from "@/lib/hooks";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { GenericMultiSelect } from "@/components/GenericMultiSelect";
 
 export type GroupsMultiSelectFormType = {
@@ -28,10 +29,10 @@ export function GroupsMultiSelect<T extends GroupsMultiSelectFormType>({
     isLoading: userGroupsIsLoading,
     error,
   } = useUserGroups();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   // Show loading state while checking enterprise features or loading groups
-  if (userGroupsIsLoading || isPaidEnterpriseFeaturesEnabled === undefined) {
+  if (userGroupsIsLoading || businessTier === undefined) {
     return (
       <div className="mb-4">
         <Label>{label}</Label>
@@ -40,7 +41,7 @@ export function GroupsMultiSelect<T extends GroupsMultiSelectFormType>({
     );
   }
 
-  if (!isPaidEnterpriseFeaturesEnabled) {
+  if (!businessTier) {
     return null;
   }
 

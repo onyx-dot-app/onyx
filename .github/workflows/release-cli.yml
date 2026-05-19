@@ -36,7 +36,6 @@ jobs:
       - runs-on
       - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-cli-amd64
-      - extras=ecr-cache
     environment: deploy
     permissions:
       id-token: write
@@ -92,7 +91,6 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - run-id=${{ github.run_id }}-cli-arm64
-      - extras=ecr-cache
     environment: deploy
     permissions:
       id-token: write

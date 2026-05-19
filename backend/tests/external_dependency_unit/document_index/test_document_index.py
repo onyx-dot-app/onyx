@@ -14,6 +14,7 @@ import pytest
 
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
 from onyx.document_index.interfaces_new import DocumentSectionRequest
@@ -22,10 +23,6 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
-)
-from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -35,6 +32,43 @@ from tests.external_dependency_unit.document_index.conftest import (
     make_indexing_metadata,
 )
 
+
+def _retrieve_chunks_with_expected_boost(
+    document_index: DocumentIndexNew,
+    document_id: str,
+    expected_chunk_count: int,
+    expected_boost: int,
+    filters: IndexFilters,
+    timeout_s: float = 10.0,
+    poll_interval_s: float = 0.25,
+) -> list[InferenceChunk]:
+    """Polls id_based_retrieval until the retrieved chunks match the expected
+    count and boost, or the timeout is reached.
+
+    Document indexes are eventually consistent after updates (OpenSearch
+    refreshes on a ~1s interval, Vespa is near-real-time). Polling avoids
+    relying on a fixed sleep that races the refresh window.
+    """
+    deadline = time.time() + timeout_s
+    retrieved: list[InferenceChunk] = []
+    while time.time() < deadline:
+        retrieved = document_index.id_based_retrieval(
+            chunk_requests=[DocumentSectionRequest(document_id=document_id)],
+            filters=filters,
+        )
+        if len(retrieved) == expected_chunk_count and all(
+            chunk.boost == expected_boost for chunk in retrieved
+        ):
+            return retrieved
+        time.sleep(poll_interval_s)
+    actual_boosts = [chunk.boost for chunk in retrieved]
+    pytest.fail(
+        f"Timed out after {timeout_s}s waiting for document {document_id!r}: "
+        f"expected {expected_chunk_count} chunk(s) with boost={expected_boost}, "
+        f"got {len(retrieved)} chunk(s) with boosts={actual_boosts}."
+    )
+
+
 # ------------------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------------------
@@ -42,7 +76,7 @@ from tests.external_dependency_unit.document_index.conftest import (
 
 @pytest.fixture(scope="module")
 def vespa_document_index(
-    vespa_index: VespaIndex,  # noqa: ARG001 — ensures schema exists
+    vespa_index: VespaDocumentIndex,  # noqa: ARG001 — ensures schema exists
     httpx_client: httpx.Client,
     test_index_name: str,
 ) -> Generator[VespaDocumentIndex, None, None]:
@@ -56,7 +90,7 @@ def vespa_document_index(
 
 @pytest.fixture(scope="module")
 def opensearch_document_index(
-    opensearch_old_index: OpenSearchOldDocumentIndex,  # noqa: ARG001 — ensures index exists
+    opensearch_index: OpenSearchDocumentIndex,  # noqa: ARG001 — ensures index exists
     test_index_name: str,
 ) -> Generator[OpenSearchDocumentIndex, None, None]:
     yield OpenSearchDocumentIndex(
@@ -340,20 +374,25 @@ class TestDocumentIndexNew:
             )
             document_index.update([update_request])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
-            time.sleep(1)
-
-            # Postcondition.
+            # Postcondition. Poll until the eventually-consistent indexes
+            # reflect the updates rather than racing a fixed sleep against
+            # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=TEST_TENANT_ID,
             )
-            retrieved_doc1 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc1,
+                expected_chunk_count=3,
+                expected_boost=7,
                 filters=filters,
             )
-            retrieved_doc2 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc2,
+                expected_chunk_count=2,
+                expected_boost=7,
                 filters=filters,
             )
             assert len(retrieved_doc1) == 3
@@ -400,20 +439,25 @@ class TestDocumentIndexNew:
             )
             document_index.update([req1, req2])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
-            time.sleep(1)
-
-            # Postcondition.
+            # Postcondition. Poll until the eventually-consistent indexes
+            # reflect the updates rather than racing a fixed sleep against
+            # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=TEST_TENANT_ID,
             )
-            retrieved_doc1 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc1,
+                expected_chunk_count=2,
+                expected_boost=3,
                 filters=filters,
             )
-            retrieved_doc2 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc2,
+                expected_chunk_count=1,
+                expected_boost=9,
                 filters=filters,
             )
             assert len(retrieved_doc1) == 2

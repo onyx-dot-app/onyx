@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
 import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
 
@@ -54,4 +54,4 @@ export function useQueryController(): QueryControllerValue {
   return useContext(QueryControllerContext);
 }
 
-export const QueryControllerProvider = eeGated(EEQueryControllerProvider);
+export const QueryControllerProvider = paidTierGated(EEQueryControllerProvider);

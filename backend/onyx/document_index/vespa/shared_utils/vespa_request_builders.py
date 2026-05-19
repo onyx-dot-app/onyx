@@ -4,7 +4,7 @@ from datetime import timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT

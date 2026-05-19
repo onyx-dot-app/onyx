@@ -65,7 +65,8 @@ import {
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
@@ -791,7 +792,7 @@ function ChatPreferencesSettings() {
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
   } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
@@ -920,7 +921,7 @@ function ChatPreferencesSettings() {
             />
           </InputHorizontal>
 
-          {isPaidEnterpriseFeaturesEnabled && (
+          {businessTier && (
             <Tooltip
               tooltip={
                 searchUiEnabled

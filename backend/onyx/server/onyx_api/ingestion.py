@@ -181,8 +181,6 @@ def delete_ingestion_doc(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    tenant_id = get_current_tenant_id()
-
     # Verify the document exists and was created via the ingestion API
     document = get_document(document_id=document_id, db_session=db_session)
     if document is None:
@@ -202,9 +200,8 @@ def delete_ingestion_doc(
         None,
     )
     for document_index in document_indices:
-        document_index.delete_single(
-            doc_id=document_id,
-            tenant_id=tenant_id,
+        document_index.delete(
+            document_id,
             chunk_count=document.chunk_count,
         )
 

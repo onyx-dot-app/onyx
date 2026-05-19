@@ -119,7 +119,15 @@ class UserFileIndexingAdapter:
         """Do all DB lookups and pre-compute file metadata from chunks."""
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
-        doc_id_to_new_chunk_cnt: dict[str, int] = defaultdict(int)
+        # Pre-seed every updatable_id with 0 so user files reindexing to zero
+        # chunks (e.g. all chunks filtered out, or all embeddings failed) still
+        # appear in the dict. Without this, IndexingMetadata silently omits such
+        # docs and their stale chunks from a prior indexing remain in the vector
+        # DB. Mirrors DocumentIndexingBatchAdapter.prepare_enrichment so both
+        # adapters expose the same keyset contract.
+        doc_id_to_new_chunk_cnt: dict[str, int] = {
+            doc_id: 0 for doc_id in updatable_ids
+        }
         content_by_file: dict[str, list[str]] = defaultdict(list)
         for chunk in chunks:
             doc_id_to_new_chunk_cnt[chunk.source_document.id] += 1

@@ -5,7 +5,7 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from onyx.utils.platform import is_running_in_container
+from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import LOG_FILE_NAME

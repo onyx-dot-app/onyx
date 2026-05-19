@@ -1,9 +1,9 @@
 import json
 from collections.abc import Generator
 
+from onyx.context.search.models import IndexFilters
 from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
-from onyx.document_index.vespa.index import IndexFilters
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.kg.models import KGChunkFormat
 from onyx.utils.logger import setup_logger
 

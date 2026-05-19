@@ -28,7 +28,10 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 _THIS_FILE = Path(__file__)
 
 # Sandbox filesystem paths
-SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
+# TODO(security): the sandbox base path holds user-supplied code; the `/tmp`
+# default is fine for dev but production should override via env (or we should
+# pick a non-world-writable default like `/var/lib/onyx-sandboxes`).
+SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")  # noqa: S108
 OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
 VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 # "copy" (default, safe for production where the agent may pip install) or
