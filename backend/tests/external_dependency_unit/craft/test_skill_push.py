@@ -56,31 +56,6 @@ from tests.external_dependency_unit.craft.conftest import SandboxHandle
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 
-def _provision_with_status(
-    handle: SandboxHandle,
-    db_session: Session,
-    user: User,
-    status: SandboxStatus = SandboxStatus.RUNNING,
-) -> tuple[Sandbox, Path]:
-    """Provision a sandbox for ``user`` via ``handle``, optionally overriding status.
-
-    Returns ``(sandbox_row, workspace_path)``. If ``status`` is not RUNNING the
-    row is updated after provisioning (the manager always starts with RUNNING).
-    """
-    workspace = handle.provision_for(user)
-    row = (
-        db_session.query(Sandbox)
-        .filter(Sandbox.user_id == user.id)
-        .order_by(Sandbox.created_at.desc())
-        .first()
-    )
-    assert row is not None
-    if status != SandboxStatus.RUNNING:
-        row.status = status
-        db_session.commit()
-    return row, workspace
-
-
 def _skill_file_path(workspace: Path, slug: str, name: str = "SKILL.md") -> Path:
     return workspace / "managed" / "skills" / slug / name
 
@@ -132,7 +107,7 @@ class TestSkillPush:
             db_session.delete(row)
         db_session.commit()
         for user in (user_a, user_b, user_c):
-            workspaces[user.id] = handle.provision_for(user)
+            _, workspaces[user.id] = handle.provision_for(user)
 
         public_skill = seeded_skill(
             slug=f"public-skill-{uuid4().hex[:6]}",
@@ -174,7 +149,7 @@ class TestSkillPush:
             db_session.delete(row)
         db_session.commit()
         for user in (user_a, user_b, user_c):
-            workspaces[user.id] = handle.provision_for(user)
+            _, workspaces[user.id] = handle.provision_for(user)
 
         skill = seeded_skill(
             slug=f"eng-only-{uuid4().hex[:6]}",
@@ -199,9 +174,7 @@ class TestSkillPush:
 
         user = make_user(db_session)
         db_session.commit()
-        _row, workspace = _provision_with_status(
-            handle, db_session, user, status=SandboxStatus.SLEEPING
-        )
+        _row, workspace = handle.provision_for(user, status=SandboxStatus.SLEEPING)
 
         skill = seeded_skill(
             slug=f"sleeping-{uuid4().hex[:6]}",
@@ -225,9 +198,7 @@ class TestSkillPush:
 
         user = make_user(db_session)
         db_session.commit()
-        _row, workspace = _provision_with_status(
-            handle, db_session, user, status=SandboxStatus.TERMINATED
-        )
+        _row, workspace = handle.provision_for(user, status=SandboxStatus.TERMINATED)
 
         skill = seeded_skill(
             slug=f"terminated-{uuid4().hex[:6]}",
@@ -253,7 +224,7 @@ class TestSkillPush:
         add_user_to_group(db_session, user, group)
         db_session.commit()
 
-        _row, workspace = _provision_with_status(handle, db_session, user)
+        _row, workspace = handle.provision_for(user)
 
         skill = seeded_skill(
             slug=f"disable-me-{uuid4().hex[:6]}",
@@ -293,8 +264,8 @@ class TestSkillPush:
         add_user_to_group(db_session, user_b, group_y)
         db_session.commit()
 
-        _row_a, ws_a = _provision_with_status(handle, db_session, user_a)
-        _row_b, ws_b = _provision_with_status(handle, db_session, user_b)
+        _row_a, ws_a = handle.provision_for(user_a)
+        _row_b, ws_b = handle.provision_for(user_b)
 
         skill = seeded_skill(
             slug=f"grants-flip-{uuid4().hex[:6]}",
@@ -336,7 +307,7 @@ class TestSkillPush:
 
         user = make_user(db_session)
         db_session.commit()
-        _row, workspace = _provision_with_status(handle, db_session, user)
+        _row, workspace = handle.provision_for(user)
 
         skill = seeded_skill(
             slug=f"versioned-{uuid4().hex[:6]}",
@@ -379,8 +350,8 @@ class TestSkillPush:
         user_a = make_user(db_session)
         user_b = make_user(db_session)
         db_session.commit()
-        _row_a, ws_a = _provision_with_status(handle, db_session, user_a)
-        _row_b, ws_b = _provision_with_status(handle, db_session, user_b)
+        _row_a, ws_a = handle.provision_for(user_a)
+        _row_b, ws_b = handle.provision_for(user_b)
 
         skill = seeded_skill(
             slug=f"to-delete-{uuid4().hex[:6]}",
@@ -422,9 +393,9 @@ class TestSkillPush:
         user_b = make_user(db_session)
         user_c = make_user(db_session)
         db_session.commit()
-        _row_a, _ = _provision_with_status(handle, db_session, user_a)
-        row_b, _ = _provision_with_status(handle, db_session, user_b)
-        _row_c, _ = _provision_with_status(handle, db_session, user_c)
+        _row_a, _ = handle.provision_for(user_a)
+        row_b, _ = handle.provision_for(user_b)
+        _row_c, _ = handle.provision_for(user_c)
 
         # Make user_b's push fatally fail; the other two succeed silently.
         stub = failing_sandbox_manager(
@@ -474,7 +445,7 @@ class TestSkillPush:
         add_user_to_group(db_session, user, group_y)
         db_session.commit()
 
-        _row, workspace = _provision_with_status(handle, db_session, user)
+        _row, workspace = handle.provision_for(user)
 
         skill = seeded_skill(
             slug=f"dup-grants-{uuid4().hex[:6]}",
@@ -533,8 +504,8 @@ class TestSkillPush:
         )
         fresh_registry.register(slug="company-search", source_dir=company_search_src)
 
-        ws_a = handle.provision_for(user_a)
-        ws_b = handle.provision_for(user_b)
+        _, ws_a = handle.provision_for(user_a)
+        _, ws_b = handle.provision_for(user_b)
         row_a = db_session.query(Sandbox).filter(Sandbox.user_id == user_a.id).one()
         row_b = db_session.query(Sandbox).filter(Sandbox.user_id == user_b.id).one()
 
@@ -612,7 +583,7 @@ class TestSkillPush:
 
         user = make_user(db_session)
         db_session.commit()
-        row, workspace = _provision_with_status(handle, db_session, user)
+        row, workspace = handle.provision_for(user)
 
         hydrate_sandbox_skills(sandbox_id=row.id, user=user, db_session=db_session)
 

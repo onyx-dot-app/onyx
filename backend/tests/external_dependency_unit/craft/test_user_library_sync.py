@@ -19,7 +19,6 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.server.features.build.db.user_library import create_directory_record
 from onyx.server.features.build.db.user_library import delete_user_file
@@ -34,22 +33,6 @@ from onyx.server.features.build.sandbox.user_library import (
 )
 from tests.external_dependency_unit.craft._test_helpers import make_user
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
-
-
-def _provision(
-    handle: SandboxHandle,
-    db_session: Session,
-    user: User,
-) -> tuple[Sandbox, Path]:
-    workspace = handle.provision_for(user)
-    row = (
-        db_session.query(Sandbox)
-        .filter(Sandbox.user_id == user.id)
-        .order_by(Sandbox.created_at.desc())
-        .first()
-    )
-    assert row is not None
-    return row, workspace
 
 
 def _library_path(workspace: Path, file_path: str) -> Path:
@@ -92,7 +75,7 @@ class TestUserLibrarySync:
         content = b"spreadsheet data here"
         _seed_file(db_session, user, "test.xlsx", content)
 
-        row, workspace = _provision(handle, db_session, user)
+        row, workspace = handle.provision_for(user)
         hydrate_user_library(row.id, user.id, db_session)
 
         target = _library_path(workspace, "test.xlsx")
@@ -157,7 +140,7 @@ class TestUserLibrarySync:
 
         doc_id = _seed_file(db_session, user, "to_delete.txt", b"bye")
 
-        row, workspace = _provision(handle, db_session, user)
+        row, workspace = handle.provision_for(user)
         hydrate_user_library(row.id, user.id, db_session)
         assert _library_path(workspace, "to_delete.txt").exists()
 
