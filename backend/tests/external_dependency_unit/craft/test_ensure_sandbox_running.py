@@ -33,6 +33,15 @@ from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
+# Autouse the shared ``local_sandbox_paths`` fixture from conftest so the
+# real ``LocalSandboxManager`` constructed inside ``SessionManager`` finds
+# valid template directories. Without this, ``_validate_templates()`` raises
+# in CI / dev environments where ``/templates/{outputs,venv}`` don't exist.
+@pytest.fixture(autouse=True)
+def _autouse_local_sandbox_paths(local_sandbox_paths: object) -> None:  # noqa: ARG001
+    return None
+
+
 def _make_session_manager(db_session: Session) -> SessionManager:
     """Construct a SessionManager wired to the env's real SandboxManager.
 
