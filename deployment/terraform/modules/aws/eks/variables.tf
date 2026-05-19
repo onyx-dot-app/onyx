@@ -194,21 +194,35 @@ variable "craft_sandbox_node_group" {
   type        = any
   description = <<-EOT
     Optional sandbox node group for the Craft feature. When non-null, the
-    module adds a `sandbox` entry to its `eks_managed_node_groups` map. Pass
-    the per-NG config (instance_types, min/max_size, iam_role_name, taints,
-    labels, metadata_options, etc.) as a map; everything is forwarded
-    verbatim to terraform-aws-modules/eks/aws.
+    module adds a `craft_sandbox` entry to its `eks_managed_node_groups`
+    map. Pass the per-NG config (instance_types, min/max_size,
+    iam_role_name, taints, labels, etc.) as a map; everything is forwarded
+    to terraform-aws-modules/eks/aws.
 
     Codifies items 3 + 4 of docs/craft/infra/todos.md:
-      * Items 3 (SG composition): being in this map means the upstream EKS
-        module auto-attaches both the cluster primary SG (via EKS default)
-        and the cluster's shared node SG (via the LT) to sandbox instances,
-        matching the regular node groups.
-      * Item 4 (IMDSv2 hop limit 1): callers should set
-        `metadata_options = { http_tokens = "required", http_put_response_hop_limit = 1 }`
-        so containers cannot reach the instance metadata service.
+      * Item 3 (SG composition): being in the EKS managed node groups map
+        means the upstream module auto-attaches both the cluster primary SG
+        (via EKS default) and the cluster's shared node SG (via the LT) to
+        sandbox instances, matching the regular node groups.
+      * Item 4 (IMDSv2 hop limit 1): if you omit `metadata_options`, the
+        module supplies a hardened default (`http_tokens = "required"`,
+        `http_put_response_hop_limit = 1`). Explicit overrides are
+        validated below — IMDSv1 / hop-limit > 1 is rejected so the
+        security property holds by construction, not by convention.
 
     Leave null for clusters that don't run Craft.
   EOT
   default     = null
+
+  validation {
+    condition = (
+      var.craft_sandbox_node_group == null
+      || try(var.craft_sandbox_node_group.metadata_options, null) == null
+      || (
+        try(var.craft_sandbox_node_group.metadata_options.http_tokens, "") == "required"
+        && try(var.craft_sandbox_node_group.metadata_options.http_put_response_hop_limit, 0) == 1
+      )
+    )
+    error_message = "craft_sandbox_node_group.metadata_options must enforce IMDSv2 (http_tokens = \"required\") and hop-limit 1 (http_put_response_hop_limit = 1). Omit metadata_options entirely to use the module's hardened defaults."
+  }
 }
