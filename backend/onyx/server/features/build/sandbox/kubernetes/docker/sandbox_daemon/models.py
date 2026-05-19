@@ -44,13 +44,17 @@ class SnapshotRestoreRequest(BaseModel):
 
     @model_validator(mode="after")
     def _storage_path_under_tenant(self) -> "SnapshotRestoreRequest":
-        """The storage_path comes from a DB row that ultimately maps to one
-        tenant — we reject any storage_path that doesn't start with that
-        tenant's prefix as a defense against a bug or compromise on the
-        api-server side that mixes tenant IDs."""
+        """Reject any storage_path that doesn't sit under the tenant's
+        snapshot prefix. Guards against a bug or compromise on the
+        api-server side that mixes tenant IDs, and against ``..`` segments
+        that would otherwise escape after a passing startswith check
+        (e.g. ``t-1/snapshots/../../etc/passwd``).
+        """
         expected_prefix = f"{self.tenant_id}/snapshots/"
         if not self.storage_path.startswith(expected_prefix):
             raise ValueError(f"storage_path must start with {expected_prefix!r}")
+        if ".." in self.storage_path.split("/"):
+            raise ValueError("storage_path must not contain '..' segments")
         return self
 
 

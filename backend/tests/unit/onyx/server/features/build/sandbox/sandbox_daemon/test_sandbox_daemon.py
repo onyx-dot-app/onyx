@@ -540,22 +540,68 @@ def test_snapshot_restore_passes_body_through_and_returns_204(
     }
 
 
-def test_snapshot_restore_rejects_storage_path_outside_tenant_prefix(
+@pytest.mark.parametrize(
+    "storage_path,reason",
+    [
+        # Different tenant prefix.
+        ("OTHER-TENANT/snapshots/x/y.tar.gz", "cross-tenant"),
+        # Right prefix, then ``..`` segment that would escape on extraction.
+        ("t-1/snapshots/../../etc/passwd", "parent-traversal"),
+        # No prefix at all.
+        ("y.tar.gz", "no-prefix"),
+        # Prefix-shared but different tenant (``t-1-evil`` vs ``t-1``).
+        ("t-1-evil/snapshots/x/y.tar.gz", "prefix-share"),
+    ],
+)
+def test_snapshot_restore_rejects_unsafe_storage_path(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
+    storage_path: str,
+    reason: str,
 ) -> None:
-    """Without this check, a bug or compromise on the api-server that
-    swapped tenants in `storage_path` could cause cross-tenant restore.
+    """Pin the cross-tenant / traversal guard. Without these, a bug or
+    compromise on the api-server side could route one tenant's restore
+    onto another tenant's S3 key, or escape the session dir via ``..``.
     """
     _, _, priv, _ = configured_sandbox_daemon
     body = (
         b'{"session_id":"00000000-0000-0000-0000-000000000001",'
         b'"tenant_id":"t-1","s3_bucket":"buck",'
-        b'"storage_path":"OTHER-TENANT/snapshots/x/y.tar.gz"}'
+        b'"storage_path":"' + storage_path.encode() + b'"}'
     )
     resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
-    assert resp.status_code == 400
+    assert resp.status_code == 400, f"{reason}: expected 400, got {resp.status_code}"
     assert "storage_path" in resp.text
+
+
+@pytest.mark.parametrize(
+    "tenant_id,reason",
+    [
+        ("t/../", "slash-and-dotdot"),
+        ("", "empty"),
+        ("t" * 129, "too-long"),
+        ("tenant.with.dots", "dot-char"),
+    ],
+)
+def test_snapshot_endpoints_reject_invalid_tenant_id(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    tenant_id: str,
+    reason: str,
+) -> None:
+    """The wire model constrains tenant_id to a safe character set so it
+    can't be used to inject ``..`` into the S3 key (snapshot create) or
+    smuggle other shell-significant chars into the path.
+    """
+    _, _, priv, _ = configured_sandbox_daemon
+    tenant_b = tenant_id.encode()
+    body = (
+        b'{"session_id":"00000000-0000-0000-0000-000000000001",'
+        b'"tenant_id":"' + tenant_b + b'","s3_bucket":"buck",'
+        b'"snapshot_id":"00000000-0000-0000-0000-000000000002"}'
+    )
+    resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
+    assert resp.status_code == 400, f"{reason}: expected 400, got {resp.status_code}"
 
 
 @pytest.mark.parametrize("endpoint", ["/snapshot/create", "/snapshot/restore"])

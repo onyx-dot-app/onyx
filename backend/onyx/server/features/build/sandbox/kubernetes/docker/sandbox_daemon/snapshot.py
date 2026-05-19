@@ -52,6 +52,16 @@ def create_snapshot(
     if not (session_path / "outputs").is_dir():
         return ("empty", "")
 
+    # Reject symlinks at the top level — the agent has rw access to the
+    # session dir and could swap one of these for a symlink pointing at
+    # /etc or the sidecar's IRSA token mount. GNU tar's default already
+    # archives symlinks as symlinks (so the target isn't exfiltrated), but
+    # we fail-loud here so the operator notices the tamper.
+    for sub in ("outputs", "attachments", ".opencode-data"):
+        candidate = session_path / sub
+        if candidate.is_symlink():
+            raise SnapshotError(f"{sub} is a symlink; refusing to snapshot")
+
     storage_path = f"{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz"
     s3_uri = f"s3://{s3_bucket}/{storage_path}"
 
