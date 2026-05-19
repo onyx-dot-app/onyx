@@ -6,8 +6,8 @@ import { useFormikContext } from "formik";
 import {
   LLMProviderFormProps,
   LLMProviderName,
-  ModelConfiguration,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
+import type { ModelConfiguration } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import { useInitialValues } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";

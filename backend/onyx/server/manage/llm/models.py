@@ -176,6 +176,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_image_input: bool | None = None
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
+    custom_display_name: str | None = None  # Admin-specified override
 
     @classmethod
     def from_model(
@@ -191,6 +192,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
                 in model_configuration_model.llm_model_flow_types
             ),
             display_name=model_configuration_model.display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
         )
 
 
@@ -202,6 +204,7 @@ class ModelConfigurationView(BaseModel):
     supports_image_input: bool
     supports_reasoning: bool = False
     display_name: str | None = None
+    custom_display_name: str | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None
@@ -245,6 +248,7 @@ class ModelConfigurationView(BaseModel):
                     )
                 ),
                 display_name=model_configuration_model.display_name,
+                custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
                 vendor=vendor,
                 version=None,
@@ -298,6 +302,7 @@ class ModelConfigurationView(BaseModel):
             ),
             # Populate display fields from parsed model name
             display_name=display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
             provider_display_name=parsed.provider_display_name,
             vendor=parsed.vendor,
             version=parsed.version,
