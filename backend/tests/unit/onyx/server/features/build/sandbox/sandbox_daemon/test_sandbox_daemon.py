@@ -1,9 +1,9 @@
-"""In-pod push daemon tests.
+"""In-pod sandbox_daemon server tests.
 
-Behavior tests over the FastAPI push daemon using ``fastapi.testclient``.
-The daemon module is loaded dynamically under the ``push_daemon`` package
-name because its in-container layout (``COPY daemon/ /workspace/push_daemon``)
-isn't reflected in the backend Python path.
+Behavior tests over the FastAPI sandbox_daemon (push + snapshot endpoints) using
+``fastapi.testclient``. The sandbox_daemon module is loaded dynamically under the
+``sandbox_daemon`` package name because its in-container layout (``COPY sandbox_daemon/
+/workspace/sandbox_daemon``) isn't reflected in the backend Python path.
 """
 
 from __future__ import annotations
@@ -28,41 +28,47 @@ from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from fastapi.testclient import TestClient
 
-# Resolve the daemon directory relative to this test file so the path works in
+# Resolve the sandbox_daemon directory relative to this test file so the path works in
 # both local dev and CI. This file lives at:
-#   backend/tests/unit/onyx/server/features/build/sandbox/daemon/test_push_daemon.py
+#   backend/tests/unit/onyx/server/features/build/sandbox/sandbox_daemon/test_sandbox_daemon.py
 # so parents[9] is the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[9]
 _DAEMON_DIR = (
-    _REPO_ROOT / "backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon"
+    _REPO_ROOT
+    / "backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon"
 )
 
 
-def _load_daemon_modules() -> tuple[ModuleType, ModuleType]:
-    """Load ``push_daemon.extract`` and ``push_daemon.server`` from the
-    daemon directory.
+def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
+    """Load ``sandbox_daemon.extract`` and ``sandbox_daemon.server`` from the sandbox_daemon
+    directory.
 
-    The daemon's source imports ``from push_daemon.extract import ...`` because
-    in the container the directory is copied to ``/workspace/push_daemon/``.
+    The sandbox_daemon's source imports ``from sandbox_daemon.extract import ...`` because
+    in the container the directory is copied to ``/workspace/sandbox_daemon/``.
     The test runner doesn't have that path, so we register the modules under
     the expected names in ``sys.modules`` before loading server.py.
     """
-    if "push_daemon.server" in sys.modules and "push_daemon.extract" in sys.modules:
-        return sys.modules["push_daemon.extract"], sys.modules["push_daemon.server"]
+    if (
+        "sandbox_daemon.server" in sys.modules
+        and "sandbox_daemon.extract" in sys.modules
+    ):
+        return sys.modules["sandbox_daemon.extract"], sys.modules[
+            "sandbox_daemon.server"
+        ]
 
-    if "push_daemon" not in sys.modules:
-        sys.modules["push_daemon"] = types.ModuleType("push_daemon")
+    if "sandbox_daemon" not in sys.modules:
+        sys.modules["sandbox_daemon"] = types.ModuleType("sandbox_daemon")
 
-    for name in ("extract", "snapshot", "server"):
+    for name in ("models", "extract", "snapshot", "server"):
         spec = importlib.util.spec_from_file_location(
-            f"push_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
+            f"sandbox_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
         )
         assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[f"push_daemon.{name}"] = mod
+        sys.modules[f"sandbox_daemon.{name}"] = mod
         spec.loader.exec_module(mod)
 
-    return sys.modules["push_daemon.extract"], sys.modules["push_daemon.server"]
+    return sys.modules["sandbox_daemon.extract"], sys.modules["sandbox_daemon.server"]
 
 
 # ---------------------------------------------------------------------------
@@ -107,9 +113,9 @@ def _build_targz_bytes(entries: dict[str, bytes]) -> bytes:
 
 
 @pytest.fixture
-def daemon_modules() -> tuple[ModuleType, ModuleType]:
+def sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
     """Load extract + server modules once per test."""
-    return _load_daemon_modules()
+    return _load_sandbox_daemon_modules()
 
 
 @pytest.fixture
@@ -118,16 +124,16 @@ def keypair() -> tuple[Ed25519PrivateKey, str]:
 
 
 @pytest.fixture
-def configured_daemon(
-    daemon_modules: tuple[ModuleType, ModuleType],
+def configured_sandbox_daemon(
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
     keypair: tuple[Ed25519PrivateKey, str],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path]:
-    """Daemon with the public key env set and the ALLOWED_PREFIX pointed
+    """Sidecar with the public key env set and the ALLOWED_PREFIX pointed
     at a temp directory so extraction stays hermetic.
     """
-    extract_mod, server_mod = daemon_modules
+    extract_mod, server_mod = sandbox_daemon_modules
     priv, pub_b64 = keypair
 
     # Point ALLOWED_PREFIX at a tmp dir for hermetic extraction. Resolve to
@@ -147,9 +153,9 @@ def configured_daemon(
 
 @pytest.fixture
 def client(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
 ) -> Generator[TestClient, None, None]:
-    _, server_mod, _, _ = configured_daemon
+    _, server_mod, _, _ = configured_sandbox_daemon
     with TestClient(server_mod.app) as c:
         yield c
 
@@ -199,10 +205,10 @@ def test_health_returns_200(client: TestClient) -> None:
 
 
 def test_push_with_valid_signature_extracts(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    _, _, priv, allowed_root = configured_daemon
+    _, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     body = _build_targz_bytes({"my-skill/SKILL.md": b"# hello\n"})
 
@@ -217,10 +223,10 @@ def test_push_with_valid_signature_extracts(
 
 
 def test_push_with_invalid_signature_returns_401(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    _, _, priv, allowed_root = configured_daemon
+    _, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     body = _build_targz_bytes({"my-skill/SKILL.md": b"# hi\n"})
 
@@ -245,10 +251,10 @@ def test_push_with_invalid_signature_returns_401(
 
 
 def test_push_with_old_timestamp_returns_401(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    _, _, priv, allowed_root = configured_daemon
+    _, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     body = _build_targz_bytes({"my-skill/SKILL.md": b"x"})
     old_ts = str(int(time.time()) - 120)  # 2 minutes in the past
@@ -259,10 +265,10 @@ def test_push_with_old_timestamp_returns_401(
 
 
 def test_push_with_future_timestamp_returns_401(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    _, _, priv, allowed_root = configured_daemon
+    _, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     body = _build_targz_bytes({"my-skill/SKILL.md": b"x"})
     future_ts = str(int(time.time()) + 120)
@@ -277,7 +283,7 @@ def test_push_with_future_timestamp_returns_401(
 
 
 def test_push_with_sha_mismatch_returns_400(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
     """Header SHA != computed -> 400.
@@ -287,7 +293,7 @@ def test_push_with_sha_mismatch_returns_400(
     the wrong SHA in the header. We sign over the wrong SHA so verification
     passes, then the body hashes to a different value.
     """
-    _, _, priv, allowed_root = configured_daemon
+    _, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
     body = _build_targz_bytes({"my-skill/SKILL.md": b"real body"})
     wrong_sha = hashlib.sha256(b"different body").hexdigest()
@@ -309,11 +315,11 @@ def test_push_with_sha_mismatch_returns_400(
 
 
 def test_push_over_size_cap_returns_413(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
     """Content-Length > 100 MiB -> 413, body never streamed."""
-    extract_mod, _, priv, allowed_root = configured_daemon
+    extract_mod, _, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
 
     # Use a small body but advertise a huge Content-Length. The daemon rejects
@@ -340,11 +346,11 @@ def test_push_over_size_cap_returns_413(
 
 
 def test_push_to_mount_path_outside_allowed_prefix_returns_400(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
     """mount_path outside ALLOWED_PREFIX (e.g. /etc) is rejected with 400."""
-    _, _, priv, _ = configured_daemon
+    _, _, priv, _ = configured_sandbox_daemon
     mount_path = "/etc"
     body = _build_targz_bytes({"shadow": b"oops"})
 
@@ -353,7 +359,7 @@ def test_push_to_mount_path_outside_allowed_prefix_returns_400(
 
 
 def test_push_missing_public_key_raises_onyx_error(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -365,7 +371,7 @@ def test_push_missing_public_key_raises_onyx_error(
     ``OnyxError``. The behavior asserted here is the operator-facing error
     when the key is missing, as observed through the FastAPI TestClient.
     """
-    _, server_mod, priv, allowed_root = configured_daemon
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
 
     # Remove the env var and clear the cached key.
     monkeypatch.delenv("ONYX_SANDBOX_PUSH_PUBLIC_KEY", raising=False)
@@ -432,7 +438,7 @@ def _signed_snapshot_post(
 
 
 def test_snapshot_create_parses_body_and_returns_storage_path(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -442,7 +448,7 @@ def test_snapshot_create_parses_body_and_returns_storage_path(
     Verifying the args round-trip catches schema drift (e.g. a renamed
     field silently being dropped by pydantic).
     """
-    _, server_mod, priv, _ = configured_daemon
+    _, server_mod, priv, _ = configured_sandbox_daemon
     captured: dict[str, str] = {}
 
     def fake_create(**kwargs: str) -> tuple[str, str]:
@@ -472,7 +478,7 @@ def test_snapshot_create_parses_body_and_returns_storage_path(
 
 
 def test_snapshot_create_passes_through_empty_status(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -482,7 +488,7 @@ def test_snapshot_create_passes_through_empty_status(
     so misreporting it as "created" would create dangling DB rows pointing
     at nonexistent S3 keys.
     """
-    _, server_mod, priv, _ = configured_daemon
+    _, server_mod, priv, _ = configured_sandbox_daemon
     monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("empty", ""))
 
     body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
@@ -493,12 +499,16 @@ def test_snapshot_create_passes_through_empty_status(
     assert resp.json()["storage_path"] == ""
 
 
-def test_snapshot_restore_parses_body_and_returns_restored(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+def test_snapshot_restore_passes_body_through_and_returns_204(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, server_mod, priv, _ = configured_daemon
+    """Restore has no response body — success is the 204. The endpoint still
+    deserializes the JSON request and hands the three fields to the snapshot
+    function unchanged.
+    """
+    _, server_mod, priv, _ = configured_sandbox_daemon
     captured: dict[str, str] = {}
 
     def fake_restore(**kwargs: str) -> None:
@@ -509,8 +519,8 @@ def test_snapshot_restore_parses_body_and_returns_restored(
     body = b'{"session_id":"sess-1","s3_bucket":"buck","storage_path":"t/s/x.tar.gz"}'
     resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
 
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "restored"}
+    assert resp.status_code == 204
+    assert resp.content == b""
     assert captured == {
         "session_id": "sess-1",
         "s3_bucket": "buck",
@@ -520,14 +530,14 @@ def test_snapshot_restore_parses_body_and_returns_restored(
 
 @pytest.mark.parametrize("endpoint", ["/snapshot/create", "/snapshot/restore"])
 def test_snapshot_signature_from_wrong_key_is_rejected(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     endpoint: str,
 ) -> None:
     """The agent shares the pod network namespace and can curl localhost.
     A signature from any key other than the configured public key must fail.
     """
-    _, _, _, _ = configured_daemon
+    _, _, _, _ = configured_sandbox_daemon
     body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
     ts = str(int(time.time()))
     other_priv, _ = _new_keypair()
@@ -538,7 +548,7 @@ def test_snapshot_signature_from_wrong_key_is_rejected(
 
 
 def test_snapshot_body_tampering_after_signing_is_rejected(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -546,7 +556,7 @@ def test_snapshot_body_tampering_after_signing_is_rejected(
     signature — otherwise a network attacker (or compromised agent) could
     redirect a snapshot to a different tenant by swapping tenant_id.
     """
-    _, server_mod, priv, _ = configured_daemon
+    _, server_mod, priv, _ = configured_sandbox_daemon
     monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("created", "p"))
 
     signed_body = (
@@ -567,7 +577,7 @@ def test_snapshot_body_tampering_after_signing_is_rejected(
 
 
 def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
-    configured_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
     """A captured /push signature signs {ts}|{mount_path}|{sha} — the path
@@ -575,7 +585,7 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
     Without that domain separation, a leaked push signature could be
     replayed to trigger arbitrary snapshot operations.
     """
-    _, _, priv, _ = configured_daemon
+    _, _, priv, _ = configured_sandbox_daemon
     body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
     ts = str(int(time.time()))
 

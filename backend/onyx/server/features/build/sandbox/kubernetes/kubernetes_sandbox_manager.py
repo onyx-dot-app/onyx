@@ -71,6 +71,15 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotCreateRequest,
+)
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotCreateResponse,
+)
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotRestoreRequest,
+)
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPEvent,
 )
@@ -1361,14 +1370,16 @@ echo "Session cleanup complete"
         except (FatalWriteError, RetriableWriteError) as e:
             raise RuntimeError(f"Failed to create snapshot: {e}") from e
 
-        body = json.dumps(
-            {
-                "session_id": session_id_str,
-                "tenant_id": tenant_id,
-                "s3_bucket": self._s3_bucket,
-                "snapshot_id": snapshot_id,
-            }
-        ).encode()
+        body = (
+            SnapshotCreateRequest(
+                session_id=session_id_str,
+                tenant_id=tenant_id,
+                s3_bucket=self._s3_bucket,
+                snapshot_id=snapshot_id,
+            )
+            .model_dump_json()
+            .encode()
+        )
 
         try:
             resp = self._post_to_sidecar(
@@ -1382,16 +1393,15 @@ echo "Session cleanup complete"
                 f"Snapshot create failed: {resp.status_code} {resp.text}"
             )
 
-        data = resp.json()
-        if data.get("status") == "empty":
+        parsed = SnapshotCreateResponse.model_validate_json(resp.content)
+        if parsed.status == "empty":
             logger.info("No outputs to snapshot for session %s", session_id)
             return None
 
-        storage_path = data["storage_path"]
         logger.info("Created snapshot for session %s", session_id)
         return SnapshotResult(
-            storage_path=storage_path,
-            size_bytes=int(data.get("size_bytes", 0)),
+            storage_path=parsed.storage_path,
+            size_bytes=parsed.size_bytes,
         )
 
     def session_workspace_exists(
@@ -1489,13 +1499,15 @@ echo "Session cleanup complete"
         except (FatalWriteError, RetriableWriteError) as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
-        body = json.dumps(
-            {
-                "session_id": str(session_id),
-                "s3_bucket": self._s3_bucket,
-                "storage_path": snapshot_storage_path,
-            }
-        ).encode()
+        body = (
+            SnapshotRestoreRequest(
+                session_id=str(session_id),
+                s3_bucket=self._s3_bucket,
+                storage_path=snapshot_storage_path,
+            )
+            .model_dump_json()
+            .encode()
+        )
 
         try:
             resp = self._post_to_sidecar(
@@ -1504,7 +1516,7 @@ echo "Session cleanup complete"
         except (httpx.TimeoutException, httpx.NetworkError) as e:
             raise RuntimeError(f"Snapshot restore request failed: {e}") from e
 
-        if resp.status_code != 200:
+        if resp.status_code != 204:
             raise RuntimeError(
                 f"Snapshot restore failed: {resp.status_code} {resp.text}"
             )

@@ -90,7 +90,7 @@ USER root
 # Add opencode to PATH (installs to ~/.opencode/bin)
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 
-COPY --exclude=__pycache__ daemon/ /workspace/push_daemon/
+COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 

@@ -14,11 +14,14 @@ from fastapi import Header
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
-from push_daemon.extract import MAX_BUNDLE_BYTES
-from push_daemon.extract import safe_extract_then_atomic_swap
-from push_daemon.snapshot import create_snapshot
-from push_daemon.snapshot import restore_snapshot
-from pydantic import BaseModel
+
+from sandbox_daemon.extract import MAX_BUNDLE_BYTES
+from sandbox_daemon.extract import safe_extract_then_atomic_swap
+from sandbox_daemon.models import SnapshotCreateRequest
+from sandbox_daemon.models import SnapshotCreateResponse
+from sandbox_daemon.models import SnapshotRestoreRequest
+from sandbox_daemon.snapshot import create_snapshot
+from sandbox_daemon.snapshot import restore_snapshot
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 
@@ -125,25 +128,12 @@ async def push(
     return {"status": "ok"}
 
 
-class SnapshotCreateRequest(BaseModel):
-    session_id: str
-    tenant_id: str
-    s3_bucket: str
-    snapshot_id: str
-
-
-class SnapshotRestoreRequest(BaseModel):
-    session_id: str
-    s3_bucket: str
-    storage_path: str
-
-
 @app.post("/snapshot/create")
 async def snapshot_create(
     request: Request,
     x_push_signature: str = Header(..., alias="X-Push-Signature"),
     x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
-) -> dict[str, str | int]:
+) -> SnapshotCreateResponse:
     body = await request.body()
     _verify_signature(
         "/snapshot/create",
@@ -167,15 +157,17 @@ async def snapshot_create(
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot create failed: {e}")
 
-    return {"status": status, "storage_path": storage_path, "size_bytes": 0}
+    return SnapshotCreateResponse(
+        status=status, storage_path=storage_path, size_bytes=0
+    )
 
 
-@app.post("/snapshot/restore")
+@app.post("/snapshot/restore", status_code=204)
 async def snapshot_restore(
     request: Request,
     x_push_signature: str = Header(..., alias="X-Push-Signature"),
     x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
-) -> dict[str, str]:
+) -> None:
     body = await request.body()
     _verify_signature(
         "/snapshot/restore",
@@ -197,8 +189,6 @@ async def snapshot_restore(
         )
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot restore failed: {e}")
-
-    return {"status": "restored"}
 
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from sandbox_daemon.models import SnapshotCreateStatus
+
 SESSIONS_ROOT = Path("/workspace/sessions")
 
 
@@ -17,11 +19,11 @@ def create_snapshot(
     tenant_id: str,
     s3_bucket: str,
     snapshot_id: str,
-) -> tuple[str, str]:
+) -> tuple[SnapshotCreateStatus, str]:
     """Create a snapshot of a session's outputs/attachments/.opencode-data.
 
     Returns:
-        (status, storage_path) where status is "created" or "empty".
+        (status, storage_path). storage_path is empty when status is "empty".
     """
     session_path = SESSIONS_ROOT / session_id
     if not (session_path / "outputs").is_dir():
