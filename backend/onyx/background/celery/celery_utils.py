@@ -280,4 +280,4 @@ def make_probe_path(probe: str, hostname: str) -> Path:
         raise ValueError(f"name cannot be empty! {name=}")
 
     safe_name = "".join(c for c in name if c.isalnum()).rstrip()
-    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")
+    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")  # noqa: S108 — k8s probe file, name sanitized above

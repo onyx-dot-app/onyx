@@ -10,13 +10,25 @@ from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def build_minimal_bundle(slug: str) -> bytes:
-    """Build a minimal valid skill bundle zip with SKILL.md."""
+def build_minimal_bundle(
+    slug: str,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> bytes:
+    """Build a minimal valid skill bundle zip with SKILL.md.
+
+    `name` / `description` are written into the bundle's frontmatter — that's
+    now the canonical source for those fields on the backend, so tests that
+    care about them should pass them here instead of as separate API args.
+    """
+    fm_name = name or f"Test Skill {slug}"
+    fm_desc = description or f"Description for {slug}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
             "SKILL.md",
-            f"---\nname: {slug}\ndescription: Test skill {slug}\n---\n\nSkill instructions.",
+            f"---\nname: {fm_name}\ndescription: {fm_desc}\n---\n\nSkill instructions.",
         )
     return buf.getvalue()
 
@@ -32,30 +44,31 @@ class SkillManager:
         is_public: bool = False,
         group_ids: list[int] | None = None,
         bundle_bytes: bytes | None = None,
+        filename: str | None = None,
     ) -> DATestSkill:
         slug = slug or f"test-skill-{uuid4().hex[:8]}"
-        name = name or f"Test Skill {slug}"
-        description = description or f"Description for {slug}"
         if bundle_bytes is None:
-            bundle_bytes = build_minimal_bundle(slug)
+            bundle_bytes = build_minimal_bundle(
+                slug, name=name, description=description
+            )
+
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
 
         response = requests.post(
             f"{API_SERVER_URL}/admin/skills/custom",
             data={
-                "slug": slug,
-                "name": name,
-                "description": description,
                 "is_public": str(is_public).lower(),
                 "group_ids": json.dumps(group_ids or []),
             },
             files={
                 "bundle": (
-                    f"{slug}.zip",
+                    filename or f"{slug}.zip",
                     io.BytesIO(bundle_bytes),
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -98,6 +111,9 @@ class SkillManager:
         bundle_bytes: bytes,
         user_performing_action: DATestUser,
     ) -> DATestSkill:
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
         response = requests.put(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/bundle",
             files={
@@ -107,7 +123,7 @@ class SkillManager:
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()

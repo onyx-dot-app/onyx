@@ -1,11 +1,17 @@
+"""Fixtures and helpers for skills integration tests."""
+
+from __future__ import annotations
+
 import pytest
 
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.reset import reset_all
 
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    for item in items:
-        item.add_marker(pytest.mark.skip(reason="Skills tests under refactor"))
 
-
-@pytest.fixture(autouse=True)
-def _reset_db(reset: None) -> None:  # noqa: ARG001
-    """Auto-reset DB before each skills test."""
+@pytest.fixture(scope="module", autouse=True)
+def _module_reset_and_seed() -> None:
+    reset_all()
+    admin = UserManager.create(name=ADMIN_USER_NAME)
+    LLMProviderManager.create(user_performing_action=admin)

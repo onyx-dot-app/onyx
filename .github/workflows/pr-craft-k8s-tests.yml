@@ -136,6 +136,13 @@ jobs:
           [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
           EOF"
 
+      # Make pod IPs routable from the CI runner so write_files_to_sandbox
+      # (which does httpx.post to pod_ip:8731) can reach the in-pod daemon.
+      - name: Add host route to kind pod subnet
+        run: |
+          NODE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' onyx-craft-ci-control-plane)
+          sudo ip route add 10.244.0.0/16 via "$NODE_IP"
+
       # Pod spec sets nodeSelector onyx.app/workload=sandbox
       # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
       # node pool; in kind we just label the single control-plane node.

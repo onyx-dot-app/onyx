@@ -106,6 +106,10 @@ export const SWR_KEYS = {
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
 
+  // ── Skills ────────────────────────────────────────────────────────────────
+  adminSkills: "/api/admin/skills",
+  userSkills: "/api/skills",
+
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",

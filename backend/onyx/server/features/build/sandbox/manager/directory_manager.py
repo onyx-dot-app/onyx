@@ -9,6 +9,7 @@ import json
 import shutil
 from pathlib import Path
 
+from onyx.server.features.build.configs import SANDBOX_TEMPLATE_MODE
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
@@ -218,12 +219,14 @@ class DirectoryManager:
         """
         output_dir = sandbox_path / "outputs"
         if not output_dir.exists():
-            if self._outputs_template_path.exists():
-                shutil.copytree(self._outputs_template_path, output_dir, symlinks=True)
-            else:
+            if not self._outputs_template_path.exists():
                 raise RuntimeError(
                     f"Outputs template path does not exist: {self._outputs_template_path}"
                 )
+            if SANDBOX_TEMPLATE_MODE == "symlink":
+                self._copy_outputs_with_symlinked_node_modules(output_dir)
+            else:
+                shutil.copytree(self._outputs_template_path, output_dir, symlinks=True)
 
         # Create additional output directories for generated content
         (output_dir / "markdown").mkdir(parents=True, exist_ok=True)
@@ -231,6 +234,31 @@ class DirectoryManager:
         # (output_dir / "slides").mkdir(parents=True, exist_ok=True)
         # TODO: No graphs for now
         # (output_dir / "graphs").mkdir(parents=True, exist_ok=True)
+
+    def _copy_outputs_with_symlinked_node_modules(self, output_dir: Path) -> None:
+        """Copy outputs template but symlink node_modules to the shared template.
+
+        Next.js never writes to node_modules at runtime — only to .next/. The
+        symlink saves ~30s of per-session copytree over a 30k-file directory.
+        """
+        output_dir.mkdir(parents=True)
+        for entry in self._outputs_template_path.iterdir():
+            dst = output_dir / entry.name
+            if entry.name != "web" or not entry.is_dir():
+                if entry.is_dir():
+                    shutil.copytree(entry, dst, symlinks=True)
+                else:
+                    shutil.copy2(entry, dst)
+                continue
+            dst.mkdir()
+            for web_entry in entry.iterdir():
+                web_dst = dst / web_entry.name
+                if web_entry.name == "node_modules":
+                    web_dst.symlink_to(web_entry.resolve())
+                elif web_entry.is_dir():
+                    shutil.copytree(web_entry, web_dst, symlinks=True)
+                else:
+                    shutil.copy2(web_entry, web_dst)
 
     def setup_venv(self, sandbox_path: Path) -> Path:
         """Copy virtual environment template.
@@ -243,7 +271,10 @@ class DirectoryManager:
         """
         venv_path = sandbox_path / ".venv"
         if not venv_path.exists() and self._venv_template_path.exists():
-            shutil.copytree(self._venv_template_path, venv_path, symlinks=True)
+            if SANDBOX_TEMPLATE_MODE == "symlink":
+                venv_path.symlink_to(self._venv_template_path.resolve())
+            else:
+                shutil.copytree(self._venv_template_path, venv_path, symlinks=True)
         return venv_path
 
     def setup_agent_instructions(

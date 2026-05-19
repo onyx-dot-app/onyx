@@ -143,6 +143,9 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
+          # Bake Node.js, opencode, and sandbox templates into the image.
+          build-args: |
+            ENABLE_CRAFT=true
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
@@ -345,6 +348,16 @@ jobs:
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+          ENABLE_CRAFT=true
+          SANDBOX_TEMPLATE_MODE=symlink
+          # Lowered upload/bundle caps so cap-enforcement tests can use
+          # small payloads instead of multi-MiB allocations.
+          BUILD_MAX_UPLOAD_FILE_SIZE_MB=2
+          BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4
+          BUILD_MAX_UPLOAD_FILES_PER_SESSION=5
+          MAX_EMBEDDED_IMAGES_PER_FILE=50
+          USER_LIBRARY_MAX_FILES_PER_UPLOAD=5
+          SKILL_BUNDLE_PER_FILE_MAX_BYTES=1048576
           EOF
 
           # EE-only config
@@ -358,7 +371,8 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
+            --wait --wait-timeout 300 \
             relational_db \
             index \
             cache \
@@ -366,51 +380,41 @@ jobs:
             api_server \
             inference_model_server \
             indexing_model_server \
-            background \
-            -d
+            background
         id: start_docker
 
-      - name: Wait for services to be ready
+      - name: Verify background worker (supervisord)
         run: |
-          echo "Starting wait-for-service script..."
+          # --wait above blocks on healthchecks, but the background container
+          # has no healthcheck — verify supervisord-managed Celery workers
+          # are actually up.
+          echo "Checking background worker health..."
+          if ! docker inspect --format='{{.State.Running}}' onyx-background-1 2>/dev/null | grep -q true; then
+            echo "ERROR: Background worker container is not running!"
+            docker logs onyx-background-1 2>&1 | tail -50
+            exit 1
+          fi
 
-          wait_for_service() {
-            local url=$1
-            local label=$2
-            local timeout=${3:-300}  # default 5 minutes
-            local start_time
-            start_time=$(date +%s)
+          sleep 15  # supervisord startsecs
 
-            while true; do
-              local current_time
-              current_time=$(date +%s)
-              local elapsed_time=$((current_time - start_time))
+          FAILED_PROCS=$(docker exec onyx-background-1 \
+            supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status 2>&1 \
+            | grep -E "FATAL|BACKOFF|STOPPED" \
+            | grep -v "slack_bot\|discord_bot\|watchdog" || true)
+          if [ -n "$FAILED_PROCS" ]; then
+            echo "ERROR: Critical background processes failed to start:"
+            echo "$FAILED_PROCS"
+            docker exec onyx-background-1 \
+              supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status
+            docker logs onyx-background-1 2>&1 | tail -80
+            exit 1
+          fi
+          echo "Background worker is healthy — all critical processes running."
 
-              if [ $elapsed_time -ge $timeout ]; then
-                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
-                exit 1
-              fi
-
-              local response
-              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
-
-              if [ "$response" = "200" ]; then
-                echo "${label} is ready!"
-                break
-              elif [ "$response" = "curl_error" ]; then
-                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
-              else
-                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
-              fi
-
-              sleep 5
-            done
-          }
-
-          wait_for_service "http://localhost:8080/health" "API server"
           echo "Finished waiting for services."
 
       - name: Start Mock Services
+        if: matrix.test-dir.path == 'tests/indexing'
         run: |
           cd backend/tests/integration/mock_services
           docker compose -f docker-compose.mock-it-services.yml \
@@ -489,6 +493,7 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
               /app/tests/integration/${{ matrix.test-dir.path }}

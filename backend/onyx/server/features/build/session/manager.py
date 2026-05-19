@@ -77,6 +77,7 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
 )
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -390,6 +391,14 @@ class SessionManager:
                 "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
             )
 
+    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
+        try:
+            hydrate_user_library(sandbox_id, user_id, self._db_session)
+        except Exception:
+            logger.warning(
+                "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
+            )
+
     def _provision_sandbox(
         self,
         sandbox: Sandbox,
@@ -420,6 +429,7 @@ class SessionManager:
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+        headless: bool = False,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -471,7 +481,7 @@ class SessionManager:
         # are headless, never attach a preview, and pile up so fast they'd
         # exhaust the [3010, 3100) range on a busy tenant.
         nextjs_port: int | None
-        if origin == SessionOrigin.SCHEDULED:
+        if origin == SessionOrigin.SCHEDULED or headless:
             nextjs_port = None
         else:
             nextjs_port = allocate_nextjs_port(self._db_session)
@@ -592,6 +602,7 @@ class SessionManager:
             user_level=user_level,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
+        self._hydrate_user_library(sandbox.id, user_id)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -609,6 +620,7 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        headless: bool = False,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
@@ -657,6 +669,7 @@ class SessionManager:
                         logger.warning("Cannot push skills: user %s not found", user_id)
                     else:
                         self._hydrate_skills(sandbox.id, user)
+                    self._hydrate_user_library(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -692,6 +705,7 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
+            headless=headless,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:
