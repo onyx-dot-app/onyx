@@ -5,14 +5,18 @@ import {
   forwardRef,
   useImperativeHandle,
   useCallback,
+  useMemo,
   useRef,
+  useState,
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
+  type SyntheticEvent,
 } from "react";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
+import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -34,6 +38,9 @@ import {
 } from "@opal/icons";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import { useUser } from "@/providers/UserProvider";
+import useUserSkills from "@/hooks/useUserSkills";
+import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import { getTextContent } from "@/lib/contentEditable";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -184,6 +191,108 @@ const InputBar = memo(
         hasUploadingFiles,
       } = useUploadFilesContext();
 
+      // `/` skill picker state. The picker watches contentEditable input,
+      // shows accessible skills, and on select replaces the `/<query>` token
+      // with `/<slug> `.
+      const { data: skillsData } = useUserSkills();
+      const pickerSkills = useMemo(
+        () => toPickerSkills(skillsData),
+        [skillsData]
+      );
+      const [skillPicker, setSkillPicker] = useState<{
+        open: boolean;
+        anchorRect: DOMRect | null;
+        query: string;
+        slashIndex: number;
+      }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+
+      const getTextBeforeCursor = useCallback((): string | null => {
+        const el = inputRef.current;
+        if (!el) return null;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0);
+        if (!el.contains(range.startContainer)) return null;
+        const cloned = range.cloneRange();
+        cloned.selectNodeContents(el);
+        cloned.setEnd(range.startContainer, range.startOffset);
+        const tmp = document.createElement("div");
+        tmp.appendChild(cloned.cloneContents());
+        return getTextContent(tmp);
+      }, [inputRef]);
+
+      const getCaretRect = useCallback((): DOMRect | null => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0).cloneRange();
+        range.collapse(true);
+        const rect = range.getBoundingClientRect();
+        if (
+          rect.top === 0 &&
+          rect.left === 0 &&
+          rect.width === 0 &&
+          rect.height === 0
+        ) {
+          return inputRef.current?.getBoundingClientRect() ?? null;
+        }
+        return rect;
+      }, [inputRef]);
+
+      const evaluateSkillPicker = useCallback(() => {
+        const textBefore = getTextBeforeCursor();
+        if (textBefore === null) {
+          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
+          return;
+        }
+        const trigger = detectSlashTrigger(textBefore);
+        if (!trigger) {
+          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
+          return;
+        }
+        setSkillPicker({
+          open: true,
+          anchorRect: getCaretRect(),
+          query: trigger.query,
+          slashIndex: trigger.slashIndex,
+        });
+      }, [getCaretRect, getTextBeforeCursor]);
+
+      const handleEnhancedInput = useCallback(
+        (event: SyntheticEvent<HTMLDivElement>) => {
+          onInput(event);
+          evaluateSkillPicker();
+        },
+        [onInput, evaluateSkillPicker]
+      );
+
+      // Re-evaluate the slash trigger when the caret moves without input
+      // (arrow keys, Home/End, mouse clicks). Without this, the picker can
+      // hold a stale `slashIndex`/`query` from a previous position and
+      // replace the wrong text on select.
+      const handleSelectionChange = useCallback(() => {
+        evaluateSkillPicker();
+      }, [evaluateSkillPicker]);
+
+      const closeSkillPicker = useCallback(() => {
+        setSkillPicker((s) => ({ ...s, open: false }));
+      }, []);
+
+      const handleSkillPickerSelect = useCallback(
+        (slug: string) => {
+          setSkillPicker((prev) => {
+            if (!prev.open) return prev;
+            const replacement = `/${slug} `;
+            const newText =
+              message.slice(0, prev.slashIndex) +
+              replacement +
+              message.slice(prev.slashIndex + 1 + prev.query.length);
+            setMessage(newText);
+            return { ...prev, open: false };
+          });
+        },
+        [message, setMessage]
+      );
+
       useImperativeHandle(ref, () => ({
         reset: () => {
           clearMessage();
@@ -317,10 +426,12 @@ const InputBar = memo(
                 contentEditable={!disabled}
                 suppressContentEditableWarning
                 onPaste={handlePaste}
-                onInput={onInput}
+                onInput={handleEnhancedInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
+                onKeyUp={handleSelectionChange}
+                onMouseUp={handleSelectionChange}
                 className={cn(
                   "w-full",
                   "h-full",
@@ -394,6 +505,14 @@ const InputBar = memo(
               onTextChange={updateTileText}
             />
           )}
+          <SkillPickerPopover
+            open={skillPicker.open}
+            anchorRect={skillPicker.anchorRect}
+            query={skillPicker.query}
+            skills={pickerSkills}
+            onSelect={handleSkillPickerSelect}
+            onClose={closeSkillPicker}
+          />
         </Disabled>
       );
     }

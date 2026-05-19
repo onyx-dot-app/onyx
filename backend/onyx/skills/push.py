@@ -161,11 +161,12 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             mount_path=SKILLS_MOUNT_PATH,
             sandbox_files=sandbox_files,
         )
-        if result.failures:
+        for failure in result.failures:
             logger.warning(
-                "Skill push partially failed: %d/%d sandboxes",
-                len(result.failures),
-                result.targets,
+                "Skill push failed for sandbox %s: %s: %s",
+                failure.sandbox_id,
+                failure.reason,
+                failure.detail,
             )
     except Exception:
         logger.exception("Failed to push skills to sandboxes")

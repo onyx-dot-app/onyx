@@ -24,6 +24,7 @@ from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -45,9 +46,6 @@ SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
 @dataclass(frozen=True, kw_only=True)
 class SkillPatch:
-    slug: str | UnsetType = UNSET
-    name: str | UnsetType = UNSET
-    description: str | UnsetType = UNSET
     is_public: bool | UnsetType = UNSET
     enabled: bool | UnsetType = UNSET
 
@@ -78,7 +76,12 @@ def _add_user_visibility_filter(
 
 
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
-    stmt = select(Skill).where(Skill.enabled.is_(True)).order_by(Skill.name)
+    stmt = (
+        select(Skill)
+        .where(Skill.enabled.is_(True))
+        .options(selectinload(Skill.author))
+        .order_by(Skill.name)
+    )
     stmt = _add_user_visibility_filter(stmt, user)
     return list(db_session.scalars(stmt))
 
@@ -86,7 +89,12 @@ def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
 def fetch_skill_for_user(
     skill_id: UUID, user: User, db_session: Session
 ) -> Skill | None:
-    stmt = select(Skill).where(Skill.id == skill_id).where(Skill.enabled.is_(True))
+    stmt = (
+        select(Skill)
+        .where(Skill.id == skill_id)
+        .where(Skill.enabled.is_(True))
+        .options(selectinload(Skill.author))
+    )
     stmt = _add_user_visibility_filter(stmt, user)
     return db_session.scalars(stmt).one_or_none()
 
@@ -94,18 +102,23 @@ def fetch_skill_for_user(
 def fetch_skill_for_user_by_slug(
     slug: str, user: User, db_session: Session
 ) -> Skill | None:
-    stmt = select(Skill).where(Skill.slug == slug).where(Skill.enabled.is_(True))
+    stmt = (
+        select(Skill)
+        .where(Skill.slug == slug)
+        .where(Skill.enabled.is_(True))
+        .options(selectinload(Skill.author))
+    )
     stmt = _add_user_visibility_filter(stmt, user)
     return db_session.scalars(stmt).one_or_none()
 
 
 def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
-    stmt = select(Skill).where(Skill.id == skill_id)
+    stmt = select(Skill).where(Skill.id == skill_id).options(selectinload(Skill.author))
     return db_session.scalars(stmt).one_or_none()
 
 
 def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
-    stmt = select(Skill).order_by(Skill.name)
+    stmt = select(Skill).options(selectinload(Skill.author)).order_by(Skill.name)
     return list(db_session.scalars(stmt))
 
 
@@ -155,12 +168,17 @@ def replace_skill_bundle(
     skill_id: UUID,
     new_bundle_file_id: str,
     new_bundle_sha256: str,
+    new_name: str,
+    new_description: str,
     db_session: Session,
 ) -> tuple[Skill, str]:
-    """Swap a skill's bundle blob.
+    """Swap a skill's bundle blob and refresh its display metadata.
 
     Returns `(skill, old_bundle_file_id)` so the caller can delete the old
     blob from FileStore AFTER the transaction commits — never inline.
+
+    Name and description come from the new bundle's SKILL.md frontmatter so
+    the DB row stays in lockstep with what's actually pushed to sandboxes.
     """
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
@@ -172,6 +190,8 @@ def replace_skill_bundle(
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
+    skill.name = new_name
+    skill.description = new_description
     db_session.flush()
     return skill, old_bundle_file_id
 
@@ -189,39 +209,12 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    # Apply simple field updates
-    for field in ("name", "description", "is_public", "enabled"):
+    for field in ("is_public", "enabled"):
         value = getattr(patch, field)
         if not isinstance(value, UnsetType):
             setattr(skill, field, value)
 
-    # Slug requires a uniqueness pre-check
-    slug_changed = False
-    if not isinstance(patch.slug, UnsetType):
-        new_slug: str = patch.slug
-        if new_slug != skill.slug:
-            slug_changed = True
-            exists = db_session.scalars(
-                select(Skill.id)
-                .where(Skill.slug == new_slug)
-                .where(Skill.id != skill_id)
-            ).first()
-            if exists is not None:
-                raise OnyxError(
-                    OnyxErrorCode.DUPLICATE_RESOURCE,
-                    f"A skill with slug '{new_slug}' already exists.",
-                )
-            skill.slug = new_slug
-
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if slug_changed and is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{patch.slug}' already exists.",
-            ) from e
-        raise
+    db_session.flush()
     return skill
 
 

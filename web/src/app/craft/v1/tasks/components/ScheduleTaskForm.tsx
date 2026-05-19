@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -13,6 +13,9 @@ import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import { compileToCron, computeNextRuns } from "@/app/craft/v1/tasks/schedule";
+import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import useUserSkills from "@/hooks/useUserSkills";
+import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
 import type {
   EditorMode,
   EditorPayload,
@@ -59,6 +62,81 @@ export default function ScheduleTaskForm({
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
   const [timezone, setTimezone] = useState(initial.timezone);
   const [saving, setSaving] = useState(false);
+
+  // `/` skill picker state for the prompt field. Scoped to the trigger
+  // owner's accessible skills (same access query as `GET /skills`).
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const { data: skillsData } = useUserSkills();
+  const pickerSkills = useMemo(() => toPickerSkills(skillsData), [skillsData]);
+  const [skillPicker, setSkillPicker] = useState<{
+    open: boolean;
+    anchorRect: DOMRect | null;
+    query: string;
+    slashIndex: number;
+  }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+
+  const evaluateSkillPicker = useCallback((value: string, cursor: number) => {
+    const textBefore = value.slice(0, cursor);
+    const trigger = detectSlashTrigger(textBefore);
+    if (!trigger) {
+      setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
+      return;
+    }
+    const anchorRect =
+      promptTextareaRef.current?.getBoundingClientRect() ?? null;
+    setSkillPicker({
+      open: true,
+      anchorRect,
+      query: trigger.query,
+      slashIndex: trigger.slashIndex,
+    });
+  }, []);
+
+  const handlePromptChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      setPrompt(value);
+      evaluateSkillPicker(value, e.target.selectionStart ?? value.length);
+    },
+    [evaluateSkillPicker]
+  );
+
+  const handlePromptCursorChange = useCallback(
+    (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+      const target = e.currentTarget;
+      evaluateSkillPicker(target.value, target.selectionStart ?? 0);
+    },
+    [evaluateSkillPicker]
+  );
+
+  const closeSkillPicker = useCallback(() => {
+    setSkillPicker((s) => ({ ...s, open: false }));
+  }, []);
+
+  const handleSkillPickerSelect = useCallback(
+    (slug: string) => {
+      setSkillPicker((prev) => {
+        if (!prev.open) return prev;
+        const replacement = `/${slug} `;
+        const newPrompt =
+          prompt.slice(0, prev.slashIndex) +
+          replacement +
+          prompt.slice(prev.slashIndex + 1 + prev.query.length);
+        setPrompt(newPrompt);
+
+        const cursorPos = prev.slashIndex + replacement.length;
+        const textarea = promptTextareaRef.current;
+        if (textarea) {
+          requestAnimationFrame(() => {
+            textarea.focus();
+            textarea.setSelectionRange(cursorPos, cursorPos);
+          });
+        }
+        return { ...prev, open: false };
+      });
+    },
+    [prompt]
+  );
 
   const timezones = useMemo(() => getCommonTimezones(), []);
   const compiled = compileToCron(mode, payload);
@@ -167,14 +245,25 @@ export default function ScheduleTaskForm({
           This message is sent to Craft each time the task fires.
         </Text>
         <InputTextArea
+          ref={promptTextareaRef}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={handlePromptChange}
+          onKeyUp={handlePromptCursorChange}
+          onClick={handlePromptCursorChange}
           placeholder="Describe what Craft should do on each run..."
           rows={6}
           autoResize
           maxRows={12}
           data-testid="task-prompt-input"
           variant={promptError ? "error" : undefined}
+        />
+        <SkillPickerPopover
+          open={skillPicker.open}
+          anchorRect={skillPicker.anchorRect}
+          query={skillPicker.query}
+          skills={pickerSkills}
+          onSelect={handleSkillPickerSelect}
+          onClose={closeSkillPicker}
         />
         {promptError && (
           <Text secondaryBody text03 className="text-status-error-05">

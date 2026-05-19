@@ -77,27 +77,28 @@ def test_create_and_list_skill(admin_user: DATestUser) -> None:
 def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
 
-    updated = SkillManager.patch_custom(
-        skill,
-        admin_user,
-        name="New Name",
-        description="New desc",
-        is_public=True,
-    )
-    assert updated.name == "New Name"
-    assert updated.description == "New desc"
-    assert updated.is_public is True
+    public = SkillManager.patch_custom(skill, admin_user, is_public=True)
+    assert public.is_public is True
 
     disabled = SkillManager.patch_custom(skill, admin_user, enabled=False)
     assert disabled.enabled is False
 
 
-def test_replace_bundle(admin_user: DATestUser) -> None:
+def test_replace_bundle_updates_metadata(admin_user: DATestUser) -> None:
     slug = f"bundle-test-{uuid4().hex[:6]}"
-    skill = SkillManager.create_custom(admin_user, slug=slug)
-    new_bundle = build_minimal_bundle(slug)
+    skill = SkillManager.create_custom(
+        admin_user,
+        slug=slug,
+        name="Original Name",
+        description="Original desc",
+    )
+    new_bundle = build_minimal_bundle(
+        slug, name="Renamed via bundle", description="Updated desc"
+    )
     updated = SkillManager.replace_bundle(skill, new_bundle, admin_user)
     assert updated.slug == slug
+    assert updated.name == "Renamed via bundle"
+    assert updated.description == "Updated desc"
 
 
 def test_delete_skill(admin_user: DATestUser) -> None:
@@ -145,6 +146,40 @@ def test_grants_replace(admin_user: DATestUser) -> None:
     )
     updated = SkillManager.replace_grants(skill, [], admin_user)
     assert updated.granted_group_ids == []
+
+
+def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
+    bundle = build_minimal_bundle(
+        "from-frontmatter", name="From Bundle", description="From bundle desc"
+    )
+    skill = SkillManager.create_custom(
+        admin_user, slug="from-frontmatter", bundle_bytes=bundle
+    )
+    assert skill.name == "From Bundle"
+    assert skill.description == "From bundle desc"
+
+
+def test_missing_frontmatter_rejected(admin_user: DATestUser) -> None:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("SKILL.md", "no frontmatter at all\n")
+    bad_bundle = buf.getvalue()
+
+    with pytest.raises(requests.HTTPError) as exc_info:
+        SkillManager.create_custom(admin_user, slug="no-fm", bundle_bytes=bad_bundle)
+    assert exc_info.value.response.status_code == 400
+
+
+def test_bad_filename_rejected(admin_user: DATestUser) -> None:
+    bundle = build_minimal_bundle("placeholder")
+    with pytest.raises(requests.HTTPError) as exc_info:
+        SkillManager.create_custom(
+            admin_user,
+            slug="placeholder",
+            bundle_bytes=bundle,
+            filename="Invalid Name.zip",
+        )
+    assert exc_info.value.response.status_code == 400
 
 
 # ---------------------------------------------------------------------------

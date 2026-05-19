@@ -12,6 +12,8 @@ import zipfile
 from pathlib import Path
 from typing import Final
 
+import yaml
+
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.registry import BuiltinSkillRegistry
@@ -27,6 +29,10 @@ SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
 
 SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
+_FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
+    r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
+    re.DOTALL,
+)
 
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 
@@ -34,6 +40,90 @@ _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 def check_slug(slug: str) -> None:
     if not SLUG_REGEX.match(slug):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"invalid slug '{slug}'")
+
+
+def slug_from_filename(filename: str | None) -> str:
+    """Derive a skill slug from the uploaded bundle's filename.
+
+    The bundle ships as ``<slug>.zip`` — strip the extension and validate. We
+    don't take basename here: any directory component is suspicious enough
+    that we'd rather fail than silently massage the input.
+    """
+    if not filename:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "bundle upload is missing a filename",
+        )
+    candidate = filename
+    if candidate.lower().endswith(".zip"):
+        candidate = candidate[:-4]
+    check_slug(candidate)
+    return candidate
+
+
+def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
+    """Extract ``(name, description)`` from the bundle's SKILL.md frontmatter.
+
+    The bundle is the source of truth for skill metadata. ``validate_custom_bundle``
+    has already confirmed structural shape; here we re-open the zip just for the
+    SKILL.md payload because parsing frontmatter requires the contents, not the
+    archive layout.
+    """
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
+
+    with zf:
+        try:
+            raw = zf.read(SKILL_MD_NAME)
+        except KeyError:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "SKILL.md missing at bundle root",
+            )
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md must be UTF-8 encoded",
+        ) from exc
+
+    match = _FRONTMATTER_REGEX.match(content)
+    if match is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md must start with YAML frontmatter delimited by two --- lines",
+        )
+
+    try:
+        parsed = yaml.safe_load(match.group("frontmatter")) or {}
+    except yaml.YAMLError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"SKILL.md frontmatter is not valid YAML: {exc}",
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md frontmatter must be a mapping",
+        )
+
+    name = parsed.get("name")
+    description = parsed.get("description")
+    if not isinstance(name, str) or not name.strip():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md frontmatter must include a non-empty 'name'",
+        )
+    if not isinstance(description, str) or not description.strip():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md frontmatter must include a non-empty 'description'",
+        )
+    return name.strip(), description.strip()
 
 
 def _is_symlink(info: zipfile.ZipInfo) -> bool:
