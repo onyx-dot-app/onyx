@@ -1351,16 +1351,20 @@ class SharepointConnector(
             if base_url is None:
                 continue
 
+            # SharePoint site URLs come in three shapes: /sites/<name>,
+            # /teams/<name>, and /personal/<upn_with_underscores> for
+            # OneDrive for Business personal sites.
             lower_parts = [part.lower() for part in parts]
             site_type_index = None
-            for site_token in ("sites", "teams"):
+            for site_token in ("sites", "teams", "personal"):
                 if site_token in lower_parts:
                     site_type_index = lower_parts.index(site_token)
                     break
 
             if site_type_index is None or len(parts) <= site_type_index + 1:
                 logger.warning(
-                    "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
+                    "Site URL '%s' is not a valid Sharepoint URL "
+                    "(must contain /sites/<name>, /teams/<name>, or /personal/<upn>)",
                     url,
                 )
                 continue
