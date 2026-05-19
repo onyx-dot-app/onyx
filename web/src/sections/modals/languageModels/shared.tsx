@@ -570,7 +570,11 @@ export function ModelSelectionField({
                         selectVariant="select-heavy"
                         state={model.is_visible ? "selected" : "empty"}
                         icon={() => <Checkbox checked={model.is_visible} />}
-                        title={model.custom_display_name || model.name}
+                        title={
+                          model.custom_display_name ||
+                          model.display_name ||
+                          model.name
+                        }
                         onClick={() =>
                           setVisibility(model.name, !model.is_visible)
                         }
