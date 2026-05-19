@@ -2192,6 +2192,15 @@ def test_custom_display_name_cleared(
     assert response.status_code == 200
     provider_id = response.json()["id"]
 
+    # Verify custom_display_name was persisted before clearing it
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    config = next(
+        (m for m in provider["model_configurations"] if m["name"] == "gpt-4o"), None
+    )
+    assert config is not None
+    assert config["custom_display_name"] == "My GPT-4o"
+
     # Update: clear the custom_display_name
     response = requests.put(
         f"{API_SERVER_URL}/admin/llm/provider",

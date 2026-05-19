@@ -125,6 +125,29 @@ describe("LLMPopover helpers", () => {
     expect(options[0]?.displayName).toBe("GPT-4o");
   });
 
+  test("display_name is used when custom_display_name is null (as sent by backend)", () => {
+    const providers: LLMProviderDescriptor[] = [
+      makeProvider({
+        name: "OpenAI",
+        provider: "openai",
+        model_configurations: [
+          {
+            name: "gpt-4o",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: false,
+            supports_reasoning: false,
+            display_name: "GPT-4o",
+            custom_display_name: null,
+          },
+        ],
+      }),
+    ];
+
+    const options = buildLlmOptions(providers);
+    expect(options[0]?.displayName).toBe("GPT-4o");
+  });
+
   test("falls back to model name when both custom_display_name and display_name are absent", () => {
     const providers: LLMProviderDescriptor[] = [
       makeProvider({
