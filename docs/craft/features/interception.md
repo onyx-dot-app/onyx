@@ -361,7 +361,7 @@ Lightweight, focused on the boundary properties the proxy promises. The mitmprox
 - Skipped on CI runners without an outbound network; mark with the existing skip pattern.
 
 **Integration (one file):**
-`backend/tests/integration/tests/build/test_sandbox_egress.py`
+`backend/tests/integration/tests/craft/test_sandbox_egress.py`
 - Uses the standard Craft session integration fixtures.
 - Boots a real sandbox session, runs a skill that does `curl https://api.test-fixture.local/...` (test fixture host registered as a `CraftInterceptedService`).
 - Asserts the request reached the test fixture upstream with the injected header, and that the audit outbox has the expected event sequence.

@@ -9,12 +9,13 @@ import { SvgSlack } from "@opal/logos";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useAgents } from "@/lib/agents/hooks";
 import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { useRouter } from "next/navigation";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
-  const isPaidEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const {
     data: documentSets,
@@ -37,7 +38,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   if (
     isDocSetsLoading ||
     isAgentsLoading ||
-    (isPaidEnterprise && isStdAnswerLoading)
+    (enterpriseTier && isStdAnswerLoading)
   ) {
     return <SimpleLoader />;
   }
@@ -65,7 +66,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   }
 
   const standardAnswerCategoryResponse: StandardAnswerCategoryResponse =
-    isPaidEnterprise
+    enterpriseTier
       ? {
           paidEnterpriseFeaturesEnabled: true,
           categories: standardAnswerCategories ?? [],

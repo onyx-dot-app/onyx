@@ -49,7 +49,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images

@@ -21,13 +21,17 @@ from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.document_index_utils import get_multipass_config
-from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.document_index.vespa.vespa_document_index import VespaIndexPair
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
 from onyx.setup import setup_document_indices
 from onyx.setup import setup_postgres
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 
 logger = setup_logger()
@@ -328,17 +332,25 @@ def reset_vespa() -> None:
         multipass_config = get_multipass_config(search_settings)
         index_name = search_settings.index_name
 
+    primary = VespaDocumentIndex(
+        index_name=index_name,
+        tenant_state=TenantState(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA,
+            multitenant=MULTI_TENANT,
+        ),
+        large_chunks_enabled=multipass_config.enable_large_chunks,
+    )
     success = setup_document_indices(
         document_indices=[
-            VespaIndex(
-                index_name=index_name,
+            VespaIndexPair(
+                primary=primary,
+                secondary=None,
                 secondary_index_name=None,
-                large_chunks_enabled=multipass_config.enable_large_chunks,
-                secondary_large_chunks_enabled=None,
+                secondary_embedding_dim=None,
+                secondary_embedding_precision=None,
             )
         ],
         index_setting=IndexingSetting.from_db_model(search_settings),
-        secondary_index_setting=None,
     )
     if not success:
         raise RuntimeError("Could not connect to Vespa within the specified timeout.")
@@ -386,17 +398,22 @@ def reset_vespa_multitenant() -> None:
             multipass_config = get_multipass_config(search_settings)
             index_name = search_settings.index_name
 
+        primary = VespaDocumentIndex(
+            index_name=index_name,
+            tenant_state=TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT),
+            large_chunks_enabled=multipass_config.enable_large_chunks,
+        )
         success = setup_document_indices(
             document_indices=[
-                VespaIndex(
-                    index_name=index_name,
+                VespaIndexPair(
+                    primary=primary,
+                    secondary=None,
                     secondary_index_name=None,
-                    large_chunks_enabled=multipass_config.enable_large_chunks,
-                    secondary_large_chunks_enabled=None,
+                    secondary_embedding_dim=None,
+                    secondary_embedding_precision=None,
                 )
             ],
             index_setting=IndexingSetting.from_db_model(search_settings),
-            secondary_index_setting=None,
         )
 
         if not success:

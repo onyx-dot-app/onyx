@@ -28,6 +28,9 @@ class SessionCreateRequest(BaseModel):
     # LLM selection from user's cookie
     llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
     llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
+    # Skip Next.js dev server startup. Used by integration tests that don't
+    # exercise the webapp proxy and don't want to pay the ~20s startup wait.
+    headless: bool = False
 
 
 class SessionUpdateRequest(BaseModel):

@@ -76,9 +76,9 @@ import { useSidebarState } from "@/layouts/sidebar-layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
-const SearchUI = eeGated(EESearchUI);
+const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 
 interface FadeProps {

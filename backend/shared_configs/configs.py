@@ -20,7 +20,7 @@ if DISABLE_MODEL_SERVER:
     INDEXING_MODEL_SERVER_HOST = "disabled"
 else:
     MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
+    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"  # noqa: S104 — model server allowed-host default; intentional for containerized deployment
     INDEXING_MODEL_SERVER_HOST = (
         os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
     )

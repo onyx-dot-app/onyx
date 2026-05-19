@@ -47,10 +47,10 @@ from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
-from onyx.document_index.interfaces import DocumentMetadata
-from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentInsertionRecord
+from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import promote_staged_file
@@ -1302,11 +1302,17 @@ def index_doc_batch(
                 db_session=db_session,
             )
 
-            index_batch_params = IndexBatchParams(
-                doc_id_to_previous_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt,
-                doc_id_to_new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt,
-                tenant_id=tenant_id,
-                large_chunks_enabled=chunker.enable_large_chunks,
+            doc_id_to_chunk_cnt_diff: dict[str, IndexingMetadata.ChunkCounts] = {}
+            prev_and_new_doc_id_set = set(
+                enricher.doc_id_to_previous_chunk_cnt.keys()
+            ) | set(enricher.doc_id_to_new_chunk_cnt.keys())
+            for doc_id in prev_and_new_doc_id_set:
+                doc_id_to_chunk_cnt_diff[doc_id] = IndexingMetadata.ChunkCounts(
+                    old_chunk_cnt=enricher.doc_id_to_previous_chunk_cnt.get(doc_id, 0),
+                    new_chunk_cnt=enricher.doc_id_to_new_chunk_cnt.get(doc_id, 0),
+                )
+            indexing_metadata = IndexingMetadata(
+                doc_id_to_chunk_cnt_diff=doc_id_to_chunk_cnt_diff,
             )
 
             primary_doc_idx_insertion_records: list[DocumentInsertionRecord] | None = (
@@ -1333,7 +1339,8 @@ def index_doc_batch(
                     write_chunks_to_vector_db_with_backoff(
                         document_index=document_index,
                         make_chunks=_enriched_stream,
-                        index_batch_params=index_batch_params,
+                        indexing_metadata=indexing_metadata,
+                        tenant_id=tenant_id,
                     )
                 )
                 vector_db_write_ms += max(

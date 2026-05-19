@@ -177,7 +177,7 @@ class SnapshotManager:
                             raise RuntimeError(
                                 f"Path traversal attempt detected: {member.name}"
                             )
-                    tar.extractall(target_path)
+                    tar.extractall(target_path)  # noqa: S202 — path traversal validated in the loop above for pre-3.11.4 fallback
 
             logger.info("Restored snapshot from %s to %s", storage_path, target_path)
 

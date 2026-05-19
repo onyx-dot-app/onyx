@@ -52,6 +52,9 @@ class SkillManager:
                 slug, name=name, description=description
             )
 
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
         response = requests.post(
             f"{API_SERVER_URL}/admin/skills/custom",
             data={
@@ -65,7 +68,7 @@ class SkillManager:
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -108,6 +111,9 @@ class SkillManager:
         bundle_bytes: bytes,
         user_performing_action: DATestUser,
     ) -> DATestSkill:
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
         response = requests.put(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/bundle",
             files={
@@ -117,7 +123,7 @@ class SkillManager:
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()

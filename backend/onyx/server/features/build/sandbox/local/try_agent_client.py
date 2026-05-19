@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Test script for ACPAgentClient with opencode CLI.
+"""Interactive CLI / REPL script for exercising ACPAgentClient with the opencode CLI.
+
+This is NOT a pytest test module. It is a manual driver script you invoke directly
+to send prompts to a local opencode agent and inspect streamed responses.
 
 Usage:
   # From backend directory:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/try_agent_client.py
 
   # Or with specific message:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py "What files are in this directory?"
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/try_agent_client.py "What files are in this directory?"
 
   # With specific working directory:
-  PYTHONPATH=. python onyx/server/features/build/sandbox/local/test_agent_client.py --dir /path/to/project "List files"
+  PYTHONPATH=. python onyx/server/features/build/sandbox/local/try_agent_client.py --dir /path/to/project "List files"
 """
 
 import argparse

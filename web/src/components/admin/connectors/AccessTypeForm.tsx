@@ -7,7 +7,8 @@ import {
 } from "@/lib/types";
 import { useField } from "formik";
 import { AutoSyncOptions } from "./AutoSyncOptions";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useEffect, useMemo } from "react";
 import { Credential } from "@/lib/connectors/credentials";
 import { credentialTemplates } from "@/lib/connectors/credentials";
@@ -28,8 +29,10 @@ export function AccessTypeForm({
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
 
-  const isPaidEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
-  const isAutoSyncSupported = isValidAutoSyncSource(connector);
+  // Private requires User Groups, Auto Sync requires permission-sync —
+  // both are Business+ features.
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const showAutoSync = businessTier && isValidAutoSyncSource(connector);
 
   const selectedAuthMethod = currentCredential?.credential_json?.[
     "authentication_method"
@@ -46,42 +49,51 @@ export function AccessTypeForm({
     return method?.disablePermSync === true;
   }, [connector, selectedAuthMethod]);
 
+  // Prefer Auto Sync when available, else Private (User Groups), else
+  // Public. Mirrors the option-availability rules below.
+  const defaultAccess: AccessType = showAutoSync
+    ? "sync"
+    : businessTier
+      ? "private"
+      : "public";
+
   useEffect(() => {
-    // Only set default value if access_type.value is not already set
-    if (!access_type.value) {
-      if (!isPaidEnterpriseEnabled) {
-        access_type_helpers.setValue("public");
-      } else if (isAutoSyncSupported) {
-        access_type_helpers.setValue("sync");
-      } else {
-        access_type_helpers.setValue("private");
-      }
-    }
+    if (!access_type.value) access_type_helpers.setValue(defaultAccess);
   }, [
     // Only run this effect once when the component mounts
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]);
 
-  const options = [
-    {
+  // Build options in display order: Private, Public, Auto Sync.
+  const options: {
+    name: string;
+    value: string;
+    description: string;
+    disabled: boolean;
+    disabledReason: string;
+  }[] = [];
+
+  if (businessTier) {
+    options.push({
       name: "Private",
       value: "private",
       description:
         "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
       disabled: false,
       disabledReason: "",
-    },
-    {
-      name: "Public",
-      value: "public",
-      description:
-        "Everyone with an account on Onyx can access the documents pulled in by this connector",
-      disabled: false,
-      disabledReason: "",
-    },
-  ];
+    });
+  }
 
-  if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
+  options.push({
+    name: "Public",
+    value: "public",
+    description:
+      "Everyone with an account on Onyx can access the documents pulled in by this connector",
+    disabled: false,
+    disabledReason: "",
+  });
+
+  if (showAutoSync) {
     options.push({
       name: "Auto Sync Permissions",
       value: "sync",
@@ -93,28 +105,26 @@ export function AccessTypeForm({
     });
   }
 
+  if (!businessTier) return null;
+
   return (
     <>
-      {isPaidEnterpriseEnabled && (
-        <>
-          <div>
-            <label className="text-text-950 font-medium">Document Access</label>
-            <p className="text-sm text-text-500">
-              Control who has access to the documents indexed by this connector.
-            </p>
-          </div>
-          <DefaultDropdown
-            options={options}
-            selected={access_type.value}
-            onSelect={(selected) => {
-              access_type_helpers.setValue(selected as AccessType);
-            }}
-            includeDefault={false}
-          />
-          {access_type.value === "sync" && isAutoSyncSupported && (
-            <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
-          )}
-        </>
+      <div>
+        <label className="text-text-950 font-medium">Document Access</label>
+        <p className="text-sm text-text-500">
+          Control who has access to the documents indexed by this connector.
+        </p>
+      </div>
+      <DefaultDropdown
+        options={options}
+        selected={access_type.value}
+        onSelect={(selected) =>
+          access_type_helpers.setValue(selected as AccessType)
+        }
+        includeDefault={false}
+      />
+      {access_type.value === "sync" && showAutoSync && (
+        <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
       )}
     </>
   );
