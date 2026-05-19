@@ -31,7 +31,6 @@ def test_load_with_no_stored_value_uses_env_fallbacks() -> None:
     # Env fallbacks fill in every field — none should be None.
     assert settings.user_directory_admin_only is not None
     assert settings.track_external_idp_expiry is not None
-    assert settings.require_email_verification is not None
     assert settings.mask_credential_prefix is not None
     assert settings.valid_email_domains is not None
     assert settings.password_min_length is not None

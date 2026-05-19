@@ -18,7 +18,6 @@ admin_router = APIRouter(prefix="/admin/security")
 # uniform credential masking). The frontend hides them; this list is the
 # authoritative server-side enforcement.
 _OPERATOR_LOCKED_FIELDS = {
-    "require_email_verification",
     "mask_credential_prefix",
     "valid_email_domains",
     "password_min_length",

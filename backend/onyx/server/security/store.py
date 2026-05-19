@@ -5,7 +5,6 @@ from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
 from onyx.configs.app_configs import PASSWORD_REQUIRE_LOWERCASE
 from onyx.configs.app_configs import PASSWORD_REQUIRE_SPECIAL_CHAR
 from onyx.configs.app_configs import PASSWORD_REQUIRE_UPPERCASE
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
@@ -46,8 +45,6 @@ def load_security_settings() -> SecuritySettings:
         settings.user_directory_admin_only = USER_DIRECTORY_ADMIN_ONLY
     if settings.track_external_idp_expiry is None:
         settings.track_external_idp_expiry = TRACK_EXTERNAL_IDP_EXPIRY
-    if settings.require_email_verification is None:
-        settings.require_email_verification = REQUIRE_EMAIL_VERIFICATION
     if settings.mask_credential_prefix is None:
         settings.mask_credential_prefix = MASK_CREDENTIAL_PREFIX
     if settings.valid_email_domains is None:

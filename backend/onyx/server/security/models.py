@@ -15,7 +15,6 @@ class SecuritySettings(BaseModel):
     track_external_idp_expiry: bool | None = None
 
     # Operator-locked in multi-tenant mode (server enforces; UI hides)
-    require_email_verification: bool | None = None
     mask_credential_prefix: bool | None = None
     valid_email_domains: list[str] | None = None
 

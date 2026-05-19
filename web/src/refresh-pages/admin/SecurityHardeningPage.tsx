@@ -23,7 +23,6 @@ const SECURITY_SETTINGS_KEY = "/api/admin/security";
 interface SecuritySettings {
   user_directory_admin_only: boolean | null;
   track_external_idp_expiry: boolean | null;
-  require_email_verification: boolean | null;
   mask_credential_prefix: boolean | null;
   valid_email_domains: string[] | null;
   password_min_length: number | null;
@@ -165,15 +164,6 @@ export default function SecurityHardeningPage() {
 
             {!isMultiTenant && (
               <>
-                <ToggleRow
-                  title="Require Email Verification"
-                  description="New users must verify their email address before they can log in."
-                  checked={draft.require_email_verification ?? false}
-                  onCheckedChange={(checked) =>
-                    void saveSettings({ require_email_verification: checked })
-                  }
-                />
-
                 <ToggleRow
                   title="Mask Credential Prefix"
                   description="Hide the leading characters of stored credentials when displayed in the UI."

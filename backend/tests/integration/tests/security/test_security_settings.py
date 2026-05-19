@@ -27,7 +27,6 @@ def _reset_settings(admin_user: DATestUser) -> None:
         {
             "user_directory_admin_only": None,
             "track_external_idp_expiry": None,
-            "require_email_verification": None,
             "mask_credential_prefix": None,
             "valid_email_domains": None,
             "password_min_length": None,

@@ -216,7 +216,7 @@ def generate_password() -> str:
 
 def user_needs_to_be_verified() -> bool:
     if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
-        return bool(load_security_settings().require_email_verification)
+        return REQUIRE_EMAIL_VERIFICATION
 
     # For other auth types, if the user is authenticated it's assumed that
     # the user is already verified via the external IDP
