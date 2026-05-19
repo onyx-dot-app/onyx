@@ -412,6 +412,15 @@ VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
 
+# How many doc IDs to bundle into one document_by_cc_pair_bulk_cleanup_task
+# dispatch. Larger → fewer Celery messages and less taskset bookkeeping; too
+# large → batch wall-clock pushes past LIGHT_SOFT_TIME_LIMIT (105s). At
+# ~30ms/doc inside one OpenSearch _bulk delete a batch of 100 is well under
+# that ceiling.
+CONNECTOR_CLEANUP_BATCH_SIZE = int(
+    os.environ.get("CONNECTOR_CLEANUP_BATCH_SIZE") or 100
+)
+
 MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
