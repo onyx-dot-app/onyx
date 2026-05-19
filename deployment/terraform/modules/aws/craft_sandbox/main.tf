@@ -42,6 +42,24 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "sandbox" {
   }
 }
 
+# Backstop against orphaned multipart-upload parts: aborts incomplete uploads
+# after 7 days. Does not expire completed objects — sandbox-snapshot retention
+# is a product decision and should be configured separately if/when needed.
+resource "aws_s3_bucket_lifecycle_configuration" "sandbox" {
+  bucket = aws_s3_bucket.sandbox.id
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
 resource "aws_iam_policy" "sandbox" {
   name = local.policy_name
 
@@ -55,6 +73,12 @@ resource "aws_iam_policy" "sandbox" {
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
+          # AbortMultipartUpload is necessary so the file-sync sidecar can
+          # clean up parts from failed/abandoned uploads. Without it,
+          # orphaned parts accumulate silently (billed but invisible to
+          # `s3:ListBucket`). Paired with the lifecycle rule below as a
+          # backstop.
+          "s3:AbortMultipartUpload",
         ]
         Resource = "${aws_s3_bucket.sandbox.arn}/*"
       },
