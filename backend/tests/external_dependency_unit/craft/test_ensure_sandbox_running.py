@@ -15,6 +15,7 @@ DB doesn't seed a default LLM provider.
 """
 
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -38,7 +39,7 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 # valid template directories. Without this, ``_validate_templates()`` raises
 # in CI / dev environments where ``/templates/{outputs,venv}`` don't exist.
 @pytest.fixture(autouse=True)
-def _autouse_local_sandbox_paths(local_sandbox_paths: object) -> None:  # noqa: ARG001
+def _autouse_local_sandbox_paths(local_sandbox_paths: Path) -> None:  # noqa: ARG001
     return None
 
 
