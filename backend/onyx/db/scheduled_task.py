@@ -24,7 +24,9 @@ from sqlalchemy import literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ScheduledTaskErrorClass
 from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.enums import ScheduledTaskSkipReason
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
@@ -322,7 +324,7 @@ def insert_run(
     task_id: UUID,
     trigger_source: ScheduledTaskTriggerSource,
     status: ScheduledTaskRunStatus = ScheduledTaskRunStatus.QUEUED,
-    skip_reason: str | None = None,
+    skip_reason: ScheduledTaskSkipReason | None = None,
 ) -> ScheduledTaskRun:
     """Insert a new run row. Returns the persisted row (with id)."""
     started_at = datetime.now(tz=timezone.utc)
@@ -347,8 +349,8 @@ def mark_run_status(
     run_id: UUID,
     status: ScheduledTaskRunStatus,
     session_id: UUID | None = None,
-    skip_reason: str | None = None,
-    error_class: str | None = None,
+    skip_reason: ScheduledTaskSkipReason | None = None,
+    error_class: ScheduledTaskErrorClass | None = None,
     error_detail: str | None = None,
     summary: str | None = None,
 ) -> ScheduledTaskRun:
