@@ -162,10 +162,13 @@
     },
     {
       "label": "k8s: telepresence connect",
-      "detail": "Bridge host DNS into the cluster (cluster DNS resolves from laptop).",
-      "type": "shell",
-      "command": "telepresence",
-      "args": ["connect", "-n", "onyx"],
+      "detail": "Bridge host DNS into the cluster (cluster DNS resolves from laptop). Pins telepresence to kind-onyx-dev via --context without mutating your kubectl current-context.",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e; kubectl config get-contexts -o name | grep -qx kind-onyx-dev || { echo 'error: kubectl context kind-onyx-dev not found; run deployment/helm/dev/k8s-up.sh first' >&2; exit 1; }; telepresence connect --context kind-onyx-dev -n onyx"
+      ],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"
@@ -174,12 +177,12 @@
     },
     {
       "label": "k8s: telepresence intercept api_server",
-      "detail": "Idempotently connect + intercept api_server. Writes cluster env to .vscode/.env.k8s. Wired as preLaunchTask on every (k8s) launch config.",
-      "type": "shell",
+      "detail": "Idempotently connect + intercept api_server. Pins telepresence to kind-onyx-dev via --context without mutating your kubectl current-context. Writes cluster env to .vscode/.env.k8s. Wired as preLaunchTask on every (k8s) launch config.",
+      "type": "process",
       "command": "bash",
       "args": [
         "-c",
-        "set -e; telepresence connect -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file \"${workspaceFolder}/.vscode/.env.k8s\"; if [ -f \"${workspaceFolder}/.vscode/.env.k8s.local\" ]; then echo '' >> \"${workspaceFolder}/.vscode/.env.k8s\"; cat \"${workspaceFolder}/.vscode/.env.k8s.local\" >> \"${workspaceFolder}/.vscode/.env.k8s\"; fi"
+        "set -e; kubectl config get-contexts -o name | grep -qx kind-onyx-dev || { echo 'error: kubectl context kind-onyx-dev not found; run deployment/helm/dev/k8s-up.sh first' >&2; exit 1; }; telepresence connect --context kind-onyx-dev -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file \"${workspaceFolder}/.vscode/.env.k8s\"; if [ -f \"${workspaceFolder}/.vscode/.env.k8s.local\" ]; then echo '' >> \"${workspaceFolder}/.vscode/.env.k8s\"; cat \"${workspaceFolder}/.vscode/.env.k8s.local\" >> \"${workspaceFolder}/.vscode/.env.k8s\"; fi"
       ],
       "presentation": {
         "reveal": "silent",

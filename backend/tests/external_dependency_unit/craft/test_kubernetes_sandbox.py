@@ -248,6 +248,17 @@ def test_session_workspace_setup_creates_expected_tree(
         f".opencode/skills should symlink to managed skills, got: {link_target!r}"
     )
 
+    # user_library must be a symlink targeting /workspace/managed/user_library
+    library_link = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"readlink {session_path}/user_library || echo MISSING",
+    )
+    assert "/workspace/managed/user_library" in library_link, (
+        f"user_library should symlink to managed user_library, got: {library_link!r}"
+    )
+
 
 def test_send_message_streams_acp_events(
     k8s_manager: KubernetesSandboxManager,

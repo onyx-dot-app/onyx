@@ -367,6 +367,17 @@ class LocalSandboxManager(SandboxManager):
             skills_link.symlink_to(skills_target)
             logger.debug("Skills symlink ready")
 
+            logger.debug("Setting up user_library symlink")
+            user_library_target = sandbox_path / "managed" / "user_library"
+            user_library_link = session_path / "user_library"
+            if user_library_link.is_symlink() or user_library_link.exists():
+                if user_library_link.is_symlink():
+                    user_library_link.unlink()
+                else:
+                    shutil.rmtree(user_library_link)
+            user_library_link.symlink_to(user_library_target)
+            logger.debug("User library symlink ready")
+
             # Setup attachments directory
             logger.debug("Setting up attachments directory")
             self._directory_manager.setup_attachments_directory(session_path)
