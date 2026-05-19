@@ -283,6 +283,7 @@ RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 # been deleted in SharePoint. 403 covers per-site permission loss (sensitivity
 # labels, sharing restrictions). 410 is a deleted site. 400 covers malformed
 # per-site URLs. 401 and other 5xx are tenant-wide and abort the run.
+# Applies to the whole per-site block (lookup + iteration + per-page fetches).
 PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({400, 403, 404, 410})
 
 
@@ -2171,6 +2172,7 @@ class SharepointConnector(
                 except ClientRequestException as e:
                     if not _is_per_site_graph_failure(e):
                         raise
+                    # Slim sync can't yield ConnectorFailure; log-and-skip.
                     logger.warning(
                         "Skipping slim site pages for %s: Graph returned %s (%s)",
                         site_descriptor.url,
@@ -2179,7 +2181,7 @@ class SharepointConnector(
                             if e.response is not None
                             else "no response"
                         ),
-                        e.code or "no code",
+                        e.code or "<no code>",
                     )
         yield doc_batch
 
@@ -2854,7 +2856,7 @@ class SharepointConnector(
                         if e.response is not None
                         else "no response"
                     ),
-                    e.code or "no code",
+                    e.code or "<no code>",
                 )
                 yield _create_entity_failure(
                     site_descriptor.url,
