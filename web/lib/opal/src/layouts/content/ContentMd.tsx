@@ -150,7 +150,7 @@ function ContentMd({
 
   function commit() {
     const value = editValue.trim();
-    if (value && value !== toPlainString(title)) onTitleChange?.(value);
+    if (value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 

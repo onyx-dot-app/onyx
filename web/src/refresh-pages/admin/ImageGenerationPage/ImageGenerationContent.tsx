@@ -7,7 +7,10 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
+import {
+  LLMProviderResponse,
+  LLMProviderView,
+} from "@/lib/languageModels/types";
 import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
