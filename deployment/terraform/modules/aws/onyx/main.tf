@@ -91,6 +91,9 @@ module "eks" {
   # Control plane logging
   cluster_enabled_log_types              = var.eks_cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.eks_cloudwatch_log_group_retention_in_days
+
+  # Forwarded to eks/main.tf so callers can opt into the Craft sandbox node group.
+  craft_sandbox_node_group = var.craft_sandbox_node_group
 }
 
 module "waf" {

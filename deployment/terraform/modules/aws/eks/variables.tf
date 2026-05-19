@@ -189,3 +189,26 @@ variable "cloudwatch_log_group_retention_in_days" {
     error_message = "Must be a valid CloudWatch retention value (0, 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653)."
   }
 }
+
+variable "craft_sandbox_node_group" {
+  type        = any
+  description = <<-EOT
+    Optional sandbox node group for the Craft feature. When non-null, the
+    module adds a `sandbox` entry to its `eks_managed_node_groups` map. Pass
+    the per-NG config (instance_types, min/max_size, iam_role_name, taints,
+    labels, metadata_options, etc.) as a map; everything is forwarded
+    verbatim to terraform-aws-modules/eks/aws.
+
+    Codifies items 3 + 4 of docs/craft/infra/todos.md:
+      * Items 3 (SG composition): being in this map means the upstream EKS
+        module auto-attaches both the cluster primary SG (via EKS default)
+        and the cluster's shared node SG (via the LT) to sandbox instances,
+        matching the regular node groups.
+      * Item 4 (IMDSv2 hop limit 1): callers should set
+        `metadata_options = { http_tokens = "required", http_put_response_hop_limit = 1 }`
+        so containers cannot reach the instance metadata service.
+
+    Leave null for clusters that don't run Craft.
+  EOT
+  default     = null
+}

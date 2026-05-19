@@ -27,7 +27,7 @@ module "eks" {
     ami_type = "AL2023_x86_64_STANDARD"
   }
 
-  eks_managed_node_groups = {
+  eks_managed_node_groups = merge({
     for k, v in var.eks_managed_node_groups : k => merge(v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
@@ -45,7 +45,9 @@ module "eks" {
         subnet_ids = var.main_node_subnet_ids
       } : {}
     )
-  }
+    },
+    var.craft_sandbox_node_group != null ? { sandbox = var.craft_sandbox_node_group } : {}
+  )
 
   tags = var.tags
 }
