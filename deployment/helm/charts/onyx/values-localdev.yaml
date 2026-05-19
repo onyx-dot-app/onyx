@@ -95,6 +95,11 @@ codeInterpreter:
 
 # ---- Craft / Sandbox ----
 
+# IRSA isn't functional on local kind clusters, but the chart requires a non-empty
+# value when ENABLE_CRAFT=true. The annotation is harmless on kind.
+craft:
+  sandboxFileSyncRoleArn: "arn:aws:iam::000000000000:role/localdev-sandbox-placeholder"
+
 configMap:
   ENABLE_CRAFT: "true"
   SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"

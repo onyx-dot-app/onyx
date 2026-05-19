@@ -1309,6 +1309,27 @@ auth:
     values:
       private_key: ""
 
+# -- Craft (sandbox code-execution feature) configuration. Used only when
+# `configMap.ENABLE_CRAFT` is set to "true". Templated by sandbox-namespace.yaml,
+# sandbox-rbac.yaml and network-policy-sandbox-push.yaml. When ENABLE_CRAFT is
+# unset/false, the entire craft block is ignored.
+craft:
+  # -- IAM role ARN granted to the sandbox ServiceAccount via IRSA. The role's
+  # trust policy must permit the cluster's OIDC provider + sandbox namespace +
+  # ServiceAccount name (see configMap.SANDBOX_NAMESPACE and
+  # configMap.SANDBOX_SERVICE_ACCOUNT_NAME). Required when ENABLE_CRAFT="true";
+  # otherwise helm install/upgrade will fail fast with a clear error.
+  sandboxFileSyncRoleArn: ""
+  # -- Additional workload ServiceAccounts (beyond the chart's main
+  # `onyx.serviceAccountName`) that need to manage sandbox pods. Most clusters
+  # leave this empty — the main workload SA covers api-server and Celery
+  # workers. Set if you've split Celery workers onto a dedicated SA.
+  # Example:
+  #   extraBoundServiceAccounts:
+  #     - name: celery-worker-sandbox-sa
+  #       namespace: onyx
+  extraBoundServiceAccounts: []
+
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,
@@ -1405,6 +1426,9 @@ configMap:
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
+  # ServiceAccount that runs the sandbox file-sync sidecar (in the
+  # SANDBOX_NAMESPACE). Created by sandbox-rbac.yaml when ENABLE_CRAFT="true".
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
 
 # -- Additional arbitrary manifests to render as part of the release. Each entry
 # may be either a YAML mapping (a single Kubernetes object) or a multi-line

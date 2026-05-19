@@ -1,0 +1,69 @@
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $saName := .Values.configMap.SANDBOX_SERVICE_ACCOUNT_NAME | default "sandbox-file-sync" }}
+{{- $craft := .Values.craft | default dict }}
+{{- $roleArn := required "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=\"true\" (IAM role ARN to bind to the sandbox-file-sync ServiceAccount via IRSA)" $craft.sandboxFileSyncRoleArn }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $saName }}
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ $roleArn | quote }}
+    eks.amazonaws.com/skip-containers: sandbox
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-server-role
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "onyx.serviceAccountName" . }}-sandbox-binding
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: api-server-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "onyx.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- range $extraSa := $craft.extraBoundServiceAccounts | default list }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $extraSa.name }}-sandbox-binding
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: api-server-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ $extraSa.name }}
+    namespace: {{ $extraSa.namespace | default $.Release.Namespace }}
+{{- end }}
+{{- end }}
