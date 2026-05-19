@@ -12,7 +12,6 @@ services:
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
-      - index
       - opensearch
       - cache
       - inference_model_server
@@ -21,7 +20,6 @@ services:
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
-      - VESPA_HOST=index
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
@@ -64,7 +62,6 @@ services:
     command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
-      - index
       - opensearch
       - cache
       - inference_model_server
@@ -73,7 +70,6 @@ services:
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
       - POSTGRES_HOST=relational_db
-      - VESPA_HOST=index
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
@@ -243,23 +239,6 @@ services:
         max-size: "50m"
         max-file: "6"
 
-  # This container name cannot have an underscore in it due to Vespa expectations of the URL
-  index:
-    image: vespaengine/vespa:8.609.39
-    restart: unless-stopped
-    environment:
-      - VESPA_SKIP_UPGRADE_CHECK=true
-    ports:
-      - "19071:19071"
-      - "8081:8081"
-    volumes:
-      - vespa_volume:/opt/vespa/var
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-
   opensearch:
     image: opensearchproject/opensearch:3.6.0
     restart: unless-stopped
@@ -381,9 +360,7 @@ services:
 
 volumes:
   db_volume:
-  vespa_volume:
   minio_data:
-  # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
   # for logs that we don't want to lose on container restarts

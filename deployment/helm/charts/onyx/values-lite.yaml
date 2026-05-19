@@ -19,9 +19,6 @@
 vectorDB:
   enabled: false
 
-vespa:
-  enabled: false
-
 redis:
   enabled: false
 

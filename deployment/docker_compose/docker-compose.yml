@@ -11,7 +11,7 @@
 #
 # 1. SECURITY HARDENING:
 #    - Remove all port exposures except nginx (80/443)
-#    - Comment out ports for: api_server, relational_db, index, cache, minio
+#    - Comment out ports for: api_server, relational_db, cache, minio
 #
 # 2. SSL/TLS SETUP:
 #    - Uncomment the certbot service (see below)
@@ -55,11 +55,8 @@ services:
     depends_on:
       relational_db:
         condition: service_started
-      index:
-        condition: service_started
       opensearch:
         condition: service_started
-        required: false
       cache:
         condition: service_started
       inference_model_server:
@@ -78,7 +75,6 @@ services:
       - AUTH_TYPE=${AUTH_TYPE:-basic}
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
@@ -145,11 +141,8 @@ services:
     depends_on:
       relational_db:
         condition: service_started
-      index:
-        condition: service_started
       opensearch:
         condition: service_started
-        required: false
       cache:
         condition: service_started
       inference_model_server:
@@ -160,7 +153,6 @@ services:
     environment:
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
@@ -389,29 +381,6 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
 
-  # This container name cannot have an underscore in it due to Vespa expectations of the URL
-  index:
-    image: vespaengine/vespa:8.609.39
-    restart: unless-stopped
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      - VESPA_SKIP_UPGRADE_CHECK=${VESPA_SKIP_UPGRADE_CHECK:-true}
-    # DEV: To expose ports, either:
-    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
-    # 2. Uncomment the ports below
-    # ports:
-    #   - "19071:19071"
-    #   - "8081:8081"
-    volumes:
-      - vespa_volume:/opt/vespa/var
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-
   opensearch:
     image: opensearchproject/opensearch:3.6.0
     restart: unless-stopped
@@ -579,7 +548,6 @@ services:
 volumes:
   # Necessary for persisting data for use
   db_volume:
-  vespa_volume: # Created by the container itself
   minio_data:
   # Caches to prevent re-downloading models, not strictly necessary
   model_cache_huggingface:
