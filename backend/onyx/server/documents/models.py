@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
@@ -33,6 +32,7 @@ from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.server.security.store import load_security_settings
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -152,7 +152,7 @@ class CredentialSnapshot(CredentialBase):
         # Get the credential_json value with appropriate masking
         if credential.credential_json is None:
             credential_json_value: dict[str, Any] = {}
-        elif MASK_CREDENTIAL_PREFIX:
+        elif load_security_settings().mask_credential_prefix:
             credential_json_value = credential.credential_json.get_value(
                 apply_mask=True
             )
