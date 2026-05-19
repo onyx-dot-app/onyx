@@ -1384,7 +1384,7 @@ echo "Session cleanup complete"
             resp = self._post_to_sidecar(
                 pod_ip, "/snapshot/create", body, timeout=300.0
             )
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
+        except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot create request failed: {e}") from e
 
         if resp.status_code != 200:
@@ -1513,7 +1513,7 @@ echo "Session cleanup complete"
             resp = self._post_to_sidecar(
                 pod_ip, "/snapshot/restore", body, timeout=300.0
             )
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
+        except httpx.TransportError as e:
             raise RuntimeError(f"Snapshot restore request failed: {e}") from e
 
         if resp.status_code != 204:
@@ -1637,7 +1637,7 @@ echo "Session config regeneration complete"
             with httpx.Client(timeout=timeout) as http_client:
                 resp = http_client.get(url)
             return resp.status_code == 200
-        except (httpx.TimeoutException, httpx.NetworkError):
+        except httpx.TransportError:
             return False
 
     def _create_ephemeral_acp_client(
@@ -2538,7 +2538,7 @@ fi
                         "X-Push-Timestamp": ts,
                     },
                 )
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
+        except httpx.TransportError as e:
             raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
 
         if resp.status_code == 200:

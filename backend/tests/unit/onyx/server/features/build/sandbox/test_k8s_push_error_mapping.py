@@ -225,9 +225,24 @@ def test_daemon_413_raises_fatal() -> None:
             )
 
 
-def test_daemon_timeout_raises_retriable() -> None:
+@pytest.mark.parametrize(
+    "exc",
+    [
+        # Timeout family.
+        httpx.TimeoutException("timeout"),
+        # Network family (refused / reset / DNS).
+        httpx.ConnectError("connection refused"),
+        # Protocol family — raised when the sidecar accepts a TCP connection
+        # but sends a malformed/partial HTTP response (typical during uvicorn
+        # startup or graceful shutdown). Subclass of httpx.ProtocolError,
+        # NOT of NetworkError; only a TransportError catch picks it up.
+        httpx.RemoteProtocolError("server disconnected without sending a response"),
+    ],
+    ids=["timeout", "connect-error", "remote-protocol-error"],
+)
+def test_transport_error_raises_retriable(exc: httpx.HTTPError) -> None:
     mgr = _make_manager()
-    factory = _mock_httpx_client(raise_exc=httpx.TimeoutException("timeout"))
+    factory = _mock_httpx_client(raise_exc=exc)
     with patch(_HTTPX_CLIENT_PATH, factory):
         with pytest.raises(RetriableWriteError, match="failed"):
             mgr.write_files_to_sandbox(
@@ -247,6 +262,27 @@ def test_2xx_returns_success() -> None:
             mount_path="/workspace/managed/skills",
             files=_files(),
         )
+
+
+# ---------------------------------------------------------------------------
+# health_check: must always return a bool, never propagate transport errors
+# ---------------------------------------------------------------------------
+
+
+def test_health_check_returns_false_on_remote_protocol_error() -> None:
+    """RemoteProtocolError is the realistic failure mode during sidecar
+    startup/shutdown (TCP accepts, partial HTTP response). It's a subclass
+    of httpx.ProtocolError, not NetworkError — a narrow ``(TimeoutException,
+    NetworkError)`` catch would let it propagate and break the bool
+    contract.
+    """
+    mgr = _make_manager()
+    factory = _mock_httpx_client(
+        raise_exc=httpx.RemoteProtocolError("server disconnected")
+    )
+    with patch(_HTTPX_CLIENT_PATH, factory):
+        # Bool contract: any transport failure becomes False.
+        assert mgr.health_check(_sandbox_id(), timeout=1.0) is False
 
 
 # ---------------------------------------------------------------------------
