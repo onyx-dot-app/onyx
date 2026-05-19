@@ -239,14 +239,23 @@ class SnapshotManager:
         }
 
         if size_hint is not None:
-            self._file_store.save_file(
-                content=stream,
-                display_name=display_name,
-                file_origin=FileOrigin.SANDBOX_SNAPSHOT,
-                file_type=SNAPSHOT_FILE_TYPE,
-                file_id=storage_path,
-                file_metadata=metadata,
-            )
+            try:
+                self._file_store.save_file(
+                    content=stream,
+                    display_name=display_name,
+                    file_origin=FileOrigin.SANDBOX_SNAPSHOT,
+                    file_type=SNAPSHOT_FILE_TYPE,
+                    file_id=storage_path,
+                    file_metadata=metadata,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to create streamed snapshot for sandbox %s: %s",
+                    sandbox_id,
+                    e,
+                )
+                raise RuntimeError(f"Failed to create snapshot: {e}") from e
+
             logger.info(
                 "Created snapshot %s for sandbox %s, size: %s bytes (hint)",
                 snapshot_id,

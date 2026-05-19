@@ -209,6 +209,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     sandbox = make_sandbox(db_session, user)
     _backdate_created_at(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
+    stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
@@ -303,6 +304,7 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     db_session.refresh(session_b)
 
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+    stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
