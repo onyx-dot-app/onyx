@@ -330,10 +330,10 @@ def reset_file_store() -> None:
 def reset_all() -> None:
     """Reset state that persists across tests.
 
-    OpenSearch is intentionally NOT reset between tests — tests are expected
-    to use unique document IDs (e.g. uuid-based) so they don't collide on
-    shared index state, and CI runners are ephemeral so accumulated docs
-    don't leak across runs.
+    OpenSearch is intentionally NOT reset between tests — tests are expected to
+    use unique document IDs (e.g. uuid-based) so they don't collide on shared
+    index state, and CI runners are ephemeral so accumulated docs don't leak
+    across runs.
     """
     if os.environ.get("SKIP_RESET", "").lower() == "true":
         logger.info("Skipping reset.")

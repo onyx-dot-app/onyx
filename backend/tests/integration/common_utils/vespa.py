@@ -16,18 +16,18 @@ class vespa_fixture:
     """Test fixture for inspecting the document index.
 
     Kept named ``vespa_fixture`` for backwards compatibility with the many
-    existing integration tests that take it as a parameter. Internally it is
-    now backed by OpenSearch, and it reshapes hits into the dict-of-keys
-    layout that the legacy Vespa assertions expect (``access_control_list``
-    and ``document_sets`` as dicts; ``image_file_name`` mirrored from
-    OpenSearch's ``image_file_id``; the ``public`` boolean folded back into
-    the ACL as the ``"PUBLIC"`` entry).
+    existing integration tests that take it as a parameter. Internally it is now
+    backed by OpenSearch, and it reshapes hits into the dict-of-keys layout that
+    the legacy Vespa assertions expect (``access_control_list`` and
+    ``document_sets`` as dicts; ``image_file_name`` mirrored from OpenSearch's
+    ``image_file_id``; the ``public`` boolean folded back into the ACL as the
+    ``"PUBLIC"`` entry).
 
     The current index name is resolved lazily on each call rather than at
-    construction time. The docprocessing worker performs an in-flight swap
-    from ``danswer_chunk`` to ``danswer_chunk_<model>`` the first time it
-    indexes after a Postgres reset; resolving the name eagerly in the
-    fixture would cache the pre-swap value and query a non-existent index.
+    construction time. The docprocessing worker performs an in-flight swap from
+    ``danswer_chunk`` to ``danswer_chunk_<model>`` the first time it indexes
+    after a Postgres reset; resolving the name eagerly in the fixture would
+    cache the pre-swap value and query a non-existent index.
     """
 
     def __init__(self, index_name: str | None = None) -> None:
