@@ -872,6 +872,23 @@ def mark_documents_as_synced(document_ids: list[str], db_session: Session) -> No
     db_session.commit()
 
 
+def mark_documents_as_modified(document_ids: list[str], db_session: Session) -> None:
+    """Bulk variant of mark_document_as_modified.
+
+    Silently skips IDs that don't exist (unlike the singular form, which raises).
+    Used by bulk-cleanup reconciliation paths where a batch may include rows
+    that have already been deleted by an earlier attempt.
+    """
+    if not document_ids:
+        return
+
+    db_session.query(DbDocument).filter(DbDocument.id.in_(document_ids)).update(
+        {DbDocument.last_modified: datetime.now(timezone.utc)},
+        synchronize_session=False,
+    )
+    db_session.commit()
+
+
 def delete_document_by_connector_credential_pair__no_commit(
     db_session: Session,
     document_id: str,
