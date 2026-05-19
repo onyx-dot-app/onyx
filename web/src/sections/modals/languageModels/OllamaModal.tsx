@@ -11,7 +11,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import {
   useInitialValues,
   buildValidationSchema,

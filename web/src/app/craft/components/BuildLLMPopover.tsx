@@ -11,7 +11,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Popover, PopoverMenu } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   BuildLlmSelection,
   BUILD_MODE_PROVIDERS,

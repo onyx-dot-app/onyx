@@ -10,7 +10,7 @@ import {
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 
 /**
  * Fetches configured LLM providers accessible to the current user.
