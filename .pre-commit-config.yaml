@@ -69,7 +69,7 @@ repos:
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
-        exclude: ^backend/onyx/server/features/build/sandbox/kubernetes/docker/daemon/
+        exclude: ^backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/
       - id: uv-run
         alias: ruff
         name: ruff

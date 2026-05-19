@@ -230,7 +230,7 @@ trap 'kill 0 2>/dev/null; exit' SIGTERM SIGINT
 
 start_daemon() {
   while true; do
-    /workspace/.venv/bin/python -m push_daemon.server
+    /workspace/.venv/bin/python -m sandbox_daemon.server
     sleep 1
   done
 }
@@ -397,12 +397,12 @@ backend/onyx/server/features/build/sandbox/
 │   │                                  #   _build_targz, _build_push_auth_header (private)
 │   └── docker/
 │       └── daemon/     # in-pod push daemon — self-contained, no onyx.* imports,
-│           ├── server.py   # FastAPI app on :8731  (invoked as `python -m push_daemon.server`)
+│           ├── server.py   # FastAPI app on :8731  (invoked as `python -m sandbox_daemon.server`)
 │           └── extract.py  # safe_extract_then_atomic_swap + reject-list checks
 └── local/local_sandbox_manager.py     # write+find via shutil
 ```
 
-No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `kubernetes/docker/daemon/` with no `onyx.*` imports; it is copied to `/workspace/push_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
+No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `kubernetes/docker/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
 
 ### Per-feature push helpers
 
@@ -425,7 +425,7 @@ backend/onyx/server/features/build/sandbox/kubernetes/docker/
 
 Dockerfile changes:
 - Add `fastapi` and `uvicorn[standard]` to `initial-requirements.txt`.
-- Copy the `daemon/` directory into the image at `/workspace/push_daemon/` (self-contained; no `onyx.*` imports needed).
+- Copy the `sandbox_daemon/` directory into the image at `/workspace/sandbox_daemon/` (self-contained; no `onyx.*` imports needed).
 - `mkdir /workspace/managed` at build time, chowned to the sandbox user.
 - Replace `CMD ["sleep", "infinity"]` with `ENTRYPOINT ["/workspace/entrypoint.sh"]`.
 

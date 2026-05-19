@@ -78,18 +78,23 @@ def _populate_session_workspace(
         # Use printf with single quotes; payload above is shell-safe.
         script_lines.append(f"printf '%s' '{content}' > {rel_path}")
 
+    pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, "\n".join(script_lines))
+
     if include_managed_skills:
-        # ``managed/skills`` lives at /workspace/managed, not inside the
-        # session — but we create some content there so the exclude test
-        # can prove the snapshot does not pick it up via traversal of the
-        # session's ``.opencode/skills`` symlink.
-        script_lines.append("mkdir -p /workspace/managed/skills/marker")
-        script_lines.append(
+        # ``managed/skills`` lives at /workspace/managed, which is read-only
+        # in the sandbox container. The sidecar mounts it rw, so we route
+        # this seed through the sidecar. The point: prove the snapshot does
+        # not pick managed/ up via traversal of ``.opencode/skills``.
+        pod_exec(
+            k8s,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            "mkdir -p /workspace/managed/skills/marker && "
             "printf '%s' 'managed-skill-content' "
-            "> /workspace/managed/skills/marker/SKILL.md"
+            "> /workspace/managed/skills/marker/SKILL.md",
+            container="sidecar",
         )
 
-    pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, "\n".join(script_lines))
     return payload
 
 
@@ -295,12 +300,14 @@ def test_restore_re_pushes_skills(
     # Wipe the managed/skills tree to simulate a fresh post-restore state.
     # In production the caller (sessions_api) follows up restore_snapshot
     # with hydrate_sandbox_skills; this test verifies that push works
-    # against a snapshot-restored workspace.
+    # against a snapshot-restored workspace. The wipe must run in the
+    # sidecar — ``/workspace/managed`` is read-only in the sandbox container.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
         "rm -rf /workspace/managed/skills && mkdir -p /workspace/managed",
+        container="sidecar",
     )
 
     # Restore the session.
