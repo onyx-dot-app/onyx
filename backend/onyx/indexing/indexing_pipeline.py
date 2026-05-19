@@ -318,7 +318,9 @@ def embed_and_stream(
 
 
 def get_docs_to_update(
-    documents: list[Document], db_docs: list[DBDocument]
+    documents: list[Document],
+    db_docs: list[DBDocument],
+    ignore_timestamp_gate: bool = False,
 ) -> _DocsToUpdateResult:
     """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
@@ -327,16 +329,17 @@ def get_docs_to_update(
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
       already indexed, skip immediately. No hash computation needed.
+      Skipped when ignore_timestamp_gate=True (e.g. docprocessing, which relies on
+      connectors to pre-filter by recency).
 
     Gate 2 — content hash skip (fallback):
-      Only applied when doc_updated_at is absent (e.g. web connector, which never
-      provides a modification timestamp). Computes DocumentBase.content_hash() and
-      compares it to the stored hash. If equal, skip.
+      Applied when the timestamp has not advanced (absent or unchanged). Computes
+      DocumentBase.content_hash() and compares it to the stored hash. If equal, skip.
 
-      NOT applied when doc_updated_at is present and advanced, even if the hash
-      would match — a timestamp advance is authoritative evidence of a change and
-      must not be overridden (e.g. GDrive in-place image replacement: same
-      image_file_id, but image bytes changed; hash would incorrectly say "skip").
+      NOT applied when doc_updated_at is present and has advanced past what is stored —
+      a timestamp advance is authoritative evidence of a change and must not be
+      overridden (e.g. GDrive in-place image replacement: same image_file_id, but image
+      bytes changed; hash would incorrectly say "skip").
 
     The returned doc_id_to_content_hash map contains hashes for all documents that
     will be indexed. These are persisted to the DB after successful vector DB writes
@@ -350,17 +353,26 @@ def get_docs_to_update(
     updatable_docs: list[Document] = []
     doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        timestamp_advanced = (
+            doc.doc_updated_at is not None
+            and doc.id in id_update_time_map
+            and doc.doc_updated_at > id_update_time_map[doc.id]
+        )
+
+        # Gate 1: timestamp present and not advanced → skip without hashing
         if (
-            doc.id in id_update_time_map
+            not ignore_timestamp_gate
             and doc.doc_updated_at
-            and doc.doc_updated_at <= id_update_time_map[doc.id]
+            and doc.id in id_update_time_map
+            and not timestamp_advanced
         ):
             continue
 
-        # Gate 2: hash-based skip, only for connectors with no doc_updated_at.
-        # When a timestamp IS present and advanced, skip the hash check — see docstring.
+        # Gate 2: hash-based skip when the timestamp hasn't advanced.
+        # A timestamp advance is authoritative evidence of a change — skip the hash
+        # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
-        if not doc.doc_updated_at:
+        if not timestamp_advanced:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash == content_hash:
                 logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
@@ -498,13 +510,11 @@ def index_doc_batch_prepare(
         db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
     }
 
-    if not ignore_time_skip:
-        updatable_docs, doc_id_to_content_hash = get_docs_to_update(
-            documents=documents, db_docs=db_docs
-        )
-    else:
-        updatable_docs = documents
-        doc_id_to_content_hash = {doc.id: doc.content_hash() for doc in documents}
+    updatable_docs, doc_id_to_content_hash = get_docs_to_update(
+        documents=documents,
+        db_docs=db_docs,
+        ignore_timestamp_gate=ignore_time_skip,
+    )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
         skipped_doc_ids = [
