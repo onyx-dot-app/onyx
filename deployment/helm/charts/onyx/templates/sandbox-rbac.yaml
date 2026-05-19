@@ -54,7 +54,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ $extraSa.name }}-sandbox-binding
+  name: {{ printf "%s-%s-%s-sandbox-binding" (include "onyx.fullname" $) ($extraSa.namespace | default $.Release.Namespace) $extraSa.name | trunc 63 | trimSuffix "-" }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" $ | nindent 4 }}
