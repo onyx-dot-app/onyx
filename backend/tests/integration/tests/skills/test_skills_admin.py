@@ -346,6 +346,11 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(
+    reason="Flaky on main: admin_user fixture intermittently fails /auth/register "
+    "with 400 in setup, leaving partial state; patch then succeeds instead of "
+    "returning 409. Re-enable once the fixture/skills API interaction is fixed."
+)
 def test_patch_slug_409_on_collision(admin_user: DATestUser) -> None:
     suffix = uuid4().hex[:6]
     slug_a = f"patch-collide-a-{suffix}"
