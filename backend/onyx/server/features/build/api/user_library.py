@@ -30,6 +30,7 @@ from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
+from onyx.server.features.build.db.user_library import cleanup_old_blobs
 from onyx.server.features.build.db.user_library import create_directory_record
 from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.db.user_library import fetch_user_file_for_user
@@ -200,6 +201,7 @@ async def upload_files(
     connector_id, credential_id = get_or_create_craft_connector(db_session, user)
 
     uploaded_entries: list[LibraryEntryResponse] = []
+    stale_blobs: list[str | None] = []
     total_size = 0
     batch_image_total = 0
     now = datetime.now(timezone.utc)
@@ -233,7 +235,7 @@ async def upload_files(
         safe_filename = api_sanitize_filename(file.filename or "unnamed")
         file_path = f"{base_path}/{safe_filename}".replace("//", "/")
 
-        doc_id, _ = store_user_file(
+        doc_id, _, old_blob = store_user_file(
             db_session=db_session,
             user_id=user.id,
             connector_id=connector_id,
@@ -242,6 +244,7 @@ async def upload_files(
             content=content,
             mime_type=file.content_type or "application/octet-stream",
         )
+        stale_blobs.append(old_blob)
 
         uploaded_entries.append(
             LibraryEntryResponse(
@@ -266,6 +269,7 @@ async def upload_files(
     )
 
     db_session.commit()
+    cleanup_old_blobs(stale_blobs)
 
     logger.info(
         "Uploaded %s files (%s bytes) for user %s",
@@ -302,6 +306,7 @@ async def upload_zip(
     connector_id, credential_id = get_or_create_craft_connector(db_session, user)
 
     uploaded_entries: list[LibraryEntryResponse] = []
+    stale_blobs: list[str | None] = []
     total_size = 0
     batch_image_total = 0
 
@@ -383,7 +388,7 @@ async def upload_zip(
 
                 content_type, _ = mimetypes.guess_type(file_name)
 
-                doc_id, _ = store_user_file(
+                doc_id, _, old_blob = store_user_file(
                     db_session=db_session,
                     user_id=user.id,
                     connector_id=connector_id,
@@ -392,6 +397,7 @@ async def upload_zip(
                     content=file_content,
                     mime_type=content_type or "application/octet-stream",
                 )
+                stale_blobs.append(old_blob)
 
                 uploaded_entries.append(
                     LibraryEntryResponse(
@@ -428,6 +434,7 @@ async def upload_zip(
     )
 
     db_session.commit()
+    cleanup_old_blobs(stale_blobs)
 
     logger.info(
         "Extracted %s files (%s bytes) from zip for user %s",

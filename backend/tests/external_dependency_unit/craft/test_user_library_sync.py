@@ -47,7 +47,7 @@ def _seed_file(
 ) -> str:
     """Seed a user library file via the production DB-layer helper."""
     connector_id, credential_id = get_or_create_craft_connector(db_session, user)
-    doc_id, _ = store_user_file(
+    doc_id, _, _ = store_user_file(
         db_session=db_session,
         user_id=user.id,
         connector_id=connector_id,

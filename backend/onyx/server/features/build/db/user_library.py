@@ -92,12 +92,13 @@ def store_user_file(
     file_path: str,
     content: bytes,
     mime_type: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, str | None]:
     """Store a file in the default file store and upsert its document record.
 
-    When overwriting an existing path, the new blob is saved first and the old
-    blob is deleted only after the document record is updated. This avoids
-    losing the old data if the new save fails.
+    Returns (doc_id, file_id, old_blob_id_to_delete). The new blob is saved
+    first; the caller must delete the returned old_blob_id *after* its final
+    DB commit by passing it to ``cleanup_old_blobs``. Deleting before commit
+    risks permanent data loss if the commit later fails.
     """
     file_store = get_default_file_store()
     doc_id = build_document_id(user_id, file_path)
@@ -132,13 +133,20 @@ def store_user_file(
         db_session, connector_id, credential_id, [doc_id]
     )
 
-    if old_blob_id and old_blob_id != file_id:
-        try:
-            file_store.delete_file(old_blob_id, error_on_missing=False)
-        except Exception as e:
-            logger.warning("Failed to delete old blob %s: %s", old_blob_id, e)
+    stale = old_blob_id if old_blob_id and old_blob_id != file_id else None
+    return doc_id, file_id, stale
 
-    return doc_id, file_id
+
+def cleanup_old_blobs(blob_ids: list[str | None]) -> None:
+    """Delete superseded file-store blobs. Call after the final DB commit."""
+    file_store = get_default_file_store()
+    for blob_id in blob_ids:
+        if not blob_id:
+            continue
+        try:
+            file_store.delete_file(blob_id, error_on_missing=False)
+        except Exception as e:
+            logger.warning("Failed to delete stale blob %s: %s", blob_id, e)
 
 
 def create_directory_record(
