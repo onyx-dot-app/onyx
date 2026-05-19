@@ -429,13 +429,14 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
 
 
 def _cli_loglevel_explicitly_set() -> bool:
-    """Return True iff --loglevel or -l was explicitly passed on the celery CLI.
+    """
+    Returns True iff --loglevel or -l was explicitly passed on the celery CLI.
 
     The setup_logging signal handler receives a `loglevel` int regardless of
     whether the operator actually passed --loglevel — when the flag is absent,
-    Celery substitutes its own default. To distinguish "operator passed it"
-    (CLI should win) from "Celery defaulted it" (LOG_LEVEL env should win) we
-    have to inspect sys.argv ourselves.
+    Celery substitutes its own default. To distinguish "operator passed it" (CLI
+    should win) from "Celery defaulted it" (LOG_LEVEL env should win) we have to
+    inspect sys.argv ourselves.
     """
     for arg in sys.argv:
         if arg == "--loglevel" or arg.startswith("--loglevel="):
@@ -456,10 +457,10 @@ def on_setup_logging(
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
 
-    # Precedence: explicit --loglevel CLI flag > LOG_LEVEL env var > Celery default.
-    # An operator-supplied CLI flag is treated as a per-worker override; otherwise
-    # LOG_LEVEL is the single global knob across the API server, model servers,
-    # and all Celery workers.
+    # Precedence: explicit --loglevel CLI flag > LOG_LEVEL env var > Celery
+    # default. An operator-supplied CLI flag is treated as a per-worker
+    # override; otherwise LOG_LEVEL is the single global knob across the API
+    # server, model servers, and all Celery workers.
     env_log_level = os.environ.get("LOG_LEVEL")
     if _cli_loglevel_explicitly_set():
         effective_loglevel = loglevel
