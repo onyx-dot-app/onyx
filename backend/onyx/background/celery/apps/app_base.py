@@ -447,6 +447,33 @@ def _cli_loglevel_explicitly_set() -> bool:
     return False
 
 
+def _resolve_effective_loglevel(cli_loglevel: int) -> tuple[int, str]:
+    """
+    Returns the (level, human-readable explanation) for celery worker logging.
+
+    Precedence: explicit --loglevel CLI flag > LOG_LEVEL env var > Celery
+    default. An operator-supplied CLI flag is treated as a per-worker
+    override; otherwise LOG_LEVEL is the single global knob across the API
+    server, model servers, and all Celery workers.
+
+    Surfaces unrecognized LOG_LEVEL strings (e.g. "WARN" instead of
+    "WARNING") in the source string so the operator can see in the boot
+    log that their value silently fell back to INFO.
+    """
+    env_log_level = os.environ.get("LOG_LEVEL")
+    if _cli_loglevel_explicitly_set():
+        return cli_loglevel, "celery --loglevel CLI arg"
+    if env_log_level is not None:
+        effective = get_log_level_from_str(env_log_level)
+        parsed_name = logging.getLevelName(effective)
+        if parsed_name.upper() != env_log_level.upper():
+            return effective, (
+                f"LOG_LEVEL env var ({env_log_level!r} -> unrecognized, defaulted to {parsed_name})"
+            )
+        return effective, f"LOG_LEVEL env var ({env_log_level!r})"
+    return cli_loglevel, "celery default (no --loglevel, no LOG_LEVEL)"
+
+
 def on_setup_logging(
     loglevel: int,
     logfile: str | None,
@@ -457,20 +484,7 @@ def on_setup_logging(
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
 
-    # Precedence: explicit --loglevel CLI flag > LOG_LEVEL env var > Celery
-    # default. An operator-supplied CLI flag is treated as a per-worker
-    # override; otherwise LOG_LEVEL is the single global knob across the API
-    # server, model servers, and all Celery workers.
-    env_log_level = os.environ.get("LOG_LEVEL")
-    if _cli_loglevel_explicitly_set():
-        effective_loglevel = loglevel
-        loglevel_source = "celery --loglevel CLI arg"
-    elif env_log_level:
-        effective_loglevel = get_log_level_from_str(env_log_level)
-        loglevel_source = f"LOG_LEVEL env var ({env_log_level!r})"
-    else:
-        effective_loglevel = loglevel
-        loglevel_source = "celery default (no --loglevel, no LOG_LEVEL)"
+    effective_loglevel, loglevel_source = _resolve_effective_loglevel(loglevel)
 
     root_logger = logging.getLogger()
     root_logger.handlers = []

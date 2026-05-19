@@ -85,21 +85,21 @@ def test_env_set_cli_not_passed_env_wins(
     assert app_base.task_logger.level == logging.DEBUG
 
 
-def test_env_empty_cli_not_passed_falls_back_to_celery_default(
+def test_env_empty_string_falls_back_to_info(
     _snapshot_loggers: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LOG_LEVEL", "")
     _clean_argv(monkeypatch)
 
     app_base.on_setup_logging(
-        loglevel=logging.WARNING,
+        loglevel=logging.WARNING,  # Celery default; should be ignored
         logfile=None,
         format="",
         colorize=False,
     )
 
-    assert logging.getLogger().level == logging.WARNING
-    assert app_base.task_logger.level == logging.WARNING
+    assert logging.getLogger().level == logging.INFO
+    assert app_base.task_logger.level == logging.INFO
 
 
 def test_cli_long_form_wins_over_env(
@@ -168,3 +168,64 @@ def test_env_loglevel_case_insensitive(
 
     assert logging.getLogger().level == logging.WARNING
     assert app_base.task_logger.level == logging.WARNING
+
+
+# Direct tests of the resolver helper so we can assert on the human-readable
+# source string without fighting on_setup_logging clearing root_logger.handlers
+# (which kills pytest's caplog handler).
+
+
+def test_resolve_unrecognized_env_loglevel_falls_back_to_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LOG_LEVEL=WARN (common typo for WARNING) should fall back to INFO and
+    surface that fact in the source string so the boot log makes the silent
+    fallback discoverable.
+    """
+    monkeypatch.setenv("LOG_LEVEL", "WARN")
+    _clean_argv(monkeypatch)
+
+    level, source = app_base._resolve_effective_loglevel(cli_loglevel=logging.DEBUG)
+
+    assert level == logging.INFO
+    assert "'WARN'" in source
+    assert "unrecognized" in source
+    assert "INFO" in source
+
+
+def test_resolve_garbage_env_loglevel_falls_back_to_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "INVALID")
+    _clean_argv(monkeypatch)
+
+    level, source = app_base._resolve_effective_loglevel(cli_loglevel=logging.DEBUG)
+
+    assert level == logging.INFO
+    assert "'INVALID'" in source
+    assert "unrecognized" in source
+
+
+def test_resolve_valid_env_loglevel_has_clean_source_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    _clean_argv(monkeypatch)
+
+    level, source = app_base._resolve_effective_loglevel(cli_loglevel=logging.WARNING)
+
+    assert level == logging.DEBUG
+    assert "unrecognized" not in source
+    assert "'DEBUG'" in source
+
+
+def test_resolve_cli_explicit_wins_source_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    _clean_argv(monkeypatch, "--loglevel=ERROR")
+
+    level, source = app_base._resolve_effective_loglevel(cli_loglevel=logging.ERROR)
+
+    assert level == logging.ERROR
+    assert "CLI" in source
