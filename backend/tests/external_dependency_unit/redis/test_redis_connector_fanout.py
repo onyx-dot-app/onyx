@@ -136,10 +136,12 @@ class TestRedisConnectorDeleteFanout:
         mock_app.send_task = send_task_mock
         mock_lock = MagicMock()
 
-        num_tasks = rcd.generate_tasks(mock_app, db_session, mock_lock)
+        num_docs = rcd.generate_tasks(mock_app, db_session, mock_lock)
 
         expected_batches = 3
-        assert num_tasks == expected_batches
+        # Return value is doc count (callers persist as `num_docs_synced`),
+        # not batch count.
+        assert num_docs == n_docs
         assert send_task_mock.call_count == expected_batches
 
         # Every dispatched task uses the BULK task name.
@@ -183,9 +185,9 @@ class TestRedisConnectorDeleteFanout:
         send_task_mock, captured = _send_task_recorder()
         mock_app.send_task = send_task_mock
 
-        num_tasks = rcd.generate_tasks(mock_app, db_session, MagicMock())
+        num_docs = rcd.generate_tasks(mock_app, db_session, MagicMock())
 
-        assert num_tasks == 1
+        assert num_docs == CONNECTOR_CLEANUP_BATCH_SIZE
         assert send_task_mock.call_count == 1
         assert (
             len(captured[0]["kwargs"]["document_ids"]) == CONNECTOR_CLEANUP_BATCH_SIZE
@@ -209,9 +211,9 @@ class TestRedisConnectorDeleteFanout:
         send_task_mock, _ = _send_task_recorder()
         mock_app.send_task = send_task_mock
 
-        num_tasks = rcd.generate_tasks(mock_app, db_session, MagicMock())
+        num_docs = rcd.generate_tasks(mock_app, db_session, MagicMock())
 
-        assert num_tasks == 0
+        assert num_docs == 0
         assert send_task_mock.call_count == 0
         assert rcd.get_remaining() == 0
 
@@ -241,9 +243,11 @@ class TestRedisConnectorPruneFanout:
         send_task_mock, captured = _send_task_recorder()
         mock_app.send_task = send_task_mock
 
-        num_tasks = rcp.generate_tasks(documents_to_prune, mock_app, db_session, None)
+        num_docs = rcp.generate_tasks(documents_to_prune, mock_app, db_session, None)
 
-        assert num_tasks == 2
+        # Return value is doc count (callers persist as `num_docs_synced` /
+        # `num_pruned`), not batch count.
+        assert num_docs == len(documents_to_prune)
         assert send_task_mock.call_count == 2
 
         for kwargs in captured:
@@ -279,7 +283,7 @@ class TestRedisConnectorPruneFanout:
         send_task_mock, _ = _send_task_recorder()
         mock_app.send_task = send_task_mock
 
-        num_tasks = rcp.generate_tasks(set(), mock_app, db_session, None)
+        num_docs = rcp.generate_tasks(set(), mock_app, db_session, None)
 
-        assert num_tasks == 0
+        assert num_docs == 0
         assert send_task_mock.call_count == 0

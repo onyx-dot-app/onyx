@@ -108,7 +108,9 @@ class RedisConnectorDelete:
         lock: RedisLock,
     ) -> int | None:
         """Returns None if the cc_pair doesn't exist.
-        Otherwise, returns an int with the number of generated tasks."""
+        Otherwise, returns the number of documents dispatched across all
+        batches. Callers persist this as `num_docs_synced`, so it must be a
+        doc count, not a batch count."""
         last_lock_time = time.monotonic()
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -118,7 +120,7 @@ class RedisConnectorDelete:
         if not cc_pair:
             return None
 
-        num_tasks_sent = 0
+        num_docs_sent = 0
         batch: list[str] = []
 
         def _flush_batch() -> None:
@@ -127,7 +129,7 @@ class RedisConnectorDelete:
             One task ID = one batch. The taskset SADD + EXPIRE are pipelined
             so we do one round-trip to Redis per batch instead of two.
             """
-            nonlocal num_tasks_sent
+            nonlocal num_docs_sent
             if not batch:
                 return
 
@@ -156,7 +158,7 @@ class RedisConnectorDelete:
                 ignore_result=True,
             )
 
-            num_tasks_sent += 1
+            num_docs_sent += len(batch)
             batch.clear()
 
         stmt = construct_document_id_select_for_connector_credential_pair(
@@ -178,7 +180,7 @@ class RedisConnectorDelete:
         # Flush the trailing partial batch.
         _flush_batch()
 
-        return num_tasks_sent
+        return num_docs_sent
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)

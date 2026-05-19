@@ -167,7 +167,9 @@ class RedisConnectorPrune:
         if not cc_pair:
             return None
 
-        num_tasks_sent = 0
+        # Returned to the caller and persisted as `num_docs_synced` /
+        # `num_pruned` — must be a doc count, not a batch count.
+        num_docs_sent = 0
         batch: list[str] = []
 
         def _flush_batch() -> None:
@@ -176,7 +178,7 @@ class RedisConnectorPrune:
             One task ID = one batch. The taskset SADD + EXPIRE are pipelined
             so we do one round-trip to Redis per batch instead of two.
             """
-            nonlocal num_tasks_sent
+            nonlocal num_docs_sent
             if not batch:
                 return
 
@@ -206,7 +208,7 @@ class RedisConnectorPrune:
                 ignore_result=True,
             )
 
-            num_tasks_sent += 1
+            num_docs_sent += len(batch)
             batch.clear()
 
         for doc_id in documents_to_prune:
@@ -224,7 +226,7 @@ class RedisConnectorPrune:
         # Flush the trailing partial batch.
         _flush_batch()
 
-        return num_tasks_sent
+        return num_docs_sent
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
