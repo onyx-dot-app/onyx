@@ -1,10 +1,10 @@
+@import "@onyx-ai/opal/root.css";
 @import "./css/attachment-button.css" layer(base);
 @import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
 @import "./css/code.css" layer(base);
 @import "./css/color-swatch.css" layer(base);
-@import "./css/colors.css" layer(base);
 @import "./css/divider.css" layer(base);
 @import "./css/general-layouts.css" layer(base);
 @import "./css/inputs.css" layer(base);
@@ -16,9 +16,6 @@
 @import "./css/z-index.css" layer(base);
 
 /* KH Teka Font */
-
-@import "tailwindcss";
-@import "tw-animate-css";
 
 @config '../../tailwind.config.js';
 
@@ -97,23 +94,6 @@
 }
 
 @layer base {
-  /* BORDER RADII */
-  :root {
-    --border-radius-02: 0.125rem;
-    --border-radius-04: 0.25rem;
-    --border-radius-08: 0.5rem;
-    --border-radius-12: 0.75rem;
-    --border-radius-16: 1rem;
-    --border-radius-full: 64rem;
-  }
-
-  /* BACKDROP BLUR */
-  :root {
-    --backdrop-blur-01: 2px;
-    --backdrop-blur-02: 1px;
-    --backdrop-blur-03: 1px;
-  }
-
   * {
     @apply border-border;
   }
