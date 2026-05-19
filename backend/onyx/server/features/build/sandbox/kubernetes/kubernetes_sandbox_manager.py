@@ -1221,13 +1221,15 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
-# DO NOT mkdir /workspace/managed/skills here — the push daemon swaps
-# this path via os.rename(symlink, mount), which fails if mount is a
-# real directory. Dangling until the first push lands is fine; nothing
-# reads .opencode/skills during the rest of setup.
+# DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
+# here — the push daemon swaps these paths via os.rename(symlink, mount),
+# which fails if the mount is a real directory. Dangling until the first
+# push lands is fine; nothing reads these during the rest of setup.
 mkdir -p {session_path}/.opencode
 ln -sf /workspace/managed/skills {session_path}/.opencode/skills
 echo "Linked skills to /workspace/managed/skills"
+ln -sf /workspace/managed/user_library {session_path}/user_library
+echo "Linked user_library to /workspace/managed/user_library"
 
 # Write agent instructions
 echo "Writing AGENTS.md"

@@ -367,6 +367,17 @@ class LocalSandboxManager(SandboxManager):
             skills_link.symlink_to(skills_target)
             logger.debug("Skills symlink ready")
 
+            logger.debug("Setting up user_library symlink")
+            user_library_target = sandbox_path / "managed" / "user_library"
+            user_library_link = session_path / "user_library"
+            if user_library_link.is_symlink() or user_library_link.exists():
+                if user_library_link.is_symlink():
+                    user_library_link.unlink()
+                else:
+                    shutil.rmtree(user_library_link)
+            user_library_link.symlink_to(user_library_target)
+            logger.debug("User library symlink ready")
+
             # Setup attachments directory
             logger.debug("Setting up attachments directory")
             self._directory_manager.setup_attachments_directory(session_path)
@@ -943,16 +954,14 @@ class LocalSandboxManager(SandboxManager):
 
         entries = []
         for item in target_path.iterdir():
-            stat = item.stat()
             is_file = item.is_file()
-            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
             entries.append(
                 FilesystemEntry(
                     name=item.name,
                     path=str(item.relative_to(session_path)),
                     is_directory=item.is_dir(),
-                    size=stat.st_size if is_file else None,
-                    mime_type=mime_type,
+                    size=item.stat().st_size if is_file else None,
+                    mime_type=mimetypes.guess_type(str(item))[0] if is_file else None,
                 )
             )
 
