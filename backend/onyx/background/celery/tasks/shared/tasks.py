@@ -294,6 +294,7 @@ def _reconcile_batch_for_retry(
             connector_credential_pair_identifier=cc_pair_identifier,
         )
         mark_documents_as_modified(document_ids, db_session)
+        db_session.commit()
 
 
 @shared_task(
@@ -456,12 +457,18 @@ def document_by_cc_pair_bulk_cleanup_task(
         completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
 
         elapsed = time.monotonic() - start
+        # Use update_ids (bucketed) not update_ids_built (request built) so
+        # the skip count reflects what bucketing actually saw. Docs that
+        # bucketed as update but had a vanished row are tracked separately
+        # as "dropped" — they aren't truly skipped (count > 1 at bucket time)
+        # nor truly updated (no Phase 3 write).
+        dropped = len(update_ids) - len(update_ids_built)
+        skip = len(document_ids) - len(delete_ids) - len(update_ids)
         task_logger.info(
             "document_by_cc_pair_bulk_cleanup_task progress: "
             f"n={len(document_ids)} delete={len(delete_ids)} "
-            f"update={len(update_ids_built)} "
-            f"skip={len(document_ids) - len(delete_ids) - len(update_ids_built)} "
-            f"elapsed={elapsed:.2f}"
+            f"update={len(update_ids_built)} dropped={dropped} "
+            f"skip={skip} elapsed={elapsed:.2f}"
         )
     except SoftTimeLimitExceeded:
         # Bundled fix: previously the singular task silently dropped on
