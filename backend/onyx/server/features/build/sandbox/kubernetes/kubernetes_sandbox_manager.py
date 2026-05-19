@@ -329,6 +329,47 @@ class KubernetesSandboxManager(SandboxManager):
         service_name = self._get_service_name(sandbox_id)
         return f"http://{service_name}.{self._namespace}.svc.cluster.local:{port}"
 
+    def supports_idle_cleanup(self) -> bool:
+        """Kubernetes sandboxes support snapshot-driven idle cleanup."""
+        return True
+
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List valid session workspace IDs in the pod's /workspace/sessions/."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+
+            session_ids: list[UUID] = []
+            for line in resp.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    session_ids.append(UUID(line))
+                except ValueError:
+                    continue
+            return session_ids
+
+        except ApiException as e:
+            logger.warning("Failed to list session workspaces for %s: %s", sandbox_id, e)
+            return []
+
     def _load_agent_instructions(
         self,
         skills_section: str,
