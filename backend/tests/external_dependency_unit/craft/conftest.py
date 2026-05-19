@@ -229,13 +229,18 @@ class SandboxHandle:
     def skills_path(self) -> Path:
         return self.workspace_path / "managed" / "skills"
 
-    def provision_for(self, user: User) -> Path:
-        """Create a Sandbox row for ``user``, provision its FS, return workspace.
+    def provision_for(
+        self, user: User, status: SandboxStatus = SandboxStatus.RUNNING
+    ) -> tuple[Sandbox, Path]:
+        """Create a Sandbox row for ``user``, provision its FS, return (row, workspace).
 
         Use this when a test needs more than one sandbox provisioned under the
         same redirected ``SANDBOX_BASE_PATH`` — e.g. push-pipeline tests that
         iterate over a cohort from ``granted_users``. The new sandbox is
         terminated on teardown via the same finalizer chain the fixture set up.
+
+        If ``status`` is not RUNNING, the row is updated after provisioning
+        (the manager always starts with RUNNING).
         """
         sandbox_row = Sandbox(
             id=uuid4(),
@@ -253,7 +258,12 @@ class SandboxHandle:
             llm_config=self._llm_config,
         )
         self._register_extra(sandbox_row.id)
-        return self.base_path / str(sandbox_row.id)
+
+        if status != SandboxStatus.RUNNING:
+            sandbox_row.status = status
+            self._db_session.commit()
+
+        return sandbox_row, self.base_path / str(sandbox_row.id)
 
 
 @pytest.fixture(scope="function")
