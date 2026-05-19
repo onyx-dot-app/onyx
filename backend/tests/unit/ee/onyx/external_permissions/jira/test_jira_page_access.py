@@ -1,5 +1,8 @@
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+from pytest import LogCaptureFixture
 
 from ee.onyx.external_permissions.jira.page_access import get_project_permissions
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
@@ -163,16 +166,20 @@ def test_project_role_group_actor_uses_raw_actor_group_fallback() -> None:
     assert external_access.is_public is False
 
 
-def test_dynamic_only_holders_remain_empty_private_access() -> None:
+def test_dynamic_only_holders_remain_empty_private_access(
+    caplog: LogCaptureFixture,
+) -> None:
     jira_client = _jira_client(JIRA_SERVER_API_VERSION)
     jira_client.project_permissionscheme.return_value = _project_permissions(
         _permission({"type": "reporter"}),
         _permission({"type": "assignee"}),
     )
 
-    external_access = get_project_permissions(jira_client, PROJECT_KEY)
+    with caplog.at_level(logging.WARNING):
+        external_access = get_project_permissions(jira_client, PROJECT_KEY)
 
     assert external_access is not None
     assert external_access.external_user_emails == set()
     assert external_access.external_user_group_ids == set()
     assert external_access.is_public is False
+    assert all(record.levelno < logging.ERROR for record in caplog.records)

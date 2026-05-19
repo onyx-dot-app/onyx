@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import cast
 
 from jira import JIRA
 from jira.resources import PermissionScheme
@@ -43,17 +42,13 @@ def _get_role_id(holder: Holder) -> str | None:
 # depending on Jira version and endpoint.
 def _get_obj_value(obj: object, field: str) -> object | None:
     if isinstance(obj, dict):
-        obj_dict = cast(dict[str, object], obj)
-        return obj_dict.get(field)
+        return obj.get(field)  # ty: ignore[invalid-argument-type]
     return getattr(obj, field, None)
 
 
 def _get_raw_value(obj: object, field: str) -> object | None:
     raw = _get_obj_value(obj, "raw")
-    if not isinstance(raw, dict):
-        return None
-    raw_dict = cast(dict[str, object], raw)
-    return raw_dict.get(field)
+    return _get_obj_value(raw, field)
 
 
 def _get_first_str_value(obj: object, fields: tuple[str, ...]) -> str | None:
@@ -222,15 +217,13 @@ def _get_user_emails(jira_project: str, user_holders: list[Holder]) -> list[str]
 
 
 def _get_actor_group_name(actor: object) -> str | None:
-    actor_group = _get_obj_value(actor, "actorGroup")
-    if actor_group is not None:
+    for actor_group in [
+        _get_obj_value(actor, "actorGroup"),
+        _get_raw_value(actor, "actorGroup"),
+    ]:
+        if actor_group is None:
+            continue
         group_name = _get_first_str_value(actor_group, ("name", "displayName"))
-        if group_name:
-            return group_name
-
-    raw_actor_group = _get_raw_value(actor, "actorGroup")
-    if raw_actor_group is not None:
-        group_name = _get_first_str_value(raw_actor_group, ("name", "displayName"))
         if group_name:
             return group_name
 
@@ -525,6 +518,9 @@ def _build_external_access_from_holder_map(
 
     external_user_emails = set(user_emails + project_role_user_emails)
     external_user_group_ids = set(project_role_groups + direct_groups)
+    has_supported_static_holders = any(
+        holder_type in holder_map for holder_type in SUPPORTED_STATIC_HOLDER_TYPES
+    )
 
     if not external_user_group_ids:
         logger.warning(
@@ -545,13 +541,24 @@ def _build_external_access_from_holder_map(
         )
 
     if not external_user_emails and not external_user_group_ids:
-        logger.error(
-            "Jira project %s resolved to empty private ExternalAccess; "
-            "holder_counts=%s unsupported_holder_counts=%s",
-            jira_project,
-            holder_counts,
-            unsupported_holder_counts,
-        )
+        if has_supported_static_holders:
+            logger.error(
+                "Jira project %s resolved to empty private ExternalAccess; "
+                "holder_counts=%s unsupported_holder_counts=%s",
+                jira_project,
+                holder_counts,
+                unsupported_holder_counts,
+            )
+        else:
+            logger.warning(
+                "Jira project %s resolved to empty private ExternalAccess from "
+                "unsupported or dynamic-only %s holders; holder_counts=%s "
+                "unsupported_holder_counts=%s",
+                jira_project,
+                BROWSE_PROJECTS_PERMISSION,
+                holder_counts,
+                unsupported_holder_counts,
+            )
 
     return ExternalAccess(
         external_user_emails=external_user_emails,
