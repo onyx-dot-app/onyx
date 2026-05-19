@@ -584,6 +584,22 @@ STREAM_DOWNLOAD_MAX_RETRIES = 3
 STREAM_CHUNK_SIZE = 64 * 1024
 
 
+def _redact_url_for_logging(url: str, max_len: int = 120) -> str:
+    """Return a log-safe identifier for a URL.
+
+    Microsoft's ``@microsoft.graph.downloadUrl`` is a pre-authenticated link
+    whose query string carries a ``tempauth=`` JWT (and similar credential
+    parameters). Logging the raw URL — even truncated — can leak a working
+    download credential into log aggregators. Strip query and fragment, keep
+    just ``scheme://host/path`` truncated to ``max_len`` for grep-ability.
+    """
+    parts = urlsplit(url)
+    safe = f"{parts.scheme}://{parts.netloc}{parts.path}"
+    if len(safe) > max_len:
+        safe = safe[:max_len] + "..."
+    return safe
+
+
 def _stream_response_to_buffer_with_cap(
     request_factory: Callable[[], requests.Response],
     cap: int,
@@ -594,10 +610,9 @@ def _stream_response_to_buffer_with_cap(
     transport-level failures.
 
     SharePoint / Graph occasionally drop the TCP connection mid-body (surfaces
-    as `ChunkedEncodingError: IncompleteRead`, a subclass of
-    `requests.ConnectionError`). Each retry calls ``request_factory`` again to
-    obtain a fresh ``Response`` -- this also avoids reusing a stale socket from
-    urllib3's connection pool.
+    as `ChunkedEncodingError: IncompleteRead`). Each retry calls
+    ``request_factory`` again to obtain a fresh ``Response`` -- this also
+    avoids reusing a stale socket from urllib3's connection pool.
 
     Args:
         request_factory: Zero-arg callable that issues a streaming GET and
@@ -685,7 +700,7 @@ def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
         return requests.get(url, stream=True, timeout=timeout)
 
     return _stream_response_to_buffer_with_cap(
-        _factory, cap, description=f"downloadUrl:{url[:120]}"
+        _factory, cap, description=f"downloadUrl:{_redact_url_for_logging(url)}"
     )
 
 

@@ -19,6 +19,7 @@ import requests
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import _download_via_graph_api
 from onyx.connectors.sharepoint.connector import _download_with_cap
+from onyx.connectors.sharepoint.connector import _redact_url_for_logging
 from onyx.connectors.sharepoint.connector import SizeCapExceeded
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
@@ -239,3 +240,70 @@ def test_backoff_seconds_falls_back_when_retry_after_unparseable() -> None:
             0, retry_after="Wed, 21 Oct 2026 07:28:00 GMT"
         )
         assert base / 2 <= s <= base
+
+
+# Sentinel value used in tests below to simulate a leaked credential parameter.
+# `@microsoft.graph.downloadUrl` query strings carry a JWT in `tempauth=`. We
+# use a clearly-fake marker (no real JWT prefix) so this test file is friendly
+# to credential scanners.
+_FAKE_TEMPAUTH = "TEST-FAKE-TEMPAUTH-DO-NOT-LOG"
+
+
+def test_redact_url_strips_query_string_with_tempauth() -> None:
+    """tempauth and other query parameters must never survive into the description."""
+    raw = (
+        "https://tenant.sharepoint.com/sites/Foo/_layouts/15/download.aspx"
+        f"?UniqueId=abc&Translate=false&tempauth={_FAKE_TEMPAUTH}&ApiVersion=2.1"
+    )
+    safe = _redact_url_for_logging(raw)
+    assert "tempauth" not in safe
+    assert _FAKE_TEMPAUTH not in safe
+    assert "?" not in safe
+    assert safe.startswith("https://tenant.sharepoint.com/sites/Foo/")
+
+
+def test_redact_url_truncates_overly_long_paths() -> None:
+    """Even after stripping the query, a runaway path is bounded for log size."""
+    raw = "https://tenant.sharepoint.com/" + "a" * 500
+    safe = _redact_url_for_logging(raw, max_len=80)
+    assert len(safe) <= 80 + len("...")
+    assert safe.endswith("...")
+
+
+@patch("onyx.connectors.sharepoint.connector.time")
+@patch("onyx.connectors.sharepoint.connector.logger")
+@patch("onyx.connectors.sharepoint.connector.requests.get")
+def test_download_with_cap_does_not_log_tempauth_token(
+    mock_get: MagicMock,
+    mock_logger: MagicMock,
+    mock_time: MagicMock,  # noqa: ARG001
+) -> None:
+    """A failing download must never write the preauthenticated URL to the logger.
+
+    Without redaction the description string would carry the full downloadUrl
+    (including ``tempauth=...``) into every retry/exhaustion log line, which is
+    a credential leak into log aggregators.
+    """
+    raw_url = (
+        "https://tenant.sharepoint.com/sites/Foo/_layouts/15/download.aspx"
+        f"?UniqueId=abc&tempauth={_FAKE_TEMPAUTH}&ApiVersion=2.1"
+    )
+    mock_get.side_effect = [
+        _make_response(
+            raise_during_iter=requests.exceptions.ChunkedEncodingError("boom")
+        )
+        for _ in range(sp_connector.STREAM_DOWNLOAD_MAX_RETRIES + 1)
+    ]
+
+    with pytest.raises(requests.exceptions.ChunkedEncodingError):
+        _download_with_cap(raw_url, timeout=60, cap=CAP)
+
+    # Flatten every positional/keyword arg from every logger call into one blob
+    # and assert no credential material made it through.
+    all_log_args: list[Any] = []
+    for call in mock_logger.warning.call_args_list + mock_logger.error.call_args_list:
+        all_log_args.extend(call.args)
+        all_log_args.extend(call.kwargs.values())
+    blob = " ".join(str(a) for a in all_log_args)
+    assert _FAKE_TEMPAUTH not in blob
+    assert "tempauth" not in blob
