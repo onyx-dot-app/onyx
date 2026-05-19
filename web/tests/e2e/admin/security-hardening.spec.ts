@@ -50,19 +50,4 @@ test.describe("Security Hardening Page @exclusive", () => {
     });
   });
 
-  test("environment configuration panel renders status badges", async ({
-    page,
-  }) => {
-    await page.goto("/admin/security");
-    await page.waitForLoadState("networkidle");
-
-    await expect(page.getByText("Environment Configuration")).toBeVisible({
-      timeout: 10000,
-    });
-    // Each row is rendered — check a few labels we expect to exist regardless
-    // of the underlying configuration.
-    await expect(page.getByText("Encryption Key")).toBeVisible();
-    await expect(page.getByText("User Auth Secret")).toBeVisible();
-    await expect(page.getByText("Authentication Type")).toBeVisible();
-  });
 });

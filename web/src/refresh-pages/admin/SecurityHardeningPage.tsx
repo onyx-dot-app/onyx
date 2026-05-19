@@ -14,19 +14,11 @@ import InputChipField, {
   type ChipItem,
 } from "@/refresh-components/inputs/InputChipField";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
-import {
-  Button,
-  Card,
-  Divider,
-  Tag,
-  Text,
-} from "@opal/components";
-import { SvgCheck, SvgX } from "@opal/icons";
+import { Card, Divider, Text } from "@opal/components";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
 
 const SECURITY_SETTINGS_KEY = "/api/admin/security";
-const SECURITY_STATUS_KEY = "/api/admin/security/status";
 
 interface SecuritySettings {
   user_directory_admin_only: boolean | null;
@@ -40,31 +32,6 @@ interface SecuritySettings {
   password_require_lowercase: boolean | null;
   password_require_digit: boolean | null;
   password_require_special_char: boolean | null;
-}
-
-interface SecurityStatus {
-  auth_type: string;
-  multi_tenant: boolean;
-  encryption_key_configured: boolean;
-  user_auth_secret_configured: boolean;
-  oauth_configured: boolean;
-  oidc_configured: boolean;
-  oidc_pkce_enabled: boolean;
-  saml_configured: boolean;
-  jwt_public_key_configured: boolean;
-  cors_restricted: boolean;
-}
-
-interface StatusBadgeProps {
-  configured: boolean;
-}
-
-function StatusBadge({ configured }: StatusBadgeProps) {
-  return configured ? (
-    <Tag title="Configured" color="green" icon={SvgCheck} />
-  ) : (
-    <Tag title="Not configured" color="gray" icon={SvgX} />
-  );
 }
 
 interface ToggleRowProps {
@@ -92,10 +59,6 @@ export default function SecurityHardeningPage() {
 
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(SECURITY_SETTINGS_KEY, errorHandlingFetcher);
-  const { data: status, isLoading: statusLoading } = useSWR<SecurityStatus>(
-    SECURITY_STATUS_KEY,
-    errorHandlingFetcher
-  );
 
   // Local state mirrors the loaded settings; we save on every change.
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
@@ -133,7 +96,7 @@ export default function SecurityHardeningPage() {
     [draft]
   );
 
-  if (settingsLoading || statusLoading || !draft || !status) {
+  if (settingsLoading || !draft) {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
@@ -251,10 +214,7 @@ export default function SecurityHardeningPage() {
                 </Text>
                 <div className="flex gap-4 w-full items-start pt-2">
                   <div className="flex-1">
-                    <InputVertical
-                      title="Minimum Length"
-                      withLabel
-                    >
+                    <InputVertical title="Minimum Length" withLabel>
                       <InputNumber
                         value={draft.password_min_length}
                         onChange={(value) =>
@@ -322,104 +282,6 @@ export default function SecurityHardeningPage() {
             </Card>
           </>
         )}
-
-        {/* Card 3 — Environment configuration (read-only) */}
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-
-        <Card border="solid" rounding="lg">
-          <Section>
-            <Text font="heading-h3" color="text-04">
-              Environment Configuration
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              These settings are baked in at deployment time and can only be
-              changed by your operator via environment variables.
-            </Text>
-
-            <InputHorizontal
-              title="Authentication Type"
-              description="Configured via the AUTH_TYPE environment variable."
-              withLabel
-            >
-              <Tag title={status.auth_type} color="blue" />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="Multi-Tenant Mode"
-              description="Whether this deployment serves multiple tenants."
-              withLabel
-            >
-              <Tag
-                title={status.multi_tenant ? "Enabled" : "Disabled"}
-                color={status.multi_tenant ? "blue" : "gray"}
-              />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="Encryption Key"
-              description="ENCRYPTION_KEY_SECRET — required to encrypt connector credentials at rest."
-              withLabel
-            >
-              <StatusBadge configured={status.encryption_key_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="User Auth Secret"
-              description="USER_AUTH_SECRET — required to sign session cookies and JWTs."
-              withLabel
-            >
-              <StatusBadge configured={status.user_auth_secret_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="OAuth"
-              description="OAUTH_CLIENT_ID — Google / generic OAuth provider configuration."
-              withLabel
-            >
-              <StatusBadge configured={status.oauth_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="OIDC"
-              description="OPENID_CONFIG_URL or AUTH_TYPE=oidc."
-              withLabel
-            >
-              <StatusBadge configured={status.oidc_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="OIDC PKCE"
-              description="OIDC_PKCE_ENABLED — Proof Key for Code Exchange flow."
-              withLabel
-            >
-              <StatusBadge configured={status.oidc_pkce_enabled} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="SAML"
-              description="AUTH_TYPE=saml — SAML SSO configuration."
-              withLabel
-            >
-              <StatusBadge configured={status.saml_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="JWT Public Key"
-              description="JWT_PUBLIC_KEY_URL — verifies bearer tokens from external systems."
-              withLabel
-            >
-              <StatusBadge configured={status.jwt_public_key_configured} />
-            </InputHorizontal>
-
-            <InputHorizontal
-              title="CORS Allowlist"
-              description="CORS_ALLOWED_ORIGIN — restricts which origins can call the API."
-              withLabel
-            >
-              <StatusBadge configured={status.cors_restricted} />
-            </InputHorizontal>
-          </Section>
-        </Card>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

@@ -2,23 +2,13 @@ from fastapi import APIRouter
 from fastapi import Depends
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
-from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OIDC_PKCE_ENABLED
-from onyx.configs.app_configs import OPENID_CONFIG_URL
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.constants import AuthType
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import SecuritySettings
-from onyx.server.security.models import SecurityStatus
 from onyx.server.security.store import load_security_settings
 from onyx.server.security.store import store_security_settings
-from shared_configs.configs import CORS_ALLOWED_ORIGIN_ENV
 from shared_configs.configs import MULTI_TENANT
 
 admin_router = APIRouter(prefix="/admin/security")
@@ -73,29 +63,3 @@ def admin_put_security_settings(
         )
 
     store_security_settings(settings)
-
-
-@admin_router.get("/status")
-def admin_get_security_status(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> SecurityStatus:
-    saml_configured = AUTH_TYPE == AuthType.SAML
-    oidc_configured = bool(OPENID_CONFIG_URL) or AUTH_TYPE == AuthType.OIDC
-    return SecurityStatus(
-        auth_type=AUTH_TYPE.value,
-        multi_tenant=MULTI_TENANT,
-        encryption_key_configured=bool(ENCRYPTION_KEY_SECRET),
-        user_auth_secret_configured=bool(USER_AUTH_SECRET),
-        oauth_configured=bool(OAUTH_CLIENT_ID),
-        oidc_configured=oidc_configured,
-        oidc_pkce_enabled=OIDC_PKCE_ENABLED,
-        saml_configured=saml_configured,
-        jwt_public_key_configured=bool(JWT_PUBLIC_KEY_URL),
-        cors_restricted=_is_cors_restricted(),
-    )
-
-
-def _is_cors_restricted() -> bool:
-    # Unset / empty / "*" all mean "allow any origin"; treat anything else
-    # as a real allowlist.
-    return bool(CORS_ALLOWED_ORIGIN_ENV.strip()) and CORS_ALLOWED_ORIGIN_ENV.strip() != "*"

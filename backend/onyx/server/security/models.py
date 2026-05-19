@@ -26,20 +26,3 @@ class SecuritySettings(BaseModel):
     password_require_lowercase: bool | None = None
     password_require_digit: bool | None = None
     password_require_special_char: bool | None = None
-
-
-class SecurityStatus(BaseModel):
-    """Read-only audit panel: reports whether env-only security knobs are
-    configured. Returns booleans/labels only, never secret values.
-    """
-
-    auth_type: str
-    multi_tenant: bool
-    encryption_key_configured: bool
-    user_auth_secret_configured: bool
-    oauth_configured: bool
-    oidc_configured: bool
-    oidc_pkce_enabled: bool
-    saml_configured: bool
-    jwt_public_key_configured: bool
-    cors_restricted: bool

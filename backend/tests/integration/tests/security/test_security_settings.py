@@ -77,24 +77,6 @@ def test_put_security_settings_requires_admin(
     assert response.status_code in (401, 403), response.text
 
 
-def test_security_status_endpoint(admin_user: DATestUser) -> None:
-    response = requests.get(f"{SECURITY_URL}/status", headers=admin_user.headers)
-    response.raise_for_status()
-    status = response.json()
-
-    # All expected keys are present and have the right types.
-    assert isinstance(status["auth_type"], str)
-    assert isinstance(status["multi_tenant"], bool)
-    assert isinstance(status["encryption_key_configured"], bool)
-    assert isinstance(status["user_auth_secret_configured"], bool)
-    assert isinstance(status["oauth_configured"], bool)
-    assert isinstance(status["oidc_configured"], bool)
-    assert isinstance(status["oidc_pkce_enabled"], bool)
-    assert isinstance(status["saml_configured"], bool)
-    assert isinstance(status["jwt_public_key_configured"], bool)
-    assert isinstance(status["cors_restricted"], bool)
-
-
 def test_user_directory_admin_only_gates_list_users(
     admin_user: DATestUser,
     basic_user: DATestUser,
