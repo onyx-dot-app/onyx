@@ -148,8 +148,8 @@ def observe_opensearch_search(
                     client_duration_s,
                     server_took_ms,
                 )
-                return
-            _client_server_overhead.labels(search_type=label).observe(overhead_s)
+            else:
+                _client_server_overhead.labels(search_type=label).observe(overhead_s)
     except Exception:
         logger.warning("Failed to record OpenSearch search metrics.", exc_info=True)
 
