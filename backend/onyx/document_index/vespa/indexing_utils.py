@@ -21,7 +21,7 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.document_index.document_index_utils import get_uuid_from_chunk
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
-from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
+from onyx.document_index.vespa.internal_types import MinimalDocumentIndexingInfo
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )

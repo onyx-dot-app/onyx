@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import re
 import shutil
 import stat
@@ -15,8 +16,12 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.registry import BuiltinSkillRegistry
 
-DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
-DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * 1024 * 1024
+DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024
+)
+DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * 1024 * 1024
+)
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"

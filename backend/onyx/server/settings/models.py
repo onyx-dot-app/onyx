@@ -30,6 +30,12 @@ class ApplicationStatus(str, Enum):
     SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded"
 
 
+class Tier(str, Enum):
+    COMMUNITY = "community"
+    BUSINESS = "business"
+    ENTERPRISE = "enterprise"
+
+
 class Notification(BaseModel):
     id: int
     notif_type: NotificationType
@@ -75,6 +81,9 @@ class Settings(BaseModel):
     # or the license is expired (GATED_ACCESS).
     # This controls UI visibility of EE features (user groups, analytics, RBAC, etc.).
     ee_features_enabled: bool = False
+
+    # Resolved per-tenant tier for ENTERPRISE-only feature gating in the FE.
+    tier: Tier = Tier.COMMUNITY
 
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
@@ -134,3 +143,7 @@ class UserSettings(Settings):
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         )
     )
+    # True when the backend is running inside a container (Docker/Podman).
+    # The frontend uses this to default local-service URLs (e.g. Ollama,
+    # LM Studio) to host.docker.internal instead of localhost.
+    is_containerized: bool = False

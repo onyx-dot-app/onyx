@@ -1,8 +1,9 @@
 from onyx.db.document import get_document_kg_entities_and_relationships
 from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.vespa_document_index import KGUChunkUpdateRequest
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -15,13 +16,10 @@ def update_kg_chunks_vespa_info(
     tenant_id: str,
 ) -> None:
     """ """
-    # Use the existing visit API infrastructure
-    vespa_index = VespaIndex(
+    vespa_index = VespaDocumentIndex(
         index_name=index_name,
-        secondary_index_name=None,
+        tenant_state=TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT),
         large_chunks_enabled=False,
-        secondary_large_chunks_enabled=False,
-        multitenant=MULTI_TENANT,
         httpx_client=None,
     )
 

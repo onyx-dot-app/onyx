@@ -11,6 +11,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from opensearchpy import ConflictError
@@ -25,11 +26,13 @@ from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import OpenSearchIndexError
+from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
 from onyx.document_index.opensearch.client import OpenSearchUpdateError
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
@@ -2340,3 +2343,107 @@ class TestOpenSearchClient:
         )
         assert results[1].score
         assert 0.0 < results[1].score < 1.0
+
+
+class TestSearchFailureMetrics:
+    """Regression coverage for the OpenSearch search failure-rate metric.
+
+    Before the fix, ``self._log_search_result_perf(..., raise_on_timeout=True)``
+    ran after the metrics ``try/except`` block. When OpenSearch returned
+    ``"timed_out": true`` in the response body, the helper raised
+    ``RuntimeError`` outside the ``except`` arm, so the failure never reached
+    ``record_opensearch_search_error`` and ``observe_opensearch_search`` had
+    already been called with the timed-out duration.
+    """
+
+    @staticmethod
+    def _timed_out_response() -> dict[str, Any]:
+        """
+        A minimally-valid mock OpenSearch search response with timed_out=true.
+        """
+        return {
+            "took": 1234,
+            "timed_out": True,
+            "hits": {"hits": []},
+        }
+
+    @staticmethod
+    def _make_client_with_canned_response(
+        monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]
+    ) -> OpenSearchIndexClient:
+        """
+        Patches the OpenSearch class imported by ``client_module`` so that
+        ``OpenSearchIndexClient.__init__`` constructs a mocked underlying client
+        whose ``.search`` returns a mocked response. Lets us drive the timeout
+        code path without hitting a real OpenSearch.
+        """
+        mock_underlying = MagicMock()
+        mock_underlying.search.return_value = response
+        monkeypatch.setattr(
+            client_module, "OpenSearch", MagicMock(return_value=mock_underlying)
+        )
+        return OpenSearchIndexClient(index_name="test_index")
+
+    def test_search_records_error_on_server_side_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Precondition.
+        # Stub the metric boundary functions so we can assert the client routes
+        # a timed-out response through the error path rather than the success
+        # path.
+        record_error_mock = MagicMock()
+        observe_mock = MagicMock()
+        monkeypatch.setattr(
+            client_module, "record_opensearch_search_error", record_error_mock
+        )
+        monkeypatch.setattr(client_module, "observe_opensearch_search", observe_mock)
+
+        client = self._make_client_with_canned_response(
+            monkeypatch, self._timed_out_response()
+        )
+
+        # Under test.
+        with pytest.raises(OpenSearchServerSideTimeout, match="timed out"):
+            client.search(
+                body={},
+                search_pipeline_id=None,
+                search_type=OpenSearchSearchType.HYBRID,
+            )
+
+        # Postcondition.
+        # The timed-out search was recorded as an error and was NOT observed in
+        # the latency histograms.
+        assert record_error_mock.call_count == 1
+        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        assert recorded_search_type == OpenSearchSearchType.HYBRID
+        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert observe_mock.call_count == 0
+
+    def test_search_for_document_ids_records_error_on_server_side_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Precondition.
+        record_error_mock = MagicMock()
+        observe_mock = MagicMock()
+        monkeypatch.setattr(
+            client_module, "record_opensearch_search_error", record_error_mock
+        )
+        monkeypatch.setattr(client_module, "observe_opensearch_search", observe_mock)
+
+        client = self._make_client_with_canned_response(
+            monkeypatch, self._timed_out_response()
+        )
+
+        # Under test.
+        with pytest.raises(OpenSearchServerSideTimeout, match="timed out"):
+            client.search_for_document_ids(
+                body={"_source": False},
+                search_type=OpenSearchSearchType.KEYWORD,
+            )
+
+        # Postcondition.
+        assert record_error_mock.call_count == 1
+        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        assert recorded_search_type == OpenSearchSearchType.KEYWORD
+        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert observe_mock.call_count == 0

@@ -452,7 +452,7 @@ def _is_port_available(port: int) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("0.0.0.0", port))
+            sock.bind(("0.0.0.0", port))  # noqa: S104 — port availability probe; binds wildcard to detect any listener
             logger.debug("Port %s IPv4 wildcard bind successful", port)
     except OSError as e:
         logger.debug("Port %s IPv4 wildcard not available: %s", port, e)

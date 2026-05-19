@@ -9,12 +9,13 @@ import requests
 from alembic import command
 from alembic.config import Config
 
+from onyx.configs.app_configs import DOCUMENT_INDEX_NAME
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
-from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,13 +59,14 @@ def load_postgres(filename: str, container_name: str) -> None:
 
 def save_vespa(filename: str) -> None:
     logger.notice("Attempting to take Vespa snapshot")
+    endpoint = DOCUMENT_ID_ENDPOINT.format(index_name=DOCUMENT_INDEX_NAME)
     continuation = ""
     params = {}
     doc_jsons: list[dict] = []
     while continuation is not None:
         if continuation:
             params = {"continuation": continuation}
-        response = requests.get(DOCUMENT_ID_ENDPOINT, params=params)
+        response = requests.get(endpoint, params=params)
         response.raise_for_status()
         found = response.json()
         continuation = found.get("continuation")
@@ -81,12 +83,13 @@ def save_vespa(filename: str) -> None:
 
 def load_vespa(filename: str) -> None:
     headers = {"Content-Type": "application/json"}
+    endpoint = DOCUMENT_ID_ENDPOINT.format(index_name=DOCUMENT_INDEX_NAME)
     with open(filename, "r") as f:
         for line in f:
             new_doc = json.loads(line.strip())
             doc_id = new_doc["update"].split("::")[-1]
             response = requests.post(
-                DOCUMENT_ID_ENDPOINT + "/" + doc_id,
+                endpoint + "/" + doc_id,
                 headers=headers,
                 json=new_doc,
             )

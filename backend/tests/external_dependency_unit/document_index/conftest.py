@@ -17,16 +17,16 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
+    OpenSearchDocumentIndex,
 )
-from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -144,25 +144,21 @@ def vespa_index(
     httpx_client: httpx.Client,
     tenant_context: None,  # noqa: ARG001
     test_index_name: str,
-) -> Generator[VespaIndex, None, None]:
+) -> Generator[VespaDocumentIndex, None, None]:
     """Create a Vespa index, wait for schema readiness, and yield it."""
-    vespa_idx = VespaIndex(
+    vespa_idx = VespaDocumentIndex(
         index_name=test_index_name,
-        secondary_index_name=None,
+        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
         large_chunks_enabled=False,
-        secondary_large_chunks_enabled=None,
-        multitenant=MULTI_TENANT,
         httpx_client=httpx_client,
     )
     backend_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "..")
     )
     with patch("os.getcwd", return_value=backend_dir):
-        vespa_idx.ensure_indices_exist(
-            primary_embedding_dim=EMBEDDING_DIM,
-            primary_embedding_precision=EmbeddingPrecision.FLOAT,
-            secondary_index_embedding_dim=None,
-            secondary_index_embedding_precision=None,
+        vespa_idx.verify_and_create_index_if_necessary(
+            embedding_dim=EMBEDDING_DIM,
+            embedding_precision=EmbeddingPrecision.FLOAT,
         )
     if not wait_for_vespa_with_timeout(wait_limit=90):
         pytest.fail("Vespa is not available.")
@@ -219,30 +215,23 @@ def vespa_index(
 
 
 @pytest.fixture(scope="module")
-def opensearch_old_index(
+def opensearch_index(
     tenant_context: None,  # noqa: ARG001
     test_index_name: str,
-) -> Generator[OpenSearchOldDocumentIndex, None, None]:
-    """Create an OpenSearch index via the old adapter and yield it."""
+) -> Generator[OpenSearchDocumentIndex, None, None]:
+    """Create an OpenSearch index and yield the underlying DocumentIndex."""
     if not wait_for_opensearch_with_timeout():
         pytest.fail("OpenSearch is not available.")
 
-    opensearch_idx = OpenSearchOldDocumentIndex(
+    opensearch_idx = OpenSearchDocumentIndex(
+        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,
-        secondary_index_name=None,
-        secondary_embedding_dim=None,
-        secondary_embedding_precision=None,
-        large_chunks_enabled=False,
-        secondary_large_chunks_enabled=None,
-        multitenant=MULTI_TENANT,
     )
-    opensearch_idx.ensure_indices_exist(
-        primary_embedding_dim=EMBEDDING_DIM,
-        primary_embedding_precision=EmbeddingPrecision.FLOAT,
-        secondary_index_embedding_dim=None,
-        secondary_index_embedding_precision=None,
+    opensearch_idx.verify_and_create_index_if_necessary(
+        embedding_dim=EMBEDDING_DIM,
+        embedding_precision=EmbeddingPrecision.FLOAT,
     )
 
     yield opensearch_idx

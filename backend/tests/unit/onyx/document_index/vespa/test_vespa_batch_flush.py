@@ -12,9 +12,9 @@ from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
 from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk

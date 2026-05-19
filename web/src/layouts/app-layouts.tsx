@@ -62,7 +62,8 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { APP_SLOGAN } from "@/lib/constants";
 
@@ -81,7 +82,7 @@ import { APP_SLOGAN } from "@/lib/constants";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
@@ -323,7 +324,7 @@ function Header() {
               onClick={() => setFolded(false)}
             />
           )}
-          {isPaidEnterpriseFeaturesEnabled &&
+          {businessTier &&
             settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
             state.phase === "idle" && (

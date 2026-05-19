@@ -410,18 +410,16 @@ def monitor_connector_deletion_taskset(
         # the fence is setting up but isn't ready yet
         return
 
-    remaining = redis_connector.delete.get_remaining()
-    task_logger.info(
-        f"Connector deletion progress: cc_pair={cc_pair_id} remaining={remaining} initial={fence_data.num_tasks}"
-    )
-    if remaining > 0:
+    # Check if the taskset still exists in Redis without reading its size.
+    # redis.exists() is O(1) and very cheap, whereas scard() on 150k+ items OOMKills.
+    if r.exists(redis_connector.delete.taskset_key):
         with get_session_with_current_tenant() as db_session:
             update_sync_record_status(
                 db_session=db_session,
                 entity_id=cc_pair_id,
                 sync_type=SyncType.CONNECTOR_DELETION,
                 sync_status=SyncStatus.IN_PROGRESS,
-                num_docs_synced=remaining,
+                num_docs_synced=fence_data.num_tasks,
             )
         return
 

@@ -271,6 +271,7 @@ def update_license_cache(
         expiry_warning_stage=warning_stage,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
+        customer_tier=payload.customer_tier,
     )
 
     cache.set(

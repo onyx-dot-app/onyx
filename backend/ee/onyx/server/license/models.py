@@ -17,6 +17,13 @@ class LicenseSource(str, Enum):
     MANUAL_UPLOAD = "manual_upload"
 
 
+class CustomerTier(str, Enum):
+    """Paid-tier wire format from the control plane (no COMMUNITY)."""
+
+    BUSINESS = "BUSINESS"
+    ENTERPRISE = "ENTERPRISE"
+
+
 class LicensePayload(BaseModel):
     """The payload portion of a signed license."""
 
@@ -31,6 +38,7 @@ class LicensePayload(BaseModel):
     grace_period_days: int = 30
     stripe_subscription_id: str | None = None
     stripe_customer_id: str | None = None
+    customer_tier: CustomerTier | None = None
 
 
 class LicenseData(BaseModel):
@@ -55,6 +63,7 @@ class LicenseMetadata(BaseModel):
     expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
+    customer_tier: CustomerTier | None = None
 
 
 class LicenseStatusResponse(BaseModel):

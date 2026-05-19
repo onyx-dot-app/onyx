@@ -23,7 +23,7 @@ from onyx.db.models import Document
 from onyx.db.models import FederatedConnector
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
 from tests.regression.search_quality.models import CombinedMetrics
@@ -91,8 +91,8 @@ def get_doc_contents(
 
     filters = IndexFilters(access_control_list=None, tenant_id=tenant_id)
 
-    reqs: list[VespaChunkRequest] = [
-        VespaChunkRequest(
+    reqs: list[DocumentSectionRequest] = [
+        DocumentSectionRequest(
             document_id=doc.document_id,
             min_chunk_ind=doc.chunk_ind,
             max_chunk_ind=doc.chunk_ind,

@@ -1,3 +1,8 @@
+# Named `platform_utils` (not `platform`) because `supervisord_watchdog.py` in this
+# same directory is launched as a script (`python onyx/utils/supervisord_watchdog.py`),
+# which puts this directory on `sys.path[0]`. A module named `platform.py` here would
+# then shadow the stdlib `platform`, breaking `uuid` (which calls `platform.system()`)
+# and any transitive import of it (e.g. `redis`). See issue #10975.
 import os
 import warnings
 

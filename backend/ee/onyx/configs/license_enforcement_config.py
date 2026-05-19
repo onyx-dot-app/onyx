@@ -1,11 +1,20 @@
-"""Constants for license enforcement.
+"""Constants for license enforcement and per-feature tier gating.
 
-This file is the single source of truth for:
-1. Paths that bypass license enforcement (always accessible)
-2. Paths that require an EE license (EE-only features)
+Two related concerns live here, both consumed by the `tier_gate` middleware:
 
-Import these constants in both production code and tests to ensure consistency.
+1. `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` — paths that bypass license
+   enforcement entirely (auth, billing, health checks, etc.).
+2. `PATH_PREFIX_MIN_TIER` — minimum tier required to access a given path
+   prefix. `Tier.BUSINESS` = Business+. `Tier.ENTERPRISE` = Enterprise only.
+   Longest-prefix-wins, so a nested path can resolve to a stricter tier
+   than its parent (e.g. `/admin/enterprise-settings/scim` is ENTERPRISE
+   even though `/admin/enterprise-settings` is BUSINESS).
+
+Import these constants in both production code and tests to ensure
+consistency.
 """
+
+from onyx.server.settings.models import Tier
 
 # Paths that are ALWAYS accessible, even when license is expired/gated.
 # These enable users to:
@@ -48,28 +57,24 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
     }
 )
 
-# EE-only paths that require a valid license.
-# Users without a license (community edition) cannot access these.
-# These are blocked even when user has never subscribed (no license).
-EE_ONLY_PATH_PREFIXES: frozenset[str] = frozenset(
-    {
-        # User groups and access control
-        "/manage/admin/user-group",
-        # Analytics and reporting
-        "/analytics",
-        # Query history (admin chat session endpoints)
-        "/admin/chat-sessions",
-        "/admin/chat-session-history",
-        "/admin/query-history",
-        # Usage reporting/export
-        "/admin/usage-report",
-        # Standard answers (canned responses)
-        "/manage/admin/standard-answer",
-        # Token rate limits
-        "/admin/token-rate-limits",
-        # Evals
-        "/evals",
-        # Hook extensions
-        "/admin/hooks",
-    }
-)
+
+PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
+    # ----- BUSINESS -----
+    "/admin/chat-sessions": Tier.BUSINESS,
+    "/admin/chat-session-history": Tier.BUSINESS,
+    "/admin/query-history": Tier.BUSINESS,
+    "/admin/usage-report": Tier.BUSINESS,
+    "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
+    "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
+    "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open
+    "/manage/admin/user-group": Tier.BUSINESS,  # groups + RBAC (Curator roles, group-scoped access)
+    # ----- ENTERPRISE -----
+    "/admin/enterprise-settings/custom-analytics-script": Tier.ENTERPRISE,  # JS injection
+    "/admin/enterprise-settings/scim": Tier.ENTERPRISE,  # SCIM token mgmt
+    "/manage/admin/standard-answer": Tier.ENTERPRISE,
+    "/admin/token-rate-limits": Tier.ENTERPRISE,
+    "/admin/hooks": Tier.ENTERPRISE,  # outbound webhooks
+    "/analytics": Tier.ENTERPRISE,  # non-admin analytics (e.g. assistant stats)
+    "/evals": Tier.ENTERPRISE,
+    "/scim": Tier.ENTERPRISE,  # SCIM protocol
+}

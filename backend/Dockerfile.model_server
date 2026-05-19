@@ -54,7 +54,7 @@ WORKDIR /app
 
 # Utils used by model server
 COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
-COPY ./onyx/utils/platform.py /app/onyx/utils/platform.py
+COPY ./onyx/utils/platform_utils.py /app/onyx/utils/platform_utils.py
 COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 COPY ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
 
