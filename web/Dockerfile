@@ -27,10 +27,6 @@ RUN npm ci
 # pull in remaining source code
 COPY . .
 
-# Build the opal design-system package so dist/ artifacts (colors.css, root.css,
-# styles.css, JS bundles) exist before Next.js resolves package exports.
-RUN npm run build --workspace=lib/opal
-
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
 
