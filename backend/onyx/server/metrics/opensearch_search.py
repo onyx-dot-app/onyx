@@ -51,6 +51,31 @@ _server_duration = Histogram(
     buckets=_SEARCH_LATENCY_BUCKETS,
 )
 
+# Tighter than the latency buckets because true network + serialization overhead
+# is almost always sub-second.
+_OVERHEAD_BUCKETS = (
+    0.001,
+    0.0025,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+)
+
+_client_server_overhead = Histogram(
+    "onyx_opensearch_search_overhead_seconds",
+    "Per-request overhead: client wall-clock duration minus server 'took'. Only "
+    "sampled when both are known. Lets the dashboard compute proper quantiles instead of "
+    "subtracting two independent quantile series.",
+    ["search_type"],
+    buckets=_OVERHEAD_BUCKETS,
+)
+
 _search_total = Counter(
     "onyx_opensearch_search_total",
     "Total number of OpenSearch search attempts (incremented before send, so this "
@@ -109,7 +134,22 @@ def observe_opensearch_search(
         label = search_type.value
         _client_duration.labels(search_type=label).observe(client_duration_s)
         if server_took_ms is not None:
-            _server_duration.labels(search_type=label).observe(server_took_ms / 1000.0)
+            server_duration_s = server_took_ms / 1000.0
+            _server_duration.labels(search_type=label).observe(server_duration_s)
+            overhead_s = client_duration_s - server_duration_s
+            # Overhead cannot be negative. If it is we assume that there was an
+            # error in timekeeping in OpenSearch, log a warning, and do not
+            # include it in our histogram.
+            if overhead_s < 0:
+                logger.warning(
+                    "OpenSearch search overhead is negative. Got a client duration "
+                    "of %s seconds and a server 'took' of %s milliseconds. This is not possible. "
+                    "Assuming there was an error in timekeeping in OpenSearch.",
+                    client_duration_s,
+                    server_took_ms,
+                )
+            else:
+                _client_server_overhead.labels(search_type=label).observe(overhead_s)
     except Exception:
         logger.warning("Failed to record OpenSearch search metrics.", exc_info=True)
 
