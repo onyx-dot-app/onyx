@@ -6,6 +6,7 @@
     "lib/opal"
   ],
   "scripts": {
+    "postinstall": "npm run build --workspace=@onyx-ai/opal",
     "dev": "next dev",
     "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
     "build": "next build",
