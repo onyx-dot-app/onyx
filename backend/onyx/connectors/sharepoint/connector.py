@@ -276,28 +276,23 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
 # HTTP statuses we treat as transient and worth retrying.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
-# HTTP statuses that scope a Graph error to a single SharePoint site rather
-# than the whole connector run. 404 is the common case: Graph's tenant-wide
-# `getAllSites` is search-indexed and eventually consistent, so it returns
-# ephemeral sites (e.g. ServiceNow-style `/teams/INC...`) that have already
-# been deleted in SharePoint. 403 covers per-site permission loss (sensitivity
-# labels, sharing restrictions). 410 is a deleted site. 400 covers malformed
-# per-site URLs. 401 and other 5xx are tenant-wide and abort the run.
-# Applies to the whole per-site block (lookup + iteration + per-page fetches).
-PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({400, 403, 404, 410})
+PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410})
 
 
-def _is_per_site_graph_failure(e: ClientRequestException) -> bool:
-    """Classify a ClientRequestException as per-site (skip & report) or
-    tenant-wide (re-raise to abort the run).
-
-    `e.response` may be None when the office365 SDK wraps a transport-level
-    failure with no HTTP response; the retry layer (`sleep_and_retry`) owns
-    that path, so we treat None as "raise".
-    """
+def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
+    # response=None means a wrapped transport error; the retry layer owns it.
     if e.response is None:
         return False
     return e.response.status_code in PER_SITE_GRAPH_FAILURE_STATUSES
+
+
+def _graph_error_code(response: requests.Response | None) -> str:
+    if response is None:
+        return "<no response>"
+    try:
+        return response.json().get("error", {}).get("code") or "<no code>"
+    except Exception:
+        return "<no code>"
 
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
@@ -2169,7 +2164,7 @@ class SharepointConnector(
                         if len(doc_batch) >= SLIM_BATCH_SIZE:
                             yield doc_batch
                             doc_batch = []
-                except ClientRequestException as e:
+                except (ClientRequestException, HTTPError) as e:
                     if not _is_per_site_graph_failure(e):
                         raise
                     # Slim sync can't yield ConnectorFailure; log-and-skip.
@@ -2181,7 +2176,8 @@ class SharepointConnector(
                             if e.response is not None
                             else "no response"
                         ),
-                        e.code or "<no code>",
+                        _graph_error_code(e.response),
+                        exc_info=True,
                     )
         yield doc_batch
 
@@ -2845,7 +2841,7 @@ class SharepointConnector(
                     "Finished processing site pages for site: %s",
                     site_descriptor.url,
                 )
-            except ClientRequestException as e:
+            except (ClientRequestException, HTTPError) as e:
                 if not _is_per_site_graph_failure(e):
                     raise
                 logger.warning(
@@ -2856,7 +2852,8 @@ class SharepointConnector(
                         if e.response is not None
                         else "no response"
                     ),
-                    e.code or "<no code>",
+                    _graph_error_code(e.response),
+                    exc_info=True,
                 )
                 yield _create_entity_failure(
                     site_descriptor.url,
