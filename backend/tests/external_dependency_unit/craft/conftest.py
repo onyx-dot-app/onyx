@@ -763,8 +763,13 @@ def pod_exec(
     pod_name: str,
     namespace: str,
     command: str | list[str],
+    container: str = "sandbox",
 ) -> str:
-    """Run a one-shot command in the sandbox container; return combined output.
+    """Run a one-shot command in a pod container; return combined output.
+
+    Defaults to the ``sandbox`` container. Pass ``container="sidecar"`` for
+    operations that need to write to ``/workspace/managed/`` (read-only in
+    the sandbox container) or inspect the sidecar's environment.
 
     ``command`` may be a shell-string (auto-wrapped in ``/bin/sh -c``) or an
     explicit argv list passed straight through to ``connect_get_namespaced_pod_exec``.
@@ -776,7 +781,7 @@ def pod_exec(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
         namespace=namespace,
-        container="sandbox",
+        container=container,
         command=argv,
         stderr=True,
         stdin=False,
