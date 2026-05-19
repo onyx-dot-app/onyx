@@ -101,7 +101,6 @@ When a session is created, the following structure is set up in the pod:
         │   └── skills      # Symlink → /workspace/managed/skills
         ├── outputs/        # Copied from templates, contains web app
         ├── attachments/    # User-uploaded files
-        ├── org_info/       # Demo persona info (if demo mode)
         ├── AGENTS.md       # Instructions for the AI agent
         └── opencode.json   # OpenCode configuration
 ```

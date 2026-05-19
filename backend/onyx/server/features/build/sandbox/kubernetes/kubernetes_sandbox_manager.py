@@ -102,14 +102,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -338,7 +330,6 @@ class KubernetesSandboxManager(SandboxManager):
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        include_org_info: bool = False,
     ) -> str:
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
@@ -350,7 +341,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=include_org_info,
         )
 
     def _create_sandbox_pod(
@@ -1094,8 +1084,6 @@ class KubernetesSandboxManager(SandboxManager):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1104,8 +1092,7 @@ class KubernetesSandboxManager(SandboxManager):
         2. Copy outputs template from local templates (downloaded during init)
         3. Write AGENTS.md
         4. Write opencode.json with LLM config
-        5. Create org_info/ directory with user identity file (if user_work_area provided)
-        6. Start Next.js dev server (skipped when ``nextjs_port`` is None,
+        5. Start Next.js dev server (skipped when ``nextjs_port`` is None,
            e.g. for headless scheduled-task fires that don't need a preview).
 
         Args:
@@ -1115,8 +1102,6 @@ class KubernetesSandboxManager(SandboxManager):
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for persona (e.g., "engineering")
-            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1143,7 +1128,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=bool(user_work_area),
         )
 
         # Build opencode config JSON using shared config builder
@@ -1159,29 +1143,6 @@ class KubernetesSandboxManager(SandboxManager):
         # Escape for shell
         opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
-
-        # Build org_info setup script if persona is set
-        # Uses shared constants from persona_mapping module as single source of truth
-        org_info_setup = ""
-        if user_work_area:
-            persona = get_persona_info(user_work_area, user_level)
-            if persona:
-                # Escape content for shell (single quotes)
-                agents_md_escaped = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-                identity_escaped = generate_user_identity_content(persona).replace(
-                    "'", "'\\''"
-                )
-                org_structure_escaped = json.dumps(
-                    ORGANIZATION_STRUCTURE, indent=2
-                ).replace("'", "'\\''")
-
-                org_info_setup = f"""
-# Create org_info directory with all files
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md_escaped}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
-"""
 
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
@@ -1236,7 +1197,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-{org_info_setup}
+
 # Start Next.js dev server
 {nextjs_start_script}
 
@@ -1579,7 +1540,6 @@ echo "Session cleanup complete"
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=None,
             user_role=None,
-            include_org_info=False,
         )
 
         # Generate opencode.json

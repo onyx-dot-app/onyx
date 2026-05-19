@@ -23,8 +23,6 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    user_work_area: str | None = None  # User's work area (e.g., "engineering")
-    user_level: str | None = None  # User's level (e.g., "ic", "manager")
     # LLM selection from user's cookie
     llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
     llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")

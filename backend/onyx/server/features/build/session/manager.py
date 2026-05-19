@@ -583,8 +583,6 @@ class SessionManager:
         self,
         user_id: UUID,
         name: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
@@ -600,8 +598,6 @@ class SessionManager:
         Args:
             user_id: The user ID
             name: Optional session name
-            user_work_area: User's work area for persona (e.g., "engineering")
-            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
             origin: Provenance of the session. INTERACTIVE (default) sessions
@@ -753,8 +749,6 @@ class SessionManager:
             snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
             user_role=user_role,
-            user_work_area=user_work_area,
-            user_level=user_level,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)
@@ -771,8 +765,6 @@ class SessionManager:
     def get_or_create_empty_session(
         self,
         user_id: UUID,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
         headless: bool = False,
@@ -787,8 +779,6 @@ class SessionManager:
 
         Args:
             user_id: The user ID
-            user_work_area: User's work area for persona (e.g., "engineering")
-            user_level: User's level for persona (e.g., "ic", "manager")
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
 
@@ -856,8 +846,6 @@ class SessionManager:
 
         return self.create_session__no_commit(
             user_id=user_id,
-            user_work_area=user_work_area,
-            user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
             headless=headless,

@@ -53,20 +53,6 @@ def build_user_context(user_name: str | None, user_role: str | None) -> str:
     return f"You are assisting **{user_name}** with their work."
 
 
-# Content for the org_info section when user_work_area is provided
-ORG_INFO_SECTION_CONTENT = """## Organization Info
-
-The `org_info/` directory contains information about the organization and user context:
-
-- `AGENTS.md`: Description of available organizational information files
-- `user_identity_profile.txt`: Contains the current user's name, email, and organization
-  they work for. Use this information when personalizing outputs or when the user asks
-  about their identity.
-- `organization_structure.json`: Contains a JSON representation of the organization's
-  groups, managers, and their direct reports. Use this to understand reporting
-  relationships and team structures."""
-
-
 # Content for the attachments section when user has uploaded files
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
@@ -98,17 +84,6 @@ should be treated as high-priority context.
 
 **Do NOT ignore user uploaded files.** They are there for a reason and likely
 contain exactly what you need to complete the task successfully."""
-
-
-def build_org_info_section(include_org_info: bool) -> str:
-    """Build the organization info section for AGENTS.md.
-
-    Included when user_work_area is provided and the org_info/
-    directory is set up in the session.
-    """
-    if include_org_info:
-        return ORG_INFO_SECTION_CONTENT
-    return ""
 
 
 _DESCRIPTION_MAX_LEN = 120
@@ -148,7 +123,6 @@ def generate_agent_instructions(
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
     user_role: str | None = None,
-    include_org_info: bool = False,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
@@ -161,7 +135,6 @@ def generate_agent_instructions(
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
         user_role: User's role/title for personalization
-        include_org_info: Whether to include the org_info section
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -182,8 +155,6 @@ def generate_agent_instructions(
     if disabled_tools:
         disabled_tools_section = f"\n**Disabled Tools**: {', '.join(disabled_tools)}\n"
 
-    org_info_section = build_org_info_section(include_org_info)
-
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -194,6 +165,5 @@ def generate_agent_instructions(
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
-    content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
 
     return content

@@ -84,8 +84,6 @@ def stubbed_executor(
         self: SessionManager,
         user_id: UUID,
         name: str | None = None,
-        user_work_area: str | None = None,  # noqa: ARG001
-        user_level: str | None = None,  # noqa: ARG001
         llm_provider_type: str | None = None,  # noqa: ARG001
         llm_model_name: str | None = None,  # noqa: ARG001
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,

@@ -16,14 +16,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -151,63 +143,6 @@ class DirectoryManager:
         """
         return sandbox_path / "sessions" / session_id
 
-    def setup_org_info(
-        self,
-        session_path: Path,
-        user_work_area: str | None,
-        user_level: str | None,
-    ) -> None:
-        """Create org_info directory with organizational context files.
-
-        Creates an org_info/ directory at the session root level with:
-        - AGENTS.md: Description of available org info files
-        - user_identity_profile.txt: User's persona information
-        - organization_structure.json: Org hierarchy with managers and reports
-
-        Uses shared constants from persona_mapping module as single source of truth.
-
-        Args:
-            session_path: Path to the session directory
-            user_work_area: User's work area (e.g., "engineering", "product")
-            user_level: User's level (e.g., "ic", "manager")
-        """
-        # Get persona info from mapping
-        persona = get_persona_info(user_work_area, user_level)
-        if not persona:
-            logger.debug(
-                "No persona found for work_area=%s, level=%s, skipping org_info setup",
-                user_work_area,
-                user_level,
-            )
-            return
-
-        # Create org_info directory at session root
-        org_info_dir = session_path / "org_info"
-        org_info_dir.mkdir(parents=True, exist_ok=True)
-
-        try:
-            # 1. AGENTS.md - Description of org info contents
-            (org_info_dir / "AGENTS.md").write_text(ORG_INFO_AGENTS_MD)
-
-            # 2. user_identity_profile.txt - User's persona
-            (org_info_dir / "user_identity_profile.txt").write_text(
-                generate_user_identity_content(persona)
-            )
-
-            # 3. organization_structure.json - Org hierarchy
-            (org_info_dir / "organization_structure.json").write_text(
-                json.dumps(ORGANIZATION_STRUCTURE, indent=2)
-            )
-
-            logger.info(
-                "Created org_info with identity: %s <%s>",
-                persona["name"],
-                persona["email"],
-            )
-        except Exception as e:
-            # Don't fail provisioning if org_info setup fails
-            logger.warning("Failed to setup org_info: %s", e)
-
     def setup_outputs_directory(self, sandbox_path: Path) -> None:
         """Copy outputs template and create additional directories.
 
@@ -287,7 +222,6 @@ class DirectoryManager:
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        include_org_info: bool = False,
     ) -> None:
         """Generate AGENTS.md with dynamic configuration."""
         agent_md_path = sandbox_path / "AGENTS.md"
@@ -303,7 +237,6 @@ class DirectoryManager:
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=include_org_info,
         )
 
         # Write the generated content
