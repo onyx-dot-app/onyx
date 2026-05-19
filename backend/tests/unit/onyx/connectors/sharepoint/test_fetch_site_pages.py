@@ -379,16 +379,12 @@ class TestIsPerSiteGraphFailure:
         assert _is_per_site_graph_failure(exc) is True
 
     @pytest.mark.parametrize("status_code", sorted(PER_SITE_GRAPH_FAILURE_STATUSES))
-    def test_per_site_http_errors_classify_as_per_site(
-        self, status_code: int
-    ) -> None:
+    def test_per_site_http_errors_classify_as_per_site(self, status_code: int) -> None:
         exc = _make_http_error(status_code)
         assert _is_per_site_graph_failure(exc) is True
 
     @pytest.mark.parametrize("status_code", [401, 500, 502, 503, 504])
-    def test_tenant_wide_http_errors_classify_as_raise(
-        self, status_code: int
-    ) -> None:
+    def test_tenant_wide_http_errors_classify_as_raise(self, status_code: int) -> None:
         exc = _make_http_error(status_code)
         assert _is_per_site_graph_failure(exc) is False
 
