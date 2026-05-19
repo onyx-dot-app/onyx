@@ -1,4 +1,4 @@
-"""Tests for safe_extract_then_atomic_swap from the push daemon's extract module."""
+"""Tests for safe_extract_then_atomic_swap from the sandbox_daemon's extract module."""
 
 import io
 import os

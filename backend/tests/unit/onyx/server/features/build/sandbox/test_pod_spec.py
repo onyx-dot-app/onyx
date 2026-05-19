@@ -79,12 +79,8 @@ def _mount(container: client.V1Container, name: str) -> client.V1VolumeMount:
 def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
     pod: client.V1Pod,
 ) -> None:
-    """Both containers run the same image but with different entrypoints.
-
-    The asymmetric command is how a single image becomes two roles —
-    if both ran the same entrypoint, the agent container would start the
-    push daemon.
-    """
+    """Same image, different commands — the asymmetry that turns one image
+    into two roles."""
     by_name = {c.name: c for c in pod.spec.containers}
     assert set(by_name) == {"sandbox", "sidecar"}
     assert by_name["sandbox"].image == by_name["sidecar"].image
@@ -162,9 +158,6 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
 
 
 def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
-    """If PID namespace sharing were on, the agent could read
-    /proc/<sidecar-pid>/environ and pull IRSA credentials out of the
-    sidecar's env. Must be explicitly False — `None` is the K8s default
-    but we want this to be a deliberate, code-asserted invariant.
-    """
+    """PID-sharing would expose the sidecar's IRSA env via /proc to the
+    agent. Pin explicitly False (not just None / unset)."""
     assert pod.spec.share_process_namespace is False

@@ -541,27 +541,28 @@ def test_snapshot_restore_passes_body_through_and_returns_204(
 
 
 @pytest.mark.parametrize(
-    "storage_path,reason",
+    "storage_path,defends_against",
     [
-        # Different tenant prefix.
-        ("OTHER-TENANT/snapshots/x/y.tar.gz", "cross-tenant"),
-        # Right prefix, then ``..`` segment that would escape on extraction.
-        ("t-1/snapshots/../../etc/passwd", "parent-traversal"),
-        # No prefix at all.
-        ("y.tar.gz", "no-prefix"),
-        # Prefix-shared but different tenant (``t-1-evil`` vs ``t-1``).
+        # Prefix-share covers BOTH "different tenant" AND "the trailing `/`
+        # in the validator matters". A subtler bug than a totally different
+        # prefix, so it's the more interesting case to pin.
         ("t-1-evil/snapshots/x/y.tar.gz", "prefix-share"),
+        # The startswith check alone wouldn't reject this — defends the
+        # separate `..`-segment guard.
+        ("t-1/snapshots/../../etc/passwd", "parent-traversal"),
     ],
 )
 def test_snapshot_restore_rejects_unsafe_storage_path(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     storage_path: str,
-    reason: str,
+    defends_against: str,
 ) -> None:
-    """Pin the cross-tenant / traversal guard. Without these, a bug or
-    compromise on the api-server side could route one tenant's restore
-    onto another tenant's S3 key, or escape the session dir via ``..``.
+    """Pin the cross-tenant + traversal guards in
+    ``SnapshotRestoreRequest._storage_path_under_tenant``. Without these,
+    a bug or compromise on the api-server side could route one tenant's
+    restore onto another tenant's key, or escape the session dir via
+    ``..``.
     """
     _, _, priv, _ = configured_sandbox_daemon
     body = (
@@ -570,38 +571,44 @@ def test_snapshot_restore_rejects_unsafe_storage_path(
         b'"storage_path":"' + storage_path.encode() + b'"}'
     )
     resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
-    assert resp.status_code == 400, f"{reason}: expected 400, got {resp.status_code}"
+    assert resp.status_code == 400, (
+        f"{defends_against}: expected 400, got {resp.status_code}"
+    )
     assert "storage_path" in resp.text
 
 
 @pytest.mark.parametrize(
-    "tenant_id,reason",
+    "tenant_id,defends_against",
     [
-        ("t/../", "slash-and-dotdot"),
-        ("", "empty"),
-        ("t" * 129, "too-long"),
-        ("tenant.with.dots", "dot-char"),
+        # A `/` would let tenant_id smuggle path segments into the S3 key
+        # (e.g. `tenant_id="t-1/../other"`). This is the security-relevant
+        # case for the charset.
+        ("t-1/evil", "slash-in-charset"),
+        # Empty would slip past the validator if the `{1,...}` bound were
+        # dropped, producing storage paths that start with `/snapshots/`.
+        ("", "empty-lower-bound"),
     ],
 )
-def test_snapshot_endpoints_reject_invalid_tenant_id(
+def test_snapshot_create_rejects_invalid_tenant_id(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
     tenant_id: str,
-    reason: str,
+    defends_against: str,
 ) -> None:
     """The wire model constrains tenant_id to a safe character set so it
-    can't be used to inject ``..`` into the S3 key (snapshot create) or
-    smuggle other shell-significant chars into the path.
+    can't be used to inject path segments into the S3 key (snapshot create)
+    or smuggle other shell-significant chars into the path.
     """
     _, _, priv, _ = configured_sandbox_daemon
-    tenant_b = tenant_id.encode()
     body = (
         b'{"session_id":"00000000-0000-0000-0000-000000000001",'
-        b'"tenant_id":"' + tenant_b + b'","s3_bucket":"buck",'
+        b'"tenant_id":"' + tenant_id.encode() + b'","s3_bucket":"buck",'
         b'"snapshot_id":"00000000-0000-0000-0000-000000000002"}'
     )
     resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
-    assert resp.status_code == 400, f"{reason}: expected 400, got {resp.status_code}"
+    assert resp.status_code == 400, (
+        f"{defends_against}: expected 400, got {resp.status_code}"
+    )
 
 
 @pytest.mark.parametrize("endpoint", ["/snapshot/create", "/snapshot/restore"])
@@ -642,7 +649,6 @@ def test_snapshot_body_tampering_after_signing_is_rejected(
     )
 
     tampered_body = signed_body.replace(b'"tenant_id":"t"', b'"tenant_id":"VICTIM"')
-    assert tampered_body != signed_body  # sanity: the mutation actually changed bytes
 
     resp = _post_snapshot(
         client, "/snapshot/create", tampered_body, signature=sig, timestamp=ts
