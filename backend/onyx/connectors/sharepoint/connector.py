@@ -7,6 +7,7 @@ import os
 import re
 import time
 from collections import deque
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from datetime import datetime
@@ -265,12 +266,17 @@ def _site_page_in_time_window(
 # problem rather than an HTTP error. These can occur both as bare exceptions
 # (older office365 SDK paths that don't wrap them) and as the underlying
 # cause of a ClientRequestException with no response (newer SDK wrapping in
-# `execute_query`'s `except requests.exceptions.RequestException`). Note
-# `ChunkedEncodingError` is a subclass of `requests.ConnectionError`, so
-# `ConnectionError` covers it.
+# `execute_query`'s `except requests.exceptions.RequestException`).
+#
+# Note: `requests.exceptions.ChunkedEncodingError` and `ContentDecodingError`
+# are NOT subclasses of `requests.exceptions.ConnectionError` — they're
+# siblings under `RequestException`. They have to be listed explicitly to be
+# treated as retryable mid-stream connection drops.
 TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     requests.exceptions.ConnectionError,
     requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+    requests.exceptions.ContentDecodingError,
 )
 
 # HTTP statuses we treat as transient and worth retrying.
@@ -560,44 +566,117 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
     return None
 
 
+# Number of retries (in addition to the initial attempt) for streaming
+# downloads that fail with a transient transport-level error such as
+# ChunkedEncodingError / IncompleteRead. SharePoint and the Graph API
+# occasionally close the connection mid-body, especially under throttling.
+STREAM_DOWNLOAD_MAX_RETRIES = 3
+STREAM_CHUNK_SIZE = 64 * 1024
+
+
+def _stream_response_to_buffer_with_cap(
+    request_factory: Callable[[], requests.Response],
+    cap: int,
+    description: str,
+    max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
+) -> bytes:
+    """Stream a GET response into memory with a byte cap, retrying on transient
+    transport-level failures.
+
+    SharePoint / Graph occasionally drop the TCP connection mid-body (surfaces
+    as `ChunkedEncodingError: IncompleteRead`, a subclass of
+    `requests.ConnectionError`). Each retry calls ``request_factory`` again to
+    obtain a fresh ``Response`` -- this also avoids reusing a stale socket from
+    urllib3's connection pool.
+
+    Args:
+        request_factory: Zero-arg callable that issues a streaming GET and
+            returns the ``requests.Response``. Called once per attempt.
+        cap: Maximum number of bytes to read before raising ``SizeCapExceeded``.
+        description: Short label used in log messages.
+        max_retries: Number of retries beyond the initial attempt.
+
+    Raises:
+        SizeCapExceeded: when ``cap`` is exceeded (never retried).
+        requests.RequestException: when retries are exhausted; HTTPError from
+            ``raise_for_status`` is not retried here.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            with request_factory() as resp:
+                _log_and_raise_for_status(resp)
+
+                cl_header = resp.headers.get("Content-Length")
+                if cl_header and cl_header.isdigit() and int(cl_header) > cap:
+                    logger.warning(
+                        "Content-Length %s exceeds cap %s for %s; skipping download.",
+                        cl_header,
+                        cap,
+                        description,
+                    )
+                    raise SizeCapExceeded("pre_download")
+
+                buf = io.BytesIO()
+                for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
+                    if not chunk:
+                        continue
+                    buf.write(chunk)
+                    if buf.tell() > cap:
+                        logger.warning(
+                            "Streaming download for %s exceeded cap %s bytes; "
+                            "aborting early.",
+                            description,
+                            cap,
+                        )
+                        raise SizeCapExceeded("during_download")
+                return buf.getvalue()
+        except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
+            if attempt >= max_retries:
+                logger.warning(
+                    "Streaming download for %s failed after %s attempts: %s: %s",
+                    description,
+                    max_retries + 1,
+                    type(e).__name__,
+                    e,
+                )
+                raise
+            sleep_time = _backoff_seconds(attempt, retry_after=None)
+            logger.warning(
+                "Streaming download for %s hit transport error on attempt %s/%s: "
+                "%s: %s. Sleeping %ss before retry.",
+                description,
+                attempt + 1,
+                max_retries + 1,
+                type(e).__name__,
+                e,
+                sleep_time,
+            )
+            time.sleep(sleep_time)
+
+    # Defensive: the loop either returns or re-raises on the final attempt.
+    raise RuntimeError(
+        f"Unreachable: streaming download retry loop exited without resolution "
+        f"for {description}"
+    )
+
+
 def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
+    - Retries on transient transport errors (e.g. mid-stream connection drops).
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
-    with requests.get(url, stream=True, timeout=timeout) as resp:
-        _log_and_raise_for_status(resp)
 
-        # If the server provides Content-Length, prefer an early decision.
-        cl_header = resp.headers.get("Content-Length")
-        if cl_header and cl_header.isdigit():
-            content_len = int(cl_header)
-            if content_len > cap:
-                logger.warning(
-                    "Content-Length %s exceeds cap %s; skipping download.",
-                    content_len,
-                    cap,
-                )
-                raise SizeCapExceeded("pre_download")
+    def _factory() -> requests.Response:
+        return requests.get(url, stream=True, timeout=timeout)
 
-        buf = io.BytesIO()
-        # Stream in 64KB chunks; adjust if needed for slower networks.
-        for chunk in resp.iter_content(64 * 1024):
-            if not chunk:
-                continue
-            buf.write(chunk)
-            if buf.tell() > cap:
-                # Avoid keeping a large partial buffer; close and signal caller to skip.
-                logger.warning(
-                    "Streaming download exceeded cap %s bytes; aborting early.", cap
-                )
-                raise SizeCapExceeded("during_download")
-
-        return buf.getvalue()
+    return _stream_response_to_buffer_with_cap(
+        _factory, cap, description=f"downloadUrl:{url[:120]}"
+    )
 
 
 def _download_via_graph_api(
@@ -609,22 +688,22 @@ def _download_via_graph_api(
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap.
 
-    Raises SizeCapExceeded if the cap is exceeded.
+    Retries on transient transport errors. Raises SizeCapExceeded if the cap is
+    exceeded.
     """
     url = f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content"
     headers = {"Authorization": f"Bearer {access_token}"}
-    with requests.get(
-        url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
-    ) as resp:
-        _log_and_raise_for_status(resp)
-        buf = io.BytesIO()
-        for chunk in resp.iter_content(64 * 1024):
-            if not chunk:
-                continue
-            buf.write(chunk)
-            if buf.tell() > bytes_allowed:
-                raise SizeCapExceeded("during_graph_api_download")
-        return buf.getvalue()
+
+    def _factory() -> requests.Response:
+        return requests.get(
+            url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+        )
+
+    return _stream_response_to_buffer_with_cap(
+        _factory,
+        bytes_allowed,
+        description=f"graph_api(drive={drive_id},item={item_id})",
+    )
 
 
 def _convert_driveitem_to_document_with_permissions(
