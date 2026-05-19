@@ -265,6 +265,24 @@ class SandboxManager(ABC):
         ...
 
     @abstractmethod
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List session workspace IDs under a sandbox's sessions/ directory.
+
+        Used by idle cleanup to discover which sessions need snapshotting before
+        the sandbox is terminated. Implementations should filter out non-UUID
+        directory names.
+
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            List of session UUIDs found under sessions/. Returns an empty list
+            if the sandbox is not running, has no sessions, or the backend does
+            not support cleanup (e.g. local).
+        """
+        ...
+
+    @abstractmethod
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         """Check if the sandbox is healthy.
 
@@ -642,6 +660,16 @@ def get_sandbox_manager() -> SandboxManager:
 
                     _sandbox_manager_instance = KubernetesSandboxManager()
                     logger.info("Using KubernetesSandboxManager for sandbox operations")
+                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
+                    # The DockerSandboxManager module ships in a follow-up PR.
+                    # Until then, fail with a clear message rather than a
+                    # cryptic ModuleNotFoundError if someone sets
+                    # SANDBOX_BACKEND=docker against this version.
+                    raise NotImplementedError(
+                        "SANDBOX_BACKEND=docker is not available yet — "
+                        "DockerSandboxManager lands in a follow-up PR. "
+                        "Use SANDBOX_BACKEND=kubernetes or local for now."
+                    )
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
 

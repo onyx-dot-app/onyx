@@ -7,16 +7,19 @@ class SandboxBackend(str, Enum):
     """Backend mode for sandbox operations.
 
     LOCAL: Development mode - no snapshots, no automatic cleanup
-    KUBERNETES: Production mode - full snapshots and cleanup
+    KUBERNETES: Production mode (Helm/cloud) - full snapshots and cleanup
+    DOCKER: Self-hosted docker-compose - api_server drives the Docker Engine
     """
 
     LOCAL = "local"
     KUBERNETES = "kubernetes"
+    DOCKER = "docker"
 
 
 # Sandbox backend mode (controls snapshot and cleanup behavior)
 # "local" = no snapshots, no cleanup (for development)
-# "kubernetes" = full snapshots and cleanup (for production)
+# "kubernetes" = full snapshots and cleanup (production Helm/cloud)
+# "docker" = full snapshots and cleanup (self-hosted docker-compose)
 SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
 
 # Base directory path for persistent document storage (local filesystem)

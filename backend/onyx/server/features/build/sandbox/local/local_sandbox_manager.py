@@ -677,6 +677,27 @@ class LocalSandboxManager(SandboxManager):
         outputs_path = session_path / "outputs"
         return outputs_path.exists()
 
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID session directories under the sandbox's sessions/.
+
+        Used by idle cleanup. Local sandboxes never participate in idle
+        cleanup, but returning the actual list keeps behavior consistent
+        with other backends and is useful for tests and ad-hoc tooling.
+        """
+        sessions_root = self._get_sandbox_path(sandbox_id) / "sessions"
+        if not sessions_root.exists():
+            return []
+
+        result: list[UUID] = []
+        for entry in sessions_root.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                result.append(UUID(entry.name))
+            except ValueError:
+                continue
+        return result
+
     def ensure_nextjs_running(
         self,
         sandbox_id: UUID,
