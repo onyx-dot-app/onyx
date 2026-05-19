@@ -471,11 +471,6 @@ def on_setup_logging(
     else:
         effective_loglevel = loglevel
         loglevel_source = "celery default (no --loglevel, no LOG_LEVEL)"
-    logger.info(
-        "Celery effective log level: %s (source: %s)",
-        logging.getLevelName(effective_loglevel),
-        loglevel_source,
-    )
 
     root_logger = logging.getLogger()
     root_logger.handlers = []
@@ -511,6 +506,16 @@ def on_setup_logging(
         root_logger.addHandler(root_file_handler)
 
     root_logger.setLevel(effective_loglevel)
+
+    # Emit the diagnostic after the root logger is configured so it goes through
+    # the fresh handler at the level we just chose. (Before this point Python's
+    # root logger defaults to WARNING, which would silently drop an INFO message
+    # in the no-LOG_LEVEL/no-CLI default case.)
+    logger.info(
+        "Celery effective log level: %s (source: %s)",
+        logging.getLevelName(effective_loglevel),
+        loglevel_source,
+    )
 
     # Configure the task logger
     task_logger.handlers = []
