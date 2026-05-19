@@ -5,14 +5,17 @@ row, waking SLEEPING / TERMINATED / FAILED, recovering a RUNNING-but-
 unhealthy pod, and polling a PROVISIONING sandbox to completion (or
 timeout).
 
-Uses the real Postgres DB (via the ``db_session`` fixture) but mocks
-``SandboxManager`` because real pod provisioning isn't available in this
-test tier. ``_get_llm_config`` is also stubbed since the wake state
+Uses the real Postgres DB (via the ``db_session`` fixture) AND the real
+sandbox manager configured in the env (LocalSandboxManager by default,
+KubernetesSandboxManager when ``SANDBOX_BACKEND=kubernetes``). Each
+test cleans up its sandbox via ``mgr.terminate()`` so consecutive runs
+stay hermetic. ``_get_llm_config`` is stubbed because the wake state
 machine forwards the config opaquely to ``provision()`` and the test
 DB doesn't seed a default LLM provider.
 """
 
-from unittest.mock import MagicMock
+from collections.abc import Generator
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -23,65 +26,83 @@ from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
+from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
-def _make_mock_sandbox_manager(*, healthy: bool = True) -> MagicMock:
-    """Build a SandboxManager test double.
+def _make_session_manager(db_session: Session) -> SessionManager:
+    """Construct a SessionManager wired to the env's real SandboxManager.
 
-    ``provision()`` returns ``SandboxInfo(status=RUNNING)`` so the post-
-    provision DB update (``update_sandbox_status__no_commit``) lands the
-    row in RUNNING — matching real LocalSandboxManager behavior.
-    ``health_check()`` returns ``healthy``; ``terminate()`` is a no-op.
-    """
-    mgr = MagicMock()
-
-    def _provision(sandbox_id: UUID, **_kwargs: object) -> SandboxInfo:
-        return SandboxInfo(
-            sandbox_id=sandbox_id,
-            directory_path=f"/tmp/{sandbox_id}",
-            status=SandboxStatus.RUNNING,
-            last_heartbeat=None,
-        )
-
-    mgr.provision.side_effect = _provision
-    mgr.health_check.return_value = healthy
-    mgr.terminate.return_value = None
-    return mgr
-
-
-def _make_session_manager(
-    db_session: Session,
-    *,
-    sandbox_manager: MagicMock,
-) -> SessionManager:
-    """Construct a SessionManager wired to a mock SandboxManager + stub LLM.
-
-    Bypasses ``_get_llm_config`` because the wake state machine only
-    forwards the config to ``provision()`` (which we mock).
+    ``_get_llm_config`` is stubbed because the wake state machine just
+    forwards the config to ``provision()`` and the external-dependency
+    test DB doesn't seed a default LLM provider.
     """
     sm = SessionManager(db_session)
-    sm._sandbox_manager = sandbox_manager
-
     stub_config = LLMProviderConfig(
         provider="test",
         model_name="test-model",
         api_key="test-key",
         api_base=None,
     )
-    # Use setattr so static type-checkers don't flag the method override.
     setattr(sm, "_get_llm_config", lambda *_args, **_kwargs: stub_config)
     return sm
 
 
-def _seed_sandbox(
+@pytest.fixture
+def sandbox_cleanup() -> Generator[list[UUID], None, None]:
+    """Track sandbox IDs created during a test and terminate them after.
+
+    Goes through ``SandboxManager.terminate`` (matching real shutdown
+    behavior) so the test stays valid on both Local and Kubernetes
+    backends. Swallows errors during teardown — the goal is cleanup, not
+    a second assertion surface.
+    """
+    from onyx.server.features.build.sandbox import get_sandbox_manager
+
+    tracked: list[UUID] = []
+    yield tracked
+    mgr = get_sandbox_manager()
+    for sandbox_id in tracked:
+        try:
+            mgr.terminate(sandbox_id)
+        except Exception:
+            # Best-effort: the test may have already terminated it.
+            pass
+
+
+def _provision_real(
+    mgr: SandboxManager,
+    sandbox: Sandbox,
+    user_id: UUID,
+) -> None:
+    """Bring a sandbox to RUNNING on the real backend.
+
+    Used by tests that need the pod/dir to exist before calling
+    ``ensure_sandbox_running`` (e.g. the "RUNNING + healthy" hot path).
+    """
+    mgr.provision(
+        sandbox_id=sandbox.id,
+        user_id=user_id,
+        tenant_id=TEST_TENANT_ID,
+        llm_config=LLMProviderConfig(
+            provider="test",
+            model_name="test-model",
+            api_key="test-key",
+            api_base=None,
+        ),
+        onyx_pat=None,
+    )
+
+
+def _seed_row(
     db_session: Session,
     user: User,
     status: SandboxStatus,
 ) -> Sandbox:
+    """Create only the DB row — no pod/dir."""
     sandbox = create_sandbox__no_commit(db_session=db_session, user_id=user.id)
     update_sandbox_status__no_commit(db_session, sandbox.id, status)
     db_session.commit()
@@ -96,56 +117,80 @@ class TestEnsureSandboxRunning:
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
     ) -> None:
-        """No sandbox row → row is created and provisioned."""
-        mgr = _make_mock_sandbox_manager()
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        """No sandbox row → row is created and provisioned for real."""
+        session_manager = _make_session_manager(db_session)
 
         sandbox = session_manager.ensure_sandbox_running(test_user.id)
         db_session.commit()
+        sandbox_cleanup.append(sandbox.id)
 
         assert sandbox.user_id == test_user.id
         assert sandbox.status == SandboxStatus.RUNNING
-        mgr.provision.assert_called_once()
-        mgr.health_check.assert_not_called()
-        mgr.terminate.assert_not_called()
+        # The real provision() left the sandbox in a healthy state.
+        assert session_manager._sandbox_manager.health_check(sandbox.id, timeout=5.0)
 
     def test_running_and_healthy_returns_as_is(
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
     ) -> None:
         """RUNNING + health_check=True → no re-provision, no terminate."""
-        existing = _seed_sandbox(db_session, test_user, SandboxStatus.RUNNING)
-        mgr = _make_mock_sandbox_manager(healthy=True)
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        session_manager = _make_session_manager(db_session)
+        mgr = session_manager._sandbox_manager
 
-        sandbox = session_manager.ensure_sandbox_running(test_user.id)
+        # Real seeded "healthy RUNNING" state: provision then make sure
+        # the row is RUNNING.
+        existing = create_sandbox__no_commit(
+            db_session=db_session, user_id=test_user.id
+        )
+        _provision_real(mgr, existing, test_user.id)
+        update_sandbox_status__no_commit(db_session, existing.id, SandboxStatus.RUNNING)
+        db_session.commit()
+        sandbox_cleanup.append(existing.id)
+
+        with (
+            patch.object(mgr, "provision", wraps=mgr.provision) as provision_spy,
+            patch.object(mgr, "terminate", wraps=mgr.terminate) as terminate_spy,
+        ):
+            sandbox = session_manager.ensure_sandbox_running(test_user.id)
 
         assert sandbox.id == existing.id
         assert sandbox.status == SandboxStatus.RUNNING
-        mgr.health_check.assert_called_once()
-        mgr.provision.assert_not_called()
-        mgr.terminate.assert_not_called()
+        provision_spy.assert_not_called()
+        terminate_spy.assert_not_called()
 
     def test_running_but_unhealthy_recovers_via_terminate_then_provision(
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
     ) -> None:
-        """RUNNING + health_check=False → terminate + re-provision."""
-        existing = _seed_sandbox(db_session, test_user, SandboxStatus.RUNNING)
-        mgr = _make_mock_sandbox_manager(healthy=False)
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        """RUNNING in DB but no pod/dir → health_check fails → terminate +
+        re-provision."""
+        # Seed RUNNING in the DB without actually provisioning, so the
+        # real health_check fails (no pod, no directory).
+        existing = _seed_row(db_session, test_user, SandboxStatus.RUNNING)
+        sandbox_cleanup.append(existing.id)
 
-        sandbox = session_manager.ensure_sandbox_running(test_user.id)
-        db_session.commit()
+        session_manager = _make_session_manager(db_session)
+        mgr = session_manager._sandbox_manager
+
+        with (
+            patch.object(mgr, "terminate", wraps=mgr.terminate) as terminate_spy,
+            patch.object(mgr, "provision", wraps=mgr.provision) as provision_spy,
+        ):
+            sandbox = session_manager.ensure_sandbox_running(test_user.id)
+            db_session.commit()
 
         assert sandbox.id == existing.id
         assert sandbox.status == SandboxStatus.RUNNING
-        mgr.health_check.assert_called_once()
-        mgr.terminate.assert_called_once_with(existing.id)
-        mgr.provision.assert_called_once()
+        terminate_spy.assert_called_once_with(existing.id)
+        provision_spy.assert_called_once()
+        # Real re-provision left the sandbox healthy.
+        assert mgr.health_check(sandbox.id, timeout=5.0)
 
     @pytest.mark.parametrize(
         "initial_status",
@@ -159,41 +204,48 @@ class TestEnsureSandboxRunning:
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
         initial_status: SandboxStatus,
     ) -> None:
         """SLEEPING / TERMINATED / FAILED → re-provision in place."""
-        existing = _seed_sandbox(db_session, test_user, initial_status)
-        mgr = _make_mock_sandbox_manager()
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        existing = _seed_row(db_session, test_user, initial_status)
+        sandbox_cleanup.append(existing.id)
 
-        sandbox = session_manager.ensure_sandbox_running(test_user.id)
-        db_session.commit()
+        session_manager = _make_session_manager(db_session)
+        mgr = session_manager._sandbox_manager
+
+        with patch.object(mgr, "provision", wraps=mgr.provision) as provision_spy:
+            sandbox = session_manager.ensure_sandbox_running(test_user.id)
+            db_session.commit()
 
         assert sandbox.id == existing.id
         assert sandbox.status == SandboxStatus.RUNNING
-        mgr.provision.assert_called_once()
-        mgr.health_check.assert_not_called()
-        mgr.terminate.assert_not_called()
+        provision_spy.assert_called_once()
+        assert mgr.health_check(sandbox.id, timeout=5.0)
 
     def test_provisioning_transitions_to_running_during_wait(
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A concurrent provisioner finishes mid-wait: we return RUNNING
         without calling ``provision()`` ourselves."""
-        existing = _seed_sandbox(db_session, test_user, SandboxStatus.PROVISIONING)
-        mgr = _make_mock_sandbox_manager(healthy=True)
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        existing = _seed_row(db_session, test_user, SandboxStatus.PROVISIONING)
+        sandbox_cleanup.append(existing.id)
 
-        # Use the sleep hook to simulate the concurrent provisioner
-        # committing: between the first and second refresh, flip the row
-        # to RUNNING. The next refresh sees the committed value.
+        session_manager = _make_session_manager(db_session)
+        mgr = session_manager._sandbox_manager
+
+        # Sleep-hook simulates the "other" provisioner finishing: flip
+        # the DB row to RUNNING AND actually call the real provision so
+        # the subsequent health_check sees a live pod/dir.
         flipped: list[bool] = [False]
 
         def _flipping_sleep(_seconds: float) -> None:
             if not flipped[0]:
+                _provision_real(mgr, existing, test_user.id)
                 update_sandbox_status__no_commit(
                     db_session, existing.id, SandboxStatus.RUNNING
                 )
@@ -205,34 +257,37 @@ class TestEnsureSandboxRunning:
             _flipping_sleep,
         )
 
-        sandbox = session_manager.ensure_sandbox_running(
-            test_user.id,
-            provisioning_wait_seconds=10.0,
-        )
+        with patch.object(mgr, "provision", wraps=mgr.provision) as provision_spy:
+            sandbox = session_manager.ensure_sandbox_running(
+                test_user.id,
+                provisioning_wait_seconds=10.0,
+            )
 
         assert sandbox.id == existing.id
         assert sandbox.status == SandboxStatus.RUNNING
-        # Health check runs because the row reached RUNNING during the wait.
-        mgr.health_check.assert_called_once()
-        # We did NOT provision — the (mocked) concurrent caller did.
-        mgr.provision.assert_not_called()
-        mgr.terminate.assert_not_called()
+        # Exactly one provision is expected — the one the sleep hook
+        # makes to simulate the concurrent provisioner finishing. A
+        # second call would mean session_manager re-provisioned after
+        # the wait succeeded, which is what this test exists to prevent.
+        assert provision_spy.call_count == 1
 
     def test_provisioning_times_out_raises(
         self,
         db_session: Session,
         test_user: User,
+        sandbox_cleanup: list[UUID],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Stuck PROVISIONING → SandboxProvisioningError once the deadline
         elapses (without provisioning ourselves)."""
-        _seed_sandbox(db_session, test_user, SandboxStatus.PROVISIONING)
-        mgr = _make_mock_sandbox_manager()
-        session_manager = _make_session_manager(db_session, sandbox_manager=mgr)
+        existing = _seed_row(db_session, test_user, SandboxStatus.PROVISIONING)
+        sandbox_cleanup.append(existing.id)
+
+        session_manager = _make_session_manager(db_session)
+        mgr = session_manager._sandbox_manager
 
         # No-op sleep keeps the test fast; real time.monotonic() still
-        # advances on each iteration, so a tiny wait deadline elapses on
-        # the first check.
+        # advances, so the tiny wait deadline elapses on the first check.
         def _sleep_noop(_seconds: float) -> None:
             return None
 
@@ -241,11 +296,11 @@ class TestEnsureSandboxRunning:
             _sleep_noop,
         )
 
-        with pytest.raises(SandboxProvisioningError):
-            session_manager.ensure_sandbox_running(
-                test_user.id,
-                provisioning_wait_seconds=0.0,
-            )
+        with patch.object(mgr, "provision", wraps=mgr.provision) as provision_spy:
+            with pytest.raises(SandboxProvisioningError):
+                session_manager.ensure_sandbox_running(
+                    test_user.id,
+                    provisioning_wait_seconds=0.0,
+                )
 
-        mgr.provision.assert_not_called()
-        mgr.health_check.assert_not_called()
+        provision_spy.assert_not_called()
