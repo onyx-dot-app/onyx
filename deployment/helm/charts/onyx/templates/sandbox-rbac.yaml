@@ -3,6 +3,7 @@
 {{- $saName := .Values.configMap.SANDBOX_SERVICE_ACCOUNT_NAME | default "sandbox-file-sync" }}
 {{- $craft := .Values.craft | default dict }}
 {{- $roleArn := required "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=\"true\" (IAM role ARN to bind to the sandbox-file-sync ServiceAccount via IRSA)" $craft.sandboxFileSyncRoleArn }}
+{{- $roleName := printf "%s-api-server-role" (include "onyx.fullname" .) }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,7 +19,7 @@ automountServiceAccountToken: true
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: api-server-role
+  name: {{ $roleName }}
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
@@ -28,7 +29,7 @@ rules:
     verbs: ["create", "get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create", "get"]
+    verbs: ["create"]
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["create", "get", "list", "watch", "delete"]
@@ -43,7 +44,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: api-server-role
+  name: {{ $roleName }}
 subjects:
   - kind: ServiceAccount
     name: {{ include "onyx.serviceAccountName" . }}
@@ -60,7 +61,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: api-server-role
+  name: {{ $roleName }}
 subjects:
   - kind: ServiceAccount
     name: {{ $extraSa.name }}
