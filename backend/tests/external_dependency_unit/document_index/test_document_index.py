@@ -507,3 +507,107 @@ class TestDocumentIndexNew:
             assert len(retrieved) == 2
             for chunk in retrieved:
                 assert chunk.boost == 0
+
+
+class TestDocumentIndexNewDelete:
+    """Tests for the new DocumentIndex.delete_batch() bulk delete entrypoint."""
+
+    def test_delete_batch_removes_all_listed_docs(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        for document_index in document_indices:
+            doc1 = f"test_batch_del_a_{uuid.uuid4().hex[:8]}"
+            doc2 = f"test_batch_del_b_{uuid.uuid4().hex[:8]}"
+            doc3 = f"test_batch_del_c_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(doc1, chunk_id=0),
+                make_chunk(doc1, chunk_id=1),
+                make_chunk(doc2, chunk_id=0),
+                make_chunk(doc3, chunk_id=0),
+            ]
+            metadata = make_indexing_metadata(
+                [doc1, doc2, doc3], old_counts=[0, 0, 0], new_counts=[2, 1, 1]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+            time.sleep(1)
+
+            chunks_deleted = document_index.delete_batch({doc1: 2, doc2: 1, doc3: 1})
+            time.sleep(1)
+
+            assert chunks_deleted == 4
+
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            for doc_id in (doc1, doc2, doc3):
+                assert (
+                    document_index.id_based_retrieval(
+                        chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+                        filters=filters,
+                    )
+                    == []
+                )
+
+    def test_delete_batch_does_not_touch_unlisted_docs(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        for document_index in document_indices:
+            kept_doc = f"test_batch_del_keep_{uuid.uuid4().hex[:8]}"
+            removed_doc = f"test_batch_del_remove_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(kept_doc, chunk_id=0),
+                make_chunk(removed_doc, chunk_id=0),
+            ]
+            metadata = make_indexing_metadata(
+                [kept_doc, removed_doc], old_counts=[0, 0], new_counts=[1, 1]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+            time.sleep(1)
+
+            document_index.delete_batch({removed_doc: 1})
+            time.sleep(1)
+
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            assert (
+                len(
+                    document_index.id_based_retrieval(
+                        chunk_requests=[DocumentSectionRequest(document_id=kept_doc)],
+                        filters=filters,
+                    )
+                )
+                == 1
+            )
+            assert (
+                document_index.id_based_retrieval(
+                    chunk_requests=[DocumentSectionRequest(document_id=removed_doc)],
+                    filters=filters,
+                )
+                == []
+            )
+
+    def test_delete_batch_empty_mapping_is_noop(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        for document_index in document_indices:
+            assert document_index.delete_batch({}) == 0
+
+    def test_delete_batch_missing_doc_id_is_noop(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        for document_index in document_indices:
+            doc_id = f"test_batch_del_missing_{uuid.uuid4().hex[:8]}"
+            # Doc was never indexed — backends should treat this as a no-op,
+            # not raise.
+            assert document_index.delete_batch({doc_id: None}) == 0

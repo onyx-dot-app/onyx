@@ -1,5 +1,6 @@
 import abc
 from collections.abc import Iterable
+from collections.abc import Mapping
 from typing import Self
 
 from pydantic import BaseModel
@@ -250,8 +251,6 @@ class Deletable(abc.ABC):
     @abc.abstractmethod
     def delete(
         self,
-        # TODO(andrei): Fine for now but this can probably be a batch operation
-        # that takes in a list of IDs.
         document_id: str,
         chunk_count: int | None = None,
         # TODO(andrei): Shouldn't this also have some acl filtering at minimum?
@@ -273,6 +272,34 @@ class Deletable(abc.ABC):
 
         Returns:
             The number of chunks deleted.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],
+    ) -> int:
+        """Hard-delete all chunks for each of the supplied document IDs.
+
+        Backends are expected to amortize across docs (e.g. one OpenSearch
+        delete_by_query, or a shared httpx client + thread pool for Vespa) so
+        that batch cost is far below `len(doc_id_to_chunk_count)` calls to
+        `delete()`. Missing document IDs are treated as no-ops.
+
+        Callers are responsible for bounding batch size. The OpenSearch
+        backend caps a single batch at MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY
+        (65,536 doc ids) and will raise ValueError above that. An empty
+        mapping is always a no-op (returns 0).
+
+        Args:
+            doc_id_to_chunk_count: Per-doc chunk counts. Used by backends that
+                benefit from knowing the count up front (Vespa's chunk-id
+                derived path); other backends may ignore it. None means
+                unknown.
+
+        Returns:
+            Total number of chunks deleted across all supplied document IDs.
         """
         raise NotImplementedError
 

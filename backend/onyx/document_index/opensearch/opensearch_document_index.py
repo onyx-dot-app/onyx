@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterable
+from collections.abc import Mapping
 from typing import Any
 
 from opensearchpy.helpers.errors import BulkIndexError
@@ -539,6 +540,25 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],  # noqa: ARG002
+    ) -> int:
+        document_ids = list(doc_id_to_chunk_count.keys())
+        if not document_ids:
+            return 0
+
+        logger.debug(
+            "[OpenSearchDocumentIndex] Bulk-deleting %d documents from index %s.",
+            len(document_ids),
+            self._index_name,
+        )
+        query_body = DocumentQuery.delete_from_document_ids_query(
+            document_ids=document_ids,
+            tenant_state=self._tenant_state,
+        )
+        return self._client.delete_by_query(query_body)
+
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
@@ -969,6 +989,15 @@ class OpenSearchIndexPair(DocumentIndex):
         total = self._primary.delete(document_id, chunk_count)
         if self._secondary is not None:
             total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],
+    ) -> int:
+        total = self._primary.delete_batch(doc_id_to_chunk_count)
+        if self._secondary is not None:
+            total += self._secondary.delete_batch(doc_id_to_chunk_count)
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:

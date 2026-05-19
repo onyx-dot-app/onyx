@@ -6,6 +6,7 @@ out against a nonexistent Vespa/OpenSearch instance.
 """
 
 from collections.abc import Iterable
+from collections.abc import Mapping
 
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
@@ -49,6 +50,12 @@ class DisabledDocumentIndex(DocumentIndex):
         self,
         document_id: str,  # noqa: ARG002
         chunk_count: int | None = None,  # noqa: ARG002
+    ) -> int:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],  # noqa: ARG002
     ) -> int:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 

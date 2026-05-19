@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import httpx
 from tenacity import retry
 from tenacity import retry_if_exception_type
@@ -34,6 +36,17 @@ class RetryDocumentIndex:
         chunk_count: int | None = None,
     ) -> int:
         return self.index.delete(doc_id, chunk_count=chunk_count)
+
+    @retry(
+        retry=retry_if_exception_type(httpx.ReadTimeout),
+        wait=wait_random_exponential(multiplier=1, max=MAX_WAIT),
+        stop=stop_after_delay(STOP_AFTER),
+    )
+    def delete_batch(
+        self,
+        doc_id_to_chunk_count: Mapping[str, int | None],
+    ) -> int:
+        return self.index.delete_batch(doc_id_to_chunk_count)
 
     @retry(
         retry=retry_if_exception_type(httpx.ReadTimeout),
