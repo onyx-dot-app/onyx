@@ -1,6 +1,7 @@
 import logging
 import multiprocessing
 import os
+import sys
 import time
 from typing import Any
 from typing import cast
@@ -47,6 +48,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.logger import ColoredFormatter
+from onyx.utils.logger import get_log_level_from_str
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
 from onyx.utils.logger import setup_logger
@@ -426,6 +428,24 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:  # noqa: ARG001
         logger.exception("Failed to check if primary worker lock is owned")
 
 
+def _cli_loglevel_explicitly_set() -> bool:
+    """Return True iff --loglevel or -l was explicitly passed on the celery CLI.
+
+    The setup_logging signal handler receives a `loglevel` int regardless of
+    whether the operator actually passed --loglevel — when the flag is absent,
+    Celery substitutes its own default. To distinguish "operator passed it"
+    (CLI should win) from "Celery defaulted it" (LOG_LEVEL env should win) we
+    have to inspect sys.argv ourselves.
+    """
+    for arg in sys.argv:
+        if arg == "--loglevel" or arg.startswith("--loglevel="):
+            return True
+        # short form: `-l VALUE`, `-l=VALUE`, `-lVALUE`
+        if arg == "-l" or (arg.startswith("-l") and not arg.startswith("--")):
+            return True
+    return False
+
+
 def on_setup_logging(
     loglevel: int,
     logfile: str | None,
@@ -435,6 +455,26 @@ def on_setup_logging(
 ) -> None:
     # TODO: could unhardcode format and colorize and accept these as options from
     # celery's config
+
+    # Precedence: explicit --loglevel CLI flag > LOG_LEVEL env var > Celery default.
+    # An operator-supplied CLI flag is treated as a per-worker override; otherwise
+    # LOG_LEVEL is the single global knob across the API server, model servers,
+    # and all Celery workers.
+    env_log_level = os.environ.get("LOG_LEVEL")
+    if _cli_loglevel_explicitly_set():
+        effective_loglevel = loglevel
+        loglevel_source = "celery --loglevel CLI arg"
+    elif env_log_level:
+        effective_loglevel = get_log_level_from_str(env_log_level)
+        loglevel_source = f"LOG_LEVEL env var ({env_log_level!r})"
+    else:
+        effective_loglevel = loglevel
+        loglevel_source = "celery default (no --loglevel, no LOG_LEVEL)"
+    logger.info(
+        "Celery effective log level: %s (source: %s)",
+        logging.getLevelName(effective_loglevel),
+        loglevel_source,
+    )
 
     root_logger = logging.getLogger()
     root_logger.handlers = []
@@ -469,7 +509,7 @@ def on_setup_logging(
         root_file_handler.setFormatter(root_file_formatter)
         root_logger.addHandler(root_file_handler)
 
-    root_logger.setLevel(loglevel)
+    root_logger.setLevel(effective_loglevel)
 
     # Configure the task logger
     task_logger.handlers = []
@@ -494,7 +534,7 @@ def on_setup_logging(
         task_file_handler.setFormatter(task_file_formatter)
         task_logger.addHandler(task_file_handler)
 
-    task_logger.setLevel(loglevel)
+    task_logger.setLevel(effective_loglevel)
     task_logger.propagate = False
 
     # hide celery task received spam

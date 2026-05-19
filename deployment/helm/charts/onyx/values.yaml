@@ -572,7 +572,11 @@ celery_shared:
 celery_beat:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -594,7 +598,11 @@ celery_beat:
 celery_worker_heavy:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -629,7 +637,11 @@ celery_worker_heavy:
 celery_worker_docprocessing:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -664,7 +676,11 @@ celery_worker_docprocessing:
 celery_worker_light:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -699,7 +715,11 @@ celery_worker_light:
 celery_worker_monitoring:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -734,7 +754,11 @@ celery_worker_monitoring:
 celery_worker_primary:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -769,7 +793,11 @@ celery_worker_primary:
 celery_worker_user_file_processing:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -809,7 +837,11 @@ celery_worker_user_file_processing:
 celery_worker_scheduled_tasks:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -958,7 +990,11 @@ mcpServer:
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global LOG_LEVEL
+  # env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for this worker
+  # only — this becomes `--loglevel=<value>` on the celery worker command and
+  # takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -1390,6 +1426,13 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
+  # api_server, model_server, slack/discord bots, AND all Celery workers.
+  # Empty (default) -> Python falls back to "info" for the api/model/etc
+  # processes; Celery workers also pick up "" -> info via this same env var.
+  # Per-worker overrides: set `.celery_worker_X.logLevel` below to an explicit
+  # value (INFO/DEBUG/etc.) — that will render `--loglevel=<value>` into the
+  # worker command and take precedence over LOG_LEVEL for that worker only.
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_ONYX_MODEL_INTERACTIONS: ""
