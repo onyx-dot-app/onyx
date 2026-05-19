@@ -448,32 +448,37 @@ def test_snapshot_create_parses_body_and_returns_storage_path(
     Verifying the args round-trip catches schema drift (e.g. a renamed
     field silently being dropped by pydantic).
     """
-    _, server_mod, priv, _ = configured_sandbox_daemon
-    captured: dict[str, str] = {}
+    from uuid import UUID
 
-    def fake_create(**kwargs: str) -> tuple[str, str]:
+    _, server_mod, priv, _ = configured_sandbox_daemon
+    captured: dict[str, object] = {}
+
+    def fake_create(**kwargs: object) -> tuple[str, str]:
         captured.update(kwargs)
-        return "created", "t-1/snapshots/sess-1/snap-1.tar.gz"
+        return (
+            "created",
+            "t-1/snapshots/00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002.tar.gz",
+        )
 
     monkeypatch.setattr(server_mod, "create_snapshot", fake_create)
 
     body = (
-        b'{"session_id":"sess-1","tenant_id":"t-1",'
-        b'"s3_bucket":"buck","snapshot_id":"snap-1"}'
+        b'{"session_id":"00000000-0000-0000-0000-000000000001","tenant_id":"t-1",'
+        b'"s3_bucket":"buck","snapshot_id":"00000000-0000-0000-0000-000000000002"}'
     )
     resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
         "status": "created",
-        "storage_path": "t-1/snapshots/sess-1/snap-1.tar.gz",
+        "storage_path": "t-1/snapshots/00000000-0000-0000-0000-000000000001/00000000-0000-0000-0000-000000000002.tar.gz",
         "size_bytes": 0,
     }
     assert captured == {
-        "session_id": "sess-1",
+        "session_id": UUID("00000000-0000-0000-0000-000000000001"),
         "tenant_id": "t-1",
         "s3_bucket": "buck",
-        "snapshot_id": "snap-1",
+        "snapshot_id": UUID("00000000-0000-0000-0000-000000000002"),
     }
 
 
@@ -491,7 +496,7 @@ def test_snapshot_create_passes_through_empty_status(
     _, server_mod, priv, _ = configured_sandbox_daemon
     monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("empty", ""))
 
-    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    body = b'{"session_id":"00000000-0000-0000-0000-000000000003","tenant_id":"t","s3_bucket":"b","snapshot_id":"00000000-0000-0000-0000-000000000004"}'
     resp = _signed_snapshot_post(client, "/snapshot/create", body, priv)
 
     assert resp.status_code == 200
@@ -504,28 +509,53 @@ def test_snapshot_restore_passes_body_through_and_returns_204(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Restore has no response body — success is the 204. The endpoint still
-    deserializes the JSON request and hands the three fields to the snapshot
-    function unchanged.
+    """Restore has no response body — success is the 204. The endpoint
+    deserializes the JSON request and hands fields to the snapshot
+    function unchanged. The storage_path validator requires it to live
+    under the tenant's snapshot prefix.
     """
-    _, server_mod, priv, _ = configured_sandbox_daemon
-    captured: dict[str, str] = {}
+    from uuid import UUID
 
-    def fake_restore(**kwargs: str) -> None:
+    _, server_mod, priv, _ = configured_sandbox_daemon
+    captured: dict[str, object] = {}
+
+    def fake_restore(**kwargs: object) -> None:
         captured.update(kwargs)
 
     monkeypatch.setattr(server_mod, "restore_snapshot", fake_restore)
 
-    body = b'{"session_id":"sess-1","s3_bucket":"buck","storage_path":"t/s/x.tar.gz"}'
+    body = (
+        b'{"session_id":"00000000-0000-0000-0000-000000000001",'
+        b'"tenant_id":"t-1","s3_bucket":"buck",'
+        b'"storage_path":"t-1/snapshots/x/y.tar.gz"}'
+    )
     resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
 
     assert resp.status_code == 204
     assert resp.content == b""
     assert captured == {
-        "session_id": "sess-1",
+        "session_id": UUID("00000000-0000-0000-0000-000000000001"),
         "s3_bucket": "buck",
-        "storage_path": "t/s/x.tar.gz",
+        "storage_path": "t-1/snapshots/x/y.tar.gz",
     }
+
+
+def test_snapshot_restore_rejects_storage_path_outside_tenant_prefix(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+) -> None:
+    """Without this check, a bug or compromise on the api-server that
+    swapped tenants in `storage_path` could cause cross-tenant restore.
+    """
+    _, _, priv, _ = configured_sandbox_daemon
+    body = (
+        b'{"session_id":"00000000-0000-0000-0000-000000000001",'
+        b'"tenant_id":"t-1","s3_bucket":"buck",'
+        b'"storage_path":"OTHER-TENANT/snapshots/x/y.tar.gz"}'
+    )
+    resp = _signed_snapshot_post(client, "/snapshot/restore", body, priv)
+    assert resp.status_code == 400
+    assert "storage_path" in resp.text
 
 
 @pytest.mark.parametrize("endpoint", ["/snapshot/create", "/snapshot/restore"])
@@ -538,7 +568,7 @@ def test_snapshot_signature_from_wrong_key_is_rejected(
     A signature from any key other than the configured public key must fail.
     """
     _, _, _, _ = configured_sandbox_daemon
-    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    body = b'{"session_id":"00000000-0000-0000-0000-000000000003","tenant_id":"t","s3_bucket":"b","snapshot_id":"00000000-0000-0000-0000-000000000004"}'
     ts = str(int(time.time()))
     other_priv, _ = _new_keypair()
     sig = _sign_snapshot(other_priv, endpoint_path=endpoint, body=body, timestamp=ts)
@@ -559,9 +589,7 @@ def test_snapshot_body_tampering_after_signing_is_rejected(
     _, server_mod, priv, _ = configured_sandbox_daemon
     monkeypatch.setattr(server_mod, "create_snapshot", lambda **_: ("created", "p"))
 
-    signed_body = (
-        b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
-    )
+    signed_body = b'{"session_id":"00000000-0000-0000-0000-000000000003","tenant_id":"t","s3_bucket":"b","snapshot_id":"00000000-0000-0000-0000-000000000004"}'
     ts = str(int(time.time()))
     sig = _sign_snapshot(
         priv, endpoint_path="/snapshot/create", body=signed_body, timestamp=ts
@@ -586,7 +614,7 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
     replayed to trigger arbitrary snapshot operations.
     """
     _, _, priv, _ = configured_sandbox_daemon
-    body = b'{"session_id":"s","tenant_id":"t","s3_bucket":"b","snapshot_id":"x"}'
+    body = b'{"session_id":"00000000-0000-0000-0000-000000000003","tenant_id":"t","s3_bucket":"b","snapshot_id":"00000000-0000-0000-0000-000000000004"}'
     ts = str(int(time.time()))
 
     # Sign as if this were a push to /snapshot/create (mount_path = endpoint).

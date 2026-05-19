@@ -499,15 +499,27 @@ def test_irsa_credentials_present_in_sidecar_only(
         _provisioned_sandbox(k8s_manager, sandbox_id)
         pod_name = k8s_manager._get_pod_name(sandbox_id)
 
+        # Check each var independently so partial leakage (one set, one unset)
+        # cannot pass as "all unset". The shell expansion ${VAR:-} substitutes
+        # an empty string when the var is unset OR empty; we then explicitly
+        # report which (if any) is non-empty.
         sandbox_env = pod_exec(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            'printenv AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE 2>&1 || echo "(unset)"',
+            (
+                "for v in AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE; do "
+                '  eval "val=\\${${v}:-}"; '
+                '  if [ -n "$val" ]; then echo "LEAK:$v=$val"; fi; '
+                "done; echo DONE"
+            ),
             container="sandbox",
         )
-        assert "(unset)" in sandbox_env or sandbox_env.strip() == "", (
+        assert "LEAK:" not in sandbox_env, (
             f"sandbox container leaked IRSA env vars: {sandbox_env!r}"
+        )
+        assert "DONE" in sandbox_env, (
+            f"env-leak probe did not run to completion: {sandbox_env!r}"
         )
 
         # Belt to the env-var suspenders: confirm the projected token mount

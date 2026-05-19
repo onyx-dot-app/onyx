@@ -1361,9 +1361,8 @@ echo "Session cleanup complete"
 
         Returns None if there are no outputs to snapshot.
         """
-        session_id_str = str(session_id)
         pod_name = self._get_pod_name(str(sandbox_id))
-        snapshot_id = str(uuid4())
+        snapshot_id = uuid4()
 
         try:
             pod_ip = self._get_pod_ip(pod_name)
@@ -1372,7 +1371,7 @@ echo "Session cleanup complete"
 
         body = (
             SnapshotCreateRequest(
-                session_id=session_id_str,
+                session_id=session_id,
                 tenant_id=tenant_id,
                 s3_bucket=self._s3_bucket,
                 snapshot_id=snapshot_id,
@@ -1464,7 +1463,7 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
+        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -1501,7 +1500,8 @@ echo "Session cleanup complete"
 
         body = (
             SnapshotRestoreRequest(
-                session_id=str(session_id),
+                session_id=session_id,
+                tenant_id=tenant_id,
                 s3_bucket=self._s3_bucket,
                 storage_path=snapshot_storage_path,
             )

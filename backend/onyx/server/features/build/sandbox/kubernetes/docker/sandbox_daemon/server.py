@@ -1,8 +1,8 @@
+import asyncio
 import base64
 import binascii
 import hashlib
 import os
-import subprocess
 import tarfile
 import time
 
@@ -22,6 +22,7 @@ from sandbox_daemon.models import SnapshotCreateResponse
 from sandbox_daemon.models import SnapshotRestoreRequest
 from sandbox_daemon.snapshot import create_snapshot
 from sandbox_daemon.snapshot import restore_snapshot
+from sandbox_daemon.snapshot import SnapshotError
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 
@@ -148,14 +149,17 @@ async def snapshot_create(
         raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
     try:
-        status, storage_path = create_snapshot(
+        status, storage_path = await asyncio.to_thread(
+            create_snapshot,
             session_id=payload.session_id,
             tenant_id=payload.tenant_id,
             s3_bucket=payload.s3_bucket,
             snapshot_id=payload.snapshot_id,
         )
-    except subprocess.CalledProcessError as e:
+    except SnapshotError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot create failed: {e}")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Snapshot create OS error: {e}")
 
     return SnapshotCreateResponse(
         status=status, storage_path=storage_path, size_bytes=0
@@ -182,13 +186,16 @@ async def snapshot_restore(
         raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
 
     try:
-        restore_snapshot(
+        await asyncio.to_thread(
+            restore_snapshot,
             session_id=payload.session_id,
             s3_bucket=payload.s3_bucket,
             storage_path=payload.storage_path,
         )
-    except subprocess.CalledProcessError as e:
+    except SnapshotError as e:
         raise HTTPException(status_code=500, detail=f"Snapshot restore failed: {e}")
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Snapshot restore OS error: {e}")
 
 
 if __name__ == "__main__":
