@@ -494,16 +494,20 @@ def test_pod_runs_sandbox_and_sidecar_containers(
         )
 
 
-def test_irsa_credentials_present_in_sidecar_only(
+def test_irsa_credentials_stripped_from_sandbox_container(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:
-    """The EKS IRSA webhook honors the `skip-containers` SA annotation.
+    """The sandbox container must never see IRSA credentials.
 
-    The annotation lives in `cloud-deployment-yamls`; this test is the only
-    way to detect a regression (someone removing the annotation, or the
-    webhook ignoring it on a particular EKS version) before it ships
-    cross-tenant S3 access to the agent.
+    Guards the code-side half of the IRSA contract: the pod spec must keep
+    the agent container free of `AWS_*` env vars and the projected token
+    mount, so that even if a misconfigured SA grants IRSA, the agent can't
+    use it to reach cross-tenant S3.
+
+    The matching positive check ("sidecar *does* get AWS_ROLE_ARN from
+    IRSA") depends on the EKS pod-identity webhook plus SA annotations
+    that don't exist on a kind cluster, so it lives elsewhere.
     """
     sandbox_id = uuid4()
     try:
@@ -544,17 +548,6 @@ def test_irsa_credentials_present_in_sidecar_only(
         )
         assert "MISSING" in token_mount, (
             f"IRSA token mount leaked into sandbox container: {token_mount!r}"
-        )
-
-        sidecar_role = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            'printenv AWS_ROLE_ARN || echo "(unset)"',
-            container="sidecar",
-        )
-        assert "arn:aws:iam" in sidecar_role, (
-            f"sidecar should have AWS_ROLE_ARN from IRSA, got: {sidecar_role!r}"
         )
     finally:
         k8s_manager.terminate(sandbox_id)
