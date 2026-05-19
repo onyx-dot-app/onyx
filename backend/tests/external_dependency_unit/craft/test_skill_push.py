@@ -331,6 +331,8 @@ class TestSkillPush:
             skill_id=skill.id,
             new_bundle_file_id=new_file_id,
             new_bundle_sha256=hashlib.sha256(v2_bytes).hexdigest(),
+            new_name=skill.name,
+            new_description=skill.description,
             db_session=db_session,
         )
         db_session.commit()

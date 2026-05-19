@@ -29,7 +29,6 @@ from onyx.db.skill import list_skills_for_user
 from onyx.db.skill import patch_skill
 from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
-from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -39,8 +38,9 @@ from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillsList
-from onyx.skills.bundle import check_slug
 from onyx.skills.bundle import compute_bundle_sha256
+from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
@@ -76,9 +76,6 @@ def list_skills_admin(
 
 @admin_router.post("/custom")
 def create_custom_skill(
-    slug: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(...),
     is_public: bool = Form(False),
     group_ids: str = Form("[]"),
     bundle: UploadFile = File(...),
@@ -86,7 +83,9 @@ def create_custom_skill(
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     bundle_bytes = bundle.file.read()
+    slug = slug_from_filename(bundle.filename)
     validate_custom_bundle(bundle_bytes, slug=slug)
+    name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
     parsed_group_ids = _parse_group_ids(group_ids)
 
@@ -133,27 +132,17 @@ def patch_custom_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    if not isinstance(domain_patch.slug, UnsetType):
-        check_slug(domain_patch.slug)
-        if domain_patch.slug in BuiltinSkillRegistry.instance().reserved_slugs():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT, "Slug reserved by a built-in skill"
-            )
-
     # Snapshot before patch — SQLAlchemy identity map means the ORM object
     # is mutated in-place by patch_skill, so we can't compare before/after.
     old_is_public = skill.is_public
     old_enabled = skill.enabled
-    old_slug = skill.slug
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
     updated = patch_skill(skill_id=skill_id, patch=domain_patch, db_session=db_session)
     db_session.commit()
 
     visibility_changed = (
-        old_is_public != updated.is_public
-        or old_enabled != updated.enabled
-        or old_slug != updated.slug
+        old_is_public != updated.is_public or old_enabled != updated.enabled
     )
     if visibility_changed:
         after_affected = affected_user_ids_for_skill(updated, db_session)
@@ -177,6 +166,7 @@ def replace_custom_skill_bundle(
 
     bundle_bytes = bundle.file.read()
     validate_custom_bundle(bundle_bytes, slug=skill.slug)
+    name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
 
     file_store = get_default_file_store()
@@ -192,6 +182,8 @@ def replace_custom_skill_bundle(
             skill_id=skill_id,
             new_bundle_file_id=new_file_id,
             new_bundle_sha256=sha,
+            new_name=name,
+            new_description=description,
             db_session=db_session,
         )
         db_session.commit()
