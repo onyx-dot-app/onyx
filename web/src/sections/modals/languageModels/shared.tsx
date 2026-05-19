@@ -542,50 +542,52 @@ export function ModelSelectionField({
                 <>
                   {shownModels.map((model) =>
                     isAutoMode ? (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state="selected"
-                        icon={() => <Checkbox checked />}
-                        title={
-                          model.custom_display_name ||
-                          model.display_name ||
-                          model.name
-                        }
-                        editable
-                        onTitleChange={(newTitle) =>
-                          setCustomDisplayName(
-                            model.name,
-                            newTitle || undefined
-                          )
-                        }
-                      />
+                      <div key={model.name} data-model-name={model.name}>
+                        <LineItemButton
+                          variant="section"
+                          sizePreset="main-ui"
+                          selectVariant="select-heavy"
+                          state="selected"
+                          icon={() => <Checkbox checked />}
+                          title={
+                            model.custom_display_name ||
+                            model.display_name ||
+                            model.name
+                          }
+                          editable
+                          onTitleChange={(newTitle) =>
+                            setCustomDisplayName(
+                              model.name,
+                              newTitle || undefined
+                            )
+                          }
+                        />
+                      </div>
                     ) : (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state={model.is_visible ? "selected" : "empty"}
-                        icon={() => <Checkbox checked={model.is_visible} />}
-                        title={
-                          model.custom_display_name ||
-                          model.display_name ||
-                          model.name
-                        }
-                        onClick={() =>
-                          setVisibility(model.name, !model.is_visible)
-                        }
-                        editable
-                        onTitleChange={(newTitle) =>
-                          setCustomDisplayName(
-                            model.name,
-                            newTitle || undefined
-                          )
-                        }
-                      />
+                      <div key={model.name} data-model-name={model.name}>
+                        <LineItemButton
+                          variant="section"
+                          sizePreset="main-ui"
+                          selectVariant="select-heavy"
+                          state={model.is_visible ? "selected" : "empty"}
+                          icon={() => <Checkbox checked={model.is_visible} />}
+                          title={
+                            model.custom_display_name ||
+                            model.display_name ||
+                            model.name
+                          }
+                          onClick={() =>
+                            setVisibility(model.name, !model.is_visible)
+                          }
+                          editable
+                          onTitleChange={(newTitle) =>
+                            setCustomDisplayName(
+                              model.name,
+                              newTitle || undefined
+                            )
+                          }
+                        />
+                      </div>
                     )
                   )}
                   {isFoldable && (
