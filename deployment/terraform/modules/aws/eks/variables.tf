@@ -191,12 +191,38 @@ variable "cloudwatch_log_group_retention_in_days" {
 }
 
 variable "craft_sandbox_node_group" {
-  type        = any
+  type = object({
+    name                            = optional(string)
+    use_name_prefix                 = optional(bool)
+    instance_types                  = optional(list(string))
+    capacity_type                   = optional(string)
+    ami_type                        = optional(string)
+    min_size                        = optional(number)
+    max_size                        = optional(number)
+    desired_size                    = optional(number)
+    iam_role_use_name_prefix        = optional(bool)
+    iam_role_name                   = optional(string)
+    launch_template_use_name_prefix = optional(bool)
+    launch_template_name            = optional(string)
+    subnet_ids                      = optional(list(string))
+    metadata_options = optional(object({
+      http_endpoint               = optional(string)
+      http_tokens                 = optional(string)
+      http_put_response_hop_limit = optional(number)
+    }))
+    labels = optional(map(string))
+    taints = optional(list(object({
+      key    = string
+      value  = optional(string)
+      effect = string
+    })))
+    block_device_mappings = optional(any)
+    tags                  = optional(map(string))
+  })
   description = <<-EOT
     Optional sandbox node group for the Craft feature. When non-null, the
     module adds a `craft_sandbox` entry to its `eks_managed_node_groups`
-    map. Pass the per-NG config (instance_types, min/max_size,
-    iam_role_name, taints, labels, etc.) as a map; everything is forwarded
+    map. Pass the per-NG config as a typed object; everything is forwarded
     to terraform-aws-modules/eks/aws.
 
     Codifies items 3 + 4 of docs/craft/infra/todos.md:
@@ -204,11 +230,11 @@ variable "craft_sandbox_node_group" {
         means the upstream module auto-attaches both the cluster primary SG
         (via EKS default) and the cluster's shared node SG (via the LT) to
         sandbox instances, matching the regular node groups.
-      * Item 4 (IMDSv2 hop limit 1): if you omit `metadata_options`, the
-        module supplies a hardened default (`http_tokens = "required"`,
-        `http_put_response_hop_limit = 1`). Explicit overrides are
-        validated below — IMDSv1 / hop-limit > 1 is rejected so the
-        security property holds by construction, not by convention.
+      * Item 4 (IMDSv2 hop limit 1): the module deep-merges your
+        `metadata_options` over hardened defaults (`http_endpoint=enabled`,
+        `http_tokens=required`, `http_put_response_hop_limit=1`). Omit
+        metadata_options to inherit the defaults; per-field overrides are
+        accepted but rejected below if they weaken IMDSv2 or hop-limit.
 
     Leave null for clusters that don't run Craft.
   EOT
@@ -219,10 +245,10 @@ variable "craft_sandbox_node_group" {
       var.craft_sandbox_node_group == null
       || try(var.craft_sandbox_node_group.metadata_options, null) == null
       || (
-        try(var.craft_sandbox_node_group.metadata_options.http_tokens, "") == "required"
-        && try(var.craft_sandbox_node_group.metadata_options.http_put_response_hop_limit, 0) == 1
+        coalesce(try(var.craft_sandbox_node_group.metadata_options.http_tokens, null), "required") == "required"
+        && coalesce(try(var.craft_sandbox_node_group.metadata_options.http_put_response_hop_limit, null), 1) == 1
       )
     )
-    error_message = "craft_sandbox_node_group.metadata_options must enforce IMDSv2 (http_tokens = \"required\") and hop-limit 1 (http_put_response_hop_limit = 1). Omit metadata_options entirely to use the module's hardened defaults."
+    error_message = "craft_sandbox_node_group.metadata_options, if any field is set, must keep IMDSv2 (http_tokens = \"required\") and hop-limit 1 (http_put_response_hop_limit = 1). Omit metadata_options entirely to inherit the module's hardened defaults."
   }
 }

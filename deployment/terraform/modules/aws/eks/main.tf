@@ -1,16 +1,22 @@
 locals {
   # Default-supply IMDSv2 + hop-limit 1 for the sandbox NG so omitting
-  # metadata_options is safe by default; explicit overrides are validated in
-  # the craft_sandbox_node_group variable definition.
+  # metadata_options is safe by default. metadata_options is deep-merged so
+  # explicit per-field overrides don't erase the hardened siblings (e.g. a
+  # caller setting only http_endpoint still inherits http_tokens = required
+  # and hop_limit = 1). The variable's validation block also rejects
+  # explicit weakenings of the security-relevant fields.
   craft_sandbox_normalized = var.craft_sandbox_node_group != null ? merge(
-    {
-      metadata_options = {
-        http_endpoint               = "enabled"
-        http_tokens                 = "required"
-        http_put_response_hop_limit = 1
-      }
-    },
     var.craft_sandbox_node_group,
+    {
+      metadata_options = merge(
+        {
+          http_endpoint               = "enabled"
+          http_tokens                 = "required"
+          http_put_response_hop_limit = 1
+        },
+        coalesce(try(var.craft_sandbox_node_group.metadata_options, null), {}),
+      )
+    },
   ) : null
 
   s3_bucket_arns = [for name in var.s3_bucket_names : {
