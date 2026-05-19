@@ -2059,6 +2059,170 @@ def test_default_provider_is_not_default_vision_provider(
     )
 
 
+def test_custom_display_name_on_create(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """custom_display_name set during provider creation is persisted and returned."""
+    admin_user = UserManager.create(name="admin_user")
+    name = str(uuid.uuid4())
+
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    custom_display_name="My GPT-4o",
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    provider_id = response.json()["id"]
+
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    config = next(
+        (m for m in provider["model_configurations"] if m["name"] == "gpt-4o"), None
+    )
+    assert config is not None
+    assert config["custom_display_name"] == "My GPT-4o"
+
+
+def test_custom_display_name_on_update(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """custom_display_name can be set and changed when updating a provider."""
+    admin_user = UserManager.create(name="admin_user")
+    name = str(uuid.uuid4())
+
+    # Create without a custom_display_name
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    provider_id = response.json()["id"]
+
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    config = next(
+        (m for m in provider["model_configurations"] if m["name"] == "gpt-4o"), None
+    )
+    assert config is not None
+    assert config["custom_display_name"] is None
+
+    # Update: set a custom_display_name
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+        json={
+            "id": provider_id,
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    custom_display_name="My GPT-4o",
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    config = next(
+        (m for m in provider["model_configurations"] if m["name"] == "gpt-4o"), None
+    )
+    assert config is not None
+    assert config["custom_display_name"] == "My GPT-4o"
+
+
+def test_custom_display_name_cleared(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Setting custom_display_name to null on update clears it."""
+    admin_user = UserManager.create(name="admin_user")
+    name = str(uuid.uuid4())
+
+    # Create with a custom_display_name
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    custom_display_name="My GPT-4o",
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+    provider_id = response.json()["id"]
+
+    # Update: clear the custom_display_name
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider",
+        headers=admin_user.headers,
+        json={
+            "id": provider_id,
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o",
+                    is_visible=True,
+                    custom_display_name=None,
+                ).model_dump()
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert response.status_code == 200
+
+    provider = _get_provider_by_id(admin_user, provider_id)
+    assert provider is not None
+    config = next(
+        (m for m in provider["model_configurations"] if m["name"] == "gpt-4o"), None
+    )
+    assert config is not None
+    assert config["custom_display_name"] is None
+
+
 def _get_all_image_gen_configs(admin_user: DATestUser) -> list[dict]:
     """Utility function to fetch all image generation configs."""
     response = requests.get(
