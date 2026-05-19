@@ -130,7 +130,11 @@ def test_acl_enforcement(
 
     blocked_resp = _search(doc_content, blocked_user)
     assert blocked_resp.status_code == 200
-    assert len(blocked_resp.json()["results"]) == 0
+    # OpenSearch is not reset between tests, so prior tests' PUBLIC docs may
+    # still satisfy the query and surface here. Assert on the specific private
+    # doc rather than total result count.
+    blocked_contents = [r["content"] for r in blocked_resp.json()["results"]]
+    assert not any(doc_content in c for c in blocked_contents)
 
 
 def test_persona_scoped_search(
