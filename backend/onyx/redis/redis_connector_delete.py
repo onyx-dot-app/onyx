@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import CONNECTOR_CLEANUP_BATCH_SIZE
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
@@ -107,7 +108,9 @@ class RedisConnectorDelete:
         lock: RedisLock,
     ) -> int | None:
         """Returns None if the cc_pair doesn't exist.
-        Otherwise, returns an int with the number of generated tasks."""
+        Otherwise, returns the number of documents dispatched across all
+        batches. Callers persist this as `num_docs_synced`, so it must be a
+        doc count, not a batch count."""
         last_lock_time = time.monotonic()
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -117,7 +120,46 @@ class RedisConnectorDelete:
         if not cc_pair:
             return None
 
-        num_tasks_sent = 0
+        num_docs_sent = 0
+        batch: list[str] = []
+
+        def _flush_batch() -> None:
+            """Dispatch one bulk cleanup task for the accumulated doc IDs.
+
+            One task ID = one batch. The taskset SADD + EXPIRE are pipelined
+            so we do one round-trip to Redis per batch instead of two.
+            """
+            nonlocal num_docs_sent
+            if not batch:
+                return
+
+            custom_task_id = self._generate_task_id()
+
+            # Pipeline the SADD + EXPIRE so the bookkeeping is one Redis
+            # round-trip per batch. Must happen BEFORE send_task so the
+            # task_postrun handler can never see the task ID before we've
+            # recorded it.
+            pipe = self.redis.pipeline()
+            pipe.sadd(self.taskset_key, custom_task_id)
+            pipe.expire(self.taskset_key, self.TASKSET_TTL)
+            pipe.execute()
+
+            celery_app.send_task(
+                OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_BULK_CLEANUP_TASK,
+                kwargs=dict(
+                    document_ids=list(batch),
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                    tenant_id=self.tenant_id,
+                ),
+                queue=OnyxCeleryQueues.CONNECTOR_DELETION,
+                task_id=custom_task_id,
+                priority=OnyxCeleryPriority.MEDIUM,
+                ignore_result=True,
+            )
+
+            num_docs_sent += len(batch)
+            batch.clear()
 
         stmt = construct_document_id_select_for_connector_credential_pair(
             cc_pair.connector_id, cc_pair.credential_id
@@ -131,31 +173,14 @@ class RedisConnectorDelete:
                 lock.reacquire()
                 last_lock_time = current_time
 
-            custom_task_id = self._generate_task_id()
+            batch.append(doc_id)
+            if len(batch) >= CONNECTOR_CLEANUP_BATCH_SIZE:
+                _flush_batch()
 
-            # add to the tracking taskset in redis BEFORE creating the celery task.
-            # note that for the moment we are using a single taskset key, not differentiated by cc_pair id
-            self.redis.sadd(self.taskset_key, custom_task_id)
-            self.redis.expire(self.taskset_key, self.TASKSET_TTL)
+        # Flush the trailing partial batch.
+        _flush_batch()
 
-            # Priority on sync's triggered by new indexing should be medium
-            celery_app.send_task(
-                OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
-                queue=OnyxCeleryQueues.CONNECTOR_DELETION,
-                task_id=custom_task_id,
-                priority=OnyxCeleryPriority.MEDIUM,
-                ignore_result=True,
-            )
-
-            num_tasks_sent += 1
-
-        return num_tasks_sent
+        return num_docs_sent
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
