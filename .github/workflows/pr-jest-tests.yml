@@ -27,20 +27,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm" # zizmor: ignore[cache-poisoning] test-only workflow; no deploy artifacts
-          cache-dependency-path: ./web/package-lock.json
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2 # ratchet:oven-sh/setup-bun@v2
 
-      - name: Install node dependencies
+      - name: Install dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Run Jest tests
         working-directory: ./web
-        run: npm test -- --ci --coverage --maxWorkers=50%
+        run: bun test -- --ci --coverage --maxWorkers=50%
 
       - name: Upload coverage reports
         if: always()

@@ -1,4 +1,4 @@
-FROM node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS base
+FROM oven/bun:1-alpine AS base
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -14,19 +14,19 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files first for better layer caching
-# This layer will be cached unless package.json or package-lock.json changes
-COPY package.json package-lock.json ./
+# This layer will be cached unless package.json or bun.lock changes
+COPY package.json bun.lock ./
 COPY lib/opal/package.json ./lib/opal/
 
 # Install dependencies
-RUN npm ci
+RUN bun install --frozen-lockfile
 
 # pull in source code / package.json / package-lock.json
 COPY . .
 
 # Build the opal design-system package so dist/ artifacts (colors.css, root.css,
 # styles.css, JS bundles) exist before Next.js resolves package exports.
-RUN npm run build --workspace=lib/opal
+RUN bun run --filter './lib/opal' build
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
@@ -90,7 +90,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
-    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+    NODE_OPTIONS="${NODE_OPTIONS}" bun run build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner

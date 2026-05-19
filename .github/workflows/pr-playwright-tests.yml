@@ -286,30 +286,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup node
+      - name: Setup bun
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm" # zizmor: ignore[cache-poisoning]
-          cache-dependency-path: ./web/package-lock.json
+        uses: oven-sh/setup-bun@v2 # ratchet:oven-sh/setup-bun@v2
 
-      - name: Install node dependencies
+      - name: Install dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-npm-
+            ${{ runner.os }}-playwright-bun-
 
       - name: Install playwright browsers
         working-directory: ./web
-        run: npx playwright install --with-deps
+        run: bunx playwright install --with-deps
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -490,7 +486,7 @@ jobs:
         env:
           PROJECT: ${{ matrix.project }}
         run: |
-          npx playwright test --project ${PROJECT}
+          bunx playwright test --project ${PROJECT}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
@@ -662,30 +658,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup node
+      - name: Setup bun
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm" # zizmor: ignore[cache-poisoning]
-          cache-dependency-path: ./web/package-lock.json
+        uses: oven-sh/setup-bun@v2 # ratchet:oven-sh/setup-bun@v2
 
-      - name: Install node dependencies
+      - name: Install dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-npm-
+            ${{ runner.os }}-playwright-bun-
 
       - name: Install playwright browsers
         working-directory: ./web
-        run: npx playwright install --with-deps
+        run: bunx playwright install --with-deps
 
       - name: Setup test license
         uses: ./.github/actions/setup-test-license
@@ -731,7 +723,7 @@ jobs:
 
       - name: Run Playwright tests (lite)
         working-directory: ./web
-        run: npx playwright test --project lite
+        run: bunx playwright test --project lite
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()

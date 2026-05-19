@@ -25,8 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   unzip \
   wget \
   zsh \
-  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-  && apt-get install -y nodejs \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -53,9 +51,14 @@ RUN mkdir -p /workspace && \
 
 WORKDIR /workspace
 
+# Install bun
+RUN curl -fsSL https://bun.sh/install | bash && \
+  ln -s /root/.bun/bin/bun /usr/local/bin/bun && \
+  ln -s /root/.bun/bin/bunx /usr/local/bin/bunx
+
 # Install Claude Code
 ARG CLAUDE_CODE_VERSION=latest
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Configure zsh — source the repo-local zshrc so shell customization
 # doesn't require an image rebuild.

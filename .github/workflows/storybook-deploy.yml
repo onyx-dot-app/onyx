@@ -19,7 +19,7 @@ on:
       - "web/src/refresh-components/**"
       - "web/.storybook/**"
       - "web/package.json"
-      - "web/package-lock.json"
+      - "web/bun.lock"
 permissions:
   contents: read
 jobs:
@@ -32,24 +32,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm"
-          cache-dependency-path: ./web/package-lock.json
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2 # ratchet:oven-sh/setup-bun@v2
 
       - name: Install dependencies
         working-directory: web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build Storybook
         working-directory: web
-        run: npm run storybook:build
+        run: bun run storybook:build
 
       - name: Deploy to Vercel (Production)
         working-directory: web
-        run: npx --yes "$VERCEL_CLI" deploy storybook-static/ --prod --yes --token="$VERCEL_TOKEN"
+        run: bunx "$VERCEL_CLI" deploy storybook-static/ --prod --yes --token="$VERCEL_TOKEN"
 
   notify-slack-on-failure:
     needs: Deploy-Storybook

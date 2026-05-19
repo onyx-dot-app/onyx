@@ -37,6 +37,8 @@ done
 ALLOWED_DOMAINS=(
     "github.com"
     "registry.npmjs.org"
+    "bun.sh"
+    "objects.githubusercontent.com"
     "api.anthropic.com"
     "api-staging.anthropic.com"
     "files.anthropic.com"
@@ -55,7 +57,6 @@ ALLOWED_DOMAINS=(
     "static.crates.io"
     "archive.ubuntu.com"
     "security.ubuntu.com"
-    "deb.nodesource.com"
 )
 
 for domain in "${ALLOWED_DOMAINS[@]}"; do
