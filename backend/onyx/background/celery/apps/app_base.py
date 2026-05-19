@@ -432,7 +432,7 @@ def _cli_loglevel_explicitly_set() -> bool:
     """
     Returns True iff --loglevel or -l was explicitly passed on the celery CLI.
 
-    The setup_logging signal handler receives a `loglevel` int regardless of
+    The setup_logging signal handler receives a ``loglevel`` int regardless of
     whether the operator actually passed --loglevel — when the flag is absent,
     Celery substitutes its own default. To distinguish "operator passed it" (CLI
     should win) from "Celery defaulted it" (LOG_LEVEL env should win) we have to
@@ -441,9 +441,9 @@ def _cli_loglevel_explicitly_set() -> bool:
     for arg in sys.argv:
         if arg == "--loglevel" or arg.startswith("--loglevel="):
             return True
-        # short form: `-l VALUE`, `-l=VALUE`, `-lVALUE` (the `arg == "-l"` case
-        # is subsumed by the startswith branch since "-l" starts with "-l" and
-        # doesn't start with "--")
+        # short form: ``-l VALUE``, ``-l=VALUE``, ``-lVALUE`` (the ``arg ==
+        # "-l"`` case is subsumed by the startswith branch since "-l" starts
+        # with "-l" and doesn't start with "--")
         if arg.startswith("-l") and not arg.startswith("--"):
             return True
     return False

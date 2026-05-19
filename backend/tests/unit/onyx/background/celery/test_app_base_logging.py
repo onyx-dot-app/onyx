@@ -44,7 +44,7 @@ def _snapshot_loggers() -> Generator[None, None, None]:
 def _clean_argv(monkeypatch: pytest.MonkeyPatch, *extra: str) -> None:
     """Replaces sys.argv with a celery-like invocation (plus any extra args).
 
-    Strips pytest's own argv so the --loglevel detector doesn't see e.g. `-v`
+    Strips pytest's own argv so the --loglevel detector doesn't see e.g. ``-v``
     from pytest's command line as a false short-flag match.
     """
     monkeypatch.setattr(sys, "argv", ["celery", "-A", "app", "worker", *extra])
