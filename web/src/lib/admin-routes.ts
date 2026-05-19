@@ -22,6 +22,7 @@ import {
   SvgPaintBrush,
   SvgProgressBars,
   SvgSearchMenu,
+  SvgShield,
   SvgTerminal,
   SvgThumbsUp,
   SvgUploadCloud,
@@ -238,6 +239,12 @@ export const ADMIN_ROUTES = {
     icon: SvgDownload,
     title: "Debug Logs",
     sidebarLabel: "Debug Logs",
+  },
+  SECURITY_HARDENING: {
+    path: "/admin/security",
+    icon: SvgShield,
+    title: "Security and Hardening",
+    sidebarLabel: "Security and Hardening",
   },
   // Prefix-only entries used for layout matching — not rendered as sidebar
   // items or page headers.
