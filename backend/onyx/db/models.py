@@ -4214,6 +4214,11 @@ class Skill(Base):
         nullable=False,
     )
 
+    author: Mapped[User | None] = relationship(
+        "User",
+        foreign_keys=[author_user_id],
+    )
+
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="skill__user_group",
