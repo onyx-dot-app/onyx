@@ -441,8 +441,10 @@ def _cli_loglevel_explicitly_set() -> bool:
     for arg in sys.argv:
         if arg == "--loglevel" or arg.startswith("--loglevel="):
             return True
-        # short form: `-l VALUE`, `-l=VALUE`, `-lVALUE`
-        if arg == "-l" or (arg.startswith("-l") and not arg.startswith("--")):
+        # short form: `-l VALUE`, `-l=VALUE`, `-lVALUE` (the `arg == "-l"` case
+        # is subsumed by the startswith branch since "-l" starts with "-l" and
+        # doesn't start with "--")
+        if arg.startswith("-l") and not arg.startswith("--"):
             return True
     return False
 
