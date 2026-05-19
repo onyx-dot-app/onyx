@@ -1,5 +1,6 @@
-"""Unit tests for the LOG_LEVEL env var override in Celery's
-``setup_logging`` handler.
+"""
+Unit tests for the LOG_LEVEL env var override in Celery's ``setup_logging``
+handler.
 
 Verifies the precedence rule in
 ``onyx.background.celery.apps.app_base.on_setup_logging``:
@@ -19,8 +20,8 @@ from onyx.background.celery.apps import app_base
 def _snapshot_loggers() -> Generator[None, None, None]:
     """on_setup_logging mutates the root logger and the Celery task logger.
 
-    Snapshot and restore both so tests don't bleed into each other or the
-    rest of the suite.
+    Snapshot and restore both so tests don't bleed into each other or the rest
+    of the suite.
     """
     root = logging.getLogger()
     task = app_base.task_logger
@@ -41,10 +42,10 @@ def _snapshot_loggers() -> Generator[None, None, None]:
 
 
 def _clean_argv(monkeypatch: pytest.MonkeyPatch, *extra: str) -> None:
-    """Replace sys.argv with a celery-like invocation (plus any extra args).
+    """Replaces sys.argv with a celery-like invocation (plus any extra args).
 
-    Strips pytest's own argv so the --loglevel detector doesn't see e.g.
-    `-v` from pytest's command line as a false short-flag match.
+    Strips pytest's own argv so the --loglevel detector doesn't see e.g. `-v`
+    from pytest's command line as a false short-flag match.
     """
     monkeypatch.setattr(sys, "argv", ["celery", "-A", "app", "worker", *extra])
 
