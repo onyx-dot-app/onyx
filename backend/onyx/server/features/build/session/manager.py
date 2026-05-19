@@ -4,10 +4,14 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import hashlib
 import io
 import json
 import mimetypes
+import re
+import tempfile
 import time
+import uuid
 import zipfile
 from collections.abc import Generator
 from datetime import datetime
@@ -16,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
+import pypandoc
 from acp.schema import AgentMessageChunk
 from acp.schema import AgentPlanUpdate
 from acp.schema import AgentThoughtChunk
@@ -36,6 +42,7 @@ from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
@@ -51,6 +58,7 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
+from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -76,6 +84,7 @@ from onyx.server.features.build.sandbox import get_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     SSEKeepalive,
 )
+from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
@@ -484,10 +493,6 @@ class SessionManager:
         # running count.
         tenant_id = get_current_tenant_id()
         if MULTI_TENANT:
-            from onyx.server.features.build.configs import (
-                SANDBOX_MAX_CONCURRENT_PER_ORG,
-            )
-
             running_count = get_running_sandbox_count_by_tenant(
                 self._db_session, tenant_id
             )
@@ -605,10 +610,6 @@ class SessionManager:
 
         # Check sandbox limits for multi-tenant deployments
         if MULTI_TENANT:
-            from onyx.server.features.build.configs import (
-                SANDBOX_MAX_CONCURRENT_PER_ORG,
-            )
-
             running_count = get_running_sandbox_count_by_tenant(
                 self._db_session, tenant_id
             )
@@ -1110,8 +1111,6 @@ class SessionManager:
         Returns:
             List of suggestion dicts or empty list on parse failure
         """
-        import re
-
         # Strategy 1: Try direct JSON parse
         try:
             # Strip common LLM artifacts (code fences, etc.)
@@ -1221,11 +1220,6 @@ class SessionManager:
         # Delete snapshot files from S3 before removing DB records
         snapshots = get_snapshots_for_session(self._db_session, session_id)
         if snapshots:
-            from onyx.file_store.file_store import get_default_file_store
-            from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-                SnapshotManager,
-            )
-
             snapshot_manager = SnapshotManager(get_default_file_store())
             for snapshot in snapshots:
                 try:
@@ -1838,8 +1832,6 @@ class SessionManager:
         Returns:
             List of artifact dicts or None if session not found or user doesn't own session
         """
-        import uuid
-
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1968,10 +1960,6 @@ class SessionManager:
         if not filename.lower().endswith(".md"):
             raise ValueError("Only markdown (.md) files can be exported as DOCX")
 
-        import tempfile
-
-        import pypandoc
-
         md_text = content_bytes.decode("utf-8")
 
         with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
@@ -2005,8 +1993,6 @@ class SessionManager:
         Raises:
             ValueError: If path is invalid or conversion fails
         """
-        import hashlib
-
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -2102,10 +2088,6 @@ class SessionManager:
         Returns True if the server responds with any status code, False on timeout
         or connection error.
         """
-        import httpx
-
-        from onyx.server.features.build.sandbox.base import get_sandbox_manager
-
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
@@ -2505,10 +2487,6 @@ class SessionManager:
         Returns:
             True if sandbox was terminated, False if user had no sandbox
         """
-        from onyx.server.features.build.db.sandbox import (
-            update_sandbox_status__no_commit,
-        )
-
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return False

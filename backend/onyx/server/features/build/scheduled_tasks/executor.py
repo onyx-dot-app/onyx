@@ -12,11 +12,11 @@ Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
    marked it failed).
 2. Get the user's sandbox to a RUNNING state via
    ``SessionManager.ensure_sandbox_running`` — creates a sandbox if the
-   user has none, waits up to 30s for any concurrent provisioner, and
-   wakes SLEEPING / TERMINATED / FAILED sandboxes in place. SKIP only
-   if the wait window elapses with the sandbox still PROVISIONING
-   (``sandbox_provisioning``); any other failure marks the run FAILED
-   with ``error_class=sandbox_wake_failed``.
+   user has none, waits up to ``PROVISIONING_WAIT_SECONDS`` for any
+   concurrent provisioner, and wakes SLEEPING / TERMINATED / FAILED
+   sandboxes in place. SKIP only if the wait window elapses with the
+   sandbox still PROVISIONING (``sandbox_provisioning``); any other
+   failure marks the run FAILED with ``error_class=sandbox_wake_failed``.
 3. Transition QUEUED -> RUNNING.
 4. Create a fresh ``BuildSession`` with ``origin=SCHEDULED``. Record its
    id on the run row.
@@ -208,9 +208,10 @@ def run_scheduled_task_logic(
         task_prompt = task.prompt
 
         # ensure_sandbox_running handles every state we care about:
-        # creates a sandbox if none exists, waits up to 30s for any
-        # concurrent provisioner, wakes SLEEPING / TERMINATED / FAILED,
-        # and recovers a RUNNING-but-unhealthy pod.
+        # creates a sandbox if none exists, waits up to
+        # PROVISIONING_WAIT_SECONDS for any concurrent provisioner, wakes
+        # SLEEPING / TERMINATED / FAILED, and recovers a RUNNING-but-
+        # unhealthy pod.
         try:
             session_manager = SessionManager(db_session)
             sandbox = session_manager.ensure_sandbox_running(
