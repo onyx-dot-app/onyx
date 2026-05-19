@@ -838,11 +838,20 @@ jobs:
     steps:
       - name: Check job status
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_TESTS: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
           MULTITENANT_RESULT: ${{ needs.multitenant-tests.result }}
         run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed — required check passes."
             exit 0
