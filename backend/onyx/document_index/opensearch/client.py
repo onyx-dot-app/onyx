@@ -303,9 +303,7 @@ class OpenSearchClient(AbstractContextManager):
         Returns:
             The raw cluster health response.
         """
-        if index is not None:
-            return self._client.cluster.health(index=index, level=level)
-        return self._client.cluster.health(level=level)
+        return self._client.cluster.health(index=index, level=level)
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def cat_shards(
@@ -328,10 +326,7 @@ class OpenSearchClient(AbstractContextManager):
         Returns:
             A list of dicts, one per shard, with the requested columns as keys.
         """
-        kwargs: dict[str, Any] = {"format": "json", "h": columns}
-        if index is not None:
-            kwargs["index"] = index
-        return self._client.cat.shards(**kwargs)
+        return self._client.cat.shards(format="json", h=columns, index=index)
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def allocation_explain(
@@ -364,9 +359,7 @@ class OpenSearchClient(AbstractContextManager):
             body["shard"] = shard
         if primary is not None:
             body["primary"] = primary
-        if body:
-            return self._client.cluster.allocation_explain(body=body)
-        return self._client.cluster.allocation_explain()
+        return self._client.cluster.allocation_explain(body=body or None)
 
     @log_function_time(print_only=True, debug_only=True)
     def reroute_retry_failed(self) -> dict[str, Any]:
@@ -1296,17 +1289,12 @@ class OpenSearchIndexClient(OpenSearchClient):
         with ctx:
             try:
                 t0 = time.perf_counter()
-                if search_pipeline_id:
-                    result = self._client.search(
-                        index=self._index_name,
-                        search_pipeline=search_pipeline_id,
-                        body=body,
-                        params=params,
-                    )
-                else:
-                    result = self._client.search(
-                        index=self._index_name, body=body, params=params
-                    )
+                result = self._client.search(
+                    index=self._index_name,
+                    search_pipeline=search_pipeline_id,
+                    body=body,
+                    params=params,
+                )
                 client_duration_s = time.perf_counter() - t0
                 hits, time_took, timed_out, phase_took, profile = (
                     self._get_hits_and_profile_from_search_result(result)
