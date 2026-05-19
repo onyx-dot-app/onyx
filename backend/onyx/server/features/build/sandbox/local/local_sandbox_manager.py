@@ -954,16 +954,14 @@ class LocalSandboxManager(SandboxManager):
 
         entries = []
         for item in target_path.iterdir():
-            stat = item.stat()
             is_file = item.is_file()
-            mime_type = mimetypes.guess_type(str(item))[0] if is_file else None
             entries.append(
                 FilesystemEntry(
                     name=item.name,
                     path=str(item.relative_to(session_path)),
                     is_directory=item.is_dir(),
-                    size=stat.st_size if is_file else None,
-                    mime_type=mime_type,
+                    size=item.stat().st_size if is_file else None,
+                    mime_type=mimetypes.guess_type(str(item))[0] if is_file else None,
                 )
             )
 
