@@ -37,7 +37,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.serviceAccountName" . }}-sandbox-binding
+  name: {{ include "onyx.fullname" . }}-sandbox-binding
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
