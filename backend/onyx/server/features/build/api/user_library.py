@@ -1,15 +1,11 @@
 """API endpoints for User Library file management in Craft."""
 
-import hashlib
-import io
 import mimetypes
 import re
 import zipfile
 from datetime import datetime
 from datetime import timezone
 from io import BytesIO
-from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -23,28 +19,27 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
 from onyx.db.connector_credential_pair import update_connector_credential_pair
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
-from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
 from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
-from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
+from onyx.server.features.build.db.user_library import create_directory_record
+from onyx.server.features.build.db.user_library import delete_user_file
+from onyx.server.features.build.db.user_library import fetch_user_file_for_user
 from onyx.server.features.build.db.user_library import get_or_create_craft_connector
 from onyx.server.features.build.db.user_library import get_user_storage_bytes
-from onyx.server.features.build.sandbox.user_files import (
-    sync_user_files_to_active_sandboxes,
+from onyx.server.features.build.db.user_library import list_user_files
+from onyx.server.features.build.db.user_library import set_sync_disabled
+from onyx.server.features.build.db.user_library import store_user_file
+from onyx.server.features.build.sandbox.user_library import (
+    sync_user_library_to_active_sandboxes,
 )
 from onyx.server.features.build.utils import sanitize_filename as api_sanitize_filename
 from onyx.utils.logger import setup_logger
@@ -137,16 +132,6 @@ def _sanitize_path(path: str) -> str:
     return "/" + "/".join(sanitized_parts)
 
 
-def _build_document_id(user_id: str, path: str) -> str:
-    """Deterministic document ID for a craft file.
-
-    Uses a path hash to avoid collisions from separator replacement
-    (e.g., "/a/b_c" vs "/a_b/c" would collide with naive slash-to-underscore).
-    """
-    path_hash = hashlib.sha256(path.encode()).hexdigest()[:16]
-    return f"CRAFT_FILE__{user_id}__{path_hash}"
-
-
 def _validate_zip_contents(
     zip_file: zipfile.ZipFile,
     existing_usage: int,
@@ -169,99 +154,13 @@ def _validate_zip_contents(
         )
 
 
-def _verify_ownership_and_get_document(
-    document_id: str,
-    user: User,
-    db_session: Session,
-) -> Any:
-    """Verify the user owns the document and return it."""
-    from onyx.db.document import get_document
-
-    user_prefix = f"CRAFT_FILE__{user.id}__"
-    if not document_id.startswith(user_prefix):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Not authorized to modify this file",
-        )
-
-    doc = get_document(document_id, db_session)
-    if doc is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
-
-    return doc
-
-
-def _store_and_track_file(
-    *,
-    file_path: str,
-    content: bytes,
-    content_type: str | None,
-    user_id: str,
-    connector_id: int,
-    credential_id: int,
-    db_session: Session,
-) -> tuple[str, str]:
-    """Write a file to the default file store and upsert its document record."""
-    filename = file_path.split("/")[-1]
-    mime_type = content_type or "application/octet-stream"
-
-    file_store = get_default_file_store()
-
-    # Delete the old blob if re-uploading to the same path.
-    from onyx.db.document import get_document
-
-    doc_id = _build_document_id(user_id, file_path)
-    existing = get_document(doc_id, db_session)
-    if existing and existing.link:
-        file_store.delete_file(existing.link)
-
-    file_id = file_store.save_file(
-        content=io.BytesIO(content),
-        display_name=filename,
-        file_origin=FileOrigin.USER_FILE,
-        file_type=mime_type,
-    )
-    doc_metadata = DocumentMetadata(
-        connector_id=connector_id,
-        credential_id=credential_id,
-        document_id=doc_id,
-        semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{file_path}",
-        first_link=file_id,
-        file_id=file_id,
-        doc_metadata={
-            "file_store_id": file_id,
-            "file_path": file_path,
-            "file_size": len(content),
-            "mime_type": mime_type,
-            "is_directory": False,
-        },
-    )
-    upsert_documents(db_session, [doc_metadata])
-    upsert_document_by_connector_credential_pair(
-        db_session, connector_id, credential_id, [doc_id]
-    )
-
-    return doc_id, file_id
-
-
-def _try_sync(user_id: UUID, db_session: Session) -> None:
-    """Best-effort push of user files to active sandboxes after a mutation."""
-    sync_user_files_to_active_sandboxes(user_id, db_session)
-
-
 @router.get("/tree")
 def get_library_tree(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[LibraryEntryResponse]:
     """Get user's uploaded files as a tree structure."""
-    from onyx.db.document import get_documents_by_source
-
-    user_docs = get_documents_by_source(
-        db_session=db_session,
-        source=DocumentSource.CRAFT_FILE,
-        creator_id=user.id,
-    )
+    user_docs = list_user_files(db_session, user.id)
 
     entries: list[LibraryEntryResponse] = []
     now = datetime.now(timezone.utc)
@@ -334,14 +233,14 @@ async def upload_files(
         safe_filename = api_sanitize_filename(file.filename or "unnamed")
         file_path = f"{base_path}/{safe_filename}".replace("//", "/")
 
-        doc_id, _ = _store_and_track_file(
-            file_path=file_path,
-            content=content,
-            content_type=file.content_type,
-            user_id=str(user.id),
+        doc_id, _ = store_user_file(
+            db_session=db_session,
+            user_id=user.id,
             connector_id=connector_id,
             credential_id=credential_id,
-            db_session=db_session,
+            file_path=file_path,
+            content=content,
+            mime_type=file.content_type or "application/octet-stream",
         )
 
         uploaded_entries.append(
@@ -366,6 +265,8 @@ async def upload_files(
         run_dt=now,
     )
 
+    db_session.commit()
+
     logger.info(
         "Uploaded %s files (%s bytes) for user %s",
         len(uploaded_entries),
@@ -373,7 +274,7 @@ async def upload_files(
         user.id,
     )
 
-    _try_sync(user.id, db_session)
+    sync_user_library_to_active_sandboxes(user.id, db_session)
 
     return UploadResponse(
         entries=uploaded_entries,
@@ -482,14 +383,14 @@ async def upload_zip(
 
                 content_type, _ = mimetypes.guess_type(file_name)
 
-                doc_id, _ = _store_and_track_file(
-                    file_path=file_path,
-                    content=file_content,
-                    content_type=content_type,
-                    user_id=str(user.id),
+                doc_id, _ = store_user_file(
+                    db_session=db_session,
+                    user_id=user.id,
                     connector_id=connector_id,
                     credential_id=credential_id,
-                    db_session=db_session,
+                    file_path=file_path,
+                    content=file_content,
+                    mime_type=content_type or "application/octet-stream",
                 )
 
                 uploaded_entries.append(
@@ -508,22 +409,13 @@ async def upload_zip(
     except zipfile.BadZipFile:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid zip file")
 
-    if directory_paths:
-        dir_doc_ids: list[str] = []
-        for dir_path in sorted(directory_paths):
-            dir_doc_id = _build_document_id(str(user.id), dir_path)
-            dir_doc_ids.append(dir_doc_id)
-            dir_metadata = DocumentMetadata(
-                connector_id=connector_id,
-                credential_id=credential_id,
-                document_id=dir_doc_id,
-                semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{dir_path}",
-                first_link="",
-                doc_metadata={"is_directory": True},
-            )
-            upsert_documents(db_session, [dir_metadata])
-        upsert_document_by_connector_credential_pair(
-            db_session, connector_id, credential_id, dir_doc_ids
+    for dir_path in sorted(directory_paths):
+        create_directory_record(
+            db_session=db_session,
+            user_id=user.id,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            dir_path=dir_path,
         )
 
     update_connector_credential_pair(
@@ -535,6 +427,8 @@ async def upload_zip(
         run_dt=now,
     )
 
+    db_session.commit()
+
     logger.info(
         "Extracted %s files (%s bytes) from zip for user %s",
         len(uploaded_entries),
@@ -542,7 +436,7 @@ async def upload_zip(
         user.id,
     )
 
-    _try_sync(user.id, db_session)
+    sync_user_library_to_active_sandboxes(user.id, db_session)
 
     return UploadResponse(
         entries=uploaded_entries,
@@ -564,20 +458,12 @@ def create_directory(
     safe_name = api_sanitize_filename(request.name)
     dir_path = f"{parent_path}/{safe_name}".replace("//", "/")
 
-    doc_id = _build_document_id(str(user.id), dir_path)
-    doc_metadata = DocumentMetadata(
+    doc_id = create_directory_record(
+        db_session=db_session,
+        user_id=user.id,
         connector_id=connector_id,
         credential_id=credential_id,
-        document_id=doc_id,
-        semantic_identifier=f"{USER_LIBRARY_SOURCE_DIR}{dir_path}",
-        first_link="",
-        doc_metadata={
-            "is_directory": True,
-        },
-    )
-    upsert_documents(db_session, [doc_metadata])
-    upsert_document_by_connector_credential_pair(
-        db_session, connector_id, credential_id, [doc_id]
+        dir_path=dir_path,
     )
     db_session.commit()
 
@@ -604,37 +490,11 @@ def toggle_file_sync(
 
     If the item is a directory, all children are also toggled.
     """
-    from onyx.db.document import get_documents_by_source
-    from onyx.db.document import update_document_metadata__no_commit
-
-    doc = _verify_ownership_and_get_document(document_id, user, db_session)
-
-    new_metadata = dict(doc.doc_metadata or {})
-    new_metadata["sync_disabled"] = not enabled
-    update_document_metadata__no_commit(db_session, document_id, new_metadata)
-
-    doc_metadata = doc.doc_metadata or {}
-    if doc_metadata.get("is_directory"):
-        folder_path = doc.semantic_id
-        if folder_path:
-            all_docs = get_documents_by_source(
-                db_session=db_session,
-                source=DocumentSource.CRAFT_FILE,
-                creator_id=user.id,
-            )
-            for child_doc in all_docs:
-                if child_doc.semantic_id and child_doc.semantic_id.startswith(
-                    folder_path + "/"
-                ):
-                    child_metadata = dict(child_doc.doc_metadata or {})
-                    child_metadata["sync_disabled"] = not enabled
-                    update_document_metadata__no_commit(
-                        db_session, child_doc.id, child_metadata
-                    )
-
+    doc = fetch_user_file_for_user(db_session, document_id, user.id)
+    set_sync_disabled(db_session, user.id, doc, sync_disabled=not enabled)
     db_session.commit()
 
-    _try_sync(user.id, db_session)
+    sync_user_library_to_active_sandboxes(user.id, db_session)
 
     return ToggleSyncResponse(success=True, sync_enabled=enabled)
 
@@ -646,23 +506,10 @@ def delete_file(
     db_session: Session = Depends(get_session),
 ) -> DeleteFileResponse:
     """Delete a file from the file store and the document table."""
-    from onyx.db.document import delete_document_by_id__no_commit
-
-    doc = _verify_ownership_and_get_document(document_id, user, db_session)
-
-    doc_metadata = doc.doc_metadata or {}
-    if not doc_metadata.get("is_directory"):
-        file_id = doc.link or doc_metadata.get("file_store_id")
-        if file_id:
-            file_store = get_default_file_store()
-            try:
-                file_store.delete_file(file_id, error_on_missing=False)
-            except Exception as e:
-                logger.warning("Failed to delete file %s: %s", file_id, e)
-
-    delete_document_by_id__no_commit(db_session, document_id)
+    doc = fetch_user_file_for_user(db_session, document_id, user.id)
+    delete_user_file(db_session, doc)
     db_session.commit()
 
-    _try_sync(user.id, db_session)
+    sync_user_library_to_active_sandboxes(user.id, db_session)
 
     return DeleteFileResponse(success=True, deleted=document_id)

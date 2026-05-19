@@ -77,7 +77,7 @@ from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client impo
 )
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.user_files import hydrate_user_files
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.prompts import BUILD_NAMING_SYSTEM_PROMPT
 from onyx.server.features.build.session.prompts import BUILD_NAMING_USER_PROMPT
 from onyx.server.features.build.session.prompts import (
@@ -391,12 +391,12 @@ class SessionManager:
                 "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
             )
 
-    def _hydrate_user_files(self, sandbox_id: UUID, user_id: UUID) -> None:
+    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
         try:
-            hydrate_user_files(sandbox_id, user_id, self._db_session)
+            hydrate_user_library(sandbox_id, user_id, self._db_session)
         except Exception:
             logger.warning(
-                "Failed to push user files to sandbox %s", sandbox_id, exc_info=True
+                "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
             )
 
     def _provision_sandbox(
@@ -602,7 +602,7 @@ class SessionManager:
             user_level=user_level,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
-        self._hydrate_user_files(sandbox.id, user_id)
+        self._hydrate_user_library(sandbox.id, user_id)
 
         sandbox_id = sandbox.id
         logger.info(
@@ -669,7 +669,7 @@ class SessionManager:
                         logger.warning("Cannot push skills: user %s not found", user_id)
                     else:
                         self._hydrate_skills(sandbox.id, user)
-                    self._hydrate_user_files(sandbox.id, user_id)
+                    self._hydrate_user_library(sandbox.id, user_id)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,

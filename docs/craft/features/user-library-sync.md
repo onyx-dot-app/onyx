@@ -32,7 +32,7 @@ This eliminates `get_persistent_document_writer()`, `S3PersistentDocumentWriter`
 
 ### Mount path
 
-`/workspace/managed/user_files`
+`/workspace/managed/user_library`
 
 Same atomic symlink swap as skills. The agent sees files at this stable path; the daemon swaps the underlying versioned directory on each push.
 
@@ -53,18 +53,18 @@ All triggers are synchronous — same pattern as skills. No Celery tasks needed.
 Upload/delete API         Session creation
     │                          │
     ▼                          ▼
-sync_user_files_to_      hydrate_user_files()
+sync_user_library_to_     hydrate_user_library()
   active_sandboxes()           │
     │                          │
     └──────────┬───────────────┘
                ▼
-    build_user_files_fileset(user_id, db_session)
+    build_user_library_fileset(user_id, db_session)
         1. Query CRAFT_FILE documents for user (sync_disabled != True, is_directory != True)
         2. Read each file from default file store via file_id
         3. Return FileSet dict keyed by relative path
                │
                ▼
-    write_files_to_sandbox(mount_path="/workspace/managed/user_files", files=fileset)
+    write_files_to_sandbox(mount_path="/workspace/managed/user_library", files=fileset)
         1. tar.gz the FileSet
         2. Sign with Ed25519
         3. POST to push daemon
@@ -98,13 +98,13 @@ Replace all `get_persistent_document_writer()` calls with `get_default_file_stor
 
 ### Part B: Sync to sandboxes
 
-**New file: `backend/onyx/server/features/build/sandbox/user_files.py`**
+**New file: `backend/onyx/server/features/build/sandbox/user_library.py`**
 
 ```python
-def build_user_files_fileset(user_id: UUID, db_session: Session) -> FileSet:
+def build_user_library_fileset(user_id: UUID, db_session: Session) -> FileSet:
     """Read user's CRAFT_FILE documents from file store, return as FileSet."""
 
-def hydrate_user_files(
+def hydrate_user_library(
     sandbox_manager: SandboxManager,
     sandbox_id: UUID,
     user_id: UUID,
@@ -112,17 +112,17 @@ def hydrate_user_files(
 ) -> None:
     """Push user's files to sandbox. Called on session creation."""
 
-def sync_user_files_to_active_sandboxes(user_id: UUID, db_session: Session) -> None:
+def sync_user_library_to_active_sandboxes(user_id: UUID, db_session: Session) -> None:
     """Push updated file set to all active sandboxes for user."""
 ```
 
 **Wire into session creation: `session/manager.py`**
 
-After `_hydrate_skills()`, call `hydrate_user_files()`.
+After `_hydrate_skills()`, call `hydrate_user_library()`.
 
 **Wire into upload/delete/toggle: `api/user_library.py`**
 
-After mutations, call `sync_user_files_to_active_sandboxes(user_id, db_session)` synchronously — same pattern as `push_skill_to_affected_sandboxes()`.
+After mutations, call `sync_user_library_to_active_sandboxes(user_id, db_session)` synchronously — same pattern as `push_skill_to_affected_sandboxes()`.
 
 ### No daemon changes
 
@@ -133,9 +133,9 @@ The push daemon already supports `/workspace/managed/` prefix. No new endpoints 
 | File | Change |
 |------|--------|
 | `api/user_library.py` | Replace PersistentDocumentWriter with default file store; enqueue sync task after mutations |
-| `sandbox/user_files.py` | New — `build_user_files_fileset`, `hydrate_user_files`, `sync_user_files_to_active_sandboxes` |
-| `session/manager.py` | Call `hydrate_user_files()` on session creation |
-| `skills/push.py` | Per-failure logging (matching user_files pattern) |
+| `sandbox/user_library.py` | New — `build_user_library_fileset`, `hydrate_user_library`, `sync_user_library_to_active_sandboxes` |
+| `session/manager.py` | Call `hydrate_user_library()` on session creation |
+| `skills/push.py` | Per-failure logging (matching user_library pattern) |
 
 ## 5. Important notes
 
@@ -157,7 +157,7 @@ Pure logic, no DB or network. Already covered by the test overhaul branch:
 Real Postgres + real `LocalSandboxManager` on `tmp_path`. Mock nothing except where injecting errors.
 
 **New: `test_user_file_sync.py`** — mirrors `test_skill_push.py` structure:
-- `test_hydrate_pushes_files_to_sandbox` — upload files via file store + DB, call `hydrate_user_files()`, assert files land at `managed/user_files/{path}` on disk with correct contents
+- `test_hydrate_pushes_files_to_sandbox` — upload files via file store + DB, call `hydrate_user_library()`, assert files land at `managed/user_library/{path}` on disk with correct contents
 - `test_sync_disabled_files_excluded` — set `sync_disabled=True` in doc_metadata, verify file is absent from fileset
 - `test_directories_excluded_from_fileset` — `is_directory=True` entries don't appear in fileset
 - `test_empty_library_is_noop` — no files → no push call, no error
@@ -172,7 +172,7 @@ Real HTTP against a running Onyx deployment. Already covered by the test overhau
 - `test_upload_api.py` — session-scoped upload, auth, blocked extensions, unicode filenames (8 tests)
 
 **New tests to add to `test_user_library_api.py`:**
-- `test_upload_triggers_sync_to_sandbox` — upload a file, verify it appears at `/workspace/managed/user_files/` via the sandbox's file listing (local backend: check disk; hit the tree endpoint to confirm round-trip)
+- `test_upload_triggers_sync_to_sandbox` — upload a file, verify it appears at `/workspace/managed/user_library/` via the sandbox's file listing (local backend: check disk; hit the tree endpoint to confirm round-trip)
 - `test_delete_triggers_resync` — upload, confirm present, delete, confirm absent from sandbox
 
 ### K8s tests (`test_kubernetes_sandbox.py`)
