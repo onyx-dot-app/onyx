@@ -420,6 +420,7 @@ class SessionManager:
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+        headless: bool = False,
     ) -> BuildSession:
         """
         Create a new build session with a sandbox.
@@ -471,7 +472,7 @@ class SessionManager:
         # are headless, never attach a preview, and pile up so fast they'd
         # exhaust the [3010, 3100) range on a busy tenant.
         nextjs_port: int | None
-        if origin == SessionOrigin.SCHEDULED:
+        if origin == SessionOrigin.SCHEDULED or headless:
             nextjs_port = None
         else:
             nextjs_port = allocate_nextjs_port(self._db_session)
@@ -609,6 +610,7 @@ class SessionManager:
         user_level: str | None = None,
         llm_provider_type: str | None = None,
         llm_model_name: str | None = None,
+        headless: bool = False,
     ) -> BuildSession:
         """Get existing empty session or create a new one with provisioned sandbox.
 
@@ -692,6 +694,7 @@ class SessionManager:
             user_level=user_level,
             llm_provider_type=llm_provider_type,
             llm_model_name=llm_model_name,
+            headless=headless,
         )
 
     def delete_empty_session(self, user_id: UUID) -> bool:

@@ -10,14 +10,32 @@ from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def build_minimal_bundle(slug: str) -> bytes:
-    """Build a minimal valid skill bundle zip with SKILL.md."""
+def build_minimal_bundle(
+    slug: str,
+    *,
+    body: str | None = None,
+    extra_files: dict[str, bytes] | None = None,
+) -> bytes:
+    """Build a minimal valid skill bundle zip.
+
+    - ``body``: contents of ``SKILL.md``. When None, a minimal frontmatter-
+      only SKILL.md is generated so the bundle parses.
+    - ``extra_files``: additional ``{path: bytes}`` entries to include in
+      the zip alongside ``SKILL.md``.
+    """
+    skill_md = (
+        body
+        if body is not None
+        else (
+            f"---\nname: {slug}\ndescription: Test skill {slug}\n---\n"
+            "\nSkill instructions."
+        )
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(
-            "SKILL.md",
-            f"---\nname: {slug}\ndescription: Test skill {slug}\n---\n\nSkill instructions.",
-        )
+        zf.writestr("SKILL.md", skill_md)
+        for path, content in (extra_files or {}).items():
+            zf.writestr(path, content)
     return buf.getvalue()
 
 
@@ -39,6 +57,9 @@ class SkillManager:
         if bundle_bytes is None:
             bundle_bytes = build_minimal_bundle(slug)
 
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
         response = requests.post(
             f"{API_SERVER_URL}/admin/skills/custom",
             data={
@@ -55,7 +76,7 @@ class SkillManager:
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()
@@ -98,6 +119,9 @@ class SkillManager:
         bundle_bytes: bytes,
         user_performing_action: DATestUser,
     ) -> DATestSkill:
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
         response = requests.put(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/bundle",
             files={
@@ -107,7 +131,7 @@ class SkillManager:
                     "application/zip",
                 )
             },
-            headers=user_performing_action.headers,
+            headers=headers,
         )
         response.raise_for_status()
         data = response.json()
