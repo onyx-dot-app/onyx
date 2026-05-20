@@ -162,6 +162,7 @@ detect_compose_cmd() {
     COMPOSE_CMD=""
     return 1
 }
+detect_compose_cmd || true
 
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
@@ -289,7 +290,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
 
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            if ! detect_compose_cmd; then
+            if [[ -z "$COMPOSE_CMD" ]]; then
                 print_error "Docker Compose not found. Cannot stop containers."
                 exit 1
             fi
@@ -342,7 +343,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            if ! detect_compose_cmd; then
+            if [[ -z "$COMPOSE_CMD" ]]; then
                 print_error "Docker Compose not found. Cannot remove containers."
                 exit 1
             fi
@@ -432,12 +433,14 @@ if ! command -v docker &> /dev/null; then
             exit 1
         fi
         print_success "Docker installed successfully"
+        # Compose plugin may ship with Docker — re-detect.
+        detect_compose_cmd || true
     fi
 fi
 
 # --- Auto-install Docker Compose plugin (Linux only) ---
 if command -v docker &> /dev/null \
-    && ! detect_compose_cmd \
+    && [[ -z "$COMPOSE_CMD" ]] \
     && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
 
     print_info "Docker Compose is required but not installed."
@@ -537,7 +540,7 @@ DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 print_success "Docker $DOCKER_VERSION is installed"
 
 # Check Docker Compose
-if ! detect_compose_cmd; then
+if [[ -z "$COMPOSE_CMD" ]]; then
     print_error "Docker Compose is not installed. Please install Docker Compose first."
     echo "Visit: https://docs.docker.com/compose/install/"
     exit 1
