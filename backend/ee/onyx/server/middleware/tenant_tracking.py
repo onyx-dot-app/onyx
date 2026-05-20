@@ -6,8 +6,13 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import JSONResponse
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
+from ee.onyx.configs.license_enforcement_config import (
+    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+)
+from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
@@ -37,11 +42,56 @@ def add_api_server_tenant_id_middleware(
                 tenant_id = POSTGRES_DEFAULT_SCHEMA
 
             CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+            # Block GATED_ACCESS tenants on every non-allowlisted path.
+            # The frontend ProductGatingWrapper only stops UI rendering — direct
+            # API callers (bots with stored auth, PATs, scripts) bypass it and
+            # have historically continued burning the cloud LLM key after their
+            # trial expired or payment failed. Allowlist mirrors the self-hosted
+            # `license_enforcement` middleware so a gated tenant can still reach
+            # /auth, /billing, /me, etc. to resubscribe, plus the multi-tenant
+            # Stripe publishable key endpoint needed to render the checkout flow.
+            if MULTI_TENANT and not _is_path_allowed(request.url.path):
+                try:
+                    gated = is_tenant_gated(tenant_id)
+                except Exception:
+                    # Fail open on Redis errors — don't lock paying users out
+                    # because of cache connectivity.
+                    logger.warning(
+                        "[tenant_tracking] is_tenant_gated check failed; allowing request"
+                    )
+                    gated = False
+
+                if gated:
+                    logger.info(
+                        "[tenant_tracking] Blocking gated tenant: tenant=%s path=%s",
+                        tenant_id,
+                        request.url.path,
+                    )
+                    return JSONResponse(
+                        status_code=402,
+                        content={
+                            "detail": {
+                                "error": "license_expired",
+                                "message": "Your subscription has expired. Please update your billing.",
+                            }
+                        },
+                    )
+
             return await call_next(request)
 
         except Exception as e:
             logger.exception("Error in tenant ID middleware: %s", str(e))
             raise
+
+
+def _is_path_allowed(path: str) -> bool:
+    if path.startswith("/api/"):
+        path = path[4:]
+    if any(path.startswith(prefix) for prefix in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES):
+        return True
+    # Multi-tenant billing uses the tenants namespace instead of /admin/billing.
+    return path.startswith("/tenants/stripe-publishable-key")
 
 
 async def _get_tenant_id_from_request(
