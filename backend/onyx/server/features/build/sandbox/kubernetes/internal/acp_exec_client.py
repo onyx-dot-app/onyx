@@ -75,9 +75,6 @@ class ACPExecClient(ACPExecClientBase):
         return f"pod={self._pod_name}"
 
     def _open_transport(self, cwd: str) -> None:
-        if self._ws_client is not None:
-            raise RuntimeError("Client already started. Call stop() first.")
-
         k8s = self._get_k8s_client()
 
         # Set XDG_DATA_HOME so opencode stores session data on the shared

@@ -82,9 +82,6 @@ class DockerACPExecClient(ACPExecClientBase):
         return f"container={self._container_name}"
 
     def _open_transport(self, cwd: str) -> None:
-        if self._socket is not None:
-            raise RuntimeError("Client already started. Call stop() first.")
-
         data_dir = shlex.quote(f"{cwd}/.opencode-data")
         safe_cwd = shlex.quote(cwd)
         cmd = [
