@@ -286,14 +286,14 @@ class OnyxTokenStorage(TokenStorage):
             }
             update_connection_config(config.id, db_session, config_data)
 
-        # The shared admin row is intentionally NOT written here: it is
-        # cross-user state (it serves as the OAuth `client_info` registry
-        # for every user of this MCP server, see `get_client_info`), and
-        # writing this user's tokens / Authorization header into it would
-        # leak them to every other user of the same server (GHSA-q62f-rv3h-f822).
-        # The Redis push below is what `process_oauth_callback` blocks on
-        # to know token exchange has completed; the admin config id is the
-        # only stable identifier shared between the two contexts.
+        # The shared admin row is intentionally NOT written here: it
+        # serves as the OAuth `client_info` registry shared across all
+        # users of this MCP server (see `get_client_info`). Per-user
+        # state (access tokens and resolved `Authorization` headers)
+        # belongs only on the per-user row. The Redis push below is
+        # what `process_oauth_callback` blocks on to know token exchange
+        # has completed; the admin config id is the only stable
+        # identifier shared between the two contexts.
         if self.alt_config_id:
             r = get_redis_client()
             r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
@@ -336,11 +336,9 @@ class OnyxTokenStorage(TokenStorage):
             # used by every user of this MCP server (see `get_client_info`).
             # When DCR runs we want to cache the discovered client_info there
             # so future users can re-use it — but ONLY the `client_info`
-            # field. The per-user `config_data` carries this user's
-            # `tokens` and resolved `Authorization` header by the time the
-            # SDK calls `set_client_info`, and writing the whole payload
-            # into the shared admin row would leak those secrets to every
-            # other user of the same server (GHSA-q62f-rv3h-f822).
+            # field. The per-user `config_data` carries per-user state
+            # (`tokens`, resolved `Authorization` header) which belongs
+            # only on the per-user row.
             if self.alt_config_id:
                 alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
                 alt_config_data = extract_connection_data(alt_config)
@@ -1094,15 +1092,12 @@ def _db_mcp_server_to_api_mcp_server(
                 admin_credentials = {}
                 logger.warning("No client info found for server %s", db_server.name)
 
-    # Get auth template if this is a per-user API_TOKEN server.
-    #
-    # OAUTH per-user servers intentionally do NOT get an `auth_template`:
-    # OAuth uses the handshake URL (`/oauth/connect`) rather than a
-    # header template, so the frontend never consumes one for OAuth
-    # flows. Returning the admin row's headers for OAuth servers is the
-    # exposure path of GHSA-q62f-rv3h-f822 — the admin row is shared
-    # cross-user, so anything stamped onto its `headers` would leak to
-    # every authenticated caller of `/api/mcp/servers*`.
+    # The header template is only meaningful for per-user API_TOKEN
+    # servers, where it surfaces placeholder strings (e.g.
+    # `Bearer {API_KEY}`) for the user-side credential prompt. OAuth
+    # per-user servers do not get an `auth_template`: OAuth uses the
+    # handshake URL (`/oauth/connect`) rather than a header template,
+    # so the frontend never consumes one for OAuth flows.
     auth_template = None
     if (
         auth_performer == MCPAuthenticationPerformer.PER_USER
