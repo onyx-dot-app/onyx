@@ -10,7 +10,7 @@ export default function Error() {
         <Text as="p" headingH2>
           We encountered an issue
         </Text>
-        <SvgAlertCircle className="w-[1.5rem] h-[1.5rem] stroke-text-04" />
+        <SvgAlertCircle className="w-6 h-6 stroke-text-04" />
       </div>
 
       <Text as="p" text03>

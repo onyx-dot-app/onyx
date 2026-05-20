@@ -202,9 +202,9 @@ def transform_vespa_chunks_to_opensearch_chunks(
             # function.
             if vespa_document_id in sanitized_to_original_doc_id_mapping:
                 logger.warning(
-                    f"Migration warning: Vespa document ID {vespa_document_id} does not match the document ID supplied "
-                    f"{sanitized_to_original_doc_id_mapping[vespa_document_id]}. "
-                    "The Vespa ID will be discarded."
+                    "Migration warning: Vespa document ID %s does not match the document ID supplied %s. The Vespa ID will be discarded.",
+                    vespa_document_id,
+                    sanitized_to_original_doc_id_mapping[vespa_document_id],
                 )
             document_id = sanitized_to_original_doc_id_mapping.get(
                 vespa_document_id, vespa_document_id
@@ -287,9 +287,9 @@ def transform_vespa_chunks_to_opensearch_chunks(
             )
             if not is_public and not acl_list:
                 logger.warning(
-                    f"Migration warning: Vespa chunk with document ID {vespa_document_id} and chunk index {chunk_index} has no "
-                    "public ACL and no access control list. This does not make sense as it implies the document is never "
-                    "searchable. Continuing with the migration..."
+                    "Migration warning: Vespa chunk with document ID %s and chunk index %s has no public ACL and no access control list. This does not make sense as it implies the document is never searchable. Continuing with the migration...",
+                    vespa_document_id,
+                    chunk_index,
                 )
 
             chunk_tenant_id: str | None = vespa_chunk.get(TENANT_ID)
@@ -338,9 +338,9 @@ def transform_vespa_chunks_to_opensearch_chunks(
         except Exception:
             traceback.print_exc()
             logger.exception(
-                f"Migration error: Error transforming Vespa chunk with document ID {vespa_chunk.get(DOCUMENT_ID)} "
-                f"and chunk index {vespa_chunk.get(CHUNK_ID)} into an OpenSearch chunk. Continuing with "
-                "the migration..."
+                "Migration error: Error transforming Vespa chunk with document ID %s and chunk index %s into an OpenSearch chunk. Continuing with the migration...",
+                vespa_chunk.get(DOCUMENT_ID),
+                vespa_chunk.get(CHUNK_ID),
             )
             errored_chunks.append(vespa_chunk)
 

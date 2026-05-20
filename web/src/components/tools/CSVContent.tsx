@@ -12,7 +12,7 @@ import { ContentComponentProps } from "./ExpandableContentWrapper";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { SvgAlertCircle } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 const CsvContent: React.FC<ContentComponentProps> = ({
   fileDescriptor,

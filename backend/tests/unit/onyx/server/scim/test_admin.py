@@ -6,7 +6,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
@@ -50,23 +49,25 @@ def _make_token(token_id: int, name: str, *, is_active: bool = True) -> ScimToke
 class TestGetActiveToken:
     def test_returns_token_metadata(self, scim_dal: ScimDAL, admin_user: User) -> None:
         token = _make_token(1, "prod-token")
-        scim_dal._session.scalar.return_value = token  # type: ignore[attr-defined]
+        scim_dal._session.scalar.return_value = (  # ty: ignore[unresolved-attribute]
+            token
+        )
 
         result = get_active_scim_token(_=admin_user, dal=scim_dal)
 
+        assert result is not None
         assert result.id == 1
         assert result.name == "prod-token"
         assert result.is_active is True
 
-    def test_raises_404_when_no_active_token(
+    def test_returns_none_when_no_active_token(
         self, scim_dal: ScimDAL, admin_user: User
     ) -> None:
-        scim_dal._session.scalar.return_value = None  # type: ignore[attr-defined]
+        scim_dal._session.scalar.return_value = None  # ty: ignore[unresolved-attribute]
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_active_scim_token(_=admin_user, dal=scim_dal)
+        result = get_active_scim_token(_=admin_user, dal=scim_dal)
 
-        assert exc_info.value.status_code == 404
+        assert result is None
 
 
 class TestCreateToken:
@@ -81,7 +82,9 @@ class TestCreateToken:
 
         # Simulate one existing active token that should get revoked
         existing = _make_token(1, "old-token", is_active=True)
-        scim_dal._session.scalars.return_value.all.return_value = [existing]  # type: ignore[attr-defined]
+        scim_dal._session.scalars.return_value.all.return_value = (  # type: ignore
+            [existing]
+        )
 
         # Simulate DB defaults that would be set on INSERT/flush
         def fake_add(obj: ScimToken) -> None:
@@ -89,7 +92,7 @@ class TestCreateToken:
             obj.is_active = True
             obj.created_at = datetime(2026, 2, 1)
 
-        scim_dal._session.add.side_effect = fake_add  # type: ignore[attr-defined]
+        scim_dal._session.add.side_effect = fake_add  # ty: ignore[unresolved-attribute]
 
         body = ScimTokenCreate(name="new-token")
         result = create_scim_token(body=body, user=admin_user, dal=scim_dal)
@@ -103,7 +106,7 @@ class TestCreateToken:
         assert result.is_active is True
 
         # Session was committed
-        scim_dal._session.commit.assert_called_once()  # type: ignore[attr-defined]
+        scim_dal._session.commit.assert_called_once()  # ty: ignore[unresolved-attribute]
 
     @patch("ee.onyx.server.enterprise_settings.api.generate_scim_token")
     def test_creates_first_token_when_none_exist(
@@ -115,14 +118,16 @@ class TestCreateToken:
         mock_generate.return_value = ("raw_token_val", "hashed_val", "****abcd")
 
         # No existing tokens
-        scim_dal._session.scalars.return_value.all.return_value = []  # type: ignore[attr-defined]
+        scim_dal._session.scalars.return_value.all.return_value = (  # ty: ignore[unresolved-attribute]
+            []
+        )
 
         def fake_add(obj: ScimToken) -> None:
             obj.id = 1
             obj.is_active = True
             obj.created_at = datetime(2026, 2, 1)
 
-        scim_dal._session.add.side_effect = fake_add  # type: ignore[attr-defined]
+        scim_dal._session.add.side_effect = fake_add  # ty: ignore[unresolved-attribute]
 
         body = ScimTokenCreate(name="first-token")
         result = create_scim_token(body=body, user=admin_user, dal=scim_dal)

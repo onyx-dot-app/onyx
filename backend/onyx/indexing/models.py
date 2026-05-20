@@ -18,7 +18,7 @@ from shared_configs.model_server_models import Embedding
 
 if TYPE_CHECKING:
     from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
-from sqlalchemy.engine.util import TransactionalContext
+from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from onyx.db.models import SearchSettings
@@ -189,11 +189,19 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
-    embedding_precision: EmbeddingPrecision
+    # Defaults to FLOAT (float32). OpenSearch ignores embedding_precision and
+    # stores vectors as float32 regardless — see
+    # onyx/document_index/opensearch/opensearch_document_index.py. BFLOAT16
+    # still works for existing Vespa deployments.
+    embedding_precision: EmbeddingPrecision = EmbeddingPrecision.FLOAT
     reduced_dimension: int | None = None
 
     switchover_type: SwitchoverType = SwitchoverType.REINDEX
     enable_contextual_rag: bool
+    contextual_rag_model_configuration_id: int | None = None
+    # Deprecated: accepted for backward compat but silently ignored on write.
+    # Callers must send contextual_rag_model_configuration_id instead;
+    # these fields are no longer resolved or persisted.
     contextual_rag_llm_name: str | None = None
     contextual_rag_llm_provider: str | None = None
 
@@ -221,6 +229,7 @@ class IndexingSetting(EmbeddingModelDetail):
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
             enable_contextual_rag=search_settings.enable_contextual_rag,
+            contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
 
 
@@ -248,21 +257,23 @@ class ChunkEnrichmentContext(Protocol):
 
 
 class IndexingBatchAdapter(Protocol):
+    connector_id: int | None
+    credential_id: int | None
+
     def prepare(
         self, documents: list[Document], ignore_time_skip: bool
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager
-    def lock_context(
-        self, documents: list[Document]
-    ) -> Generator[TransactionalContext, None, None]:
-        """Provide a transaction/row-lock context for critical updates."""
+    def lock_context(self, documents: list[Document]) -> Generator[Session, None, None]:
+        """Acquire row locks and yield the session for the critical section."""
 
     def prepare_enrichment(
         self,
         context: "DocumentBatchPrepareContext",
         tenant_id: str,
         chunks: list[DocAwareChunk],
+        db_session: Session,
     ) -> ChunkEnrichmentContext:
         """Prepare per-chunk enrichment data (access, document sets, boost, etc.).
 
@@ -278,4 +289,5 @@ class IndexingBatchAdapter(Protocol):
         updatable_chunk_data: list[UpdatableChunkData],
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
+        db_session: Session,
     ) -> None: ...

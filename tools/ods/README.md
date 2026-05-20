@@ -244,6 +244,54 @@ ods web lint
 ods web test --watch
 ```
 
+### `dev` - Devcontainer Management
+
+Manage the Onyx devcontainer. Also available as `ods dc`.
+
+Requires the [devcontainer CLI](https://github.com/devcontainers/cli) (`npm install -g @devcontainers/cli`).
+
+```shell
+ods dev <subcommand>
+```
+
+**Subcommands:**
+
+- `up` - Start the devcontainer (pulls the image if needed)
+- `into` - Open a zsh shell inside the running devcontainer
+- `exec` - Run an arbitrary command inside the devcontainer
+- `restart` - Remove and recreate the devcontainer
+- `rebuild` - Pull the latest published image and recreate
+- `stop` - Stop the running devcontainer
+
+The devcontainer image is published to `onyxdotapp/onyx-devcontainer` and
+referenced by tag in `.devcontainer/devcontainer.json` — no local build needed.
+
+**Examples:**
+
+```shell
+# Start the devcontainer
+ods dev up
+
+# Open a shell
+ods dev into
+
+# Run a command
+ods dev exec -- npm test
+
+# Restart the container
+ods dev restart
+
+# Pull latest image and recreate
+ods dev rebuild
+
+# Stop the container
+ods dev stop
+
+# Same commands work with the dc alias
+ods dc up
+ods dc into
+```
+
 ### `db` - Database Administration
 
 Manage PostgreSQL database dumps, restores, and migrations.

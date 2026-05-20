@@ -22,6 +22,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
+from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
 from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
@@ -32,7 +33,8 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
+from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
@@ -47,9 +49,7 @@ from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.llm_provider_options import (
-    get_recommendations,
-)
+from onyx.llm.well_known_providers.llm_provider_options import get_recommendations
 from onyx.llm.well_known_providers.llm_provider_options import (
     model_configurations_for_provider,
 )
@@ -63,7 +63,6 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
-
 
 logger = setup_logger()
 
@@ -112,16 +111,21 @@ async def get_or_provision_tenant(
                 # The tenant was already dequeued from the pool — roll it back so
                 # it doesn't end up orphaned (schema exists, but not assigned to anyone).
                 logger.exception(
-                    f"Migration failed for pre-provisioned tenant {_tenant_id}; rolling back"
+                    "Migration failed for pre-provisioned tenant %s; rolling back",
+                    _tenant_id,
                 )
                 try:
                     await rollback_tenant_provisioning(_tenant_id)
                 except Exception:
-                    logger.exception(f"Failed to rollback orphaned tenant {_tenant_id}")
+                    logger.exception(
+                        "Failed to rollback orphaned tenant %s", _tenant_id
+                    )
                 raise
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
-            logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
+            logger.info(
+                "Assigned pre-provisioned tenant %s to user %s", tenant_id, email
+            )
         else:
             # If no pre-provisioned tenant is available, create a new one on-demand
             tenant_id = await create_tenant(email, referral_source)
@@ -152,19 +156,19 @@ async def create_tenant(
 
     """
     tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
-    logger.info(f"Creating new tenant {tenant_id} for user {email}")
+    logger.info("Creating new tenant %s for user %s", tenant_id, email)
 
     try:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
 
     except Exception as e:
-        logger.exception(f"Tenant provisioning failed: {str(e)}")
+        logger.exception("Tenant provisioning failed: %s", str(e))
         # Attempt to rollback the tenant provisioning
         try:
             await rollback_tenant_provisioning(tenant_id)
         except Exception:
-            logger.exception(f"Failed to rollback tenant provisioning for {tenant_id}")
+            logger.exception("Failed to rollback tenant provisioning for %s", tenant_id)
         raise HTTPException(status_code=500, detail="Failed to provision tenant.")
 
     return tenant_id
@@ -179,14 +183,14 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.debug(f"Provisioning tenant {tenant_id} for user {email}")
+    logger.debug("Provisioning tenant %s for user %s", tenant_id, email)
 
     try:
         # Create the schema for the tenant
         if not create_schema_if_not_exists(tenant_id):
-            logger.debug(f"Created schema for tenant {tenant_id}")
+            logger.debug("Created schema for tenant %s", tenant_id)
         else:
-            logger.debug(f"Schema already exists for tenant {tenant_id}")
+            logger.debug("Schema already exists for tenant %s", tenant_id)
 
         # Set up the tenant with all necessary configurations
         await setup_tenant(tenant_id)
@@ -195,7 +199,7 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
         await assign_tenant_to_user(tenant_id, email)
 
     except Exception as e:
-        logger.exception(f"Failed to create tenant {tenant_id}")
+        logger.exception("Failed to create tenant %s", tenant_id)
         raise HTTPException(
             status_code=500, detail=f"Failed to create tenant: {str(e)}"
         )
@@ -222,7 +226,7 @@ async def notify_control_plane(
         ) as response:
             if response.status != 200:
                 error_text = await response.text()
-                logger.error(f"Control plane tenant creation failed: {error_text}")
+                logger.error("Control plane tenant creation failed: %s", error_text)
                 raise Exception(
                     f"Failed to create tenant on control plane: {error_text}"
                 )
@@ -233,7 +237,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     Logic to rollback tenant provisioning on data plane.
     Handles each step independently to ensure maximum cleanup even if some steps fail.
     """
-    logger.info(f"Rolling back tenant provisioning for tenant_id: {tenant_id}")
+    logger.info("Rolling back tenant provisioning for tenant_id: %s", tenant_id)
 
     # Track if any part of the rollback fails
     rollback_errors = []
@@ -241,7 +245,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     # 1. Try to drop the tenant's schema
     try:
         drop_schema(tenant_id)
-        logger.info(f"Successfully dropped schema for tenant {tenant_id}")
+        logger.info("Successfully dropped schema for tenant %s", tenant_id)
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
         logger.error(error_msg)
@@ -257,7 +261,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
                 ).delete()
                 db_session.commit()
                 logger.info(
-                    f"Successfully removed user mappings for tenant {tenant_id}"
+                    "Successfully removed user mappings for tenant %s", tenant_id
                 )
             except Exception as e:
                 db_session.rollback()
@@ -282,7 +286,7 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
                     db_session.delete(available_tenant)
                     db_session.commit()
                     logger.info(
-                        f"Removed tenant {tenant_id} from available tenants table"
+                        "Removed tenant %s from available tenants table", tenant_id
                     )
             except Exception as e:
                 db_session.rollback()
@@ -294,9 +298,9 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
 
     # Log summary of rollback operation
     if rollback_errors:
-        logger.error(f"Tenant rollback completed with {len(rollback_errors)} errors")
+        logger.error("Tenant rollback completed with %s errors", len(rollback_errors))
     else:
-        logger.info(f"Tenant rollback completed successfully for tenant {tenant_id}")
+        logger.info("Tenant rollback completed successfully for tenant %s", tenant_id)
 
 
 def _build_model_configuration_upsert_requests(
@@ -327,9 +331,16 @@ def configure_default_api_keys(db_session: Session) -> None:
     def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
         nonlocal has_set_default_provider
         try:
-            existing = fetch_existing_llm_provider(
-                name=request.name, db_session=db_session
-            )
+            if request.name:
+                existing = fetch_existing_llm_provider_by_name_and_type(
+                    name=request.name,
+                    provider_type=request.provider,
+                    db_session=db_session,
+                )
+            else:
+                existing = fetch_existing_llm_provider_by_type_nameless(
+                    provider_type=request.provider, db_session=db_session
+                )
             if existing:
                 request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
@@ -337,14 +348,14 @@ def configure_default_api_keys(db_session: Session) -> None:
                 update_default_provider(provider.id, default_model, db_session)
                 has_set_default_provider = True
         except Exception as e:
-            logger.error(f"Failed to configure {request.provider} provider: {e}")
+            logger.error("Failed to configure %s provider: %s", request.provider, e)
 
     # Configure OpenAI provider
-    if OPENAI_DEFAULT_API_KEY:
+    if OPENAI_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
         if default_model is None:
             logger.error(
-                f"No default model found for {OPENAI_PROVIDER_NAME} in recommendations"
+                "No default model found for %s in recommendations", OPENAI_PROVIDER_NAME
             )
         default_model_name = default_model.name if default_model else "gpt-5.2"
 
@@ -366,18 +377,20 @@ def configure_default_api_keys(db_session: Session) -> None:
                 db_session, OPENAI_DEFAULT_API_KEY
             )
         except Exception as e:
-            logger.error(f"Failed to create default image gen config: {e}")
+            logger.error("Failed to create default image gen config: %s", e)
     else:
         logger.info(
-            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
+            "Skipping OpenAI default provider configuration "
+            "(OPENAI_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Anthropic provider
-    if ANTHROPIC_DEFAULT_API_KEY:
+    if ANTHROPIC_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
         if default_model is None:
             logger.error(
-                f"No default model found for {ANTHROPIC_PROVIDER_NAME} in recommendations"
+                "No default model found for %s in recommendations",
+                ANTHROPIC_PROVIDER_NAME,
             )
         default_model_name = (
             default_model.name if default_model else "claude-sonnet-4-5"
@@ -396,7 +409,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         _upsert(anthropic_provider, default_model_name)
     else:
         logger.info(
-            "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
+            "Skipping Anthropic default provider configuration "
+            "(ANTHROPIC_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Vertex AI provider
@@ -404,7 +418,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         default_model = recommendations.get_default_model(VERTEXAI_PROVIDER_NAME)
         if default_model is None:
             logger.error(
-                f"No default model found for {VERTEXAI_PROVIDER_NAME} in recommendations"
+                "No default model found for %s in recommendations",
+                VERTEXAI_PROVIDER_NAME,
             )
         default_model_name = default_model.name if default_model else "gemini-2.5-pro"
 
@@ -431,11 +446,12 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
     # Configure OpenRouter provider
-    if OPENROUTER_DEFAULT_API_KEY:
+    if OPENROUTER_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(OPENROUTER_PROVIDER_NAME)
         if default_model is None:
             logger.error(
-                f"No default model found for {OPENROUTER_PROVIDER_NAME} in recommendations"
+                "No default model found for %s in recommendations",
+                OPENROUTER_PROVIDER_NAME,
             )
         default_model_name = default_model.name if default_model else "z-ai/glm-4.7"
 
@@ -463,7 +479,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         _upsert(openrouter_provider, default_model_name)
     else:
         logger.info(
-            "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"
+            "Skipping OpenRouter default provider configuration "
+            "(OPENROUTER_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Cohere embedding provider
@@ -552,7 +569,7 @@ async def submit_to_hubspot(
         response = await client.post(HUBSPOT_TRACKING_URL, json=data)
 
     if response.status_code != 200:
-        logger.error(f"Failed to submit to HubSpot: {response.text}")
+        logger.error("Failed to submit to HubSpot: %s", response.text)
 
 
 async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
@@ -571,7 +588,7 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
         ) as response:
             if response.status != 200:
                 error_text = await response.text()
-                logger.error(f"Control plane tenant creation failed: {error_text}")
+                logger.error("Control plane tenant creation failed: %s", error_text)
                 raise Exception(
                     f"Failed to delete tenant on control plane: {error_text}"
                 )
@@ -604,7 +621,7 @@ def get_tenant_by_domain_from_control_plane(
         )
 
         if response.status_code != 200:
-            logger.error(f"Control plane tenant lookup failed: {response.text}")
+            logger.error("Control plane tenant lookup failed: %s", response.text)
             return None
 
         response_data = response.json()
@@ -617,7 +634,7 @@ def get_tenant_by_domain_from_control_plane(
             creator_email=response_data.get("creator_email"),
         )
     except Exception as e:
-        logger.error(f"Error fetching tenant by domain: {str(e)}")
+        logger.error("Error fetching tenant by domain: %s", str(e))
         return None
 
 
@@ -648,7 +665,7 @@ async def get_available_tenant() -> str | None:
                 # Remove the tenant from the available tenants table
                 db_session.delete(available_tenant)
                 db_session.commit()
-                logger.info(f"Using pre-provisioned tenant {tenant_id}")
+                logger.info("Using pre-provisioned tenant %s", tenant_id)
                 return tenant_id
             else:
                 db_session.rollback()
@@ -692,7 +709,7 @@ async def setup_tenant(tenant_id: str) -> None:
             setup_onyx(db_session, tenant_id, cohere_enabled=cohere_enabled)
 
     except Exception as e:
-        logger.exception(f"Failed to set up tenant {tenant_id}")
+        logger.exception("Failed to set up tenant %s", tenant_id)
         raise e
     finally:
         if token is not None:
@@ -714,5 +731,5 @@ async def assign_tenant_to_user(
     try:
         add_users_to_tenant([email], tenant_id)
     except Exception:
-        logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
+        logger.exception("Failed to assign tenant %s to user %s", tenant_id, email)
         raise Exception("Failed to assign tenant to user")

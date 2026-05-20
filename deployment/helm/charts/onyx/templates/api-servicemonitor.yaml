@@ -1,0 +1,23 @@
+{{- if .Values.monitoring.serviceMonitors.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "onyx.fullname" . }}-api
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    {{- with .Values.monitoring.serviceMonitors.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app: {{ .Values.api.deploymentLabels.app }}
+  endpoints:
+    - port: api-server-port
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}

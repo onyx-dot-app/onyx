@@ -25,19 +25,25 @@ export const logout = async (): Promise<Response> => {
 
 export const basicLogin = async (
   email: string,
-  password: string
+  password: string,
+  captchaToken?: string
 ): Promise<Response> => {
   const params = new URLSearchParams([
     ["username", email],
     ["password", password],
   ]);
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (captchaToken) {
+    headers["X-Captcha-Token"] = captchaToken;
+  }
+
   const response = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers,
     body: params,
   });
   return response;
@@ -116,10 +122,10 @@ export async function refreshToken(
 
 export function getUserDisplayName(user: User | null): string {
   // Prioritize custom personal name, if set.
-  if (!!user?.personalization?.name) return user.personalization.name;
+  if (user?.personalization?.name) return user.personalization.name;
 
   // Then, prioritize personal email.
-  if (!!user?.email) {
+  if (user?.email) {
     const atIndex = user.email.indexOf("@");
     if (atIndex > 0) {
       return user.email.substring(0, atIndex);
@@ -132,7 +138,7 @@ export function getUserDisplayName(user: User | null): string {
 
 export function getUserEmail(user: User | null): string {
   // Prioritize personal email.
-  if (!!user?.email) return user.email;
+  if (user?.email) return user.email;
 
   // If nothing works, then fall back to anonymous email.
   return "anonymous@email.com";

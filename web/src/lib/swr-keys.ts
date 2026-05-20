@@ -10,8 +10,9 @@ export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
 
-  // ── Health ────────────────────────────────────────────────────────────────
+  // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
@@ -25,6 +26,8 @@ export const SWR_KEYS = {
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   personaLabels: "/api/persona/labels",
+  adminAgents: "/api/admin/agents",
+  adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
@@ -32,9 +35,11 @@ export const SWR_KEYS = {
     `/api/llm/persona/${personaId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
+  customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
+  llmContextualCost: "/api/admin/llm/provider-contextual-cost",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
@@ -67,6 +72,7 @@ export const SWR_KEYS = {
   // ── Search Settings ───────────────────────────────────────────────────────
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
+  embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
@@ -80,6 +86,11 @@ export const SWR_KEYS = {
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
   invitedUsers: "/api/manage/users/invited",
+  // Curator-accessible listing of all users (and optionally service-account
+  // entries when `?include_api_keys=true`). Used by group create/edit pages so
+  // global curators — who cannot hit the admin-only `/accepted/all` and
+  // `/invited` endpoints — can still load the member picker.
+  groupMemberCandidates: "/api/manage/users?include_api_keys=true",
   pendingTenantUsers: "/api/tenants/users/pending",
   userCounts: "/api/manage/users/counts",
 
@@ -95,6 +106,10 @@ export const SWR_KEYS = {
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
 
+  // ── Skills ────────────────────────────────────────────────────────────────
+  adminSkills: "/api/admin/skills",
+  userSkills: "/api/skills",
+
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
@@ -105,7 +120,6 @@ export const SWR_KEYS = {
   voiceStatus: "/api/voice/status",
 
   // ── Build (Craft) ─────────────────────────────────────────────────────────
-  buildConnectors: "/api/build/connectors",
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
@@ -119,15 +133,6 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-
-  // ── Knowledge Graph ───────────────────────────────────────────────────────
-  kgConfig: "/api/admin/kg/config",
-  kgEntityTypes: "/api/admin/kg/entity-types",
-  kgExposed: "/api/admin/kg/exposed",
-
-  // ── OpenSearch Migration ──────────────────────────────────────────────────
-  opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
-  opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",
@@ -178,4 +183,39 @@ export const SWR_KEYS = {
 
   // ── Connectors ────────────────────────────────────────────────────────────
   connector: "/api/manage/connector",
+
+  // ── Index Attempts ────────────────────────────────────────────────────────
+  indexAttemptStageMetrics: (indexAttemptId: number) =>
+    `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
+
+  // ── CC-Pair Sync Attempts ─────────────────────────────────────────────────
+  // The `*Probe` variants are single-row reads used to surface the
+  // `applicable` flag without paying for a full page; see
+  // `useSyncAttemptsPaginatedFetch`.
+  ccPairPermissionSyncAttempts: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
+  ccPairPermissionSyncAttemptsProbe: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
+  ccPairExternalGroupSyncAttempts: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
+  ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
+
+  // ── Indexing Errors ───────────────────────────────────────────────────────
+  // Base key for the per-cc-pair errors endpoint. The page also reads
+  // paginated variants via `usePaginatedFetch`, but `mutate` against
+  // this base key invalidates every variant under the same prefix.
+  ccPairIndexingErrors: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+
+  // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
+  // `scheduledTaskRuns` is a base URL — the run-history table appends
+  // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
+  // a prefix predicate so every paginated variant gets refreshed at once.
+  scheduledTasks: "/api/build/scheduled-tasks",
+  scheduledTask: (taskId: string) => `/api/build/scheduled-tasks/${taskId}`,
+  scheduledTaskRuns: (taskId: string) =>
+    `/api/build/scheduled-tasks/${taskId}/runs`,
+  scheduledRunContext: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/scheduled-run-context`,
 } as const;

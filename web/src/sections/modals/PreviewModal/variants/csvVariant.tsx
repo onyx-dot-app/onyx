@@ -7,7 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import {
@@ -23,7 +23,7 @@ interface CsvData {
 
 function parseCsv(content: string): CsvData {
   const lines = content.split(/\r?\n/).filter((l) => l.length > 0);
-  const headers = lines.length > 0 ? lines[0]?.split(",") ?? [] : [];
+  const headers = lines.length > 0 ? (lines[0]?.split(",") ?? []) : [];
   const rows = lines.slice(1).map((line) => line.split(","));
   return { headers, rows };
 }
@@ -66,7 +66,7 @@ export const csvVariant: PreviewVariant = {
                     key={cIdx}
                     className={cn(
                       cIdx === 0 && "sticky left-0 bg-background-tint-01",
-                      "py-4 px-4 whitespace-normal break-words"
+                      "py-4 px-4 whitespace-normal wrap-break-word"
                     )}
                   >
                     <Text

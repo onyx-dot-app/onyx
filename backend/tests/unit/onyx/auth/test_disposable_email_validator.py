@@ -61,9 +61,9 @@ class TestDisposableEmailValidator:
         ]
 
         for email in legitimate_emails:
-            assert (
-                is_disposable_email(email) is False
-            ), f"{email} should not be disposable"
+            assert is_disposable_email(email) is False, (
+                f"{email} should not be disposable"
+            )
 
     def test_case_insensitive(self) -> None:
         """Test that domain checking is case-insensitive."""

@@ -47,8 +47,8 @@ const OnboardingHeader = React.memo(
           title={STEP_CONFIG[onboardingState.currentStep].title}
           sizePreset="main-ui"
           variant="body"
-          prominence="muted"
-          paddingVariant="sm"
+          color="muted"
+          padding="sm"
           rightChildren={
             stepButtonText ? (
               <Section flexDirection="row">

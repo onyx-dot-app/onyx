@@ -22,7 +22,7 @@ export default function page() {
       <SettingsLayouts.Header
         icon={SvgCreditCard}
         title="Billing Information"
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <BillingInformationPage />

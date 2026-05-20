@@ -4,9 +4,8 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_delay
 from tenacity import wait_random_exponential
 
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import VespaDocumentFields
-from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 
 
 class RetryDocumentIndex:
@@ -29,37 +28,20 @@ class RetryDocumentIndex:
         wait=wait_random_exponential(multiplier=1, max=MAX_WAIT),
         stop=stop_after_delay(STOP_AFTER),
     )
-    def delete_single(
+    def delete(
         self,
         doc_id: str,
-        *,
-        tenant_id: str,
-        chunk_count: int | None,
+        chunk_count: int | None = None,
     ) -> int:
-        return self.index.delete_single(
-            doc_id,
-            tenant_id=tenant_id,
-            chunk_count=chunk_count,
-        )
+        return self.index.delete(doc_id, chunk_count=chunk_count)
 
     @retry(
         retry=retry_if_exception_type(httpx.ReadTimeout),
         wait=wait_random_exponential(multiplier=1, max=MAX_WAIT),
         stop=stop_after_delay(STOP_AFTER),
     )
-    def update_single(
+    def update(
         self,
-        doc_id: str,
-        *,
-        tenant_id: str,
-        chunk_count: int | None,
-        fields: VespaDocumentFields | None,
-        user_fields: VespaDocumentUserFields | None,
+        update_requests: list[MetadataUpdateRequest],
     ) -> None:
-        self.index.update_single(
-            doc_id,
-            tenant_id=tenant_id,
-            chunk_count=chunk_count,
-            fields=fields,
-            user_fields=user_fields,
-        )
+        self.index.update(update_requests)

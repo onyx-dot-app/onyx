@@ -8,6 +8,9 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { AuthType } from "@/lib/constants";
+import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
 // Stats cell — number + label + hover filter icon
@@ -23,7 +26,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   return (
-    <Hoverable.Root group="stat" widthVariant="full">
+    <Hoverable.Root group="stat" width="full">
       <div
         className={`relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
           onFilter ? "cursor-pointer hover:bg-background-tint-02" : ""
@@ -38,13 +41,12 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         </Text>
         {onFilter && (
           <div className="absolute right-1 top-1">
-            <Hoverable.Item group="stat" variant="opacity-on-hover">
+            <Hoverable.Item group="stat" variant="appear-on-hover">
               <IconButton
                 tertiary
                 icon={SvgFilterPlus}
                 tooltip="Add Filter"
                 toolTipPosition="left"
-                tooltipSize="sm"
                 onClick={(e) => {
                   e.stopPropagation();
                   onFilter();
@@ -71,7 +73,7 @@ function ScimCard() {
         description="Users are synced from your identity provider."
         sizePreset="main-ui"
         variant="section"
-        paddingVariant="fit"
+        padding="fit"
         rightChildren={
           <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">
@@ -85,7 +87,7 @@ function ScimCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Stats bar — layout varies by SCIM status
+// Stats bar — layout varies by SCIM / invite-only status
 // ---------------------------------------------------------------------------
 
 type UsersSummaryProps = {
@@ -107,6 +109,11 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
+  const { authTypeMetadata } = useAuthTypeMetadata();
+  const showInviteOnly =
+    !showScim &&
+    (authTypeMetadata.authType === AuthType.BASIC ||
+      authTypeMetadata.authType === AuthType.GOOGLE_OAUTH);
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
@@ -133,7 +140,13 @@ export default function UsersSummary({
     </Card>
   );
 
-  if (showScim) {
+  const rightCard = showScim ? (
+    <ScimCard />
+  ) : showInviteOnly ? (
+    <InviteOnlyCard />
+  ) : null;
+
+  if (rightCard) {
     return (
       <Section
         flexDirection="row"
@@ -142,37 +155,10 @@ export default function UsersSummary({
         gap={0.5}
       >
         {statsCard}
-        <ScimCard />
+        {rightCard}
       </Section>
     );
   }
 
-  // No SCIM — each stat gets its own card
-  return (
-    <Section flexDirection="row" gap={0.5}>
-      <Card padding={0.5}>
-        <StatCell
-          value={activeUsers}
-          label="active users"
-          onFilter={onFilterActive}
-        />
-      </Card>
-      <Card padding={0.5}>
-        <StatCell
-          value={pendingInvites}
-          label="pending invites"
-          onFilter={onFilterInvites}
-        />
-      </Card>
-      {showRequests && (
-        <Card padding={0.5}>
-          <StatCell
-            value={requests}
-            label="requests to join"
-            onFilter={onFilterRequests}
-          />
-        </Card>
-      )}
-    </Section>
-  );
+  return statsCard;
 }

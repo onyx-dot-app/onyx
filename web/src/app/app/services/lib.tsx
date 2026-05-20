@@ -19,7 +19,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
@@ -361,7 +361,9 @@ export function processRawChatHistory(
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
       message: messageInfo.message,
-      type: messageInfo.message_type as "user" | "assistant",
+      type: messageInfo.error
+        ? "error"
+        : (messageInfo.message_type as "user" | "assistant"),
       files: messageInfo.files,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null
@@ -415,9 +417,7 @@ export function processRawChatHistory(
   return messages;
 }
 
-export function personaIncludesRetrieval(
-  selectedPersona: MinimalPersonaSnapshot
-) {
+export function personaIncludesRetrieval(selectedPersona: MinimalAgent) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&

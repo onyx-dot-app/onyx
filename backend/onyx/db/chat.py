@@ -41,7 +41,6 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
-
 logger = setup_logger()
 
 
@@ -384,7 +383,7 @@ def get_chat_sessions_older_than(
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
     """
 
-    cutoff_time = datetime.utcnow() - timedelta(days=days_old)
+    cutoff_time = datetime.now(tz=timezone.utc) - timedelta(days=days_old)
     old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
         select(ChatSession.user_id, ChatSession.id).where(
             ChatSession.time_created < cutoff_time
@@ -417,7 +416,8 @@ def get_chat_message(
 
     if expected_user_id != user_id:
         logger.error(
-            f"User {user_id} tried to fetch a chat message that does not belong to them"
+            "User %s tried to fetch a chat message that does not belong to them",
+            user_id,
         )
         raise ValueError("Chat message does not belong to user")
 
@@ -541,6 +541,7 @@ def get_chat_messages_by_session(
     db_session: Session,
     skip_permission_check: bool = False,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
 ) -> list[ChatMessage]:
     if not skip_permission_check:
         # bug if we ever call this expecting the permission check to not be skipped
@@ -553,6 +554,12 @@ def get_chat_messages_by_session(
         .where(ChatMessage.chat_session_id == chat_session_id)
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+
+    if prefetch_message_details:
+        stmt = stmt.options(
+            selectinload(ChatMessage.chat_message_feedbacks),
+            selectinload(ChatMessage.search_docs),
+        )
 
     # This should handle both the top level tool calls and deep research
     # If there are future nested agents, this can be extended.

@@ -1,7 +1,10 @@
-import "@opal/components/tooltip.css";
-
-/* Shared types */
-export type TooltipSide = "top" | "bottom" | "left" | "right";
+/* Tooltip */
+export {
+  Tooltip,
+  type TooltipProps,
+  type TooltipSide,
+  type TooltipAlign,
+} from "@opal/components/tooltip/components";
 
 /* Button */
 export {
@@ -39,6 +42,12 @@ export {
   type SidebarTabProps,
 } from "@opal/components/buttons/sidebar-tab/components";
 
+/* LinkButton */
+export {
+  LinkButton,
+  type LinkButtonProps,
+} from "@opal/components/buttons/link-button/components";
+
 /* Text */
 export {
   Text,
@@ -54,13 +63,14 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
-/* Card */
+/* Divider */
 export {
-  Card,
-  type CardProps,
-  type BackgroundVariant,
-  type BorderVariant,
-} from "@opal/components/cards/card/components";
+  Divider,
+  type DividerProps,
+} from "@opal/components/divider/components";
+
+/* Card */
+export { Card, type CardProps } from "@opal/components/cards/card/components";
 
 /* SelectCard */
 export {
@@ -74,6 +84,12 @@ export {
   type EmptyMessageCardProps,
 } from "@opal/components/cards/empty-message-card/components";
 
+/* MessageCard */
+export {
+  MessageCard,
+  type MessageCardProps,
+} from "@opal/components/cards/message-card/components";
+
 /* Pagination */
 export {
   Pagination,
@@ -81,7 +97,32 @@ export {
   type PaginationSize,
 } from "@opal/components/pagination/components";
 
+/* Checkbox */
+export {
+  Checkbox,
+  type CheckboxProps,
+} from "@opal/components/checkbox/components";
+
 /* Table */
 export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+
+/* Separator */
+export {
+  Separator,
+  type SeparatorProps,
+} from "@opal/components/separator/components";
+
+/* ShadowDiv */
+export {
+  ShadowDiv,
+  type ShadowDivProps,
+} from "@opal/components/shadow-div/components";
+
+/* Popover */
+export {
+  Popover,
+  PopoverMenu,
+  type PopoverMenuProps,
+} from "@opal/components/popover/components";

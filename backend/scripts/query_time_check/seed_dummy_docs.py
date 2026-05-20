@@ -18,12 +18,14 @@ from onyx.connectors.models import Document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_multipass_config
-from onyx.document_index.vespa.index import VespaIndex
-from onyx.indexing.indexing_pipeline import IndexBatchParams
+from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.model_server_models import Embedding
 
@@ -112,16 +114,11 @@ def generate_dummy_chunk(
 
 @log_function_time()
 def do_insertion(
-    vespa_index: VespaIndex, all_chunks: list[DocMetadataAwareIndexChunk]
+    vespa_index: VespaDocumentIndex, all_chunks: list[DocMetadataAwareIndexChunk]
 ) -> None:
     insertion_records = vespa_index.index(
         chunks=all_chunks,
-        index_batch_params=IndexBatchParams(
-            doc_id_to_previous_chunk_cnt={},
-            doc_id_to_new_chunk_cnt={},
-            tenant_id=POSTGRES_DEFAULT_SCHEMA,
-            large_chunks_enabled=False,
-        ),
+        indexing_metadata=IndexingMetadata(doc_id_to_chunk_cnt_diff={}),
     )
     print(f"Indexed {len(insertion_records)} documents.")
     print(
@@ -146,11 +143,12 @@ def seed_dummy_docs(
         index_name = search_settings.index_name
         embedding_dim = search_settings.final_embedding_dim
 
-    vespa_index = VespaIndex(
+    vespa_index = VespaDocumentIndex(
         index_name=index_name,
-        secondary_index_name=None,
+        tenant_state=TenantState(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=MULTI_TENANT
+        ),
         large_chunks_enabled=multipass_config.enable_large_chunks,
-        secondary_large_chunks_enabled=None,
     )
     print(index_name)
 

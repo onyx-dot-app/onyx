@@ -11,7 +11,7 @@ import { Hoverable } from "@opal/core";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
@@ -110,9 +110,9 @@ export default function GroupsCell({
   const hasOverflow = !isMeasuring && overflowCount > 0;
 
   const allGroupsTooltip = (
-    <div className="flex flex-wrap gap-1 max-w-[14rem]">
+    <div className="flex flex-wrap gap-1 max-w-56">
       {groups.map((g) => (
-        <div key={g.id} className="max-w-[10rem]">
+        <div key={g.id} className="max-w-40">
           <Tag title={g.name} size="md" />
         </div>
       ))}
@@ -122,12 +122,12 @@ export default function GroupsCell({
   const tagsContent = (
     <>
       {(isMeasuring ? groups : groups.slice(0, effectiveVisible)).map((g) => (
-        <div key={g.id} data-group-tag className="flex-shrink-0">
+        <div key={g.id} data-group-tag className="shrink-0">
           <Tag title={g.name} size="md" />
         </div>
       ))}
       {hasOverflow && (
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <Tag title={`+${overflowCount}`} size="md" />
         </div>
       )}
@@ -153,12 +153,10 @@ export default function GroupsCell({
               </Text>
             </div>
           ) : (
-            <SimpleTooltip
+            <Tooltip
               side="bottom"
               align="start"
-              tooltip={allGroupsTooltip}
-              disabled={!hasOverflow}
-              className="bg-background-neutral-01 shadow-sm"
+              tooltip={hasOverflow ? allGroupsTooltip : undefined}
               delayDuration={200}
             >
               <div
@@ -167,10 +165,10 @@ export default function GroupsCell({
               >
                 {tagsContent}
               </div>
-            </SimpleTooltip>
+            </Tooltip>
           )}
           {user.id && (
-            <Hoverable.Item group="tags" variant="opacity-on-hover">
+            <Hoverable.Item group="tags" variant="appear-on-hover">
               <Button
                 icon={SvgEdit}
                 prominence="tertiary"

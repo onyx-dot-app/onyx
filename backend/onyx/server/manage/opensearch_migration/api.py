@@ -2,8 +2,10 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_migration_state
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
@@ -23,7 +25,7 @@ admin_router = APIRouter(prefix="/admin/opensearch-migration")
 
 @admin_router.get("/status")
 def get_opensearch_migration_status(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OpenSearchMigrationStatusResponse:
     (
@@ -42,19 +44,20 @@ def get_opensearch_migration_status(
 
 @admin_router.get("/retrieval")
 def get_opensearch_retrieval_status(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OpenSearchRetrievalStatusResponse:
     enable_opensearch_retrieval = get_opensearch_retrieval_state(db_session)
     return OpenSearchRetrievalStatusResponse(
         enable_opensearch_retrieval=enable_opensearch_retrieval,
+        toggling_retrieval_is_disabled=ONYX_DISABLE_VESPA,
     )
 
 
 @admin_router.put("/retrieval")
 def set_opensearch_retrieval_status(
     request: OpenSearchRetrievalStatusRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> OpenSearchRetrievalStatusResponse:
     set_enable_opensearch_retrieval_with_commit(
@@ -62,4 +65,5 @@ def set_opensearch_retrieval_status(
     )
     return OpenSearchRetrievalStatusResponse(
         enable_opensearch_retrieval=request.enable_opensearch_retrieval,
+        toggling_retrieval_is_disabled=ONYX_DISABLE_VESPA,
     )

@@ -1,0 +1,20 @@
+name: onyx
+
+services:
+  mcp_per_user_key_server:
+    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:latest}
+    restart: on-failure
+    working_dir: /workspace
+    environment:
+      - MCP_PER_USER_KEY_TEST_PORT=${MCP_PER_USER_KEY_TEST_PORT:-8007}
+      - MCP_PER_USER_KEY_REQUIRED_HEADER=${MCP_PER_USER_KEY_REQUIRED_HEADER:-X-Username}
+      - MCP_SERVER_HOST=${MCP_PER_USER_KEY_SERVER_HOST:-0.0.0.0}
+      - MCP_SERVER_PUBLIC_HOST=${MCP_PER_USER_KEY_SERVER_PUBLIC_HOST:-host.docker.internal}
+    command: >
+      /bin/sh -c "
+      python backend/tests/integration/mock_services/mcp_test_server/run_mcp_server_per_user_key.py ${MCP_PER_USER_KEY_TEST_PORT:-8007} --require-header ${MCP_PER_USER_KEY_REQUIRED_HEADER:-X-Username}
+      "
+    ports:
+      - "${MCP_PER_USER_KEY_TEST_PORT:-8007}:${MCP_PER_USER_KEY_TEST_PORT:-8007}"
+    volumes:
+      - ../..:/workspace:ro

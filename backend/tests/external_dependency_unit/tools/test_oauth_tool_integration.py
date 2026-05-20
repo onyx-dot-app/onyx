@@ -32,7 +32,6 @@ from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from tests.external_dependency_unit.answer.conftest import ensure_default_llm_provider
 from tests.external_dependency_unit.conftest import create_test_user
 
-
 # Simple OpenAPI schema for testing
 SIMPLE_OPENAPI_SCHEMA: dict[str, Any] = {
     "openapi": "3.0.0",
@@ -104,16 +103,16 @@ def _get_authorization_header(headers: dict[str, str]) -> str | None:
 
 def _assert_has_authorization_header(headers: dict[str, str]) -> None:
     """Assert that headers contain an authorization header (any case)."""
-    assert (
-        "authorization" in headers or "Authorization" in headers
-    ), "Expected authorization header to be present"
+    assert "authorization" in headers or "Authorization" in headers, (
+        "Expected authorization header to be present"
+    )
 
 
 def _assert_no_authorization_header(headers: dict[str, str]) -> None:
     """Assert that headers do NOT contain an authorization header."""
-    assert (
-        "authorization" not in headers and "Authorization" not in headers
-    ), "Expected no authorization header"
+    assert "authorization" not in headers and "Authorization" not in headers, (
+        "Expected no authorization header"
+    )
 
 
 class TestOAuthToolIntegrationPriority:

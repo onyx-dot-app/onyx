@@ -39,6 +39,7 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
 from onyx.utils.logger import setup_logger
@@ -299,8 +300,11 @@ def fetch_user_groups_for_user(
     stmt = (
         select(UserGroup)
         .join(User__UserGroup, User__UserGroup.user_group_id == UserGroup.id)
-        .join(User, User.id == User__UserGroup.user_id)  # type: ignore
-        .where(User.id == user_id)  # type: ignore
+        .join(
+            User,
+            User.id == User__UserGroup.user_id,  # ty: ignore[invalid-argument-type]
+        )
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
@@ -429,7 +433,7 @@ def fetch_user_groups_for_documents(
         .group_by(Document.id)
     )
 
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
@@ -662,9 +666,11 @@ def update_user_curator_relationship(
     )
 
     logger.info(
-        f"user_making_change={user_making_change.email if user_making_change else 'None'} is "
-        f"updating the curator relationship for user={target_user.email} "
-        f"in group={user_group_id} to is_curator={set_curator_request.is_curator}"
+        "user_making_change=%s is updating the curator relationship for user=%s in group=%s to is_curator=%s",
+        user_making_change.email if user_making_change else "None",
+        target_user.email,
+        user_group_id,
+        set_curator_request.is_curator,
     )
 
     relationship_to_update = (
@@ -803,7 +809,9 @@ def update_user_group(
         db_user_group.is_up_to_date = False
 
     removed_users = db_session.scalars(
-        select(User).where(User.id.in_(removed_user_ids))  # type: ignore
+        select(User).where(
+            User.id.in_(removed_user_ids)  # ty: ignore[unresolved-attribute]
+        )
     ).unique()
 
     # Filter out admin and global curator users before validating curator status
@@ -952,3 +960,46 @@ def delete_user_group_cc_pair_relationship__no_commit(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair_id,
     )
     db_session.execute(delete_stmt)
+
+
+def set_group_permission__no_commit(
+    group_id: int,
+    permission: Permission,
+    enabled: bool,
+    granted_by: UUID,
+    db_session: Session,
+) -> None:
+    """Grant or revoke a single permission for a group using soft-delete.
+
+    Does NOT commit — caller must commit the session.
+    """
+    existing = db_session.execute(
+        select(PermissionGrant)
+        .where(
+            PermissionGrant.group_id == group_id,
+            PermissionGrant.permission == permission,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+
+    if enabled:
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.granted_by = granted_by
+                existing.granted_at = func.now()
+        else:
+            db_session.add(
+                PermissionGrant(
+                    group_id=group_id,
+                    permission=permission,
+                    grant_source=GrantSource.USER,
+                    granted_by=granted_by,
+                )
+            )
+    else:
+        if existing is not None and not existing.is_deleted:
+            existing.is_deleted = True
+
+    db_session.flush()
+    recompute_permissions_for_group__no_commit(group_id, db_session)

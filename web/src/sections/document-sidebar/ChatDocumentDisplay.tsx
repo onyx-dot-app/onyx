@@ -8,7 +8,7 @@ import { WebResultIcon } from "@/components/WebResultIcon";
 import { Dispatch, SetStateAction, useMemo } from "react";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Truncated from "@/refresh-components/texts/Truncated";
 import Text from "@/refresh-components/texts/Text";
 

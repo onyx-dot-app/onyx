@@ -8,7 +8,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
 from tests.daily.connectors.utils import load_all_from_connector
-
+from tests.utils.secret_names import TestSecret
 
 PUBLIC_CHANNEL_NAME = "#daily-connector-test-channel"
 PRIVATE_CHANNEL_NAME = "#private-channel"
@@ -23,7 +23,10 @@ PRIVATE_CHANNEL_USERS = [
 # the "no start time" case while exercising the oldest= parameter.
 OLDEST_TS_2016 = datetime(2016, 1, 1, tzinfo=timezone.utc).timestamp()
 
-pytestmark = pytest.mark.usefixtures("enable_ee")
+pytestmark = [
+    pytest.mark.usefixtures("enable_ee"),
+    pytest.mark.secrets(TestSecret.SLACK_BOT_TOKEN),
+]
 
 
 @pytest.mark.parametrize(
@@ -51,18 +54,18 @@ def test_load_from_checkpoint_access__public_channel(
     assert len(docs) > 0, "Expected to find at least one document"
 
     for doc in docs:
-        assert (
-            doc.external_access is not None
-        ), f"Document {doc.id} should have external_access when using perm sync"
-        assert (
-            doc.external_access.is_public is True
-        ), f"Document {doc.id} should have public access when using perm sync"
-        assert (
-            doc.external_access.external_user_emails == set()
-        ), f"Document {doc.id} should have no external user emails when using perm sync"
-        assert (
-            doc.external_access.external_user_group_ids == set()
-        ), f"Document {doc.id} should have no external user group ids when using perm sync"
+        assert doc.external_access is not None, (
+            f"Document {doc.id} should have external_access when using perm sync"
+        )
+        assert doc.external_access.is_public is True, (
+            f"Document {doc.id} should have public access when using perm sync"
+        )
+        assert doc.external_access.external_user_emails == set(), (
+            f"Document {doc.id} should have no external user emails when using perm sync"
+        )
+        assert doc.external_access.external_user_group_ids == set(), (
+            f"Document {doc.id} should have no external user group ids when using perm sync"
+        )
 
 
 @pytest.mark.parametrize(
@@ -90,18 +93,18 @@ def test_load_from_checkpoint_access__private_channel(
     assert len(docs) > 0, "Expected to find at least one document"
 
     for doc in docs:
-        assert (
-            doc.external_access is not None
-        ), f"Document {doc.id} should have external_access when using perm sync"
-        assert (
-            doc.external_access.is_public is False
-        ), f"Document {doc.id} should have private access when using perm sync"
-        assert doc.external_access.external_user_emails == set(
-            PRIVATE_CHANNEL_USERS
-        ), f"Document {doc.id} should have private channel users when using perm sync"
-        assert (
-            doc.external_access.external_user_group_ids == set()
-        ), f"Document {doc.id} should have no external user group ids when using perm sync"
+        assert doc.external_access is not None, (
+            f"Document {doc.id} should have external_access when using perm sync"
+        )
+        assert doc.external_access.is_public is False, (
+            f"Document {doc.id} should have private access when using perm sync"
+        )
+        assert doc.external_access.external_user_emails == set(PRIVATE_CHANNEL_USERS), (
+            f"Document {doc.id} should have private channel users when using perm sync"
+        )
+        assert doc.external_access.external_user_group_ids == set(), (
+            f"Document {doc.id} should have no external user group ids when using perm sync"
+        )
 
 
 @pytest.mark.parametrize(

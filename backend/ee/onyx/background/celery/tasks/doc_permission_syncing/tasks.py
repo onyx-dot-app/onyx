@@ -1,4 +1,5 @@
 import time
+import traceback
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -64,9 +65,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import create_doc_permission_sync_attempt
 from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_failed
-from onyx.db.permission_sync_attempt import (
-    mark_doc_permission_sync_attempt_in_progress,
-)
+from onyx.db.permission_sync_attempt import mark_doc_permission_sync_attempt_in_progress
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -80,6 +79,11 @@ from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSyn
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_docs_processed
+from onyx.server.metrics.perm_sync_metrics import inc_doc_perm_sync_errors
+from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import doc_permission_sync_ctx
@@ -144,11 +148,11 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 
     sync_config = get_source_perm_sync_config(cc_pair.connector.source)
     if sync_config is None:
-        logger.error(f"No sync config found for {cc_pair.connector.source}")
+        logger.error("No sync config found for %s", cc_pair.connector.source)
         return False
 
     if sync_config.doc_sync_config is None:
-        logger.error(f"No doc sync config found for {cc_pair.connector.source}")
+        logger.error("No doc sync config found for %s", cc_pair.connector.source)
         return False
 
     # if indexing also does perm sync, don't start running doc_sync until at
@@ -207,6 +211,11 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             for cc_pair in cc_pairs:
                 if _is_external_doc_permissions_sync_due(cc_pair):
                     cc_pair_ids_to_sync.append(cc_pair.id)
+
+        # Tenant-work-gating hook: refresh this tenant's active-set membership
+        # whenever doc-permission sync has any due cc_pairs to dispatch.
+        if cc_pair_ids_to_sync:
+            maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
 
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:
@@ -282,7 +291,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
 def try_creating_permissions_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,
+    r: TenantRedisClient,
     tenant_id: str,
 ) -> str | None:
     """Returns a randomized payload id on success.
@@ -439,7 +448,8 @@ def connector_permission_sync_generator_task(
 
         if payload.celery_task_id is None:
             logger.info(
-                f"connector_permission_sync_generator_task - Waiting for fence: fence={redis_connector.permissions.fence_key}"
+                "connector_permission_sync_generator_task - Waiting for fence: fence=%s",
+                redis_connector.permissions.fence_key,
             )
             sleep(1)
             continue
@@ -447,9 +457,9 @@ def connector_permission_sync_generator_task(
         payload_id = payload.id
 
         logger.info(
-            f"connector_permission_sync_generator_task - Fence found, continuing...: "
-            f"fence={redis_connector.permissions.fence_key} "
-            f"payload_id={payload.id}"
+            "connector_permission_sync_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+            redis_connector.permissions.fence_key,
+            payload.id,
         )
         break
 
@@ -469,6 +479,8 @@ def connector_permission_sync_generator_task(
         _fail_doc_permission_sync_attempt(attempt_id, error_msg)
         return None
 
+    sync_start = time.monotonic()
+    connector_type: str = "unknown"
     try:
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
@@ -502,6 +514,7 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
+            connector_type = source_type.value
             sync_config = get_source_perm_sync_config(source_type)
             if sync_config is None:
                 error_msg = f"No sync config found for {source_type}"
@@ -519,7 +532,7 @@ def connector_permission_sync_generator_task(
                     f"No doc sync func found for {source_type} with cc_pair={cc_pair_id}"
                 )
 
-            logger.info(f"Syncing docs for {source_type} with cc_pair={cc_pair_id}")
+            logger.info("Syncing docs for %s with cc_pair=%s", source_type, cc_pair_id)
 
             mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
 
@@ -587,7 +600,7 @@ def connector_permission_sync_generator_task(
                 result = redis_connector.permissions.update_db(
                     lock=lock,
                     new_permissions=[doc_external_access],
-                    source_string=source_type,
+                    source_string=connector_type,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                     task_logger=task_logger,
@@ -599,6 +612,10 @@ def connector_permission_sync_generator_task(
                 f"RedisConnector.permissions.generate_tasks finished. "
                 f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
             )
+
+            inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
+            if docs_with_errors > 0:
+                inc_doc_perm_sync_errors(connector_type, docs_with_errors)
 
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
@@ -614,6 +631,7 @@ def connector_permission_sync_generator_task(
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
+        full_exception_trace = traceback.format_exc()
 
         task_logger.warning(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id} {error_msg}"
@@ -624,7 +642,10 @@ def connector_permission_sync_generator_task(
 
         with get_session_with_current_tenant() as db_session:
             mark_doc_permission_sync_attempt_failed(
-                attempt_id, db_session, error_message=error_msg
+                attempt_id,
+                db_session,
+                error_message=error_msg,
+                full_exception_trace=full_exception_trace,
             )
 
         redis_connector.permissions.generator_clear()
@@ -632,6 +653,7 @@ def connector_permission_sync_generator_task(
         redis_connector.permissions.set_fence(None)
         raise e
     finally:
+        observe_doc_perm_sync_duration(time.monotonic() - sync_start, connector_type)
         if lock.owned():
             lock.release()
 
@@ -731,8 +753,8 @@ def element_update_permissions(
 
 def validate_permission_sync_fences(
     tenant_id: str,
-    r: Redis,
-    r_replica: Redis,
+    r: TenantRedisClient,
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -781,7 +803,7 @@ def validate_permission_sync_fence(
     key_bytes: bytes,
     queued_tasks: set[str],
     reserved_tasks: set[str],
-    r: Redis,
+    r: TenantRedisClient,
     r_celery: Redis,
 ) -> None:
     """Checks for the error condition where an indexing fence is set but the associated celery tasks don't exist.
@@ -885,8 +907,7 @@ def validate_permission_sync_fence(
     for member in r.sscan_iter(redis_connector.permissions.taskset_key):
         tasks_scanned += 1
 
-        member_bytes = cast(bytes, member)
-        member_str = member_bytes.decode("utf-8")
+        member_str = member.decode("utf-8")
         if member_str in queued_tasks:
             continue
 
@@ -935,7 +956,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         self,
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
     ):
         super().__init__()
@@ -963,9 +984,10 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
             elapsed = time.monotonic() - self.start_monotonic
             if elapsed > self.timeout_seconds:
                 logger.warning(
-                    f"PermissionSyncCallback - task timeout exceeded: "
-                    f"elapsed={elapsed:.0f}s timeout={self.timeout_seconds}s "
-                    f"cc_pair={self.redis_connector.cc_pair_id}"
+                    "PermissionSyncCallback - task timeout exceeded: elapsed=%ss timeout=%ss cc_pair=%s",
+                    format(elapsed, ".0f"),
+                    self.timeout_seconds,
+                    self.redis_connector.cc_pair_id,
                 )
                 return True
 
@@ -986,12 +1008,12 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
             self.last_tag = tag
         except LockError:
             logger.exception(
-                f"PermissionSyncCallback - lock.reacquire exceptioned: "
-                f"lock_timeout={self.redis_lock.timeout} "
-                f"start={self.started} "
-                f"last_tag={self.last_tag} "
-                f"last_reacquired={self.last_lock_reacquire} "
-                f"now={datetime.now(timezone.utc)}"
+                "PermissionSyncCallback - lock.reacquire exceptioned: lock_timeout=%s start=%s last_tag=%s last_reacquired=%s now=%s",
+                self.redis_lock.timeout,
+                self.started,
+                self.last_tag,
+                self.last_lock_reacquire,
+                datetime.now(timezone.utc),
             )
 
             redis_lock_dump(self.redis_lock, self.redis_client)
@@ -1004,7 +1026,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 def monitor_ccpair_permissions_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,  # noqa: ARG001
     db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")

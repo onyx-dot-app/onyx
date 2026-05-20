@@ -35,9 +35,7 @@ from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
-from onyx.onyxbot.slack.handlers.handle_regular_answer import (
-    handle_regular_answer,
-)
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import build_feedback_id
 from onyx.onyxbot.slack.utils import decompose_action_id
@@ -52,7 +50,6 @@ from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -139,6 +136,7 @@ def handle_generate_answer_button(
 
     thread_messages = read_slack_thread(
         tenant_id=client._tenant_id,
+        slack_bot_id=client.slack_bot_id,
         channel=channel_id,
         thread=thread_ts,
         client=client.web_client,
@@ -241,7 +239,7 @@ def handle_publish_ephemeral_message_button(
                 chat_message_id, None, db_session
             )  # is this good idea?
         except Exception as e:
-            logger.error(f"Failed to get chat message: {e}")
+            logger.error("Failed to get chat message: %s", e)
             raise e
 
         chat_message_detail = translate_db_message_to_chat_message_detail(chat_message)
@@ -279,7 +277,7 @@ def handle_publish_ephemeral_message_button(
                 delete_original=True,
             )
         except Exception as e:
-            logger.error(f"Failed to send webhook: {e}")
+            logger.error("Failed to send webhook: %s", e)
 
         # remove handling of empheremal block and add AI feedback.
         all_blocks = build_slack_response_blocks(
@@ -305,7 +303,7 @@ def handle_publish_ephemeral_message_button(
                 send_as_ephemeral=False,
             )
         except Exception as e:
-            logger.error(f"Failed to publish ephemeral message: {e}")
+            logger.error("Failed to publish ephemeral message: %s", e)
             raise e
 
     elif action_id == KEEP_TO_YOURSELF_ACTION_ID:
@@ -356,7 +354,7 @@ def handle_publish_ephemeral_message_button(
                     delete_original=False,
                 )
         except Exception as e:
-            logger.error(f"Failed to send webhook: {e}")
+            logger.error("Failed to send webhook: %s", e)
 
 
 def handle_slack_feedback(
@@ -415,7 +413,7 @@ def handle_slack_feedback(
                 feedback=feedback,
             )
         else:
-            logger.error(f"Feedback type '{feedback_type}' not supported")
+            logger.error("Feedback type '%s' not supported", feedback_type)
 
     if get_feedback_visibility() == FeedbackVisibility.PRIVATE or feedback_type not in [
         LIKE_BLOCK_ACTION_ID,

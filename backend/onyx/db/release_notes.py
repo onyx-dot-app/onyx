@@ -47,10 +47,12 @@ def create_release_notifications_for_versions(
     # Get active users and exclude API key users
     user_ids = list(
         db_session.scalars(
-            select(User.id).where(  # type: ignore
+            select(User.id).where(  # ty: ignore[no-matching-overload]
                 User.is_active == True,  # noqa: E712
                 User.account_type.notin_([AccountType.BOT, AccountType.EXT_PERM_USER]),
-                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(False),  # type: ignore[attr-defined]
+                User.email.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN).is_(  # ty: ignore[unresolved-attribute]
+                    False
+                ),
             )
         ).all()
     )
@@ -76,7 +78,7 @@ def create_release_notifications_for_versions(
             "link": link,
         }
 
-        created_count = batch_create_notifications(
+        inserted_ids = batch_create_notifications(
             user_ids,
             NotificationType.RELEASE_NOTES,
             db_session,
@@ -84,10 +86,14 @@ def create_release_notifications_for_versions(
             description=f"Check out what's new in {entry.version}",
             additional_data=additional_data,
         )
+        created_count = len(inserted_ids)
         total_created += created_count
 
         logger.debug(
-            f"Created {created_count} release notes notifications (version {entry.version}, {len(user_ids)} eligible users)"
+            "Created %s release notes notifications (version %s, %s eligible users)",
+            created_count,
+            entry.version,
+            len(user_ids),
         )
 
     return total_created

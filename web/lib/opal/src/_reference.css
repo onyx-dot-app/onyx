@@ -1,0 +1,20 @@
+/**
+ * Opal — Tailwind v4 reference file.
+ *
+ * Sourced by every opal CSS file via `@reference` so that `@apply` can resolve
+ * both standard Tailwind utilities and the custom theme tokens defined in
+ * `tailwind-preset.cjs` (e.g. `rounded-08`, `text-text-04`).
+ *
+ * Under Tailwind v4 each CSS file is processed independently by PostCSS, so
+ * every standalone opal stylesheet that uses `@apply` must `@reference` this
+ * file to have visibility into the design system's tokens.
+ *
+ * The bundler (`scripts/bundle-css.mjs`) concatenates all opal CSS into
+ * `dist/styles.css` with this file first; redundant `@reference` directives
+ * from other files are stripped during bundling so the published artifact is
+ * self-contained.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@config "../tailwind-preset.cjs";

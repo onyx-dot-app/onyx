@@ -11,7 +11,7 @@ resolves the matching ``AzureEnvironment`` value (and the implied SharePoint
 domain suffix) so callers can pass ``environment=…`` to ``GraphClient``.
 """
 
-from office365.graph_client import AzureEnvironment  # type: ignore[import-untyped]
+from office365.graph_client import AzureEnvironment
 from pydantic import BaseModel
 
 from onyx.connectors.exceptions import ConnectorValidationError

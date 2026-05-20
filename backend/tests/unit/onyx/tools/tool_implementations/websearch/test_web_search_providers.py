@@ -1,11 +1,7 @@
 import pytest
 
-from onyx.tools.tool_implementations.web_search.clients.baidu_client import (
-    BaiduClient,
-)
-from onyx.tools.tool_implementations.web_search.clients.brave_client import (
-    BraveClient,
-)
+from onyx.tools.tool_implementations.web_search.clients.baidu_client import BaiduClient
+from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )

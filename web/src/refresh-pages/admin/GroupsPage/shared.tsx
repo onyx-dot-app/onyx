@@ -1,6 +1,7 @@
 import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
+import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
@@ -63,7 +64,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
       <Text as="span" mainUiBody text03>
-        {row.role ? USER_ROLE_LABELS[row.role] ?? row.role : "\u2014"}
+        {row.role ? (USER_ROLE_LABELS[row.role] ?? row.role) : "\u2014"}
       </Text>
     </div>
   );

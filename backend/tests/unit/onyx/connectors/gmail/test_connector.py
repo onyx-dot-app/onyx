@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import os
@@ -8,7 +9,6 @@ from unittest.mock import patch
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.gmail.connector import _build_time_range_query
 from onyx.connectors.gmail.connector import GmailCheckpoint
 from onyx.connectors.gmail.connector import GmailConnector
@@ -51,29 +51,43 @@ def test_build_time_range_query() -> None:
     assert query is None
 
 
-def test_time_str_to_utc() -> None:
-    str_to_dt = {
-        "Tue, 5 Oct 2021 09:38:25 GMT": datetime.datetime(
-            2021, 10, 5, 9, 38, 25, tzinfo=datetime.timezone.utc
-        ),
-        "Sat, 24 Jul 2021 09:21:20 +0000 (UTC)": datetime.datetime(
-            2021, 7, 24, 9, 21, 20, tzinfo=datetime.timezone.utc
-        ),
-        "Thu, 29 Jul 2021 04:20:37 -0400 (EDT)": datetime.datetime(
-            2021, 7, 29, 8, 20, 37, tzinfo=datetime.timezone.utc
-        ),
-        "30 Jun 2023 18:45:01 +0300": datetime.datetime(
-            2023, 6, 30, 15, 45, 1, tzinfo=datetime.timezone.utc
-        ),
-        "22 Mar 2020 20:12:18 +0000 (GMT)": datetime.datetime(
-            2020, 3, 22, 20, 12, 18, tzinfo=datetime.timezone.utc
-        ),
-        "Date: Wed, 27 Aug 2025 11:40:00 +0200": datetime.datetime(
-            2025, 8, 27, 9, 40, 0, tzinfo=datetime.timezone.utc
-        ),
-    }
-    for strptime, expected_datetime in str_to_dt.items():
-        assert time_str_to_utc(strptime) == expected_datetime
+def _thread_with_date(date_header: str | None) -> dict[str, Any]:
+    """Load the fixture thread and replace (or strip, if None) its Date header."""
+    json_path = os.path.join(os.path.dirname(__file__), "thread.json")
+    with open(json_path, "r") as f:
+        thread = cast(dict[str, Any], json.load(f))
+    thread = copy.deepcopy(thread)
+
+    for message in thread["messages"]:
+        headers: list[dict[str, str]] = message["payload"]["headers"]
+        if date_header is None:
+            message["payload"]["headers"] = [
+                h for h in headers if h.get("name") != "Date"
+            ]
+            continue
+
+        replaced = False
+        for header in headers:
+            if header.get("name") == "Date":
+                header["value"] = date_header
+                replaced = True
+                break
+        if not replaced:
+            headers.append({"name": "Date", "value": date_header})
+
+    return thread
+
+
+def test_thread_to_document_skips_unparseable_dates() -> None:
+    for bad_date in (
+        "Wed, 33 Sep 2007 13:42:59 +0100",
+        "Thu, 11 Oct 2007 31:50:55 +0900",
+        "total garbage not even close to a date",
+    ):
+        doc = thread_to_document(_thread_with_date(bad_date), "admin@example.com")
+        assert isinstance(doc, Document), f"failed for {bad_date!r}"
+        assert doc.doc_updated_at is None
+        assert doc.id == "192edefb315737c3"
 
 
 def test_gmail_checkpoint_progression() -> None:

@@ -9,7 +9,7 @@ const route = ADMIN_ROUTES.QUERY_HISTORY;
 export default function QueryHistoryPage() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
 
       <SettingsLayouts.Body>
         <QueryHistoryTable />

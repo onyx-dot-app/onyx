@@ -7,7 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { toast } from "@/hooks/useToast";
-import { Button, Text } from "@opal/components";
+import { Button, MessageCard, Text } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
@@ -28,11 +28,10 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import Code from "@/refresh-components/Code";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
-import Message from "@/refresh-components/messages/Message";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
@@ -252,7 +251,7 @@ export default function ServiceAccountsPage() {
           title={route.title}
           icon={route.icon}
           description="Use service accounts to programmatically access Onyx API."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
@@ -272,7 +271,7 @@ export default function ServiceAccountsPage() {
           title={route.title}
           icon={route.icon}
           description="Use service accounts to programmatically access Onyx API."
-          separator
+          divider
         />
         <SettingsLayouts.Body>
           <SimpleLoader />
@@ -289,17 +288,14 @@ export default function ServiceAccountsPage() {
         title={route.title}
         icon={route.icon}
         description="Use service accounts to programmatically access Onyx API."
-        separator
+        divider
       />
 
       <SettingsLayouts.Body>
         {isTrialing && (
-          <Message
-            static
-            warning
-            close={false}
-            className="w-full"
-            text="Upgrade to a paid plan to create API keys."
+          <MessageCard
+            variant="warning"
+            title="Upgrade to a paid plan to create API keys."
             description="Trial accounts do not include API key access — purchase a paid subscription to unlock this feature."
           />
         )}

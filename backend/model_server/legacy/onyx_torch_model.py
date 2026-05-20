@@ -18,7 +18,7 @@
 #         super().__init__()
 #         config = DistilBertConfig()
 #         self.distilbert = DistilBertModel(config)
-#         config = self.distilbert.config  # type: ignore
+#         config = self.distilbert.config
 
 #         # Keyword tokenwise binary classification layer
 #         self.keyword_classifier = nn.Linear(config.dim, 2)
@@ -85,7 +85,7 @@
 
 #         self.config = config
 #         self.distilbert = DistilBertModel(config)
-#         config = self.distilbert.config  # type: ignore
+#         config = self.distilbert.config
 #         self.connector_global_classifier = nn.Linear(config.dim, 1)
 #         self.connector_match_classifier = nn.Linear(config.dim, 1)
 #         self.tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")

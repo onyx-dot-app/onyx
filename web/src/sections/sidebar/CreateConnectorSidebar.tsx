@@ -47,7 +47,7 @@ export default function Sidebar() {
                 }
               }}
             >
-              <div className="flex-shrink-0 mr-4 z-10">
+              <div className="shrink-0 mr-4 z-10">
                 <div
                   className={`rounded-full h-3.5 w-3.5 flex items-center justify-center ${
                     allowed ? "bg-blue-500" : "bg-background-tint-04"

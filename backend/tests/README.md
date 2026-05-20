@@ -15,8 +15,20 @@ pytest -xv backend/tests/unit
 
 ### External Dependency Unit Tests (`tests/external_dependency_unit/`)
 
-External services (Postgres, Redis, Vespa, OpenAI, etc.) are running, but Onyx
-application containers are not. Tests call functions directly and can mock selectively.
+Real Postgres, Redis, MinIO, and Vespa available. Real OpenAI key when set. Real
+Kubernetes cluster when configured (`SANDBOX_BACKEND=kubernetes`) — gated by
+file-level `pytest.mark.skipif`. Onyx application processes (API server, Celery
+workers) are **not** running. Tests import and call functions directly and can
+mock selectively.
+
+Conditional external dependencies (K8s, OpenAI) are gated by `skipif` at the
+top of the test file so the suite stays runnable in environments that lack
+those dependencies. Tests that need them only execute when the relevant env
+var or credential is present.
+
+There is no separate K8s integration layer. K8s-requiring tests live in
+`external_dependency_unit/` with a `skipif` gate. CI runs them in a dedicated
+job ([pr-craft-k8s-tests.yml](../../.github/workflows/pr-craft-k8s-tests.yml)).
 
 Use when you need a real database or real API calls but want control over setup.
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { cn, ensureHrefProtocol, noProp } from "@/lib/utils";
+import { ensureHrefProtocol, noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { OpenButton } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
@@ -14,13 +15,14 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+    <Text as="p" text03 secondaryAction className="my-0! text-center">
       {children}
     </Text>
   ),
@@ -57,7 +59,7 @@ const footerMarkdownComponents = {
  * extension doesn't need.
  */
 export default function NRFChrome() {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
@@ -75,7 +77,7 @@ export default function NRFChrome() {
     }](https://www.onyx.app/) - Open Source AI Platform`;
 
   const showModeToggle =
-    isPaidEnterpriseFeaturesEnabled &&
+    businessTier &&
     settings.isSearchModeAvailable &&
     appFocus.isNewSession() &&
     state.phase === "idle";

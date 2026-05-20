@@ -5,8 +5,11 @@ These tests verify that chat files are properly passed to PythonTool
 through the PythonToolOverrideKwargs mechanism.
 """
 
+from unittest.mock import patch
+
 import pytest
 
+from onyx.db.models import UserFile
 from onyx.tools.models import ChatFile
 from onyx.tools.models import PythonToolOverrideKwargs
 
@@ -157,6 +160,93 @@ class TestChatFileConversion:
 
         chat_files = _convert_loaded_files_to_chat_files([])
         assert chat_files == []
+
+    def test_context_tabular_user_files_loaded_for_tools(self) -> None:
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file_id = uuid4()
+        user_file = UserFile(
+            id=user_file_id,
+            user_id=uuid4(),
+            file_id="stored-xlsx-file",
+            name="review_results.xlsx",
+            file_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            token_count=1000,
+        )
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.return_value.read.return_value = b"raw xlsx bytes"
+
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames=set(),
+            )
+
+        assert chat_files == [
+            ChatFile(filename="review_results.xlsx", content=b"raw xlsx bytes")
+        ]
+        mock_file_store.read_file.assert_called_once_with("stored-xlsx-file", mode="b")
+
+    def test_context_non_tabular_user_files_not_loaded_for_tools(self) -> None:
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file = UserFile(
+            id=uuid4(),
+            user_id=uuid4(),
+            file_id="stored-pdf-file",
+            name="framework.pdf",
+            file_type="application/pdf",
+            token_count=1000,
+        )
+
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames=set(),
+            )
+
+        assert chat_files == []
+        mock_file_store_factory.assert_not_called()
+
+    def test_context_user_file_filename_collision_gets_suffix(self) -> None:
+        # Avoid overwriting an existing staged chat attachment with the same name.
+        from uuid import uuid4
+
+        from onyx.chat.process_message import _load_context_user_files_for_tools
+
+        user_file_id = uuid4()
+        user_file = UserFile(
+            id=user_file_id,
+            user_id=uuid4(),
+            file_id="stored-csv-file",
+            name="data.csv",
+            file_type="text/csv",
+            token_count=100,
+        )
+        with patch(
+            "onyx.chat.process_message.get_default_file_store"
+        ) as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.return_value.read.return_value = b"a,b\n1,2"
+
+            chat_files = _load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames={"data.csv"},
+            )
+
+        assert chat_files == [
+            ChatFile(filename=f"data_{user_file_id}.csv", content=b"a,b\n1,2")
+        ]
 
 
 class TestChatFileModel:

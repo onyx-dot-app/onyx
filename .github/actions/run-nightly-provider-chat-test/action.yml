@@ -46,7 +46,7 @@ runs:
   using: "composite"
   steps:
     - name: Login to Docker Hub
-      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
       with:
         username: ${{ inputs.docker-username }}
         password: ${{ inputs.docker-token }}
@@ -60,7 +60,6 @@ runs:
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
         ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-        LICENSE_ENFORCEMENT_ENABLED=false
         AUTH_TYPE=basic
         POSTGRES_POOL_PRE_PING=true
         POSTGRES_USE_NULL_POOL=true
@@ -79,11 +78,17 @@ runs:
         cd deployment/docker_compose
         docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait \
           relational_db \
-          index \
+          opensearch \
           cache \
           minio \
           api_server \
           inference_model_server
+
+    - name: Seed dev license
+      shell: bash
+      run: |
+        docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+          python -m scripts.seed_dev_license
 
     - name: Run nightly provider integration test
       uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -113,7 +118,7 @@ runs:
             -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_POOL_PRE_PING=true \
             -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
+            -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e TEST_WEB_HOSTNAME=test-runner \

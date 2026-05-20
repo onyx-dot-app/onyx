@@ -96,7 +96,7 @@ class TestSetFence:
             calls.append({"key": key, "ex": ex})
             original_set(key, value, ex=ex)
 
-        cache.set = tracking_set  # type: ignore[method-assign]
+        cache.set = tracking_set  # ty: ignore[invalid-assignment]
 
         set_fence(uuid4(), cache, True)
         assert len(calls) == 1

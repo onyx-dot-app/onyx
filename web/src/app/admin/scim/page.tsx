@@ -30,18 +30,11 @@ function ScimContent() {
   const hasToken = !!token;
   const isConnected = hasToken && token.last_used_at !== null;
 
-  // 404 means no active token — not an error
-  const is404 =
-    tokenError &&
-    typeof tokenError === "object" &&
-    "status" in tokenError &&
-    (tokenError as { status: number }).status === 404;
-
   if (isLoading) {
     return <ThreeDotsLoader />;
   }
 
-  if (tokenError && !is404) {
+  if (tokenError) {
     return (
       <Text as="p" text03>
         Failed to load SCIM token status.
@@ -130,7 +123,7 @@ export default function Page() {
         icon={SvgUserSync}
         title="SCIM"
         description="Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <ScimContent />

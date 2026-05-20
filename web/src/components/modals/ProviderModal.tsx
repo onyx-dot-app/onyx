@@ -27,7 +27,7 @@ export interface ProviderModalProps {
 export default function ProviderModal({
   open,
   onOpenChange,
-  icon: icon,
+  icon,
   title,
   description,
   children,

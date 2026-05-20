@@ -20,12 +20,8 @@
 
 "use client";
 
-import {
-  cn,
-  ensureHrefProtocol,
-  INTERACTIVE_SELECTOR,
-  noProp,
-} from "@/lib/utils";
+import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
 import { useCallback, useMemo, useRef, useState, useEffect } from "react";
@@ -33,7 +29,6 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
@@ -47,11 +42,10 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { Interactive } from "@opal/core";
-import { Button, OpenButton } from "@opal/components";
+import { Button, LineItemButton, OpenButton } from "@opal/components";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -68,7 +62,8 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import { APP_SLOGAN } from "@/lib/constants";
 
@@ -87,7 +82,7 @@ import { APP_SLOGAN } from "@/lib/constants";
  * - App-Mode toggle (EE gated)
  */
 function Header() {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
   const { isMobile } = useScreenSize();
@@ -225,31 +220,34 @@ function Header() {
             onSearch={setSearchTerm}
           />,
           ...filteredProjects.map((project) => (
-            <LineItem
+            <LineItemButton
               key={project.id}
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgFolderIn}
+              title={project.name}
               onClick={noProp(() => handleMoveClick(project.id))}
-            >
-              {project.name}
-            </LineItem>
+            />
           )),
         ]
       : [
-          <LineItem
+          <LineItemButton
             key="move"
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgFolderIn}
+            title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
-          >
-            Move to Project
-          </LineItem>,
-          <LineItem
+          />,
+          <LineItemButton
             key="delete"
+            sizePreset="main-ui"
+            rounding="sm"
+            color="danger"
             icon={SvgTrash}
+            title="Delete"
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-            danger
-          >
-            Delete
-          </LineItem>,
+          />,
         ];
 
     setPopoverItems(items);
@@ -326,7 +324,7 @@ function Header() {
               onClick={() => setFolded(false)}
             />
           )}
-          {isPaidEnterpriseFeaturesEnabled &&
+          {businessTier &&
             settings.isSearchModeAvailable &&
             appFocus.isNewSession() &&
             state.phase === "idle" && (
@@ -343,28 +341,30 @@ function Header() {
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
                   <Popover.Menu>
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       icon={SvgSearchMenu}
-                      selected={effectiveMode === "search"}
+                      state={effectiveMode === "search" ? "selected" : "empty"}
+                      title="Search"
                       description="Quick search for documents"
                       onClick={noProp(() => {
                         setAppMode("search");
                         setModePopoverOpen(false);
                       })}
-                    >
-                      Search
-                    </LineItem>
-                    <LineItem
+                    />
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       icon={SvgBubbleText}
-                      selected={effectiveMode === "chat"}
+                      state={effectiveMode === "chat" ? "selected" : "empty"}
+                      title="Chat"
                       description="Conversation and research"
                       onClick={noProp(() => {
                         setAppMode("chat");
                         setModePopoverOpen(false);
                       })}
-                    >
-                      Chat
-                    </LineItem>
+                    />
                   </Popover.Menu>
                 </Popover.Content>
               </Popover>
@@ -380,7 +380,7 @@ function Header() {
           className={cn(
             "flex flex-col items-center overflow-hidden",
             pageWithHeaderContent && customHeaderContent
-              ? "order-last basis-full py-2 sm:py-0 sm:order-none sm:basis-auto sm:flex-1"
+              ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
               : "flex-1"
           )}
         >
@@ -436,8 +436,8 @@ function Header() {
 
 const footerMarkdownComponents = {
   p: ({ children }) => (
-    //dont remove the !my-0 class, it's important for the markdown to render without any alignment issues
-    <Text as="p" text03 secondaryAction className="!my-0 text-center">
+    //dont remove the my-0! class, it's important for the markdown to render without any alignment issues
+    <Text as="p" text03 secondaryAction className="my-0! text-center">
       {children}
     </Text>
   ),
@@ -548,7 +548,7 @@ function Root({ children, enableBackground }: AppRootProps) {
       const activeEl = document.activeElement;
       const isFocused =
         activeEl instanceof HTMLElement &&
-        activeEl.id === "onyx-chat-input-textarea";
+        activeEl.id === "onyx-chat-input-textbox";
       const target = event.target;
       const isInteractive =
         target instanceof HTMLElement && !!target.closest(INTERACTIVE_SELECTOR);
@@ -562,7 +562,7 @@ function Root({ children, enableBackground }: AppRootProps) {
     inputWasFocused.current = false;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed) return;
-    const textarea = document.getElementById("onyx-chat-input-textarea");
+    const textarea = document.getElementById("onyx-chat-input-textbox");
     // Only restore focus if no other element has grabbed it since mousedown.
     if (textarea && document.activeElement !== textarea) {
       textarea.focus();

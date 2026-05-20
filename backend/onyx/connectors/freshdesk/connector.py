@@ -9,9 +9,7 @@ from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rl_requests,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -26,6 +24,16 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _FRESHDESK_ID_PREFIX = "FRESHDESK_"
+
+# Freshdesk's /api/v2/tickets endpoint hard-caps pagination at 300 pages and
+# returns 400 for page >= 301. To get past this on accounts with more than
+# (per_page * 300) matching tickets, we roll the ``updated_since`` window
+# forward to the last ticket's ``updated_at`` and restart from page 1.
+# Source: https://developers.freshdesk.com/api/#list_all_tickets
+_FRESHDESK_MAX_PAGE = 300
+# 100 is the per_page maximum allowed by the API; using it minimizes the
+# number of pages and the number of window rolls.
+_FRESHDESK_PER_PAGE = 100
 
 
 _TICKET_FIELDS_TO_INCLUDE = {
@@ -79,6 +87,20 @@ def _rate_limited_freshdesk_get(
     return rl_requests.get(url, auth=auth, params=params)
 
 
+def _parse_freshdesk_datetime(raw: str | None) -> datetime | None:
+    """Freshdesk timestamps are ISO-8601 with a trailing 'Z'.
+
+    The API documents that fields like ``due_by``/``fr_due_by`` may be returned
+    as ``null`` — see https://developers.freshdesk.com/api/. This is also
+    significantly more frequent on accounts created after 25 Aug 2025, where
+    the new SLA engine recalculates ``due_by`` for a few seconds after every
+    ticket update.
+    """
+    if not raw:
+        return None
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+
+
 def _create_metadata_from_ticket(ticket: dict) -> dict:
     metadata: dict[str, str | list[str]] = {}
     # Combine all emails into a list so there are no repeated emails
@@ -129,8 +151,9 @@ def _create_metadata_from_ticket(ticket: dict) -> dict:
             status_number, "Unknown Status"
         )
 
-    due_by = datetime.fromisoformat(ticket["due_by"].replace("Z", "+00:00"))
-    metadata["overdue"] = str(datetime.now(timezone.utc) > due_by)
+    due_by = _parse_freshdesk_datetime(ticket.get("due_by"))
+    if due_by is not None:
+        metadata["overdue"] = str(datetime.now(timezone.utc) > due_by)
 
     return metadata
 
@@ -154,9 +177,7 @@ def _create_doc_from_ticket(ticket: dict, domain: str) -> Document:
         source=DocumentSource.FRESHDESK,
         semantic_identifier=ticket["subject"],
         metadata=metadata,
-        doc_updated_at=datetime.fromisoformat(
-            ticket["updated_at"].replace("Z", "+00:00")
-        ),
+        doc_updated_at=_parse_freshdesk_datetime(ticket.get("updated_at")),
     )
 
 
@@ -212,10 +233,15 @@ class FreshdeskConnector(PollConnector, LoadConnector):
             raise ConnectorMissingCredentialError("freshdesk")
 
         base_url = f"https://{self.domain}.freshdesk.com/api/v2/tickets"
+        # Sort by updated_at ascending so the last ticket on each page has the
+        # largest updated_at — required to roll the updated_since window
+        # forward when we hit the 300-page cap.
         params: dict[str, int | str] = {
             "include": "description",
-            "per_page": 50,
+            "per_page": _FRESHDESK_PER_PAGE,
             "page": 1,
+            "order_by": "updated_at",
+            "order_type": "asc",
         }
 
         if start:
@@ -235,13 +261,45 @@ class FreshdeskConnector(PollConnector, LoadConnector):
 
             tickets = json.loads(response.content)
             logger.info(
-                f"Fetched {len(tickets)} tickets from Freshdesk API (Page {params['page']})"
+                "Fetched %s tickets from Freshdesk API (Page %s)",
+                len(tickets),
+                params["page"],
             )
 
             yield tickets
 
             if len(tickets) < int(params["per_page"]):
                 break
+
+            if int(params["page"]) >= _FRESHDESK_MAX_PAGE:
+                # Hit Freshdesk's hard pagination cap. Advance the
+                # updated_since window to the last ticket's updated_at and
+                # restart from page 1. updated_since is inclusive, so any
+                # tickets sharing that exact timestamp will be re-yielded;
+                # downstream document upsert dedups by id.
+                # technically this breaks if 30,000 tickets have the same
+                # updated_at, but I think we'll accept that risk.
+                last_updated_at = tickets[-1].get("updated_at")
+                if not last_updated_at:
+                    logger.warning(
+                        "Freshdesk ticket missing updated_at at page cap; "
+                        "stopping pagination to avoid infinite loop."
+                    )
+                    break
+                logger.info(
+                    "Reached Freshdesk %s-page cap; rolling updated_since "
+                    "window forward to %s and restarting pagination.",
+                    _FRESHDESK_MAX_PAGE,
+                    last_updated_at,
+                )
+                if last_updated_at == params.get("updated_since"):
+                    raise RuntimeError(
+                        "Last updated_at is the same as the updated_since window; "
+                        "stopping pagination to avoid infinite loop."
+                    )
+                params["updated_since"] = last_updated_at
+                params["page"] = 1
+                continue
 
             params["page"] = int(params["page"]) + 1
 

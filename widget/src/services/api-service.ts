@@ -15,7 +15,7 @@ export class ApiService {
 
   constructor(
     private backendUrl: string,
-    private apiKey: string,
+    private apiKey: string
   ) {}
 
   /**
@@ -33,13 +33,20 @@ export class ApiService {
         method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify(request),
-      },
+      }
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to create session: ${response.status} ${response.statusText}`,
-      );
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (body.detail) {
+          detail = body.detail;
+        }
+      } catch {
+        // Fall back to statusText if body isn't JSON
+      }
+      throw new Error(detail);
     }
 
     const data = (await response.json()) as CreateSessionResponse;
@@ -72,13 +79,20 @@ export class ApiService {
         headers: this.getHeaders(),
         body: JSON.stringify(request),
         signal: params.signal,
-      },
+      }
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to send message: ${response.status} ${response.statusText}`,
-      );
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (body.detail) {
+          detail = body.detail;
+        }
+      } catch {
+        // Fall back to statusText if body isn't JSON
+      }
+      throw new Error(detail);
     }
 
     // Parse SSE stream
@@ -90,7 +104,7 @@ export class ApiService {
    * Backend returns newline-delimited JSON packets
    */
   private async *parseSSEStream(
-    response: Response,
+    response: Response
   ): AsyncGenerator<Packet, void, unknown> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -131,7 +145,7 @@ export class ApiService {
             } catch (e) {
               // Fail fast on malformed packets - don't hide backend issues
               throw new Error(
-                `Failed to parse SSE packet: ${line}. Error: ${e}`,
+                `Failed to parse SSE packet: ${line}. Error: ${e}`
               );
             }
           }
@@ -158,7 +172,7 @@ export class ApiService {
         } catch (e) {
           // Fail fast on malformed final buffer packets
           throw new Error(
-            `Failed to parse final packet: ${buffer}. Error: ${e}`,
+            `Failed to parse final packet: ${buffer}. Error: ${e}`
           );
         }
       }
@@ -173,14 +187,14 @@ export class ApiService {
   private async fetchWithRetry(
     url: string,
     options: RequestInit,
-    retries = 0,
+    retries = 0
   ): Promise<Response> {
     try {
       const response = await fetch(url, options);
 
-      // Retry on 5xx or 429 errors
+      // Retry on 5xx errors only (not 4xx — those are permanent)
       if (!response.ok && retries < this.maxRetries) {
-        if (response.status >= 500 || response.status === 429) {
+        if (response.status >= 500) {
           const delay = this.retryDelay * Math.pow(2, retries);
           await new Promise((resolve) => setTimeout(resolve, delay));
           return this.fetchWithRetry(url, options, retries + 1);

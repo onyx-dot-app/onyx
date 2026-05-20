@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FileDescriptor } from "@/app/app/interfaces";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
@@ -40,7 +40,7 @@ export default function ExpandableContentWrapper({
   };
 
   const Content = (
-    <div className="w-message-default max-w-full !rounded-lg overflow-y-hidden h-full">
+    <div className="w-message-default max-w-full rounded-lg! overflow-y-hidden h-full">
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
           <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
@@ -73,7 +73,7 @@ export default function ExpandableContentWrapper({
       </CardHeader>
       <Card
         className={cn(
-          "!rounded-none p-0 relative mx-auto w-full",
+          "rounded-none! p-0 relative mx-auto w-full",
           expanded ? "max-h-[600px]" : "max-h-[300px] h-full"
         )}
       >

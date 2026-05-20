@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import {
@@ -64,8 +65,10 @@ import { SvgSearch, SvgX } from "@opal/icons";
  * />
  * ```
  */
-export interface InputTypeInProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled"> {
+export interface InputTypeInProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "disabled"
+> {
   variant?: Variants;
 
   prefixText?: string;
@@ -139,7 +142,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
         {leftSearchIcon && (
           <div className="pr-2 pl-1">
             <div className="pl-[2px]">
-              <SvgSearch className="w-[1rem] h-[1rem] stroke-text-02" />
+              <SvgSearch className="w-4 h-4 stroke-text-02" />
             </div>
           </div>
         )}
@@ -158,7 +161,7 @@ const InputTypeIn = React.forwardRef<HTMLInputElement, InputTypeInProps>(
           value={value}
           onChange={onChange}
           className={cn(
-            "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
+            "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
             innerClasses[variant],
             textClasses[variant]
           )}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
-import { Button, Text } from "@opal/components";
+import { Button, LinkButton, Text } from "@opal/components";
 import {
   SvgCheckCircle,
   SvgShareWebhook,
@@ -14,9 +14,8 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Section } from "@/layouts/general-layouts";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content, ContentAction, InputVertical } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import {
   createHook,
@@ -110,13 +109,13 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
     useFormikContext<HookFormState>();
 
   return (
-    <InputLayouts.Vertical
-      name="timeout_seconds"
+    <InputVertical
+      withLabel="timeout_seconds"
       title="Timeout"
       suffix="(seconds)"
       subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
     >
-      <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:![appearance:textfield] [&_input::-webkit-outer-spin-button]:!appearance-none [&_input::-webkit-inner-spin-button]:!appearance-none w-full">
+      <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:[appearance:textfield]! [&_input::-webkit-outer-spin-button]:appearance-none! [&_input::-webkit-inner-spin-button]:appearance-none! w-full">
         <InputTypeInField
           name="timeout_seconds"
           type="number"
@@ -143,7 +142,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
           }
         />
       </div>
-    </InputLayouts.Vertical>
+    </InputVertical>
   );
 }
 
@@ -273,7 +272,7 @@ export default function HookFormModal({
                   <ContentAction
                     sizePreset="main-ui"
                     variant="section"
-                    paddingVariant="fit"
+                    padding="fit"
                     title={hookPointDisplayName}
                     description={hookPointDescription}
                     rightChildren={
@@ -283,26 +282,19 @@ export default function HookFormModal({
                           variant="body"
                           icon={SvgShareWebhook}
                           title="Hook Point"
-                          prominence="muted"
-                          widthVariant="fit"
+                          color="muted"
+                          width="fit"
                         />
                         {docsUrl && (
-                          <a
-                            href={docsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline leading-none"
-                          >
-                            <Text font="secondary-body" color="text-03">
-                              Documentation
-                            </Text>
-                          </a>
+                          <LinkButton href={docsUrl} target="_blank">
+                            Documentation
+                          </LinkButton>
                         )}
                       </div>
                     }
                   />
 
-                  <InputLayouts.Vertical name="name" title="Display Name">
+                  <InputVertical withLabel="name" title="Display Name">
                     <div className="[&_input::placeholder]:!font-main-ui-muted w-full">
                       <InputTypeInField
                         name="name"
@@ -310,12 +302,11 @@ export default function HookFormModal({
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
-                  <InputLayouts.Vertical
-                    name="fail_strategy"
+                  <InputVertical
+                    withLabel="fail_strategy"
                     title="Fail Strategy"
-                    nonInteractive
                     subDescription={failStrategyDescription}
                   >
                     <InputSelect
@@ -347,12 +338,12 @@ export default function HookFormModal({
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
                   <TimeoutField spec={spec} />
 
-                  <InputLayouts.Vertical
-                    name="endpoint_url"
+                  <InputVertical
+                    withLabel="endpoint_url"
                     title="External API Endpoint URL"
                     subDescription="Only connect to servers you trust. You are responsible for actions taken and data shared with this connection."
                   >
@@ -363,10 +354,10 @@ export default function HookFormModal({
                         variant={isSubmitting ? "disabled" : undefined}
                       />
                     </div>
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
-                  <InputLayouts.Vertical
-                    name="api_key"
+                  <InputVertical
+                    withLabel="api_key"
                     title="API Key"
                     subDescription="Onyx will use this key to authenticate with your API endpoint."
                   >
@@ -374,8 +365,8 @@ export default function HookFormModal({
                       name="api_key"
                       placeholder={
                         isEdit
-                          ? hook?.api_key_masked ??
-                            "Leave blank to keep current key"
+                          ? (hook?.api_key_masked ??
+                            "Leave blank to keep current key")
                           : undefined
                       }
                       disabled={isSubmitting}
@@ -385,7 +376,7 @@ export default function HookFormModal({
                         }
                       }}
                     />
-                  </InputLayouts.Vertical>
+                  </InputVertical>
 
                   {!isEdit && (isSubmitting || isConnected) && (
                     <Section

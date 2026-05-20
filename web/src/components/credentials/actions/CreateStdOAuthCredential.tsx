@@ -48,22 +48,22 @@ export function CreateStdOAuthCredential({
   return (
     <Formik
       initialValues={
-        {
-          ...Object.fromEntries(additionalFields.map((field) => [field, ""])),
-        } as formType
+        Object.fromEntries(
+          additionalFields.map((field) => [field, ""])
+        ) as formType
       }
-      validationSchema={Yup.object().shape({
-        ...Object.fromEntries(
+      validationSchema={Yup.object().shape(
+        Object.fromEntries(
           additionalFields.map((field) => [field.name, Yup.string().required()])
-        ),
-      })}
+        )
+      )}
       onSubmit={(values, formikHelpers) => {
         handleSubmit(values, formikHelpers);
       }}
     >
       {() => (
         <Form className="w-full flex items-stretch">
-          <CardSection className="w-full !border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full border-0! mt-4 flex flex-col gap-y-6">
             {additionalFields.map((field) => (
               <TextFormField
                 key={field.name}

@@ -19,7 +19,8 @@ import {
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";
@@ -41,7 +42,7 @@ export const DocumentSetCreationForm = ({
   onClose,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
   const { user } = useUser();
@@ -188,7 +189,7 @@ export const DocumentSetCreationForm = ({
                   optional={true}
                 />
 
-                {isPaidEnterpriseFeaturesEnabled && (
+                {businessTier && (
                   <IsPublicGroupSelector
                     formikProps={props}
                     objectName="document set"

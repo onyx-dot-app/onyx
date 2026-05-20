@@ -106,9 +106,9 @@ def _get_hybrid_search_normalization_weights() -> list[float]:
             f"Bug: Unhandled hybrid search subquery configuration: {HYBRID_SEARCH_SUBQUERY_CONFIGURATION}."
         )
 
-    assert (
-        sum(hybrid_search_normalization_weights) == 1.0
-    ), "Bug: Hybrid search normalization weights do not sum to 1.0."
+    assert sum(hybrid_search_normalization_weights) == 1.0, (
+        "Bug: Hybrid search normalization weights do not sum to 1.0."
+    )
 
     return hybrid_search_normalization_weights
 
@@ -765,7 +765,7 @@ class DocumentQuery:
         if search_filters is not None:
             query["knn"][CONTENT_VECTOR_FIELD_NAME]["filter"] = {
                 "bool": {"filter": search_filters}
-            }
+            }  # ty: ignore[invalid-assignment]
 
         return query
 
@@ -962,7 +962,9 @@ class DocumentQuery:
                 acl_subclause: TermsQuery[str] = {
                     "terms": {ACCESS_CONTROL_LIST_FIELD_NAME: list(access_control_list)}
                 }
-                acl_visibility_filter["bool"]["should"].append(acl_subclause)
+                acl_visibility_filter["bool"]["should"].append(
+                    acl_subclause  # ty: ignore[invalid-argument-type]
+                )
             return acl_visibility_filter
 
         def _get_source_type_filter(

@@ -12,6 +12,12 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.tasks.docprocessing.batch_counters import (
+    on_docprocessing_task_postrun,
+)
+from onyx.background.celery.tasks.docprocessing.batch_counters import (
+    on_docprocessing_task_prerun,
+)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
@@ -25,12 +31,11 @@ from onyx.server.metrics.metrics_server import start_metrics_server
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.docprocessing")
-celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
+celery_app.Task = app_base.TenantAwareTask  # ty: ignore[invalid-assignment]
 
 
 @signals.task_prerun.connect
@@ -45,6 +50,7 @@ def on_task_prerun(
     app_base.on_task_prerun(sender, task_id, task, args, kwargs, **kwds)
     on_celery_task_prerun(task_id, task)
     on_indexing_task_prerun(task_id, task, kwargs)
+    on_docprocessing_task_prerun(task_id, task, kwargs)
 
 
 @signals.task_postrun.connect
@@ -61,6 +67,7 @@ def on_task_postrun(
     app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
     on_celery_task_postrun(task_id, task, state)
     on_indexing_task_postrun(task_id, task, kwargs, state)
+    on_docprocessing_task_postrun(task_id, task, kwargs, state)
 
 
 @signals.task_retry.connect
@@ -106,12 +113,12 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     # "SSL connection has been closed unexpectedly"
     # actually setting the spawn method in the cloud fixes 95% of these.
     # setting pre ping might help even more, but not worrying about that yet
-    pool_size = cast(int, sender.concurrency)  # type: ignore
+    pool_size = cast(int, sender.concurrency)  # ty: ignore[unresolved-attribute]
     SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
-    app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
+    app_base.wait_for_document_index_or_shutdown()
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:

@@ -21,6 +21,6 @@ def should_perform_chat_ttl_check(
         return True
 
     if check_task_is_live_and_not_timed_out(latest_task, db_session):
-        logger.debug(f"{task_name} is already being performed. Skipping.")
+        logger.debug("%s is already being performed. Skipping.", task_name)
         return False
     return True

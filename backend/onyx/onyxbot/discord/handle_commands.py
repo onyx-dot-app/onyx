@@ -44,29 +44,29 @@ async def handle_dm(message: discord.Message) -> None:
 
 async def _try_dm_author(message: discord.Message, content: str) -> bool:
     """Attempt to DM the message author. Returns True if successful."""
-    logger.debug(f"Responding in Discord DM with {content}")
+    logger.debug("Responding in Discord DM with %s", content)
     try:
         await message.author.send(content)
         return True
     except (discord.Forbidden, discord.HTTPException) as e:
         # User has DMs disabled or other error
-        logger.warning(f"Failed to DM author {message.author.id}: {e}")
+        logger.warning("Failed to DM author %s: %s", message.author.id, e)
     except Exception as e:
-        logger.exception(f"Unexpected error DMing author {message.author.id}: {e}")
+        logger.exception("Unexpected error DMing author %s: %s", message.author.id, e)
     return False
 
 
 async def _try_delete_message(message: discord.Message) -> bool:
     """Attempt to delete a message. Returns True if successful."""
-    logger.debug(f"Deleting potentially sensitive message {message.id}")
+    logger.debug("Deleting potentially sensitive message %s", message.id)
     try:
         await message.delete()
         return True
     except (discord.Forbidden, discord.HTTPException) as e:
         # Bot lacks permission or other error
-        logger.warning(f"Failed to delete message {message.id}: {e}")
+        logger.warning("Failed to delete message %s: %s", message.id, e)
     except Exception as e:
-        logger.exception(f"Unexpected error deleting message {message.id}: {e}")
+        logger.exception("Unexpected error deleting message %s: %s", message.id, e)
     return False
 
 
@@ -77,9 +77,9 @@ async def _try_react_x(message: discord.Message) -> bool:
         return True
     except (discord.Forbidden, discord.HTTPException) as e:
         # Bot lacks permission or other error
-        logger.warning(f"Failed to react to message {message.id}: {e}")
+        logger.warning("Failed to react to message %s: %s", message.id, e)
     except Exception as e:
-        logger.exception(f"Unexpected error reacting to message {message.id}: {e}")
+        logger.exception("Unexpected error reacting to message %s: %s", message.id, e)
     return False
 
 
@@ -107,7 +107,7 @@ async def handle_registration_command(
         return True
 
     guild_name = message.guild.name
-    logger.info(f"Registration command received: {guild_name}")
+    logger.info("Registration command received: %s", guild_name)
 
     try:
         # Parse the registration key
@@ -132,18 +132,18 @@ async def handle_registration_command(
                 )
 
         await _register_guild(message, registration_key, cache)
-        logger.info(f"Registration successful: {guild_name}")
+        logger.info("Registration successful: %s", guild_name)
         await message.reply(
             ":white_check_mark: **Successfully registered!**\n\n"
             "This server is now connected to Onyx. "
             "I'll respond to messages based on your server and channel settings set in Onyx."
         )
     except RegistrationError as e:
-        logger.debug(f"Registration failed: {guild_name}, error={e}")
+        logger.debug("Registration failed: %s, error=%s", guild_name, e)
         await _try_dm_author(message, f":x: **Registration failed.**\n\n{e}")
         await _try_delete_message(message)
     except Exception:
-        logger.exception(f"Registration failed unexpectedly: {guild_name}")
+        logger.exception("Registration failed unexpectedly: %s", guild_name)
         await _try_dm_author(
             message,
             ":x: **Registration failed.**\n\nAn unexpected error occurred. Please try again later.",
@@ -163,7 +163,7 @@ async def _register_guild(
         # mypy, even though we already know that message.guild is not None
         raise RegistrationError("This command can only be used in a server.")
 
-    logger.info(f"Guild '{message.guild.name}' attempting to register Discord bot")
+    logger.info("Guild '%s' attempting to register Discord bot", message.guild.name)
     registration_key = registration_key.strip()
 
     # Parse tenant_id from registration key
@@ -175,14 +175,14 @@ async def _register_guild(
 
     tenant_id = parsed
 
-    logger.info(f"Parsed tenant_id {tenant_id} from registration key")
+    logger.info("Parsed tenant_id %s from registration key", tenant_id)
 
     # Check if this guild is already registered to any tenant
     guild_id = message.guild.id
     existing_tenant = cache.get_tenant(guild_id)
     if existing_tenant is not None:
         logger.warning(
-            f"Guild {guild_id} is already registered to tenant {existing_tenant}"
+            "Guild %s is already registered to tenant %s", guild_id, existing_tenant
         )
         raise RegistrationError(
             "This server is already registered.\n\nOnyxBot can only connect one Discord server to one Onyx workspace."
@@ -195,7 +195,7 @@ async def _register_guild(
 
         # Collect all text channels from the guild
         channels = get_text_channels(guild)
-        logger.info(f"Found {len(channels)} text channels in guild '{guild_name}'")
+        logger.info("Found %s text channels in guild '%s'", len(channels), guild_name)
 
         # Validate and update in database
         def _sync_register() -> int:
@@ -234,7 +234,7 @@ async def _register_guild(
         await cache.refresh_guild(guild_id, tenant_id)
 
         logger.info(
-            f"Guild '{guild_name}' registered with {len(channels)} channel configs"
+            "Guild '%s' registered with %s channel configs", guild_name, len(channels)
         )
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(context_token)
@@ -251,7 +251,10 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
             is_private = not everyone_perms.view_channel
 
             logger.debug(
-                f"Found channel: #{channel.name}, type={channel.type.name}, is_private={is_private}"
+                "Found channel: #%s, type=%s, is_private=%s",
+                channel.name,
+                channel.type.name,
+                is_private,
             )
 
             channels.append(
@@ -263,7 +266,7 @@ def get_text_channels(guild: discord.Guild) -> list[DiscordChannelView]:
                 )
             )
 
-    logger.debug(f"Retrieved {len(channels)} channels from guild '{guild.name}'")
+    logger.debug("Retrieved %s channels from guild '%s'", len(channels), guild.name)
     return channels
 
 
@@ -292,7 +295,7 @@ async def handle_sync_channels_command(
         return True
 
     guild_name = message.guild.name
-    logger.info(f"Sync-channels command received: {guild_name}")
+    logger.info("Sync-channels command received: %s", guild_name)
 
     try:
         # Must be registered
@@ -335,7 +338,11 @@ async def handle_sync_channels_command(
             guild_config_id, tenant_id, bot
         )
         logger.info(
-            f"Sync-channels successful: {guild_name}, added={added}, removed={removed}, updated={updated}"
+            "Sync-channels successful: %s, added=%s, removed=%s, updated=%s",
+            guild_name,
+            added,
+            removed,
+            updated,
         )
         await message.reply(
             f":white_check_mark: **Channel sync complete!**\n\n"
@@ -345,11 +352,11 @@ async def handle_sync_channels_command(
             "New channels are disabled by default. Enable them in the Onyx admin panel."
         )
     except SyncChannelsError as e:
-        logger.debug(f"Sync-channels failed: {guild_name}, error={e}")
+        logger.debug("Sync-channels failed: %s, error=%s", guild_name, e)
         await _try_dm_author(message, f":x: **Channel sync failed.**\n\n{e}")
         await _try_react_x(message)
     except Exception:
-        logger.exception(f"Sync-channels failed unexpectedly: {guild_name}")
+        logger.exception("Sync-channels failed unexpectedly: %s", guild_name)
         await _try_dm_author(
             message,
             ":x: **Channel sync failed.**\n\nAn unexpected error occurred. Please try again later.",
@@ -406,7 +413,7 @@ async def sync_guild_channels(
 
         # Get current channels from Discord
         channels = get_text_channels(guild)
-        logger.info(f"Syncing {len(channels)} channels for guild '{guild.name}'")
+        logger.info("Syncing %s channels for guild '%s'", len(channels), guild.name)
 
         # Sync with database
         def _sync() -> tuple[int, int, int]:
@@ -420,7 +427,11 @@ async def sync_guild_channels(
         added, removed, updated = await asyncio.to_thread(_sync)
 
         logger.info(
-            f"Channel sync complete for guild '{guild.name}': added={added}, removed={removed}, updated={updated}"
+            "Channel sync complete for guild '%s': added=%s, removed=%s, updated=%s",
+            guild.name,
+            added,
+            removed,
+            updated,
         )
 
         return added, removed, updated

@@ -12,6 +12,7 @@ from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from typing import cast
 from typing import IO
 from typing import NamedTuple
 from typing import Optional
@@ -20,9 +21,11 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
-from openpyxl.worksheet.worksheet import Worksheet
+from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from PIL import Image
 
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
+from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -47,14 +50,28 @@ KNOWN_OPENPYXL_BUGS = [
     "File contains no valid workbook part",
     "Unable to read workbook: could not read stylesheet from None",
     "Colors must be aRGB hex values",
+    "Max value is",
+    "There is no item named",
 ]
 
 
 def get_markitdown_converter() -> "MarkItDown":
     global _MARKITDOWN_CONVERTER
-    from markitdown import MarkItDown
 
     if _MARKITDOWN_CONVERTER is None:
+        from markitdown import MarkItDown
+
+        # Patch this function to effectively no-op because we were seeing this
+        # module take an inordinate amount of time to convert charts to markdown,
+        # making some powerpoint files with many or complicated charts nearly
+        # unindexable.
+        from markitdown.converters._pptx_converter import PptxConverter
+
+        setattr(
+            PptxConverter,
+            "_convert_chart_to_markdown",
+            lambda self, chart: "\n\n[chart omitted]\n\n",  # noqa: ARG005
+        )
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
 
@@ -76,10 +93,24 @@ def is_text_file(file: IO[bytes]) -> bool:
 
 
 def detect_encoding(file: IO[bytes]) -> str:
+    """Detect the character encoding of a binary file.
+
+    Tries UTF-8 first — if the bytes decode cleanly, they are definitively UTF-8
+    (UTF-8 is self-validating). Falls back to chardet only when UTF-8 fails, since
+    chardet can misidentify valid UTF-8 text (e.g. Cyrillic) as a legacy encoding
+    like windows-1251, producing mojibake. Defaults to utf-8 if chardet gives up.
+
+    Resets the file cursor to 0 after sampling so callers can still read the full file.
+    """
     raw_data = file.read(50000)
     file.seek(0)
-    encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
-    return encoding
+    try:
+        raw_data.decode("utf-8")
+        return "utf-8"
+    except UnicodeDecodeError:
+        # utf-8 failed — bytes are genuinely non-UTF-8, let chardet guess
+        encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
+        return encoding
 
 
 def is_macos_resource_fork_file(file_name: str) -> bool:
@@ -179,6 +210,56 @@ def read_text_file(
     return file_content_raw, metadata
 
 
+def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
+    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
+
+    Used to reject PDFs whose image count would OOM the user-file-processing
+    worker during indexing. Returns a value > cap as a sentinel once the count
+    exceeds the cap, so callers do not iterate thousands of image objects just
+    to report a number. Returns 0 if the PDF cannot be parsed.
+
+    Owner-password-only PDFs (permission restrictions but no open password) are
+    counted normally — they decrypt with an empty string. Truly password-locked
+    PDFs are skipped (return 0) since we can't inspect them; the caller should
+    ensure the password-protected check runs first.
+
+    Always restores the file pointer to its original position before returning.
+    """
+    from pypdf import PdfReader
+
+    try:
+        start_pos = file.tell()
+    except Exception:
+        start_pos = None
+    try:
+        if start_pos is not None:
+            file.seek(0)
+        reader = PdfReader(file)
+        if reader.is_encrypted:
+            # Try empty password first (owner-password-only PDFs); give up if that fails.
+            try:
+                if reader.decrypt("") == 0:
+                    return 0
+            except Exception:
+                return 0
+        count = 0
+        for page in reader.pages:
+            for _ in page.images:
+                count += 1
+                if count > cap:
+                    return count
+        return count
+    except Exception:
+        logger.warning("Failed to count embedded images in PDF", exc_info=True)
+        return 0
+    finally:
+        if start_pos is not None:
+            try:
+                file.seek(start_pos)
+            except Exception:
+                pass
+
+
 def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
@@ -205,18 +286,26 @@ def read_pdf_file(
     try:
         pdf_reader = PdfReader(file)
 
-        if pdf_reader.is_encrypted and pdf_pass is not None:
+        if pdf_reader.is_encrypted:
+            # Try the explicit password first, then fall back to an empty
+            # string.  Owner-password-only PDFs (permission restrictions but
+            # no open password) decrypt successfully with "".
+            # See https://github.com/onyx-dot-app/onyx/issues/9754
+            passwords = [p for p in [pdf_pass, ""] if p is not None]
             decrypt_success = False
-            try:
-                decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
-            except Exception:
-                logger.error("Unable to decrypt pdf")
+            for pw in passwords:
+                try:
+                    if pdf_reader.decrypt(pw) != 0:
+                        decrypt_success = True
+                        break
+                except Exception:
+                    pass
 
             if not decrypt_success:
+                logger.error(
+                    "Encrypted PDF could not be decrypted, returning empty text."
+                )
                 return "", metadata, []
-        elif pdf_reader.is_encrypted:
-            logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return "", metadata, []
 
         # Basic PDF metadata
         if pdf_reader.metadata is not None:
@@ -234,8 +323,27 @@ def read_pdf_file(
         )
 
         if extract_images:
+            image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+            images_processed = 0
+            cap_reached = False
             for page_num, page in enumerate(pdf_reader.pages):
+                if cap_reached:
+                    break
                 for image_file_object in page.images:
+                    if images_processed >= image_cap:
+                        # Defense-in-depth backstop. Upload-time validation
+                        # should have rejected files exceeding the cap, but
+                        # we also break here so a single oversized file can
+                        # never pin a worker.
+                        logger.warning(
+                            "PDF embedded image cap reached (%d). "
+                            "Skipping remaining images on page %d and beyond.",
+                            image_cap,
+                            page_num + 1,
+                        )
+                        cap_reached = True
+                        break
+
                     image = Image.open(io.BytesIO(image_file_object.data))
                     img_byte_arr = io.BytesIO()
                     image.save(img_byte_arr, format=image.format)
@@ -248,13 +356,21 @@ def read_pdf_file(
                         image_callback(img_bytes, image_name)
                     else:
                         extracted_images.append((img_bytes, image_name))
+                    images_processed += 1
 
         return text, metadata, extracted_images
 
-    except PdfStreamError:
-        logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
+    except PdfStreamError as e:
+        # Malformed/truncated PDF content — a per-document content issue, not
+        # a platform bug. The function returns empty text and the connector
+        # continues with the next doc; no need to ship a stack trace to
+        # Sentry for every corrupt file we encounter.
+        logger.warning("Invalid PDF file, skipping content extraction: %s", e)
+    except Exception as e:
+        # Unknown PDF parsing failure — elevate just the message, not a
+        # traceback, for the same reason. Callers treat empty text as a
+        # non-fatal skip.
+        logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
     return "", metadata, []
 
@@ -273,6 +389,40 @@ def extract_docx_images(docx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
         logger.exception("Failed to extract all docx images")
 
 
+def count_docx_embedded_images(file: IO[Any], cap: int) -> int:
+    """Return the number of embedded images in a docx, short-circuiting at cap+1.
+
+    Mirrors count_pdf_embedded_images so upload validation can apply the same
+    per-file/per-batch caps. Returns a value > cap once the count exceeds the
+    cap so callers do not iterate every media entry just to report a number.
+    Always restores the file pointer to its original position before returning.
+    """
+    try:
+        start_pos = file.tell()
+    except Exception:
+        start_pos = None
+    try:
+        if start_pos is not None:
+            file.seek(0)
+        count = 0
+        with zipfile.ZipFile(file) as z:
+            for name in z.namelist():
+                if name.startswith("word/media/"):
+                    count += 1
+                    if count > cap:
+                        return count
+        return count
+    except Exception:
+        logger.warning("Failed to count embedded images in docx", exc_info=True)
+        return 0
+    finally:
+        if start_pos is not None:
+            try:
+                file.seek(start_pos)
+            except Exception:
+                pass
+
+
 def read_docx_file(
     file: IO[Any],
     file_name: str = "",
@@ -288,11 +438,9 @@ def read_docx_file(
     The images list returned is empty in this case.
     """
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     try:
         doc = md.convert(
@@ -305,7 +453,9 @@ def read_docx_file(
         UnsupportedFormatException,
     ) as e:
         logger.warning(
-            f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
+            "Failed to extract docx %s: %s. Attempting to read as text file.",
+            file_name or "docx file",
+            e,
         )
 
         # May be an invalid docx, but still a valid text file
@@ -330,13 +480,25 @@ def read_docx_file(
     return doc.markdown, []
 
 
+def extract_pptx_images(pptx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
+    """
+    Given the bytes of a pptx file, extract all the images.
+    Returns an iterator of tuples (image_bytes, image_name).
+    """
+    try:
+        with zipfile.ZipFile(pptx_bytes) as z:
+            for name in z.namelist():
+                if name.startswith("ppt/media/"):
+                    yield (z.read(name), name.split("/")[-1])
+    except Exception:
+        logger.exception("Failed to extract all pptx images")
+
+
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
@@ -355,117 +517,117 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     return presentation.markdown
 
 
-def _worksheet_to_matrix(
-    worksheet: Worksheet,
-) -> list[list[str]]:
+def read_pptx_file(
+    file: IO[Any],
+    file_name: str = "",
+    extract_images: bool = False,
+    image_callback: Callable[[bytes, str], None] | None = None,
+) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
-    Converts a singular worksheet to a matrix of values
+    Extract text and optionally images from a pptx.
+    Return (text_content, list_of_images).
     """
-    rows: list[list[str]] = []
-    for worksheet_row in worksheet.iter_rows(min_row=1, values_only=True):
-        row = ["" if cell is None else str(cell) for cell in worksheet_row]
-        rows.append(row)
+    text = pptx_to_text(file, file_name=file_name)
 
-    return rows
+    file.seek(0)
 
-
-def _clean_worksheet_matrix(matrix: list[list[str]]) -> list[list[str]]:
-    """
-    Cleans a worksheet matrix by removing rows if there are N consecutive empty
-    rows and removing cols if there are M consecutive empty columns
-    """
-    MAX_EMPTY_ROWS = 2  # Runs longer than this are capped to max_empty; shorter runs are preserved as-is
-    MAX_EMPTY_COLS = 2
-
-    # Row cleanup
-    matrix = _remove_empty_runs(matrix, max_empty=MAX_EMPTY_ROWS)
-
-    if not matrix:
-        return matrix
-
-    # Column cleanup — determine which columns to keep without transposing.
-    num_cols = len(matrix[0])
-    keep_cols = _columns_to_keep(matrix, num_cols, max_empty=MAX_EMPTY_COLS)
-    if len(keep_cols) < num_cols:
-        matrix = [[row[c] for c in keep_cols] for row in matrix]
-
-    return matrix
+    if extract_images:
+        if image_callback is None:
+            return text, list(extract_pptx_images(to_bytesio(file)))
+        try:
+            for img_file_bytes, img_file_name in extract_pptx_images(to_bytesio(file)):
+                image_callback(img_file_bytes, img_file_name)
+        except Exception:
+            logger.exception("Failed to stream pptx images")
+    return text, []
 
 
-def _columns_to_keep(
-    matrix: list[list[str]], num_cols: int, max_empty: int
-) -> list[int]:
-    """Return the indices of columns to keep after removing empty-column runs.
-
-    Uses the same logic as ``_remove_empty_runs`` but operates on column
-    indices so no transpose is needed.
-    """
+def _columns_to_keep(col_has_data: bytearray, max_empty: int) -> list[int]:
+    """Keep non-empty columns, plus runs of up to ``max_empty`` empty columns
+    between them. Trailing empty columns are dropped."""
     kept: list[int] = []
     empty_buffer: list[int] = []
-
-    for col_idx in range(num_cols):
-        col_is_empty = all(not row[col_idx] for row in matrix)
-        if col_is_empty:
-            empty_buffer.append(col_idx)
-        else:
+    for c, has in enumerate(col_has_data):
+        if has:
             kept.extend(empty_buffer[:max_empty])
-            kept.append(col_idx)
+            kept.append(c)
             empty_buffer = []
-
+        else:
+            empty_buffer.append(c)
     return kept
 
 
-def _remove_empty_runs(
-    rows: list[list[str]],
-    max_empty: int,
-) -> list[list[str]]:
-    """Removes entire runs of empty rows when the run length exceeds max_empty.
+def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
+    """Stream worksheet rows into CSV text without materializing a dense matrix.
 
-    Leading empty runs are capped to max_empty, just like interior runs.
-    Trailing empty rows are always dropped since there is no subsequent
-    non-empty row to flush them.
+    Empty rows are never stored. Column occupancy is tracked as a ``bytearray``
+    bitmap so column trimming needs no transpose or copy. Runs of empty
+    rows/columns longer than 2 are collapsed; shorter runs are preserved.
+
+    Scanning stops once ``MAX_XLSX_CELLS_PER_SHEET`` non-empty cells have been
+    seen; the output gets a truncation marker row appended so downstream
+    indexing sees that the sheet was cut off.
     """
-    result: list[list[str]] = []
-    empty_buffer: list[list[str]] = []
+    MAX_EMPTY_ROWS_IN_OUTPUT = 2
+    MAX_EMPTY_COLS_IN_OUTPUT = 2
+    TRUNCATION_MARKER = "[truncated: sheet exceeded cell limit]"
 
-    for row in rows:
-        # Check if empty
-        if not any(row):
-            if len(empty_buffer) < max_empty:
-                empty_buffer.append(row)
-        else:
-            # Add upto max empty rows onto the result - that's what we allow
-            result.extend(empty_buffer[:max_empty])
-            # Add the new non-empty row
-            result.append(row)
-            empty_buffer = []
+    non_empty_rows: list[tuple[int, list[str]]] = []
+    col_has_data = bytearray()
+    total_non_empty = 0
+    truncated = False
 
-    return result
+    for row_idx, row_vals in enumerate(rows):
+        # Fast-reject empty rows before allocating a list of "".
+        if not any(v is not None and v != "" for v in row_vals):
+            continue
+
+        cells = ["" if v is None else str(v) for v in row_vals]
+        non_empty_rows.append((row_idx, cells))
+
+        if len(cells) > len(col_has_data):
+            col_has_data.extend(b"\x00" * (len(cells) - len(col_has_data)))
+        for i, v in enumerate(cells):
+            if v:
+                col_has_data[i] = 1
+                total_non_empty += 1
+
+        if total_non_empty > MAX_XLSX_CELLS_PER_SHEET:
+            truncated = True
+            break
+
+    if not non_empty_rows:
+        return ""
+
+    keep_cols = _columns_to_keep(col_has_data, MAX_EMPTY_COLS_IN_OUTPUT)
+    if not keep_cols:
+        return ""
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    blank_row = [""] * len(keep_cols)
+    last_idx = -1
+    for row_idx, cells in non_empty_rows:
+        gap = row_idx - last_idx - 1
+        if gap > 0:
+            for _ in range(min(gap, MAX_EMPTY_ROWS_IN_OUTPUT)):
+                writer.writerow(blank_row)
+        writer.writerow([cells[c] if c < len(cells) else "" for c in keep_cols])
+        last_idx = row_idx
+
+    if truncated:
+        writer.writerow([TRUNCATION_MARKER])
+
+    return buf.getvalue().rstrip("\n")
 
 
-def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
-    # TODO: switch back to this approach in a few months when markitdown
-    # fixes their handling of excel files
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
 
-    # md = get_markitdown_converter()
-    # stream_info = StreamInfo(
-    #     mimetype=SPREADSHEET_MIME_TYPE, filename=file_name or None, extension=".xlsx"
-    # )
-    # try:
-    #     workbook = md.convert(to_bytesio(file), stream_info=stream_info)
-    # except (
-    #     BadZipFile,
-    #     ValueError,
-    #     FileConversionException,
-    #     UnsupportedFormatException,
-    # ) as e:
-    #     error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
-    #     if file_name.startswith("~"):
-    #         logger.debug(error_str + " (this is expected for files with ~)")
-    #     else:
-    #         logger.warning(error_str)
-    #     return ""
-    # return workbook.markdown
+    Returns a list of (csv_text, sheet)
+    """
     try:
         workbook = openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
@@ -474,23 +636,36 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return ""
+        return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.error(
-                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            logger.warning(
+                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
+                file_name or "xlsx file",
+                e,
             )
-            return ""
+            return []
         raise
 
-    text_content = []
-    for sheet in workbook.worksheets:
-        sheet_matrix = _clean_worksheet_matrix(_worksheet_to_matrix(sheet))
-        buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator="\n")
-        writer.writerows(sheet_matrix)
-        text_content.append(buf.getvalue().rstrip("\n"))
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+    sheets: list[tuple[str, str]] = []
+    try:
+        for sheet in workbook.worksheets:
+            # Declared dimensions can be different to what is actually there
+            ro_sheet = cast(ReadOnlyWorksheet, sheet)
+            ro_sheet.reset_dimensions()
+            csv_text = _sheet_to_csv(ro_sheet.iter_rows(values_only=True))
+            sheets.append((csv_text.strip(), ro_sheet.title))
+    finally:
+        workbook.close()
+
+    return sheets
+
+
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    sheets = xlsx_sheet_extraction(file, file_name)
+    return TEXT_SECTION_SEPARATOR.join(
+        csv_text for csv_text, _title in sheets if csv_text
+    )
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -505,7 +680,8 @@ def eml_to_text(file: IO[Any]) -> str:
             raw_file = text_file.detach()
         except Exception as detach_error:
             logger.warning(
-                f"Failed to detach TextIOWrapper for EML upload, using original file: {detach_error}"
+                "Failed to detach TextIOWrapper for EML upload, using original file: %s",
+                detach_error,
             )
             raw_file = file
         try:
@@ -522,7 +698,7 @@ def eml_to_text(file: IO[Any]) -> str:
             elif isinstance(payload, list):
                 text_content.extend(item for item in payload if isinstance(item, str))
             else:
-                logger.warning(f"Unexpected payload type: {type(payload)}")
+                logger.warning("Unexpected payload type: %s", type(payload))
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
@@ -571,7 +747,8 @@ def extract_file_text(
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
+                    "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                    str(unstructured_error),
                 )
         if extension is None:
             extension = get_file_ext(file_name)
@@ -593,7 +770,7 @@ def extract_file_text(
             raise RuntimeError(
                 f"Failed to process file {file_name or 'Unknown'}: {str(e)}"
             ) from e
-        logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
+        logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
 
 
@@ -650,7 +827,7 @@ def extract_text_and_images(
     )
     # Clean up any temporary objects and force garbage collection
     unreachable = gc.collect()
-    logger.info(f"Unreachable objects: {unreachable}")
+    logger.info("Unreachable objects: %s", unreachable)
 
     return res
 
@@ -672,7 +849,8 @@ def _extract_text_and_images(
             )
         except Exception as e:
             logger.error(
-                f"Failed to process with Unstructured: {str(e)}. Falling back to normal processing."
+                "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                str(e),
             )
             file.seek(0)  # Reset file pointer just in case
 
@@ -708,13 +886,12 @@ def _extract_text_and_images(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
             )
 
-        # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
-        # You can do something similar to docx if needed.
         if extension == ".pptx":
+            text_content, images = read_pptx_file(
+                file, file_name, extract_images=True, image_callback=image_callback
+            )
             return ExtractionResult(
-                text_content=pptx_to_text(file, file_name=file_name),
-                embedded_images=[],
-                metadata={},
+                text_content=text_content, embedded_images=images, metadata={}
             )
 
         if extension == ".xlsx":
@@ -750,7 +927,7 @@ def _extract_text_and_images(
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
-        logger.exception(f"Failed to extract text/images from {file_name}: {e}")
+        logger.exception("Failed to extract text/images from %s: %s", file_name, e)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 

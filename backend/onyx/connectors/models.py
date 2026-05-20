@@ -1,8 +1,12 @@
+import hashlib
+import json
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import cast
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -33,17 +37,28 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
+class SectionType(str, Enum):
+    """Discriminator for Section subclasses."""
+
+    TEXT = "text"
+    IMAGE = "image"
+    TABULAR = "tabular"
+
+
 class Section(BaseModel):
     """Base section class with common attributes"""
 
+    type: SectionType
     link: str | None = None
     text: str | None = None
     image_file_id: str | None = None
+    heading: str | None = None
 
 
 class TextSection(Section):
     """Section containing text content"""
 
+    type: Literal[SectionType.TEXT] = SectionType.TEXT
     text: str
 
     def __sizeof__(self) -> int:
@@ -53,10 +68,23 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
+    type: Literal[SectionType.IMAGE] = SectionType.IMAGE
     image_file_id: str
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.image_file_id) + sys.getsizeof(self.link)
+
+
+class TabularSection(Section):
+    """Section containing tabular data (csv/tsv content, or one sheet of
+    an xlsx workbook rendered as CSV)."""
+
+    type: Literal[SectionType.TABULAR] = SectionType.TABULAR
+    text: str  # CSV representation in a string
+    link: str
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
@@ -134,7 +162,6 @@ class BasicExpertInfo(BaseModel):
 
     @classmethod
     def from_dict(cls, model_dict: dict[str, Any]) -> "BasicExpertInfo":
-
         first_name = cast(str, model_dict.get("FirstName"))
         last_name = cast(str, model_dict.get("LastName"))
         email = cast(str, model_dict.get("Email"))
@@ -161,7 +188,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection]
+    sections: Sequence[TextSection | ImageSection | TabularSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a
@@ -205,6 +232,8 @@ class DocumentBase(BaseModel):
     # Resolved database ID of the parent hierarchy node
     # Set during docfetching after hierarchy nodes are cached
     parent_hierarchy_node_id: int | None = None
+
+    file_id: str | None = None
 
     def get_title_for_document_index(
         self,
@@ -253,6 +282,39 @@ class DocumentBase(BaseModel):
 
     def get_text_content(self) -> str:
         return " ".join([section.text for section in self.sections if section.text])
+
+    def content_hash(self) -> str:
+        """MD5 fingerprint of indexable content.
+
+        Used as a fallback dedup gate for connectors that don't supply doc_updated_at
+        (e.g. web connector). Computed before image summarization runs, so LLM-generated
+        image summaries are intentionally excluded — they are non-deterministic and
+        unavailable at this point in the pipeline.
+
+        Covers: title, text section bodies, image_file_ids (connector-assigned, stable),
+        doc_metadata (sorted keys), primary and secondary owners (sorted by email).
+        Excludes: semantic_identifier (deterministically derived from other fields).
+        """
+        parts = []
+        for s in self.sections:
+            if isinstance(s, TextSection) and s.text:
+                parts.append(s.text)
+            elif isinstance(s, ImageSection) and s.image_file_id:
+                parts.append(f"[img:{s.image_file_id}]")
+
+        def _owner_key(o: BasicExpertInfo) -> str:
+            return o.email or o.display_name or o.first_name or ""
+
+        owners = json.dumps(
+            [o.model_dump() for o in sorted(self.primary_owners or [], key=_owner_key)]
+            + [
+                o.model_dump()
+                for o in sorted(self.secondary_owners or [], key=_owner_key)
+            ]
+        )
+        meta = json.dumps(self.doc_metadata or {}, sort_keys=True)
+        raw = f"{self.title or ''}||{' '.join(parts)}||{meta}||{owners}"
+        return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def convert_metadata_dict_to_list_of_strings(
@@ -345,6 +407,7 @@ class Document(DocumentBase):
             secondary_owners=base.secondary_owners,
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
+            file_id=base.file_id,
         )
 
     def __sizeof__(self) -> int:
@@ -371,12 +434,9 @@ class IndexingDocument(Document):
             )
         else:
             section_len = sum(
-                (
-                    len(section.text)
-                    if isinstance(section, TextSection) and section.text is not None
-                    else 0
-                )
+                len(section.text) if section.text is not None else 0
                 for section in self.sections
+                if isinstance(section, (TextSection, TabularSection))
             )
 
         return title_len + section_len

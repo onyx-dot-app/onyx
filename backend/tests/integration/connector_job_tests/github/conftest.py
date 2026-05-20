@@ -19,7 +19,6 @@ from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 
-
 GitHubTestEnvSetupTuple = tuple[
     DATestUser,  # admin_user
     DATestUser,  # test_user_1
@@ -150,4 +149,11 @@ def github_test_env_setup(
         timeout=900,
     )
 
-    yield admin_user, test_user_1, test_user_2, github_credential, github_connector, github_cc_pair
+    yield (
+        admin_user,
+        test_user_1,
+        test_user_2,
+        github_credential,
+        github_connector,
+        github_cc_pair,
+    )

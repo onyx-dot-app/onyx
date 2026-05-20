@@ -155,9 +155,9 @@ class TestAutoModeSyncFeature:
             # Check that all expected models are present and visible
             model_names = {mc.name for mc in provider.model_configurations}
             for expected_model in all_expected_models:
-                assert (
-                    expected_model in model_names
-                ), f"Expected model '{expected_model}' not found in provider models"
+                assert expected_model in model_names, (
+                    f"Expected model '{expected_model}' not found in provider models"
+                )
 
             # Verify visibility of all synced models
             for mc in provider.model_configurations:
@@ -170,15 +170,15 @@ class TestAutoModeSyncFeature:
             # Step 5: Fetch the default provider and verify
             default_model = fetch_default_llm_model(db_session)
             assert default_model is not None, "Default provider should exist"
-            assert (
-                default_model.llm_provider.name == provider_name
-            ), "Default provider should be our test provider"
-            assert (
-                default_model.name == expected_default_model
-            ), f"Default provider's default model should be '{expected_default_model}'"
-            assert (
-                default_model.llm_provider.is_auto_mode is True
-            ), "Default provider should be in auto mode"
+            assert default_model.llm_provider.name == provider_name, (
+                "Default provider should be our test provider"
+            )
+            assert default_model.name == expected_default_model, (
+                f"Default provider's default model should be '{expected_default_model}'"
+            )
+            assert default_model.llm_provider.is_auto_mode is True, (
+                "Default provider should be in auto mode"
+            )
 
         finally:
             db_session.rollback()
@@ -327,9 +327,9 @@ class TestAutoModeSyncFeature:
             assert initial_provider.is_auto_mode is False
 
             for mc in initial_provider.model_configurations:
-                assert (
-                    mc.is_visible is True
-                ), f"Initial model '{mc.name}' should be visible"
+                assert mc.is_visible is True, (
+                    f"Initial model '{mc.name}' should be visible"
+                )
 
             # Step 2: Update provider to enable auto mode
             with patch(
@@ -367,20 +367,20 @@ class TestAutoModeSyncFeature:
 
             # Models in auto mode config should be visible
             for model_name in all_auto_mode_models:
-                assert (
-                    model_name in model_visibility
-                ), f"Auto mode model '{model_name}' should exist"
-                assert (
-                    model_visibility[model_name] is True
-                ), f"Auto mode model '{model_name}' should be visible"
+                assert model_name in model_visibility, (
+                    f"Auto mode model '{model_name}' should exist"
+                )
+                assert model_visibility[model_name] is True, (
+                    f"Auto mode model '{model_name}' should be visible"
+                )
 
             # Models NOT in auto mode config should NOT be visible
             models_not_in_config = ["gpt-4", "gpt-3.5-turbo"]
             for model_name in models_not_in_config:
                 if model_name in model_visibility:
-                    assert (
-                        model_visibility[model_name] is False
-                    ), f"Model '{model_name}' not in auto config should NOT be visible"
+                    assert model_visibility[model_name] is False, (
+                        f"Model '{model_name}' not in auto config should NOT be visible"
+                    )
 
         finally:
             db_session.rollback()
@@ -675,9 +675,9 @@ class TestAutoModeMissingFlows:
                 )
 
                 flow_types = {f.llm_model_flow_type for f in mc.llm_model_flows}
-                assert (
-                    LLMModelFlowType.CHAT in flow_types
-                ), f"ModelConfiguration '{mc.name}' is missing a CHAT flow"
+                assert LLMModelFlowType.CHAT in flow_types, (
+                    f"ModelConfiguration '{mc.name}' is missing a CHAT flow"
+                )
 
             # Step 4: The provider must appear in fetch_existing_llm_providers
             listed_providers = fetch_existing_llm_providers(
@@ -685,9 +685,9 @@ class TestAutoModeMissingFlows:
                 flow_type_filter=[LLMModelFlowType.CHAT],
             )
             listed_provider_names = {p.name for p in listed_providers}
-            assert (
-                provider_name in listed_provider_names
-            ), f"Provider '{provider_name}' not returned by fetch_existing_llm_providers — models are missing flow rows"
+            assert provider_name in listed_provider_names, (
+                f"Provider '{provider_name}' not returned by fetch_existing_llm_providers — models are missing flow rows"
+            )
 
         finally:
             db_session.rollback()
@@ -778,12 +778,12 @@ class TestAutoModeTransitionsAndResync:
                 "Default model should not be None after transitioning to auto mode — "
                 "the provider was the default before and should remain so"
             )
-            assert (
-                default_after.llm_provider_id == provider.id
-            ), "Default should still belong to the same provider after transition"
-            assert (
-                default_after.name == "gpt-4o-mini"
-            ), f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.llm_provider_id == provider.id, (
+                "Default should still belong to the same provider after transition"
+            )
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
+            )
 
         finally:
             db_session.rollback()
@@ -1028,9 +1028,9 @@ class TestAutoModeTransitionsAndResync:
                 provider=provider,
                 llm_recommendations=config,
             )
-            assert (
-                changes == 0
-            ), f"Expected 0 changes on idempotent re-sync, got {changes}"
+            assert changes == 0, (
+                f"Expected 0 changes on idempotent re-sync, got {changes}"
+            )
 
             # State should be identical
             db_session.expire_all()
@@ -1138,12 +1138,12 @@ class TestAutoModeTransitionsAndResync:
             # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert (
-                default_after is not None
-            ), "Default model should not be None — sync should set the new recommended default when the old one is hidden"
-            assert (
-                default_after.name == "gpt-4o-mini"
-            ), f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
+            assert default_after is not None, (
+                "Default model should not be None — sync should set the new recommended default when the old one is hidden"
+            )
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
+            )
 
         finally:
             db_session.rollback()
@@ -1236,9 +1236,9 @@ class TestAutoModeTransitionsAndResync:
             # The CHAT default should now be gpt-4o-mini
             default_after = fetch_default_llm_model(db_session)
             assert default_after is not None
-            assert (
-                default_after.name == "gpt-4o-mini"
-            ), f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-4o-mini", (
+                f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+            )
 
         finally:
             db_session.rollback()
@@ -1311,9 +1311,9 @@ class TestAutoModeTransitionsAndResync:
                 provider=provider,
                 llm_recommendations=config,
             )
-            assert (
-                changes == 0
-            ), f"Expected 0 changes when default already matches recommended, got {changes}"
+            assert changes == 0, (
+                f"Expected 0 changes when default already matches recommended, got {changes}"
+            )
 
             # Default should still be gpt-4o
             default_model = fetch_default_llm_model(db_session)

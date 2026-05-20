@@ -1,0 +1,207 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "start backend",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "backend", "api"]
+    },
+    {
+      "type": "shell",
+      "label": "start frontend",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "web", "dev"]
+    },
+    {
+      "type": "shell",
+      "label": "start frontend (docker backend)",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "INTERNAL_URL": "http://api_server:8080",
+          "PORT": "3001",
+          "UV_LINK_MODE": "copy"
+        }
+      },
+      "command": "uv",
+      "args": ["run", "--with", "onyx-devtools", "ods", "web", "dev"]
+    },
+    {
+      "type": "shell",
+      "label": "Generate Onyx OpenAPI Python client",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.env",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "command": "openapi-generator",
+      "args": [
+        "generate",
+        "-i",
+        "generated/openapi.json",
+        "-g",
+        "python",
+        "-o",
+        "generated/onyx_openapi_client",
+        "--package-name",
+        "onyx_openapi_client"
+      ]
+    },
+    {
+      "type": "shell",
+      "label": "Generate Typescript Fetch client (openapi-generator)",
+      "envFile": "${workspaceFolder}/.env",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "command": "openapi-generator",
+      "args": [
+        "generate",
+        "-i",
+        "backend/generated/openapi.json",
+        "-g",
+        "typescript-fetch",
+        "-o",
+        "${workspaceFolder}/web/src/lib/generated/onyx_api",
+        "--additional-properties=disallowAdditionalPropertiesIfNotPresent=false,legacyDiscriminatorBehavior=false,supportsES6=true"
+      ]
+    },
+    {
+      "type": "shell",
+      "label": "Generate TypeScript Client (openapi-ts)",
+      "envFile": "${workspaceFolder}/.env",
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "command": "npx",
+      "args": [
+        "openapi-typescript",
+        "../backend/generated/openapi.json",
+        "--output",
+        "./src/lib/generated/onyx-schema.ts"
+      ]
+    },
+    {
+      "type": "shell",
+      "label": "Generate TypeScript Client (orval)",
+      "envFile": "${workspaceFolder}/.env",
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "command": "npx",
+      "args": ["orval", "--config", "orval.config.js"]
+    },
+    {
+      "label": "k8s: cluster up",
+      "detail": "Create the kind cluster + helm install Onyx. Idempotent.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/k8s-up.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: cluster down (full teardown)",
+      "detail": "Delete the kind cluster and all data.",
+      "type": "shell",
+      "command": "${workspaceFolder}/deployment/helm/dev/k8s-down.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: pause cluster (data preserved)",
+      "detail": "Stop the kind node container. All cluster state and PVC data survive; resume with 'k8s: resume cluster'.",
+      "type": "shell",
+      "command": "docker",
+      "args": ["stop", "onyx-dev-control-plane"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: resume cluster",
+      "detail": "Start the kind node container previously paused with 'k8s: pause cluster'. Kubelet reconciles pods automatically.",
+      "type": "shell",
+      "command": "docker",
+      "args": ["start", "onyx-dev-control-plane"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence connect",
+      "detail": "Bridge host DNS into the cluster (cluster DNS resolves from laptop). Pins telepresence to kind-onyx-dev via --context without mutating your kubectl current-context.",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e; kubectl config get-contexts -o name | grep -qx kind-onyx-dev || { echo 'error: kubectl context kind-onyx-dev not found; run deployment/helm/dev/k8s-up.sh first' >&2; exit 1; }; telepresence connect --context kind-onyx-dev -n onyx"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence intercept api_server",
+      "detail": "Idempotently connect + intercept api_server. Pins telepresence to kind-onyx-dev via --context without mutating your kubectl current-context. Writes cluster env to .vscode/.env.k8s. Wired as preLaunchTask on every (k8s) launch config.",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e; kubectl config get-contexts -o name | grep -qx kind-onyx-dev || { echo 'error: kubectl context kind-onyx-dev not found; run deployment/helm/dev/k8s-up.sh first' >&2; exit 1; }; telepresence connect --context kind-onyx-dev -n onyx; telepresence leave onyx-api-server 2>/dev/null || true; telepresence intercept onyx-api-server --namespace onyx --port 8080:8080 --mount=false --env-file \"${workspaceFolder}/.vscode/.env.k8s\"; if [ -f \"${workspaceFolder}/.vscode/.env.k8s.local\" ]; then echo '' >> \"${workspaceFolder}/.vscode/.env.k8s\"; cat \"${workspaceFolder}/.vscode/.env.k8s.local\" >> \"${workspaceFolder}/.vscode/.env.k8s\"; fi"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "k8s: telepresence quit",
+      "detail": "Tear down all telepresence intercepts and disconnect.",
+      "type": "shell",
+      "command": "telepresence",
+      "args": ["quit"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

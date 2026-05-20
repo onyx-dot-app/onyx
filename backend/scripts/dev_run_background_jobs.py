@@ -112,6 +112,20 @@ def run_jobs() -> None:
         "user_file_processing,user_file_project_sync,user_file_delete",
     ]
 
+    cmd_worker_scheduled_tasks = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.scheduled_tasks",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=scheduled_tasks@%n",
+        "-Q",
+        "scheduled_tasks",
+    ]
+
     cmd_beat = [
         "celery",
         "-A",
@@ -128,6 +142,7 @@ def run_jobs() -> None:
         ("HEAVY", cmd_worker_heavy),
         ("MONITORING", cmd_worker_monitoring),
         ("USER_FILE_PROCESSING", cmd_worker_user_file_processing),
+        ("SCHEDULED_TASKS", cmd_worker_scheduled_tasks),
         ("BEAT", cmd_beat),
     ]
 

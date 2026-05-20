@@ -2,8 +2,8 @@
 
 import React, { useMemo } from "react";
 import type { IconProps } from "@opal/types";
-import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { cn } from "@opal/utils";
+import { Tooltip } from "@opal/components";
 
 const buttonClasses = (transient: boolean | undefined) =>
   ({
@@ -280,8 +280,7 @@ const iconClasses = (transient: boolean | undefined) =>
     },
   }) as const;
 
-export interface IconButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Top level button variants
   main?: boolean;
   action?: boolean;
@@ -306,7 +305,6 @@ export interface IconButtonProps
   icon: React.FunctionComponent<IconProps>;
   tooltip?: string;
   toolTipPosition?: "top" | "bottom" | "left" | "right";
-  tooltipSize?: "sm" | "md" | "lg";
   /** Additional className to apply to the icon element */
   iconClassName?: string;
 }
@@ -332,7 +330,6 @@ export default function IconButton({
   iconClassName,
   tooltip,
   toolTipPosition = "top",
-  tooltipSize = "lg",
   ...props
 }: IconButtonProps) {
   const variant = main
@@ -388,11 +385,7 @@ export default function IconButton({
       {...props}
     >
       <Icon
-        className={cn(
-          small ? "h-[0.75rem] w-[0.75rem]" : "h-[1rem] w-[1rem]",
-          iconClass,
-          iconClassName
-        )}
+        className={cn(small ? "h-3 w-3" : "h-4 w-4", iconClass, iconClassName)}
       />
     </button>
   );
@@ -400,8 +393,8 @@ export default function IconButton({
   if (!tooltip) return buttonElement;
 
   return (
-    <SimpleTooltip side={toolTipPosition} size={tooltipSize} tooltip={tooltip}>
+    <Tooltip side={toolTipPosition} tooltip={tooltip}>
       {buttonElement}
-    </SimpleTooltip>
+    </Tooltip>
   );
 }

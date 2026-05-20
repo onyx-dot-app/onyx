@@ -5,9 +5,7 @@ from typing import Any
 import requests
 from fastapi import HTTPException
 
-from onyx.tools.tool_implementations.web_search.models import (
-    WebSearchProvider,
-)
+from onyx.tools.tool_implementations.web_search.models import WebSearchProvider
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -44,7 +42,7 @@ class BraveClient(WebSearchProvider):
             "Accept": "application/json",
             "X-Subscription-Token": api_key,
         }
-        logger.debug(f"Count of results passed to BraveClient: {num_results}")
+        logger.debug("Count of results passed to BraveClient: %s", num_results)
         self._num_results = max(1, min(num_results, BRAVE_MAX_RESULTS_PER_REQUEST))
         self._timeout_seconds = timeout_seconds
         self._country = _normalize_country(country)

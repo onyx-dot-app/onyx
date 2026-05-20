@@ -68,21 +68,13 @@
  * ```
  */
 
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useId,
-  useRef,
-} from "react";
-import { cn } from "@/lib/utils";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { cn } from "@opal/utils";
 import InputTypeIn from "./InputTypeIn";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import { FieldContext } from "../form/FieldContext";
-import { FieldMessage } from "../messages/FieldMessage";
+import { InputErrorText } from "@opal/layouts";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 
 export type KeyValue = { key: string; value: string };
@@ -107,82 +99,50 @@ const GRID_COLS = {
 interface KeyValueInputItemProps {
   item: KeyValue;
   onChange: (next: KeyValue) => void;
-  disabled?: boolean;
   onRemove: () => void;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
   error?: KeyValueError;
   canRemove: boolean;
   index: number;
-  fieldId: string;
 }
 
 function KeyValueInputItem({
   item,
   onChange,
-  disabled,
   onRemove,
   keyPlaceholder,
   valuePlaceholder,
   error,
   canRemove,
   index,
-  fieldId,
 }: KeyValueInputItemProps) {
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
-          placeholder={keyPlaceholder || "Key"}
+          placeholder={keyPlaceholder}
           value={item.key}
           onChange={(e) => onChange({ ...item, key: e.target.value })}
           aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
           aria-invalid={!!error?.key}
-          aria-describedby={
-            error?.key ? `${fieldId}-key-error-${index}` : undefined
-          }
-          variant={disabled ? "disabled" : undefined}
           showClearButton={false}
         />
-        {error?.key && (
-          <FieldMessage variant="error" className="ml-0.5">
-            <FieldMessage.Content
-              id={`${fieldId}-key-error-${index}`}
-              role="alert"
-              className="ml-0.5"
-            >
-              {error.key}
-            </FieldMessage.Content>
-          </FieldMessage>
-        )}
+        {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
       <div className="flex flex-col gap-y-0.5">
         <InputTypeIn
-          placeholder={valuePlaceholder || "Value"}
+          placeholder={valuePlaceholder}
           value={item.value}
           onChange={(e) => onChange({ ...item, value: e.target.value })}
           aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
           aria-invalid={!!error?.value}
-          aria-describedby={
-            error?.value ? `${fieldId}-value-error-${index}` : undefined
-          }
-          variant={disabled ? "disabled" : undefined}
           showClearButton={false}
         />
-        {error?.value && (
-          <FieldMessage variant="error" className="ml-0.5">
-            <FieldMessage.Content
-              id={`${fieldId}-value-error-${index}`}
-              role="alert"
-              className="ml-0.5"
-            >
-              {error.value}
-            </FieldMessage.Content>
-          </FieldMessage>
-        )}
+        {error?.value && <InputErrorText>{error.value}</InputErrorText>}
       </div>
       <Button
-        disabled={disabled || !canRemove}
+        disabled={!canRemove}
         prominence="tertiary"
         icon={SvgMinusCircle}
         onClick={onRemove}
@@ -192,52 +152,36 @@ function KeyValueInputItem({
   );
 }
 
-export interface KeyValueInputProps
-  extends WithoutStyles<
-    Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
-  > {
+export interface KeyValueInputProps extends WithoutStyles<
+  Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
+> {
   /** Title for the key column */
   keyTitle?: string;
+
   /** Title for the value column */
   valueTitle?: string;
+
+  /** Placeholder for the key input */
+  keyPlaceholder?: string;
+
+  /** Placeholder for the value input */
+  valuePlaceholder?: string;
+
   /** Array of key-value pairs */
   items: KeyValue[];
+
   /** Callback when items change */
   onChange: (nextItems: KeyValue[]) => void;
-  /** Custom add handler */
-  onAdd?: () => void;
-  /** Custom remove handler */
-  onRemove?: (index: number) => void;
-  /** Disabled state */
-  disabled?: boolean;
+
   /** Mode: 'line' allows removing all items, 'fixed-line' requires at least one item */
   mode?: "line" | "fixed-line";
+
   /** Layout: 'equal' - both inputs same width, 'key-wide' - key input is wider (60/40 split) */
   layout?: "equal" | "key-wide";
-  /** Callback when validation state changes */
-  onValidationChange?: (isValid: boolean, errors: KeyValueError[]) => void;
+
   /** Callback to handle validation errors - integrates with Formik or custom error handling. Called with error message when invalid, null when valid */
   onValidationError?: (errorMessage: string | null) => void;
-  /** Optional custom validator for the key field. Return { isValid, message } */
-  onKeyValidate?: (
-    key: string,
-    index: number,
-    item: KeyValue,
-    items: KeyValue[]
-  ) => { isValid: boolean; message?: string };
-  /** Optional custom validator for the value field. Return { isValid, message } */
-  onValueValidate?: (
-    value: string,
-    index: number,
-    item: KeyValue,
-    items: KeyValue[]
-  ) => { isValid: boolean; message?: string };
-  /** Whether to validate for duplicate keys */
-  validateDuplicateKeys?: boolean;
-  /** Whether to validate for empty keys */
-  validateEmptyKeys?: boolean;
-  /** Optional name for the field (for accessibility) */
-  name?: string;
+
   /** Custom label for the add button (defaults to "Add Line") */
   addButtonLabel?: string;
 }
@@ -245,26 +189,16 @@ export interface KeyValueInputProps
 export default function KeyValueInput({
   keyTitle = "Key",
   valueTitle = "Value",
+  keyPlaceholder,
+  valuePlaceholder,
   items = [],
   onChange,
-  onAdd,
-  onRemove,
-  disabled = false,
   mode = "line",
   layout = "equal",
-  onValidationChange,
   onValidationError,
-  onKeyValidate,
-  onValueValidate,
-  validateDuplicateKeys = true,
-  validateEmptyKeys = true,
-  name,
   addButtonLabel = "Add Line",
   ...rest
 }: KeyValueInputProps) {
-  // Try to get field context if used within FormField (safe access)
-  const fieldContext = useContext(FieldContext);
-
   // Validation logic
   const errors = useMemo((): KeyValueError[] => {
     if (!items || items.length === 0) return [];
@@ -273,12 +207,8 @@ export default function KeyValueInput({
     const keyCount = new Map<string, number[]>();
 
     items.forEach((item, index) => {
-      // Validate empty keys - only if value is filled (user is actively working on this row)
-      if (
-        validateEmptyKeys &&
-        item.key.trim() === "" &&
-        item.value.trim() !== ""
-      ) {
+      // Validate empty keys
+      if (item.key.trim() === "" && item.value.trim() !== "") {
         const error = errorsList[index];
         if (error) {
           error.key = "Key cannot be empty";
@@ -291,56 +221,22 @@ export default function KeyValueInput({
         existing.push(index);
         keyCount.set(item.key, existing);
       }
-
-      // Custom key validation
-      if (onKeyValidate) {
-        const result = onKeyValidate(item.key, index, item, items);
-        if (result && result.isValid === false) {
-          const error = errorsList[index];
-          if (error) {
-            error.key = result.message || "Invalid key";
-          }
-        }
-      }
-
-      // Custom value validation
-      if (onValueValidate) {
-        const result = onValueValidate(item.value, index, item, items);
-        if (result && result.isValid === false) {
-          const error = errorsList[index];
-          if (error) {
-            error.value = result.message || "Invalid value";
-          }
-        }
-      }
     });
 
     // Validate duplicate keys
-    if (validateDuplicateKeys) {
-      keyCount.forEach((indices, key) => {
-        if (indices.length > 1) {
-          indices.forEach((index) => {
-            const error = errorsList[index];
-            if (error) {
-              error.key = "Duplicate key";
-            }
-          });
-        }
-      });
-    }
+    keyCount.forEach((indices, key) => {
+      if (indices.length > 1) {
+        indices.forEach((index) => {
+          const error = errorsList[index];
+          if (error) {
+            error.key = "Duplicate key";
+          }
+        });
+      }
+    });
 
     return errorsList;
-  }, [
-    items,
-    validateDuplicateKeys,
-    validateEmptyKeys,
-    onKeyValidate,
-    onValueValidate,
-  ]);
-
-  const isValid = useMemo(() => {
-    return errors.every((error) => !error.key && !error.value);
-  }, [errors]);
+  }, [items]);
 
   const hasAnyError = useMemo(() => {
     return errors.some((error) => error.key || error.value);
@@ -371,20 +267,11 @@ export default function KeyValueInput({
   }, [hasAnyError, errors]);
 
   // Notify parent of validation changes
-  const onValidationChangeRef = useRef(onValidationChange);
   const onValidationErrorRef = useRef(onValidationError);
-
-  useEffect(() => {
-    onValidationChangeRef.current = onValidationChange;
-  }, [onValidationChange]);
 
   useEffect(() => {
     onValidationErrorRef.current = onValidationError;
   }, [onValidationError]);
-
-  useEffect(() => {
-    onValidationChangeRef.current?.(isValid, errors);
-  }, [isValid, errors]);
 
   // Notify parent of error state for form library integration
   useEffect(() => {
@@ -394,25 +281,17 @@ export default function KeyValueInput({
   const canRemoveItems = mode === "line" || items.length > 1;
 
   const handleAdd = useCallback(() => {
-    if (onAdd) {
-      onAdd();
-      return;
-    }
     onChange([...(items || []), { key: "", value: "" }]);
-  }, [onAdd, onChange, items]);
+  }, [onChange, items]);
 
   const handleRemove = useCallback(
     (index: number) => {
       if (!canRemoveItems && items.length === 1) return;
 
-      if (onRemove) {
-        onRemove(index);
-        return;
-      }
       const next = (items || []).filter((_, i) => i !== index);
       onChange(next);
     },
-    [canRemoveItems, items, onRemove, onChange]
+    [canRemoveItems, items, onChange]
   );
 
   const handleItemChange = useCallback(
@@ -431,8 +310,6 @@ export default function KeyValueInput({
     }
   }, [mode]); // Only run on mode change
 
-  const autoId = useId();
-  const fieldId = fieldContext?.baseId || name || `key-value-input-${autoId}`;
   const gridCols = GRID_COLS[layout];
 
   return (
@@ -460,23 +337,24 @@ export default function KeyValueInput({
               key={index}
               item={item}
               onChange={(next) => handleItemChange(index, next)}
-              disabled={disabled}
               onRemove={() => handleRemove(index)}
-              keyPlaceholder={keyTitle}
-              valuePlaceholder={valueTitle}
+              keyPlaceholder={keyPlaceholder}
+              valuePlaceholder={valuePlaceholder}
               error={errors[index]}
               canRemove={canRemoveItems}
               index={index}
-              fieldId={fieldId}
             />
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No items added yet." />
+        <EmptyMessageCard
+          title="No items added yet."
+          padding="sm"
+          sizePreset="secondary"
+        />
       )}
 
       <Button
-        disabled={disabled}
         prominence="secondary"
         onClick={handleAdd}
         icon={SvgPlusCircle}

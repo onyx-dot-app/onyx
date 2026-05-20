@@ -337,11 +337,22 @@ export function usePacedTurnGroups(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolTurnGroups, revealTrigger, shouldBypassPacing]);
 
-  // Only return display groups when tool pacing is complete (or bypassing)
+  // Only return display groups when tool pacing is complete (or bypassing).
+  // Also bypass when stop packet is already seen (e.g. history reload of stopped messages)
+  // to avoid the display staying blank while waiting for pacing to complete.
   const pacedDisplayGroups = useMemo(
-    () => (shouldBypassPacing || state.toolPacingComplete ? displayGroups : []),
+    () =>
+      shouldBypassPacing || state.toolPacingComplete || stopPacketSeen
+        ? displayGroups
+        : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.toolPacingComplete, displayGroups, revealTrigger, shouldBypassPacing]
+    [
+      state.toolPacingComplete,
+      displayGroups,
+      revealTrigger,
+      shouldBypassPacing,
+      stopPacketSeen,
+    ]
   );
 
   // Paced signals for header state consistency

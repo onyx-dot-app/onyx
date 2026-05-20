@@ -25,6 +25,8 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.license import acquire_seat_lock
+from ee.onyx.db.license import check_seat_availability
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import ScimAuthError
 from ee.onyx.server.scim.auth import verify_scim_token
@@ -64,7 +66,7 @@ from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -209,13 +211,15 @@ def _apply_exclusions(
 
 
 def _check_seat_availability(dal: ScimDAL) -> str | None:
-    """Return an error message if seat limit is reached, else None."""
-    check_fn = fetch_ee_implementation_or_noop(
-        "onyx.db.license", "check_seat_availability", None
-    )
-    if check_fn is None:
-        return None
-    result = check_fn(dal.session, seats_needed=1)
+    """Return an error message if seat limit is reached, else None.
+
+    Holds a transaction-scoped advisory lock across the check + the
+    caller's write (committed via ``dal.commit()``) so that batched
+    Okta / Azure AD provisioning requests cannot each pass the check
+    and race past the seat cap.
+    """
+    acquire_seat_lock(dal.session, get_current_tenant_id())
+    result = check_seat_availability(dal.session, seats_needed=1)
     if not result.available:
         return result.error_message or "Seat limit reached"
     return None
@@ -528,7 +532,7 @@ def create_user(
         assign_user_to_default_groups__no_commit(db_session, user)
     except Exception:
         dal.rollback()
-        logger.exception(f"Failed to assign SCIM user {email} to default groups")
+        logger.exception("Failed to assign SCIM user %s to default groups", email)
         return _scim_error_response(
             500, f"Failed to assign user {email} to default group"
         )

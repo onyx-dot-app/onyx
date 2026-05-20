@@ -53,7 +53,7 @@ def fetch_query_analytics(
         .order_by(cast(ChatMessage.time_sent, Date))
     )
 
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
 def fetch_per_user_query_analytics(
@@ -92,7 +92,7 @@ def fetch_per_user_query_analytics(
         .order_by(cast(ChatMessage.time_sent, Date), ChatSession.user_id)
     )
 
-    return db_session.execute(stmt).all()  # type: ignore
+    return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
 
 
 def fetch_onyxbot_analytics(

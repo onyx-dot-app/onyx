@@ -163,6 +163,45 @@ def test_same_content_different_filename_uploaded_separately() -> None:
     assert client.upload_file.call_count == 2
 
 
+@patch(f"{TOOL_MODULE}.CODE_INTERPRETER_BASE_URL", "http://fake:8000")
+def test_unsafe_filename_sanitized_before_upload_and_stage() -> None:
+    tool = _make_tool()
+    client = MagicMock()
+    client.upload_file.return_value = "safe-file-id"
+
+    files = [ChatFile(filename="../reports/q1.csv", content=b"data")]
+
+    _run_tool(tool, client, files)
+
+    client.upload_file.assert_called_once_with(b"data", "_reports_q1.csv")
+    _, kwargs = client.execute_streaming.call_args
+    assert kwargs["files"] == [{"path": "_reports_q1.csv", "file_id": "safe-file-id"}]
+
+
+@patch(f"{TOOL_MODULE}.CODE_INTERPRETER_BASE_URL", "http://fake:8000")
+def test_sanitized_filename_collisions_get_deduped() -> None:
+    tool = _make_tool()
+    client = MagicMock()
+    client.upload_file.side_effect = ["id-a", "id-b"]
+
+    files = [
+        ChatFile(filename="a/b.csv", content=b"first"),
+        ChatFile(filename="a_b.csv", content=b"second"),
+    ]
+
+    _run_tool(tool, client, files)
+
+    assert [call.args[1] for call in client.upload_file.call_args_list] == [
+        "a_b.csv",
+        "a_b_1.csv",
+    ]
+    _, kwargs = client.execute_streaming.call_args
+    assert kwargs["files"] == [
+        {"path": "a_b.csv", "file_id": "id-a"},
+        {"path": "a_b_1.csv", "file_id": "id-b"},
+    ]
+
+
 # ---------------------------------------------------------------------------
 # No cross-instance sharing: a fresh PythonTool re-uploads everything
 # ---------------------------------------------------------------------------

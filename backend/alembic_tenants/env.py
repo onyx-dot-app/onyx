@@ -1,11 +1,9 @@
 import asyncio
 from logging.config import fileConfig
-from typing import Literal
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.schema import SchemaItem
 
 from alembic import context
 from onyx.db.engine.sql_engine import build_connection_string
@@ -35,27 +33,6 @@ target_metadata = [PublicBase.metadata]
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
-
-
-def include_object(
-    object: SchemaItem,  # noqa: ARG001
-    name: str | None,
-    type_: Literal[
-        "schema",
-        "table",
-        "column",
-        "index",
-        "unique_constraint",
-        "foreign_key_constraint",
-    ],
-    reflected: bool,  # noqa: ARG001
-    compare_to: SchemaItem | None,  # noqa: ARG001
-) -> bool:
-    if type_ == "table" and name in EXCLUDE_TABLES:
-        return False
-    return True
-
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -72,7 +49,7 @@ def run_migrations_offline() -> None:
     url = build_connection_string()
     context.configure(
         url=url,
-        target_metadata=target_metadata,  # type: ignore
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -84,8 +61,7 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
-        target_metadata=target_metadata,  # type: ignore[arg-type]
-        include_object=include_object,
+        target_metadata=target_metadata,
     )
 
     with context.begin_transaction():

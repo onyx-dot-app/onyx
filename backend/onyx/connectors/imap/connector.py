@@ -133,7 +133,7 @@ class ImapConnector(
         checkpoint: ImapCheckpoint,
         include_perm_sync: bool,
     ) -> CheckpointOutput[ImapCheckpoint]:
-        checkpoint = cast(ImapCheckpoint, copy.deepcopy(checkpoint))
+        checkpoint = copy.deepcopy(checkpoint)
         checkpoint.has_more = True
 
         mail_client = self._get_mail_client()
@@ -188,7 +188,9 @@ class ImapConnector(
         for email_id in current_todos:
             email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
-                logger.warn(f"Failed to fetch message {email_id=}; skipping")
+                logger.warning(
+                    "Failed to fetch message email_id=%r; skipping", email_id
+                )
                 continue
 
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
@@ -260,8 +262,10 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         elif isinstance(mailboxes_raw, str):
             mailboxes_str = mailboxes_raw
         else:
-            logger.warn(
-                f"Expected the mailbox data to be of type str, instead got {type(mailboxes_raw)=} {mailboxes_raw}; skipping"
+            logger.warning(
+                "Expected the mailbox data to be of type str, instead got type(mailboxes_raw)=%r %s; skipping",
+                type(mailboxes_raw),
+                mailboxes_raw,
             )
             continue
 
@@ -274,8 +278,9 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
         # The below regex matches on that pattern; from there, we select the 3rd match (index 2), which is the mailbox-name.
         match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
         if not match:
-            logger.warn(
-                f"Invalid mailbox-data formatting structure: {mailboxes_str=}; skipping"
+            logger.warning(
+                "Invalid mailbox-data formatting structure: mailboxes_str=%r; skipping",
+                mailboxes_str,
             )
             continue
 
@@ -391,20 +396,22 @@ def _parse_email_body(
         try:
             raw_payload = part.get_payload(decode=True)
             if not isinstance(raw_payload, bytes):
-                logger.warn(
-                    "Payload section from email was expected to be an array of bytes, instead got "
-                    f"{type(raw_payload)=}, {raw_payload=}"
+                logger.warning(
+                    "Payload section from email was expected to be an array of bytes, instead got type(raw_payload)=%r, raw_payload=%r",
+                    type(raw_payload),
+                    raw_payload,
                 )
                 continue
             body = raw_payload.decode(charset)
             break
         except (UnicodeDecodeError, LookupError) as e:
-            print(f"Warning: Could not decode part with charset {charset}. Error: {e}")
+            logger.warning("Could not decode part with charset %s: %s", charset, e)
             continue
 
     if not body:
-        logger.warn(
-            f"Email with {email_headers.id=} has an empty body; returning an empty string"
+        logger.warning(
+            "Email with email_headers.id=%r has an empty body; returning an empty string",
+            email_headers.id,
         )
         return ""
 
@@ -443,8 +450,9 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
 
 if __name__ == "__main__":
     import time
-    from tests.daily.connectors.utils import load_all_from_connector
+
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+    from tests.daily.connectors.utils import load_all_from_connector
 
     host = os.environ.get("IMAP_HOST")
     mailboxes_str = os.environ.get("IMAP_MAILBOXES")

@@ -91,7 +91,8 @@ import {
   shift,
   size,
 } from "@floating-ui/react-dom";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import InputTypeIn from "../InputTypeIn";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
@@ -113,7 +114,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 const InputComboBox = ({
   value,
@@ -129,8 +130,9 @@ const InputComboBox = ({
   leftSearchIcon = false,
   rightSection,
   separatorLabel = "Other options",
-  showAddPrefix = false,
+  createPrefix,
   showOtherOptions = false,
+  dropdownMaxHeight,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -446,7 +448,8 @@ const InputComboBox = ({
           inputValue={inputValue}
           allowCreate={!strict}
           showCreateOption={showCreateOption}
-          showAddPrefix={showAddPrefix}
+          createPrefix={createPrefix}
+          dropdownMaxHeight={dropdownMaxHeight}
         />
       </>
 

@@ -20,7 +20,7 @@ import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
 import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
 import NoAgentModal from "@/components/modals/NoAgentModal";
@@ -33,19 +33,23 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
-import useAgentController from "@/hooks/useAgentController";
+import useMultiModelChat from "@/hooks/useMultiModelChat";
+import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import { useAgentController } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
-import useIsDefaultAgent from "@/hooks/useIsDefaultAgent";
+import { useIsDefaultAgent } from "@/lib/agents/hooks";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
   useCurrentMessageHistory,
+  useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
   useCurrentChatState,
   useIsReady,
   useDocumentSidebarVisible,
+  useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
@@ -55,7 +59,7 @@ import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPan
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { getProjectTokenCount } from "@/app/app/projects/projectsService";
 import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/interfaces/onboarding";
@@ -68,12 +72,13 @@ import SvgNotFound from "@opal/illustrations/not-found";
 import SvgNoAccess from "@opal/illustrations/no-access";
 import Spacer from "@/refresh-components/Spacer";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useSidebarState } from "@/layouts/sidebar-layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
-const SearchUI = eeGated(EESearchUI);
+const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 
 interface FadeProps {
@@ -200,19 +205,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: currentChatSession,
-      onAgentSelect: () => {
-        // Only remove project context if user explicitly selected an agent
-        // (i.e., agentId is present). Avoid clearing project when agentId was removed.
-        const newSearchParams = new URLSearchParams(
-          searchParams?.toString() || ""
-        );
-        if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
-          newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-          router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-        }
-      },
+    useAgentController(currentChatSession, () => {
+      // Only remove project context if user explicitly selected an agent
+      // (i.e., agentId is present). Avoid clearing project when agentId was removed.
+      const newSearchParams = new URLSearchParams(
+        searchParams?.toString() || ""
+      );
+      if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
+        newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+        router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+      }
     });
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -232,7 +234,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onboardingDismissed,
     onboardingState,
     onboardingActions,
-    llmDescriptors,
     isLoadingOnboarding,
     finishOnboarding,
     hideOnboarding,
@@ -291,12 +292,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const filterManager = useFilters();
 
-  const isDefaultAgent = useIsDefaultAgent({
+  const isDefaultAgent = useIsDefaultAgent(
     liveAgent,
-    existingChatSessionId: currentChatSessionId,
-    selectedChatSession: currentChatSession ?? undefined,
-    settings,
-  });
+    currentChatSessionId,
+    currentChatSession ?? undefined,
+    settings
+  );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -358,15 +359,97 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentDocumentSidebarVisible
   );
   const messageHistory = useCurrentMessageHistory();
+  const messageTree = useCurrentMessageTree();
+
+  // Block input when the last turn is multi-model and the user hasn't
+  // selected a preferred response yet. Without a selection, it's ambiguous
+  // which model's response should be used as context for the next message.
+  const awaitingPreferredSelection = useMemo(() => {
+    if (!messageTree || currentChatState !== "input") return false;
+    // Find the last user message in the history
+    const lastUserMsg = [...messageHistory]
+      .reverse()
+      .find((m) => m.type === "user");
+    if (!lastUserMsg) return false;
+    const childIds = lastUserMsg.childrenNodeIds ?? [];
+    if (childIds.length < 2) return false;
+    // Check if children are multi-model (have modelDisplayName)
+    const multiModelChildren = childIds
+      .map((id) => messageTree.get(id))
+      .filter(
+        (m) =>
+          m &&
+          (m.type === "assistant" || m.type === "error") &&
+          (m.modelDisplayName || m.overridden_model)
+      );
+    if (multiModelChildren.length < 2) return false;
+    // Check if a preferred response has been set on this user message
+    return lastUserMsg.preferredResponseId == null;
+  }, [messageHistory, messageTree, currentChatState]);
 
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
   const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
 
-  // Auto-scroll preference from user settings
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  // Auto-scroll preference from user settings. Pause while the
+  // typewriter is running its post-finish adaptive drain — the user is
+  // reading at that point and a scroll yank as the typewriter speeds up
+  // is jarring.
+  const autoScrollPreference = user?.preferences?.auto_scroll !== false;
+  const isStreamDraining = useCurrentIsStreamDraining();
+  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
   const isStreaming = currentChatState === "streaming";
+
+  const multiModel = useMultiModelChat(llmManager);
+
+  // Auto-fold sidebar when a multi-model message is submitted.
+  // Stays collapsed until the user exits multi-model mode (removes models).
+  const { folded: sidebarFolded, setFolded } = useSidebarState();
+  const preMultiModelFoldedRef = useRef<boolean | null>(null);
+
+  const foldSidebarForMultiModel = useCallback(() => {
+    if (preMultiModelFoldedRef.current === null) {
+      preMultiModelFoldedRef.current = sidebarFolded;
+      setFolded(true);
+    }
+  }, [sidebarFolded, setFolded]);
+
+  // Restore sidebar when user exits multi-model mode
+  useEffect(() => {
+    if (
+      !multiModel.isMultiModelActive &&
+      preMultiModelFoldedRef.current !== null
+    ) {
+      setFolded(preMultiModelFoldedRef.current);
+      preMultiModelFoldedRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiModel.isMultiModelActive]);
+
+  // Sync single-model selection to llmManager so the submission path uses
+  // the correct provider/version. Guard against echoing derived state back
+  // — only call updateCurrentLlm when the selection actually differs from
+  // currentLlm, otherwise the initial [] → [currentLlmModel] sync would
+  // pin `userHasManuallyOverriddenLLM=true` with whatever was resolved
+  // first (often the default model before the session's alt_model loads).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
+    }
+  }, [multiModel.selectedModels]);
 
   const {
     onSubmit,
@@ -441,7 +524,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabledForCurrentWorkflow,
+      deepResearch:
+        deepResearchEnabledForCurrentWorkflow && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
   }, [
@@ -449,6 +533,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     onSubmit,
     currentMessageFiles,
     deepResearchEnabledForCurrentWorkflow,
+    multiModel.isMultiModelActive,
   ]);
 
   const toggleDocumentSidebar = useCallback(() => {
@@ -465,19 +550,32 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onChat = useCallback(
     (message: string) => {
+      if (multiModel.isMultiModelActive) {
+        foldSidebarForMultiModel();
+      }
+      resetInputBar();
       onSubmit({
         message,
         currentMessageFiles,
-        deepResearch: deepResearchEnabledForCurrentWorkflow,
+        deepResearch:
+          deepResearchEnabledForCurrentWorkflow &&
+          !multiModel.isMultiModelActive,
+        selectedModels: multiModel.isMultiModelActive
+          ? multiModel.selectedModels
+          : undefined,
       });
       if (showOnboarding || !onboardingDismissed) {
         finishOnboarding();
       }
     },
     [
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
+      foldSidebarForMultiModel,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
@@ -511,10 +609,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
+        resetInputBar();
         onSubmit({
           message,
           currentMessageFiles,
-          deepResearch: deepResearchEnabledForCurrentWorkflow,
+          deepResearch:
+            deepResearchEnabledForCurrentWorkflow &&
+            !multiModel.isMultiModelActive,
+          selectedModels: multiModel.isMultiModelActive
+            ? multiModel.selectedModels
+            : undefined,
         });
         if (showOnboarding || !onboardingDismissed) {
           finishOnboarding();
@@ -523,7 +627,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
 
       // For new sessions, let the query controller handle routing.
-      // resetInputBar is called inside useChatController.onSubmit for chat-routed queries.
+      // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
       await submitQuery(message, onChat);
@@ -532,12 +636,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
+      resetInputBar,
       onSubmit,
       currentMessageFiles,
       deepResearchEnabledForCurrentWorkflow,
       showOnboarding,
       onboardingDismissed,
       finishOnboarding,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
     ]
   );
 
@@ -554,11 +661,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     retrievalEnabled && !settings.isMobile ? (
       <div
         className={cn(
-          "flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-[25rem]" : "w-[0rem]"
+          "shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
+          documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
-        <div className="h-full w-[25rem]">
+        <div className="h-full w-100">
           <DocumentsSidebar
             setPresentingDocument={setPresentingDocument}
             modal={false}
@@ -604,7 +711,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     return <NoAgentModal />;
   }
 
-  const hasStarterMessages = (liveAgent?.starter_messages?.length ?? 0) > 0;
+  const hasAgentStarterMessages =
+    (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
     gridTemplateColumns: "1fr",
@@ -669,7 +777,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         >
           {({ getRootProps }) => (
             <div
-              className="h-full w-full flex flex-col items-center outline-none relative"
+              className="h-full w-full flex flex-col items-center outline-hidden relative"
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Main content grid — 3 rows, animated */}
@@ -678,7 +786,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-4">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -710,6 +818,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onResubmit={handleResubmitLastMessage}
                         anchorNodeId={anchorNodeId}
+                        selectedModels={multiModel.selectedModels}
                       />
                     </ChatScrollContainer>
                   </Fade>
@@ -772,10 +881,31 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     }
                     className="w-full flex-1 flex flex-col items-center justify-end"
                   >
-                    <WelcomeMessage
-                      agent={liveAgent}
-                      isDefaultAgent={isDefaultAgent}
-                    />
+                    <Section
+                      flexDirection="row"
+                      justifyContent="between"
+                      alignItems="end"
+                      className="max-w-(--app-page-main-content-width)"
+                    >
+                      <WelcomeMessage
+                        agent={liveAgent}
+                        isDefaultAgent={isDefaultAgent}
+                      />
+                      {!isSearch &&
+                        !(
+                          state.phase === "idle" && state.appMode === "search"
+                        ) &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <ModelSelector
+                            llmManager={llmManager}
+                            selectedModels={multiModel.selectedModels}
+                            onAdd={multiModel.addModel}
+                            onRemove={multiModel.removeModel}
+                            onReplace={multiModel.replaceModel}
+                          />
+                        )}
+                    </Section>
                     <Spacer rem={1.5} />
                   </Fade>
                 </div>
@@ -787,10 +917,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     sessionFetchError && "hidden"
                   )}
                 >
-                  <div className="relative w-full max-w-[var(--app-page-main-content-width)] flex flex-col">
+                  <div className="relative w-full max-w-(--app-page-main-content-width) flex flex-col">
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
-                      <div className="absolute top-[-3.5rem] self-center">
+                      <div className="absolute -top-14 self-center">
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
@@ -812,7 +942,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           handleFinishOnboarding={finishOnboarding}
                           state={onboardingState}
                           actions={onboardingActions}
-                          llmDescriptors={llmDescriptors}
                         />
                       )}
 
@@ -841,12 +970,26 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
+                      {appFocus.isChat() &&
+                        liveAgent &&
+                        !llmManager.isLoadingProviders && (
+                          <div className="pb-1">
+                            <ModelSelector
+                              llmManager={llmManager}
+                              selectedModels={multiModel.selectedModels}
+                              onAdd={multiModel.addModel}
+                              onRemove={multiModel.removeModel}
+                              onReplace={multiModel.replaceModel}
+                            />
+                          </div>
+                        )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow
                         }
                         toggleDeepResearch={toggleDeepResearch}
+                        isMultiModelActive={multiModel.isMultiModelActive}
                         filterManager={filterManager}
                         llmManager={llmManager}
                         initialMessage={
@@ -875,6 +1018,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }
+                        awaitingPreferredSelection={awaitingPreferredSelection}
                       />
                       <div
                         className={cn(
@@ -899,7 +1043,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                   {/* ProjectChatSessionList */}
                   {appFocus.isProject() && (
-                    <div className="w-full max-w-[var(--app-page-main-content-width)] h-full overflow-y-auto overscroll-y-none mx-auto">
+                    <div className="w-full max-w-(--app-page-main-content-width) h-full overflow-y-auto overscroll-y-none mx-auto">
                       <ProjectChatSessionList />
                     </div>
                   )}
@@ -908,9 +1052,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
-                      hasStarterMessages
+                      hasAgentStarterMessages
                     }
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)]"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
                     <Suggestions onSubmit={onSubmit} />
@@ -919,7 +1063,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SearchUI */}
                   <Fade
                     show={isSearch}
-                    className="h-full flex-1 w-full max-w-[var(--app-page-main-content-width)] px-1 flex flex-col"
+                    className="h-full flex-1 w-full max-w-(--app-page-main-content-width) px-1 flex flex-col"
                   >
                     <Spacer rem={0.75} />
                     <SearchUI onDocumentClick={handleSearchDocumentClick} />

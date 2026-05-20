@@ -358,9 +358,9 @@ class TestLLMConfigurationEndpoint:
             assert len(captured_llms) == len(test_models)
 
             for i, llm in enumerate(captured_llms):
-                assert (
-                    llm.config.model_name == test_models[i]
-                ), f"Expected model {test_models[i]}, got {llm.config.model_name}"
+                assert llm.config.model_name == test_models[i], (
+                    f"Expected model {test_models[i]}, got {llm.config.model_name}"
+                )
 
         finally:
             db_session.rollback()
@@ -529,7 +529,8 @@ class TestDefaultProviderEndpoint:
             provider_names_to_restore: list[str] = []
 
             for provider in existing_providers:
-                provider_names_to_restore.append(provider.name)
+                if provider.name is not None:
+                    provider_names_to_restore.append(provider.name)
 
             # Remove all providers temporarily
             for provider in existing_providers:

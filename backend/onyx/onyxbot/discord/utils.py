@@ -35,7 +35,7 @@ def get_bot_token() -> str | None:
         with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db:
             config = get_discord_bot_config(db)
     except Exception as e:
-        logger.error(f"Failed to get bot token from database: {e}")
+        logger.error("Failed to get bot token from database: %s", e)
         return None
     if config and config.bot_token:
         if isinstance(config.bot_token, SensitiveValue):

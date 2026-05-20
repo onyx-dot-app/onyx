@@ -9,16 +9,14 @@ import React, {
   useEffect,
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Content } from "@opal/layouts";
+import { Content, InputHorizontal } from "@opal/layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import * as InputLayouts from "@/layouts/input-layouts";
 import { Card } from "@/refresh-components/cards";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Separator from "@/refresh-components/Separator";
 import Switch from "@/refresh-components/inputs/Switch";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import {
   SvgPlusCircle,
@@ -32,10 +30,7 @@ import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
-import {
-  AttachedDocumentSnapshot,
-  HierarchyNodeSnapshot,
-} from "@/app/admin/agents/interfaces";
+import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 import { Disabled } from "@opal/core";
@@ -116,7 +111,7 @@ function KnowledgeSidebar({
             Document Set
           </LineItem>
 
-          <Separator noPadding />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);
@@ -131,6 +126,7 @@ function KnowledgeSidebar({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 selected={isActive}
                 emphasized={isActive || isSelected || selectionCount > 0}
@@ -241,7 +237,7 @@ function KnowledgeTable<T>({
         ))}
       </TableLayouts.TableRow>
 
-      <Separator noPadding />
+      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
       {/* Table body */}
       {items.length === 0 ? (
@@ -374,7 +370,7 @@ interface SourcesTableContentProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }
 
@@ -541,7 +537,7 @@ interface KnowledgeTwoColumnViewProps {
   onDeselectAllFolders: () => void;
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange: (source: ValidSources, count: number) => void;
   vectorDbEnabled: boolean;
 }
@@ -720,6 +716,7 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
               <LineItem
                 key={connectedSource.source}
                 icon={sourceMetadata.icon}
+                strokeIcon={false}
                 onClick={() => onNavigateToSource(connectedSource.source)}
                 emphasized={isSelected || selectionCount > 0}
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
@@ -849,9 +846,9 @@ interface AgentKnowledgePaneProps {
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
   // Initial attached documents for existing agents (to populate selectedDocumentDetails)
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   // Initial hierarchy nodes for existing agents (to calculate per-source counts)
-  initialHierarchyNodes?: HierarchyNodeSnapshot[];
+  initialHierarchyNodes?: AgentHierarchyNode[];
   // When false, hides document sets, connected sources, and hierarchy nodes
   // (these require a vector DB). User files are still shown.
   vectorDbEnabled?: boolean;
@@ -1146,16 +1143,17 @@ export default function AgentKnowledgePane({
 
       <Card>
         <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-          <InputLayouts.Horizontal
+          <InputHorizontal
             title="Use Knowledge"
             description="Let this agent reference these documents to inform its responses."
+            withLabel
           >
             <Switch
               name="enable_knowledge"
               checked={enableKnowledge}
               onCheckedChange={onEnableKnowledgeChange}
             />
-          </InputLayouts.Horizontal>
+          </InputHorizontal>
 
           <Disabled disabled={!enableKnowledge}>
             <GeneralLayouts.Section alignItems="stretch" height="auto">

@@ -12,8 +12,6 @@ export interface ToastOptions {
   description?: string;
   duration?: number; // ms – default 4000, Infinity = persistent
   dismissible?: boolean; // default true (shows close button)
-  actionLabel?: string;
-  onAction?: () => void;
 }
 
 export interface Toast extends ToastOptions {
@@ -28,6 +26,16 @@ export interface Toast extends ToastOptions {
 
 export const MAX_VISIBLE_TOASTS = 3;
 const DEFAULT_DURATION = 4000;
+const TOAST_CONSOLE_METHOD: Record<
+  ToastLevel,
+  "log" | "warn" | "error" | "info"
+> = {
+  error: "error",
+  warning: "warn",
+  info: "info",
+  success: "log",
+  default: "log",
+};
 
 // ---------------------------------------------------------------------------
 // Module‑level store (external to React)
@@ -47,13 +55,24 @@ function addToast(options: ToastOptions): string {
   const id = `toast-${++nextId}-${Date.now()}`;
   const duration = options.duration ?? DEFAULT_DURATION;
 
+  const level = options.level ?? "info";
+
   const entry: Toast = {
     ...options,
     id,
-    level: options.level ?? "info",
+    level,
     dismissible: options.dismissible ?? true,
     createdAt: Date.now(),
   };
+
+  if (process.env.NODE_ENV === "development") {
+    const method = TOAST_CONSOLE_METHOD[level];
+    if (entry.description) {
+      console[method](`[Toast] ${entry.message}`, entry.description);
+    } else {
+      console[method](`[Toast] ${entry.message}`);
+    }
+  }
 
   toasts = [...toasts, entry];
   notify();
@@ -76,6 +95,21 @@ function removeToast(id: string): void {
   }
   toasts = toasts.filter((t) => t.id !== id);
   notify();
+}
+
+function setAutoDismiss(id: string, duration: number): void {
+  const existing = timers.get(id);
+  if (existing) {
+    clearTimeout(existing);
+    timers.delete(id);
+  }
+  if (duration === Infinity) {
+    return;
+  }
+  const timer = setTimeout(() => {
+    removeToast(id);
+  }, duration);
+  timers.set(id, timer);
 }
 
 function markLeaving(id: string): void {
@@ -125,6 +159,12 @@ interface ToastFn {
   ) => string;
   dismiss: (id: string) => void;
   clearAll: () => void;
+  /**
+   * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make the
+   * toast persistent. Used by ToastContainer when the user expands a truncated
+   * toast and needs more time to read it.
+   */
+  setAutoDismiss: (id: string, duration: number) => void;
   /** @internal – used by ToastContainer for exit animation */
   _markLeaving: (id: string) => void;
 }
@@ -144,6 +184,7 @@ export const toast: ToastFn = Object.assign(toastBase, {
     addToast({ ...opts, message, level: "info" }),
   dismiss: removeToast,
   clearAll,
+  setAutoDismiss,
   _markLeaving: markLeaving,
 });
 

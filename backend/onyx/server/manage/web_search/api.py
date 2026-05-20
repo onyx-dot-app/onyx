@@ -7,8 +7,9 @@ from fastapi import Response
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import InternetContentProvider
 from onyx.db.models import InternetSearchProvider
 from onyx.db.models import User
@@ -58,7 +59,7 @@ admin_router = APIRouter(prefix="/admin/web-search")
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
 def list_search_providers(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[WebSearchProviderView]:
     providers = fetch_web_search_providers(db_session)
@@ -69,7 +70,11 @@ def list_search_providers(
             provider_type=WebSearchProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or {},
-            has_api_key=bool(provider.api_key),
+            masked_api_key=(
+                provider.api_key.get_value(apply_mask=True)
+                if provider.api_key
+                else None
+            ),
         )
         for provider in providers
     ]
@@ -78,7 +83,7 @@ def list_search_providers(
 @admin_router.post("/search-providers", response_model=WebSearchProviderView)
 def upsert_search_provider_endpoint(
     request: WebSearchProviderUpsertRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     existing_by_name = fetch_web_search_provider_by_name(request.name, db_session)
@@ -132,7 +137,9 @@ def upsert_search_provider_endpoint(
         provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
@@ -141,7 +148,7 @@ def upsert_search_provider_endpoint(
 )
 def delete_search_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_search_provider(provider_id, db_session)
@@ -151,7 +158,7 @@ def delete_search_provider(
 @admin_router.post("/search-providers/{provider_id}/activate")
 def activate_search_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebSearchProviderView:
     provider = set_active_web_search_provider(
@@ -164,14 +171,16 @@ def activate_search_provider(
         provider_type=WebSearchProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or {},
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
 @admin_router.post("/search-providers/{provider_id}/deactivate")
 def deactivate_search_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_search_provider(provider_id=provider_id, db_session=db_session)
@@ -182,7 +191,7 @@ def deactivate_search_provider(
 @admin_router.post("/search-providers/test")
 def test_search_provider(
     request: WebSearchProviderTestRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     requires_key = provider_requires_api_key(request.provider_type)
@@ -231,7 +240,7 @@ def test_search_provider(
 
 @admin_router.get("/content-providers", response_model=list[WebContentProviderView])
 def list_content_providers(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[WebContentProviderView]:
     providers = fetch_web_content_providers(db_session)
@@ -242,7 +251,11 @@ def list_content_providers(
             provider_type=WebContentProviderType(provider.provider_type),
             is_active=provider.is_active,
             config=provider.config or WebContentProviderConfig(),
-            has_api_key=bool(provider.api_key),
+            masked_api_key=(
+                provider.api_key.get_value(apply_mask=True)
+                if provider.api_key
+                else None
+            ),
         )
         for provider in providers
     ]
@@ -251,7 +264,7 @@ def list_content_providers(
 @admin_router.post("/content-providers", response_model=WebContentProviderView)
 def upsert_content_provider_endpoint(
     request: WebContentProviderUpsertRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     existing_by_name = fetch_web_content_provider_by_name(request.name, db_session)
@@ -305,7 +318,9 @@ def upsert_content_provider_endpoint(
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or WebContentProviderConfig(),
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
@@ -314,7 +329,7 @@ def upsert_content_provider_endpoint(
 )
 def delete_content_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
     delete_web_content_provider(provider_id, db_session)
@@ -324,7 +339,7 @@ def delete_content_provider(
 @admin_router.post("/content-providers/{provider_id}/activate")
 def activate_content_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> WebContentProviderView:
     provider = set_active_web_content_provider(
@@ -337,13 +352,15 @@ def activate_content_provider(
         provider_type=WebContentProviderType(provider.provider_type),
         is_active=provider.is_active,
         config=provider.config or WebContentProviderConfig(),
-        has_api_key=bool(provider.api_key),
+        masked_api_key=(
+            provider.api_key.get_value(apply_mask=True) if provider.api_key else None
+        ),
     )
 
 
 @admin_router.post("/content-providers/reset-default")
 def reset_content_provider_default(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     providers = fetch_web_content_providers(db_session)
@@ -359,7 +376,7 @@ def reset_content_provider_default(
 @admin_router.post("/content-providers/{provider_id}/deactivate")
 def deactivate_content_provider(
     provider_id: int,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     deactivate_web_content_provider(provider_id=provider_id, db_session=db_session)
@@ -370,7 +387,7 @@ def deactivate_content_provider(
 @admin_router.post("/content-providers/test")
 def test_content_provider(
     request: WebContentProviderTestRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     # Determine which API key to use
@@ -449,6 +466,6 @@ def test_content_provider(
         ) from e
 
     logger.info(
-        f"Web content provider test succeeded for {request.provider_type.value}."
+        "Web content provider test succeeded for %s.", request.provider_type.value
     )
     return {"status": "ok"}

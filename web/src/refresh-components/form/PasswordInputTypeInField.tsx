@@ -6,8 +6,10 @@ import PasswordInputTypeIn, {
 } from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
-export interface PasswordInputTypeInFieldProps
-  extends Omit<PasswordInputTypeInProps, "value"> {
+export interface PasswordInputTypeInFieldProps extends Omit<
+  PasswordInputTypeInProps,
+  "value"
+> {
   name: string;
 }
 

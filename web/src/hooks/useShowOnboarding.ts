@@ -9,20 +9,18 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { MinimalAgent } from "@/lib/agents/types";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 function getOnboardingCompletedKey(userId: string): string {
   return `onyx:onboardingCompleted:${userId}`;
 }
 
-function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
+function useOnboardingState(liveAgent?: MinimalAgent): {
   state: OnboardingState;
-  llmDescriptors: WellKnownLLMProviderDescriptor[];
   actions: OnboardingActions;
   isLoading: boolean;
   hasProviders: boolean;
@@ -35,7 +33,6 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
     llmProviders,
     isLoadingProviders,
     hasProviders: hasLlmProviders,
-    providerOptions,
     refreshProviderInfo,
   } = useProviderStatus();
 
@@ -43,7 +40,6 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
   const { refetch: refreshPersonaProviders } = useLLMProviders(liveAgent?.id);
 
   const userName = user?.personalization?.name;
-  const llmDescriptors = providerOptions;
 
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -235,7 +231,6 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
 
   return {
     state,
-    llmDescriptors,
     actions: {
       nextStep,
       prevStep,
@@ -253,7 +248,7 @@ function useOnboardingState(liveAgent?: MinimalPersonaSnapshot): {
 }
 
 interface UseShowOnboardingParams {
-  liveAgent: MinimalPersonaSnapshot | undefined;
+  liveAgent: MinimalAgent | undefined;
   isLoadingChatSessions: boolean;
   chatSessionsCount: number;
   userId: string | undefined;
@@ -280,7 +275,6 @@ export function useShowOnboarding({
   const {
     state: onboardingState,
     actions: onboardingActions,
-    llmDescriptors,
     isLoading: isLoadingOnboarding,
     hasProviders: hasAnyProvider,
   } = useOnboardingState(liveAgent);
@@ -350,7 +344,6 @@ export function useShowOnboarding({
     onboardingDismissed,
     onboardingState,
     onboardingActions,
-    llmDescriptors,
     isLoadingOnboarding,
     hideOnboarding,
     finishOnboarding,

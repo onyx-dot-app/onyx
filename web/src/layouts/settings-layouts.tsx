@@ -34,20 +34,20 @@
  */
 
 import BackButton from "@/refresh-components/buttons/BackButton";
-import { cn } from "@/lib/utils";
-import Separator from "@/refresh-components/Separator";
-import { WithoutStyles } from "@/types";
+import { cn } from "@opal/utils";
+import { Divider } from "@opal/components";
+import type { WithoutStyles } from "@opal/types";
 import { IconFunctionComponent } from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import Spacer from "@/refresh-components/Spacer";
 
 const widthClasses = {
-  sm: "w-[min(var(--container-sm),100%)]",
-  "sm-md": "w-[min(var(--container-sm-md),100%)]",
-  md: "w-[min(var(--container-md),100%)]",
-  lg: "w-[min(var(--container-lg),100%)]",
-  full: "w-[var(--container-full)]",
+  sm: "w-[min(var(--app-container-sm),100%)]",
+  "sm-md": "w-[min(var(--app-container-sm-md),100%)]",
+  md: "w-[min(var(--app-container-md),100%)]",
+  lg: "w-[min(var(--app-container-lg),100%)]",
+  full: "w-(--app-container-full)",
 };
 
 /**
@@ -78,8 +78,9 @@ const widthClasses = {
  * </SettingsLayouts.Root>
  * ```
  */
-interface SettingsRootProps
-  extends WithoutStyles<React.HtmlHTMLAttributes<HTMLDivElement>> {
+interface SettingsRootProps extends WithoutStyles<
+  React.HtmlHTMLAttributes<HTMLDivElement>
+> {
   width?: keyof typeof widthClasses;
 }
 function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
@@ -113,7 +114,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  * - Optional right-aligned action buttons via rightChildren
  * - Optional children content below title/description
  * - Optional back button
- * - Optional bottom separator
+ * - Optional bottom divider
  * - Automatic scroll shadow effect
  *
  * @example
@@ -141,12 +142,12 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
  *   }
  * />
  *
- * // With search/filter below and bottom separator
+ * // With search/filter below and bottom divider
  * <SettingsLayouts.Header
  *   icon={SvgDatabase}
  *   title="Data Sources"
  *   description="Manage your connected data sources"
- *   separator
+ *   divider
  * >
  *   <InputTypeIn placeholder="Search data sources..." />
  * </SettingsLayouts.Header>
@@ -175,7 +176,7 @@ export interface SettingsHeaderProps {
   rightChildren?: React.ReactNode;
   backButton?: boolean;
   onBack?: () => void;
-  separator?: boolean;
+  divider?: boolean;
 }
 function SettingsHeader({
   icon: Icon,
@@ -185,7 +186,7 @@ function SettingsHeader({
   rightChildren,
   backButton,
   onBack,
-  separator,
+  divider,
 }: SettingsHeaderProps) {
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -249,10 +250,10 @@ function SettingsHeader({
         {children}
       </div>
 
-      {separator ? (
+      {divider ? (
         <>
           <Spacer vertical rem={1.5} />
-          <Separator noPadding className="px-4" />
+          <Divider paddingParallel="md" paddingPerpendicular="fit" />
         </>
       ) : (
         <Spacer vertical rem={0.5} />
@@ -261,7 +262,7 @@ function SettingsHeader({
       {isSticky && (
         <div
           className={cn(
-            "absolute left-0 right-0 h-[0.5rem] pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
+            "absolute left-0 right-0 h-2 pointer-events-none transition-opacity duration-300 rounded-b-08 opacity-0",
             showShadow && "opacity-100"
           )}
           style={{
@@ -305,10 +306,7 @@ function SettingsBody(
   props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
 ) {
   return (
-    <div
-      className="pt-6 pb-[4.5rem] px-4 flex flex-col gap-8 w-full"
-      {...props}
-    />
+    <div className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full" {...props} />
   );
 }
 

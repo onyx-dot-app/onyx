@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   BuildLlmSelection,
   getBuildLlmSelection,

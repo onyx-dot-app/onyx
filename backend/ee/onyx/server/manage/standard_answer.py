@@ -12,8 +12,9 @@ from ee.onyx.db.standard_answer import insert_standard_answer_category
 from ee.onyx.db.standard_answer import remove_standard_answer
 from ee.onyx.db.standard_answer import update_standard_answer
 from ee.onyx.db.standard_answer import update_standard_answer_category
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.manage.models import StandardAnswer
 from onyx.server.manage.models import StandardAnswerCategory
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/manage")
 def create_standard_answer(
     standard_answer_creation_request: StandardAnswerCreationRequest,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StandardAnswer:
     standard_answer_model = insert_standard_answer(
         keyword=standard_answer_creation_request.keyword,
@@ -43,7 +44,7 @@ def create_standard_answer(
 @router.get("/admin/standard-answer")
 def list_standard_answers(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[StandardAnswer]:
     standard_answer_models = fetch_standard_answers(db_session=db_session)
     return [
@@ -57,7 +58,7 @@ def patch_standard_answer(
     standard_answer_id: int,
     standard_answer_creation_request: StandardAnswerCreationRequest,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StandardAnswer:
     existing_standard_answer = fetch_standard_answer(
         standard_answer_id=standard_answer_id,
@@ -83,7 +84,7 @@ def patch_standard_answer(
 def delete_standard_answer(
     standard_answer_id: int,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     return remove_standard_answer(
         standard_answer_id=standard_answer_id,
@@ -95,7 +96,7 @@ def delete_standard_answer(
 def create_standard_answer_category(
     standard_answer_category_creation_request: StandardAnswerCategoryCreationRequest,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StandardAnswerCategory:
     standard_answer_category_model = insert_standard_answer_category(
         category_name=standard_answer_category_creation_request.name,
@@ -107,7 +108,7 @@ def create_standard_answer_category(
 @router.get("/admin/standard-answer/category")
 def list_standard_answer_categories(
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[StandardAnswerCategory]:
     standard_answer_category_models = fetch_standard_answer_categories(
         db_session=db_session
@@ -123,7 +124,7 @@ def patch_standard_answer_category(
     standard_answer_category_id: int,
     standard_answer_category_creation_request: StandardAnswerCategoryCreationRequest,
     db_session: Session = Depends(get_session),
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> StandardAnswerCategory:
     existing_standard_answer_category = fetch_standard_answer_category(
         standard_answer_category_id=standard_answer_category_id,

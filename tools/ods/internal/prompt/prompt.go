@@ -12,6 +12,23 @@ import (
 // reader is the input reader, can be replaced for testing
 var reader = bufio.NewReader(os.Stdin)
 
+// String prompts the user for a free-form line of input. Re-prompts until a
+// non-empty value is entered.
+func String(prompt string) string {
+	for {
+		fmt.Print(prompt)
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("Failed to read input: %v", err)
+		}
+		response = strings.TrimSpace(response)
+		if response != "" {
+			return response
+		}
+		fmt.Println("Value cannot be empty.")
+	}
+}
+
 // Confirm prompts the user with a yes/no question and returns true for yes, false for no.
 // It will keep prompting until a valid response is given.
 // Empty input (just pressing Enter) defaults to yes.

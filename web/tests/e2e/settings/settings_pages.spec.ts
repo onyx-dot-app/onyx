@@ -42,6 +42,7 @@ for (const theme of THEMES) {
             page
               .locator(".opal-content-md-header")
               .filter({ hasText: expectedHeader })
+              .first()
           ).toBeVisible({ timeout: 10_000 });
         } else {
           await page.waitForLoadState("networkidle");

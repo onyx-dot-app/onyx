@@ -58,8 +58,7 @@ def upgrade() -> None:
 
     if "prompt" in existing_tables and "persona__prompt" in existing_tables:
         # For personas that have associated prompts, copy the prompt data
-        op.execute(
-            """
+        op.execute("""
             UPDATE persona
             SET
                 system_prompt = p.system_prompt,
@@ -76,8 +75,7 @@ def upgrade() -> None:
                 JOIN prompt pr ON pp.prompt_id = pr.id
             ) p
             WHERE persona.id = p.persona_id
-        """
-        )
+        """)
 
         # Step 3: Update chat_message references
         # Since chat messages referenced prompt_id, we need to update them to use persona_id
@@ -88,24 +86,20 @@ def upgrade() -> None:
             col["name"] for col in inspector.get_columns("chat_message")
         ]
         if "prompt_id" in chat_message_columns:
-            op.execute(
-                """
+            op.execute("""
                 ALTER TABLE chat_message
                 DROP CONSTRAINT IF EXISTS chat_message__prompt_fk
-            """
-            )
+            """)
             op.drop_column("chat_message", "prompt_id")
 
     # Step 4: Handle personas without prompts - set default values if needed (always run this)
-    op.execute(
-        """
+    op.execute("""
         UPDATE persona
         SET
             system_prompt = COALESCE(system_prompt, ''),
             task_prompt = COALESCE(task_prompt, '')
         WHERE system_prompt IS NULL OR task_prompt IS NULL
-    """
-    )
+    """)
 
     # Step 5: Drop the persona__prompt association table (if it exists)
     if "persona__prompt" in existing_tables:
@@ -171,8 +165,7 @@ def downgrade() -> None:
     )
 
     # Step 3: Migrate data back from persona to prompt table
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO prompt (
             name,
             description,
@@ -195,12 +188,10 @@ def downgrade() -> None:
         FROM persona
         WHERE system_prompt IS NOT NULL AND system_prompt != ''
         RETURNING id, name
-        """
-    )
+        """)
 
     # Step 4: Re-establish persona__prompt relationships
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO persona__prompt (persona_id, prompt_id)
         SELECT
             p.id as persona_id,
@@ -208,8 +199,7 @@ def downgrade() -> None:
         FROM persona p
         JOIN prompt pr ON pr.name = CONCAT('Prompt for ', p.name)
         WHERE p.system_prompt IS NOT NULL AND p.system_prompt != ''
-    """
-    )
+    """)
 
     # Step 5: Add prompt_id column back to chat_message
     op.add_column("chat_message", sa.Column("prompt_id", sa.Integer(), nullable=True))

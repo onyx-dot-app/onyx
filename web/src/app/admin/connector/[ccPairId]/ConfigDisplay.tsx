@@ -5,8 +5,7 @@ import { useState } from "react";
 import { ValidSources } from "@/lib/types";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
-import Separator from "@/refresh-components/Separator";
+import { Button, Divider } from "@opal/components";
 import { SvgChevronUp, SvgChevronDown, SvgEdit } from "@opal/icons";
 import Truncated from "@/refresh-components/texts/Truncated";
 
@@ -62,7 +61,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
           alignItems="center"
           height="fit"
         >
-          <Text secondaryBody text03 className="break-words">
+          <Text secondaryBody text03 className="wrap-break-word">
             {displayedItems
               .map((item) => convertObjectToString(item))
               .join(", ")}
@@ -73,7 +72,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       return (
         <Section gap={0.25} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
-            <Text key={key} secondaryBody text03 className="break-words">
+            <Text key={key} secondaryBody text03 className="wrap-break-word">
               <Text mainContentEmphasis text03>
                 {key}:
               </Text>{" "}
@@ -228,7 +227,9 @@ export function AdvancedConfigDisplay({
               onEdit={item.onEdit}
             />
           </div>
-          {index < items.length - 1 && <Separator noPadding />}
+          {index < items.length - 1 && (
+            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          )}
         </div>
       ))}
     </Section>
@@ -255,7 +256,9 @@ export function ConfigDisplay({
               onEdit={onEdit ? () => onEdit(key) : undefined}
             />
           </div>
-          {index < entries.length - 1 && <Separator noPadding />}
+          {index < entries.length - 1 && (
+            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          )}
         </div>
       ))}
     </Section>

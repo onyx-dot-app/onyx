@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import Modal from "@/refresh-components/Modal";
-import * as InputLayouts from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
@@ -14,8 +14,7 @@ import {
   MCPServer,
 } from "@/lib/tools/interfaces";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import Separator from "@/refresh-components/Separator";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { ModalCreationInterface } from "@/refresh-components/contexts/ModalContext";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -146,16 +145,16 @@ export default function AddMCPServerModal({
               />
 
               <Modal.Body>
-                <InputLayouts.Vertical name="name" title="Server Name">
+                <InputVertical withLabel="name" title="Server Name">
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
                     autoFocus
                   />
-                </InputLayouts.Vertical>
+                </InputVertical>
 
-                <InputLayouts.Vertical
-                  name="description"
+                <InputVertical
+                  withLabel="description"
                   title="Description"
                   suffix="optional"
                 >
@@ -164,12 +163,12 @@ export default function AddMCPServerModal({
                     placeholder="More details about the MCP server"
                     rows={3}
                   />
-                </InputLayouts.Vertical>
+                </InputVertical>
 
-                <Separator noPadding />
+                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-                <InputLayouts.Vertical
-                  name="server_url"
+                <InputVertical
+                  withLabel="server_url"
                   title="MCP Server URL"
                   subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
                 >
@@ -177,7 +176,7 @@ export default function AddMCPServerModal({
                     name="server_url"
                     placeholder="https://your-mcp-server.com/mcp"
                   />
-                </InputLayouts.Vertical>
+                </InputVertical>
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&

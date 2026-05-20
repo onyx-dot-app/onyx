@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Chip from "@/refresh-components/Chip";
 import {
   innerClasses,
@@ -118,7 +118,7 @@ function InputChipField({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         className={cn(
-          "flex-1 min-w-[80px] h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
+          "flex-1 min-w-[80px] h-6 bg-transparent p-0.5 focus:outline-hidden",
           innerClasses[variant],
           textClasses[variant]
         )}

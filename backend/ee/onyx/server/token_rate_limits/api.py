@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
 from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
-from onyx.auth.users import current_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import insert_user_token_rate_limit
@@ -28,7 +29,7 @@ Group Token Limit Settings
 
 @router.get("/user-groups")
 def get_all_group_token_limit_settings(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, list[TokenRateLimitDisplay]]:
     user_groups_to_token_rate_limits = fetch_all_user_group_token_rate_limits_by_group(
@@ -64,7 +65,7 @@ def get_group_token_limit_settings(
 def create_group_token_limit_settings(
     group_id: int,
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     rate_limit_display = TokenRateLimitDisplay.from_db(
@@ -86,7 +87,7 @@ User Token Limit Settings
 
 @router.get("/users")
 def get_user_token_limit_settings(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[TokenRateLimitDisplay]:
     return [
@@ -98,7 +99,7 @@ def get_user_token_limit_settings(
 @router.post("/users")
 def create_user_token_limit_settings(
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
     rate_limit_display = TokenRateLimitDisplay.from_db(
