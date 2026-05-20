@@ -369,7 +369,7 @@ class OllamaModelDetails(BaseModel):
         return parsed
 
     @property
-    def parsed_num_ctx(self) -> int | None:
+    def num_ctx(self) -> int | None:
         raw = self._parse_parameters().get("num_ctx")
         if raw is None:
             return None
