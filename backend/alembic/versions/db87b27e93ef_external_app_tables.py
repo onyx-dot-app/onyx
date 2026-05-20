@@ -21,8 +21,11 @@ def upgrade() -> None:
     op.create_table(
         "external_app",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("name", sa.String(), nullable=False),
-        sa.Column("description", sa.String(), nullable=False),
+        sa.Column(
+            "skill_id",
+            postgresql.UUID(as_uuid=True),
+            nullable=False,
+        ),
         sa.Column(
             "app_type",
             sa.String(),
@@ -47,25 +50,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'{}'::jsonb"),
         ),
-        sa.Column(
-            "enabled",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.true(),
-        ),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
+        sa.ForeignKeyConstraint(["skill_id"], ["skill.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("skill_id", name="uq_external_app_skill_id"),
     )
 
     op.create_table(

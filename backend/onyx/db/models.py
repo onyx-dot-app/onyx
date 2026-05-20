@@ -5839,11 +5839,18 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False)
-    # Discriminator for the OAuth-provider dispatch layer.
-    # Decoupled from `name` (a human-editable display string) so
-    # renaming an app doesn't silently break OAuth.
+    # Display name, description, and lifecycle (including enabled state
+    # via skill presence) live on the linked Skill row. ON DELETE
+    # CASCADE: removing the skill removes the external_app gateway.
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # Discriminator for the OAuth-provider dispatch layer. Decoupled
+    # from the linked skill's name so renaming the skill doesn't
+    # silently break OAuth.
     #
     # `CUSTOM` covers admin-defined apps that don't go through any
     # built-in OAuth flow. Built-in values match entries in
@@ -5874,20 +5881,6 @@ class ExternalApp(Base):
         nullable=False,
         default=dict,
         server_default=text("'{}'::jsonb"),
-    )
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
     )
 
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
