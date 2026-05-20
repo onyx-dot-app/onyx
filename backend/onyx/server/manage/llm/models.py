@@ -349,9 +349,8 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
-    # Newline-delimited "<key>  <value>" pairs from the Modelfile, e.g.
-    # "num_ctx 8192\ntemperature 0.6\n". Empty when no PARAMETERs are set.
-    parameters: str = ""
+    # Newline-delimited "<key>  <value>" pairs from the Modelfile.
+    parameters: str | None = None
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -361,22 +360,23 @@ class OllamaModelDetails(BaseModel):
         """Check if this model supports image input"""
         return "vision" in self.capabilities
 
-    def parsed_num_ctx(self) -> int | None:
-        """Return the Modelfile-configured `num_ctx`, if any.
-
-        Honors an explicit Modelfile `PARAMETER num_ctx <N>` so operators
-        can cap context to fit their VRAM budget without Onyx silently
-        overriding it with the model's architectural maximum.
-        """
-        for line in self.parameters.splitlines():
+    def _parse_parameters(self) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for line in (self.parameters or "").splitlines():
             tokens = line.split(maxsplit=1)
-            if len(tokens) == 2 and tokens[0] == "num_ctx":
-                try:
-                    value = int(tokens[1].strip())
-                except ValueError:
-                    return None
-                return value if value > 0 else None
-        return None
+            if len(tokens) == 2:
+                parsed[tokens[0]] = tokens[1].strip()
+        return parsed
+
+    def parsed_num_ctx(self) -> int | None:
+        raw = self._parse_parameters().get("num_ctx")
+        if raw is None:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        return value if value > 0 else None
 
 
 # OpenRouter dynamic models fetch

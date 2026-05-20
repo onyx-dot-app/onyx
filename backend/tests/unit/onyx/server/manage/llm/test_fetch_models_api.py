@@ -153,8 +153,6 @@ class TestGetOllamaAvailableModels:
     def test_prefers_modelfile_num_ctx_over_architecture_context_length(
         self, mock_ollama_tags_response: dict
     ) -> None:
-        """When the Modelfile sets PARAMETER num_ctx, it should win over the
-        architectural maximum so operators can cap context to fit VRAM."""
         from onyx.server.manage.llm.api import get_ollama_available_models
 
         show_response = {
@@ -190,8 +188,6 @@ class TestGetOllamaAvailableModels:
     def test_falls_back_to_architecture_context_length_without_num_ctx(
         self, mock_ollama_tags_response: dict
     ) -> None:
-        """Absent a Modelfile num_ctx, behavior matches the pre-fix path:
-        use the architecture's context_length."""
         from onyx.server.manage.llm.api import get_ollama_available_models
 
         show_response = {
@@ -218,6 +214,37 @@ class TestGetOllamaAvailableModels:
             results = get_ollama_available_models(request, MagicMock(), MagicMock())
 
             assert all(r.max_input_tokens == 32768 for r in results)
+
+    def test_handles_null_parameters_field(
+        self, mock_ollama_tags_response: dict
+    ) -> None:
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        show_response = {
+            "model_info": {
+                "general.architecture": "llama",
+                "llama.context_length": 16384,
+            },
+            "capabilities": ["completion"],
+            "parameters": None,
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = mock_ollama_tags_response
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), MagicMock())
+
+            assert len(results) == 3
+            assert all(r.max_input_tokens == 16384 for r in results)
 
 
 class TestGetOpenRouterAvailableModels:
