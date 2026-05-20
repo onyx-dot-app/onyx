@@ -1208,9 +1208,9 @@ fi
 # Build the up flags. With --wait (default), Compose waits until every
 # container with a healthcheck reports healthy before returning, and names any
 # service that stays unhealthy past the timeout.
-UP_WAIT_ARGS=""
+UP_WAIT_ARGS=()
 if [[ "$NO_WAIT" = false ]]; then
-    UP_WAIT_ARGS="--wait --wait-timeout ${WAIT_TIMEOUT_SECONDS}"
+    UP_WAIT_ARGS=(--wait --wait-timeout "${WAIT_TIMEOUT_SECONDS}")
 fi
 
 # Start services
@@ -1222,9 +1222,9 @@ fi
 echo ""
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate $UP_WAIT_ARGS)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}")
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d $UP_WAIT_ARGS)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}")
 fi
 UP_EXIT=$?
 if [ $UP_EXIT -ne 0 ]; then
