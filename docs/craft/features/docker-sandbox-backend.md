@@ -8,14 +8,11 @@ Decision update: Docker authority will live in `api_server`. The api server will
 
 Research checked:
 
-- `~/Documents/code/onyx/deployment/docker_compose/docker-compose.yml`
+- Existing `docker-compose.yml` + `install.sh` for Craft wiring:
   - `code-interpreter` already uses Docker-out-of-Docker by mounting `${DOCKER_SOCK_PATH:-/var/run/docker.sock}`.
   - docker-compose currently sets Craft template paths and `ENABLE_CRAFT`, but does not set `SANDBOX_BACKEND`; the code default is `local`.
-  - `--include-craft` in `install.sh` selects `craft-latest` and sets `ENABLE_CRAFT=true`, but does not provision an isolated Craft sandbox backend.
-- `~/Documents/code/cloud-deployment-yamls/danswer/`
-  - Cloud config sets `SANDBOX_BACKEND=kubernetes`, `SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest`, `SANDBOX_S3_BUCKET`, and `SANDBOX_API_SERVER_URL`.
-  - Code interpreter is packaged as a separate K8s Deployment/Service, but Craft itself is not a separate service; api_server owns sandbox lifecycle through Kubernetes.
-- `~/Documents/code/onyx/backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py`
+  - `--include-craft` selects `craft-latest` and sets `ENABLE_CRAFT=true`, but does not provision an isolated Craft sandbox backend.
+- `KubernetesSandboxManager` (`backend/onyx/server/features/build/sandbox/kubernetes/`):
   - K8s Craft provisions one sandbox pod per user.
   - Each pod contains a `sandbox` container for the agent and a `sidecar` container for push/snapshot HTTP on port `8731`.
   - api_server talks directly to Kubernetes for lifecycle and exec, and to the sidecar for signed push/snapshot operations.
