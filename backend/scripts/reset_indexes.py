@@ -11,7 +11,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 from onyx.configs.app_configs import DOCUMENT_INDEX_NAME  # noqa: E402
-from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT  # noqa: E402
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT  # noqa: E402
 from onyx.utils.logger import setup_logger  # noqa: E402
 
 logger = setup_logger()
@@ -25,6 +25,8 @@ def wipe_vespa_index() -> bool:
     should_continue = True
     RETRIES = 3
 
+    endpoint = DOCUMENT_ID_ENDPOINT.format(index_name=DOCUMENT_INDEX_NAME)
+
     while should_continue:
         params = {"selection": "true", "cluster": DOCUMENT_INDEX_NAME}
         if continuation:
@@ -32,7 +34,7 @@ def wipe_vespa_index() -> bool:
 
         for attempt in range(RETRIES):
             try:
-                response = requests.delete(DOCUMENT_ID_ENDPOINT, params=params)
+                response = requests.delete(endpoint, params=params)
                 response.raise_for_status()
 
                 response_json = response.json()

@@ -57,14 +57,14 @@ export default function MinimalMarkdown({
 
     return {
       ...defaults,
-      ...(components ?? {}),
+      ...components,
     } satisfies Components;
   }, [content, components, showHeader]);
 
   return (
     <ReactMarkdown
       className={cn(
-        "prose dark:prose-invert max-w-full text-sm break-words",
+        "prose dark:prose-invert max-w-full text-sm wrap-break-word",
         className
       )}
       components={markdownComponents}

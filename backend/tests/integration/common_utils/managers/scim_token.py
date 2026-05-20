@@ -38,10 +38,10 @@ class ScimTokenManager:
             headers=user_performing_action.headers,
             timeout=60,
         )
-        if response.status_code == 404:
-            return None
         response.raise_for_status()
         data = response.json()
+        if data is None:
+            return None
         return DATestScimToken(
             id=data["id"],
             name=data["name"],

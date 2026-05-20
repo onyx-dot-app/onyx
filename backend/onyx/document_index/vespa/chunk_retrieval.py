@@ -23,8 +23,8 @@ from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
 from onyx.configs.app_configs import VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
@@ -540,7 +540,7 @@ def query_vespa(
         # Log each detail on its own line so log collectors capture them
         # as separate entries rather than truncating a single multiline msg
         logger.error(
-            "Failed to query Vespa | " "status=%s | " "yql_length=%s | " "exception=%s",
+            "Failed to query Vespa | status=%s | yql_length=%s | exception=%s",
             status_code,
             yql_length,
             str(e),
@@ -551,7 +551,7 @@ def query_vespa(
 
         # Re-raise with diagnostics so callers see what actually went wrong
         raise httpx.HTTPError(
-            f"Failed to query Vespa (status={status_code}, " f"yql_length={yql_length})"
+            f"Failed to query Vespa (status={status_code}, yql_length={yql_length})"
         ) from e
 
     response_json: dict[str, Any] = response.json()

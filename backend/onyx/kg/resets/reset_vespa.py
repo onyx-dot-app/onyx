@@ -11,8 +11,9 @@ from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.vespa.vespa_document_index import KGVespaChunkUpdateRequest
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.kg.utils.lock_utils import extend_lock
 from onyx.utils.logger import setup_logger
@@ -22,12 +23,10 @@ logger = setup_logger()
 
 
 def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> None:
-    vespa_index = VespaIndex(
+    vespa_index = VespaDocumentIndex(
         index_name=index_name,
-        secondary_index_name=None,
+        tenant_state=TenantState(tenant_id=tenant_id, multitenant=MULTI_TENANT),
         large_chunks_enabled=False,
-        secondary_large_chunks_enabled=False,
-        multitenant=MULTI_TENANT,
         httpx_client=None,
     )
 

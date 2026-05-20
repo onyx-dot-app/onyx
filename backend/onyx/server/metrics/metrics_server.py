@@ -29,6 +29,7 @@ _DEFAULT_PORTS: dict[str, int] = {
     "heavy": 9094,
     "light": 9095,
     "primary": 9097,
+    "scheduled_tasks": 9098,
 }
 
 _server_started = False

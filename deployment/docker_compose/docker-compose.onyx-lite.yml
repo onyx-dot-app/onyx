@@ -1,11 +1,11 @@
 # =============================================================================
 # ONYX LITE — MINIMAL DEPLOYMENT OVERLAY
 # =============================================================================
-# Overlay to run Onyx in a minimal configuration: no vector database (Vespa),
-# no Redis, no model servers, and no background workers. Only PostgreSQL is
-# required. In this mode, connectors and RAG search are disabled, but the core
-# chat experience (LLM conversations, tools, user file uploads, Projects,
-# Agent knowledge, code interpreter) still works.
+# Overlay to run Onyx in a minimal configuration: no vector database, no Redis,
+# no model servers, and no background workers. Only PostgreSQL is required. In
+# this mode, connectors and RAG search are disabled, but the core chat
+# experience (LLM conversations, tools, user file uploads, Projects, Agent
+# knowledge, code interpreter) still works.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml up -d
@@ -15,16 +15,15 @@
 #                  -f docker-compose.dev.yml up -d --wait
 #
 # This overlay:
-#   - Moves Vespa (index), both model servers, OpenSearch, MinIO,
-#     Redis (cache), and the background worker to profiles so they do
-#     not start by default
+#   - Moves both model servers, OpenSearch, MinIO, Redis (cache), and the
+#     background worker to profiles so they do not start by default
 #   - Makes depends_on references to removed services optional
 #   - Sets DISABLE_VECTOR_DB=true on the api_server
 #   - Uses PostgreSQL for caching and auth instead of Redis
 #   - Uses PostgreSQL for file storage instead of S3/MinIO
 #
 # To selectively bring services back:
-#   --profile vectordb          Vespa + indexing model server
+#   --profile vectordb          Indexing model server
 #   --profile inference         Inference model server
 #   --profile background        Background worker (Celery) — also needs redis
 #   --profile redis             Redis cache
@@ -37,9 +36,6 @@ name: onyx
 services:
   api_server:
     depends_on:
-      index:
-        condition: service_started
-        required: false
       opensearch:
         condition: service_started
         required: false
@@ -63,9 +59,6 @@ services:
   background:
     profiles: ["background"]
     depends_on:
-      index:
-        condition: service_started
-        required: false
       inference_model_server:
         condition: service_started
         required: false
@@ -78,10 +71,7 @@ services:
   cache:
     profiles: ["redis"]
 
-  # Move Vespa and indexing model server to a profile so they do not start.
-  index:
-    profiles: ["vectordb"]
-
+  # Move indexing model server to a profile so it does not start.
   indexing_model_server:
     profiles: ["vectordb"]
 

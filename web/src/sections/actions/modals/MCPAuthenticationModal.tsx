@@ -200,7 +200,7 @@ export default function MCPAuthenticationModal({
   }, [fullServer, mcpServer?.server_url]);
 
   // Mirrors the LLM-provider `api_key_changed` pattern in
-  // `web/src/sections/modals/llmConfig/svc.ts`. The backend uses these flags
+  // `web/src/sections/modals/languageModels/svc.ts`. The backend uses these flags
   // to decide whether to overwrite the stored OAuth credentials or to leave
   // them untouched, which prevents masked placeholders sent back from the
   // GET response from accidentally wiping out the real stored values.

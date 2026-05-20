@@ -7,6 +7,12 @@ export enum ApplicationStatus {
   SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
 }
 
+export enum Tier {
+  COMMUNITY = "community",
+  BUSINESS = "business",
+  ENTERPRISE = "enterprise",
+}
+
 export enum QueryHistoryType {
   DISABLED = "disabled",
   ANONYMIZED = "anonymized",
@@ -34,7 +40,6 @@ export interface Settings {
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
-  search_time_image_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
 
   // User Knowledge settings
@@ -54,6 +59,7 @@ export interface Settings {
   // Whether EE features are unlocked (user has a valid enterprise license).
   // Controls UI visibility of EE features like user groups, analytics, RBAC.
   ee_features_enabled?: boolean;
+  tier?: Tier;
 
   // Seat usage - populated when seat limit is exceeded
   seat_count?: number | null;
@@ -79,6 +85,10 @@ export interface Settings {
   default_pruning_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
+
+  // True when the backend runs inside a container (Docker/Podman).
+  // Used to default local-service URLs to host.docker.internal.
+  is_containerized?: boolean;
 }
 
 export interface NavigationItem {
@@ -107,6 +117,13 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+
+  // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
+  custom_help_link_url: string | null;
+  custom_help_link_label: string | null;
+
+  // Hide the "Powered by Onyx" tagline under the sidebar logo.
+  hide_onyx_branding: boolean | null;
 }
 
 export interface CombinedSettings {

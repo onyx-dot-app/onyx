@@ -24,7 +24,8 @@ def deep_getsizeof(obj: T, seen: set[int] | None = None) -> int:
         )
     elif isinstance(obj, (list, tuple, set, frozenset)):
         size += sum(
-            deep_getsizeof(i, seen) for i in obj  # ty: ignore[invalid-argument-type]
+            deep_getsizeof(i, seen)  # ty: ignore[invalid-argument-type]
+            for i in obj
         )
 
     return size

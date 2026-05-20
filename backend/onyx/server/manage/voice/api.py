@@ -70,7 +70,6 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
         api_key=mask_string(raw_key) if raw_key else None,
-        has_api_key=bool(provider.api_key),
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
     )
 

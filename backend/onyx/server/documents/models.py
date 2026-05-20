@@ -288,6 +288,7 @@ class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_docs_synced: int
     docs_with_permission_errors: int
     time_created: str
@@ -302,6 +303,7 @@ class DocPermissionSyncAttemptSnapshot(BaseModel):
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_docs_synced=attempt.total_docs_synced or 0,
             docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
             time_created=attempt.time_created.isoformat(),
@@ -318,6 +320,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
@@ -333,6 +336,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
@@ -400,6 +404,10 @@ class CCPairFullInfo(BaseModel):
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
 
+    # True if this connector's class implements `Resolver.reindex`. The FE
+    # uses this to route Resolve-All to targeted reindex vs full reindex.
+    supports_targeted_reindex: bool
+
     @classmethod
     def _get_last_full_permission_sync(
         cls, cc_pair_model: ConnectorCredentialPair
@@ -453,6 +461,7 @@ class CCPairFullInfo(BaseModel):
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
+        supports_targeted_reindex: bool = False,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -510,6 +519,7 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_targeted_reindex=supports_targeted_reindex,
         )
 
 

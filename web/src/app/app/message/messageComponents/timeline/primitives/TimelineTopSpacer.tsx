@@ -17,10 +17,10 @@ export function TimelineTopSpacer({
   }
 
   if (variant === "first") {
-    return <div className="h-[var(--timeline-first-top-spacer-height)]" />;
+    return <div className="h-(--timeline-first-top-spacer-height)" />;
   }
 
-  return <div className="h-[var(--timeline-top-connector-height)]" />;
+  return <div className="h-(--timeline-top-connector-height)" />;
 }
 
 export default TimelineTopSpacer;

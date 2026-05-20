@@ -276,6 +276,27 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
 # HTTP statuses we treat as transient and worth retrying.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
+PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410})
+
+
+def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
+    # response=None means a wrapped transport error; the retry layer owns it.
+    if e.response is None:
+        return False
+    return e.response.status_code in PER_SITE_GRAPH_FAILURE_STATUSES
+
+
+def _graph_error_code(response: requests.Response | None) -> str:
+    if response is None:
+        return "<no response>"
+    try:
+        return response.json().get("error", {}).get("code") or "<no code>"
+    except Exception:
+        logger.debug(
+            "Failed to parse Graph error code from response body", exc_info=True
+        )
+        return "<no code>"
+
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
     """Honor a numeric Retry-After header when the server provides one,
@@ -449,7 +470,7 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
         return CertificateData(
             private_key=key_pem,
-            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),
+            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),  # noqa: S303 — MSAL certificate auth requires the SHA1 thumbprint per RFC 5280
         )
     except Exception as e:
         logger.error("Error loading certificate: %s", e)
@@ -639,7 +660,6 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
-
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -2102,46 +2122,66 @@ class SharepointConnector(
 
             # Process site pages if flag is True
             if self.include_site_pages:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start, end=end
-                )
-                for site_page in site_pages:
-                    logger.debug(
-                        "Processing site page: %s",
-                        site_page.get("webUrl", site_page.get("name", "Unknown")),
+                try:
+                    site_pages = self._fetch_site_pages(
+                        site_descriptor, start=start, end=end
                     )
-                    try:
-                        if include_permissions:
-                            ctx = self._create_rest_client_context(site_descriptor.url)
-                            doc_batch.append(
-                                _convert_sitepage_to_slim_document(
-                                    site_page,
-                                    ctx,
-                                    self.graph_client,
-                                    parent_hierarchy_raw_node_id=site_descriptor.url,
-                                    treat_sharing_link_as_public=self.treat_sharing_link_as_public,
-                                )
-                            )
-                        else:
-                            page_id = site_page.get("id")
-                            if page_id is None:
-                                raise ValueError("Site page ID is required")
-                            doc_batch.append(
-                                SlimDocument(
-                                    id=page_id,
-                                    external_access=ExternalAccess.empty(),
-                                    parent_hierarchy_raw_node_id=site_descriptor.url,
-                                )
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to process site page %s: %s",
+                    for site_page in site_pages:
+                        logger.debug(
+                            "Processing site page: %s",
                             site_page.get("webUrl", site_page.get("name", "Unknown")),
-                            e,
                         )
-                    if len(doc_batch) >= SLIM_BATCH_SIZE:
-                        yield doc_batch
-                        doc_batch = []
+                        try:
+                            if include_permissions:
+                                ctx = self._create_rest_client_context(
+                                    site_descriptor.url
+                                )
+                                doc_batch.append(
+                                    _convert_sitepage_to_slim_document(
+                                        site_page,
+                                        ctx,
+                                        self.graph_client,
+                                        parent_hierarchy_raw_node_id=site_descriptor.url,
+                                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                                    )
+                                )
+                            else:
+                                page_id = site_page.get("id")
+                                if page_id is None:
+                                    raise ValueError("Site page ID is required")
+                                doc_batch.append(
+                                    SlimDocument(
+                                        id=page_id,
+                                        external_access=ExternalAccess.empty(),
+                                        parent_hierarchy_raw_node_id=site_descriptor.url,
+                                    )
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to process site page %s: %s",
+                                site_page.get(
+                                    "webUrl", site_page.get("name", "Unknown")
+                                ),
+                                e,
+                            )
+                        if len(doc_batch) >= SLIM_BATCH_SIZE:
+                            yield doc_batch
+                            doc_batch = []
+                except (ClientRequestException, HTTPError) as e:
+                    if not _is_per_site_graph_failure(e):
+                        raise
+                    # Slim sync can't yield ConnectorFailure; log-and-skip.
+                    logger.warning(
+                        "Skipping slim site pages for %s: Graph returned %s (%s)",
+                        site_descriptor.url,
+                        (
+                            e.response.status_code
+                            if e.response is not None
+                            else "no response"
+                        ),
+                        _graph_error_code(e.response),
+                        exc_info=True,
+                    )
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -2396,7 +2436,6 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
@@ -2775,32 +2814,56 @@ class SharepointConnector(
             site_descriptor = checkpoint.current_site_descriptor
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
             end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            site_pages = self._fetch_site_pages(
-                site_descriptor, start=start_dt, end=end_dt
-            )
-            for site_page in site_pages:
-                logger.debug(
-                    "Processing site page: %s",
-                    site_page.get("webUrl", site_page.get("name", "Unknown")),
+            try:
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start_dt, end=end_dt
                 )
-                client_ctx: ClientContext | None = None
-                if include_permissions:
-                    client_ctx = self._create_rest_client_context(site_descriptor.url)
-                yield (
-                    _convert_sitepage_to_document(
-                        site_page,
-                        site_descriptor.drive_name,
-                        client_ctx,
-                        self.graph_client,
-                        include_permissions=include_permissions,
-                        # Site pages have the site as their parent
-                        parent_hierarchy_raw_node_id=site_descriptor.url,
-                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                for site_page in site_pages:
+                    logger.debug(
+                        "Processing site page: %s",
+                        site_page.get("webUrl", site_page.get("name", "Unknown")),
                     )
+                    client_ctx: ClientContext | None = None
+                    if include_permissions:
+                        client_ctx = self._create_rest_client_context(
+                            site_descriptor.url
+                        )
+                    yield (
+                        _convert_sitepage_to_document(
+                            site_page,
+                            site_descriptor.drive_name,
+                            client_ctx,
+                            self.graph_client,
+                            include_permissions=include_permissions,
+                            # Site pages have the site as their parent
+                            parent_hierarchy_raw_node_id=site_descriptor.url,
+                            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                        )
+                    )
+                logger.info(
+                    "Finished processing site pages for site: %s",
+                    site_descriptor.url,
                 )
-            logger.info(
-                "Finished processing site pages for site: %s", site_descriptor.url
-            )
+            except (ClientRequestException, HTTPError) as e:
+                if not _is_per_site_graph_failure(e):
+                    raise
+                logger.warning(
+                    "Skipping site pages for %s: Graph returned %s (%s)",
+                    site_descriptor.url,
+                    (
+                        e.response.status_code
+                        if e.response is not None
+                        else "no response"
+                    ),
+                    _graph_error_code(e.response),
+                    exc_info=True,
+                )
+                yield _create_entity_failure(
+                    site_descriptor.url,
+                    f"Failed to fetch site pages: {e}",
+                    (start_dt, end_dt),
+                    e,
+                )
 
         # If no more drives, move to next site if available
         if (

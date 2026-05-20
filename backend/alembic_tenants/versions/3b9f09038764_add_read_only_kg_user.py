@@ -27,7 +27,8 @@ def upgrade() -> None:
     if not (DB_READONLY_USER and DB_READONLY_PASSWORD):
         raise Exception("DB_READONLY_USER or DB_READONLY_PASSWORD is not set")
 
-    op.execute(text(f"""
+    op.execute(
+        text(f"""
             DO $$
             BEGIN
                 -- Check if the read-only user already exists
@@ -42,11 +43,13 @@ def upgrade() -> None:
                 END IF;
             END
             $$;
-            """))
+            """)
+    )
 
 
 def downgrade() -> None:
-    op.execute(text(f"""
+    op.execute(
+        text(f"""
         DO $$
         BEGIN
             IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
@@ -59,5 +62,6 @@ def downgrade() -> None:
             END IF;
         END
         $$;
-    """))
+    """)
+    )
     op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

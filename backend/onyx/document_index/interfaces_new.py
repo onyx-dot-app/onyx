@@ -388,6 +388,7 @@ class HybridCapable(abc.ABC):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
         """Runs keyword-only search and returns a list of inference chunks.
 
@@ -396,6 +397,10 @@ class HybridCapable(abc.ABC):
             filters: Filters for things like permissions, source type, time,
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
+            include_hidden: When True, surface chunks belonging to documents
+                marked hidden. Defaults to False (user-facing search). The admin
+                search UI passes True so admins can inspect/unhide documents
+                that ordinary users cannot see.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
@@ -32,7 +33,7 @@ def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
-    demo_data_enabled: bool = True,
+    origin: SessionOrigin = SessionOrigin.INTERACTIVE,
 ) -> BuildSession:
     """Create a new build session for the given user.
 
@@ -43,22 +44,24 @@ def create_build_session__no_commit(
         user_id: The user ID
         db_session: Database session
         name: Optional session name
-        demo_data_enabled: Whether this session uses demo data (default True)
+        origin: How the session was started. Defaults to INTERACTIVE
+            (user-driven via the Craft UI); the scheduled-tasks executor
+            passes SCHEDULED so the row is filtered out of the sidebar.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
-        demo_data_enabled=demo_data_enabled,
+        origin=origin,
     )
     db_session.add(session)
     db_session.flush()
 
     logger.info(
-        "Created build session %s for user %s (demo_data=%s)",
+        "Created build session %s for user %s (origin=%s)",
         session.id,
         user_id,
-        demo_data_enabled,
+        origin.value,
     )
     return session
 
@@ -84,9 +87,13 @@ def get_user_build_sessions(
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
-    """Get all build sessions for a user that have at least one message.
+    """Get a user's interactive build sessions that have at least one message.
 
-    Excludes empty (pre-provisioned) sessions from the listing.
+    Sessions created by non-interactive callers (e.g. the scheduled-tasks
+    executor) are intentionally excluded from this listing so they don't
+    leak into the Craft sidebar. The covering composite index
+    ``ix_build_session_user_origin_created`` is built for this exact query
+    shape: ``(user_id, origin, created_at DESC)``.
     """
     # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
@@ -95,6 +102,7 @@ def get_user_build_sessions(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             has_messages,  # Only sessions with messages
         )
         .order_by(desc(BuildSession.created_at))
@@ -106,30 +114,21 @@ def get_user_build_sessions(
 def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
-    demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        demo_data_enabled: Match sessions with this demo_data setting.
-                          If None, matches any session regardless of setting.
     """
-    # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
-    query = db_session.query(BuildSession).filter(
-        BuildSession.user_id == user_id,
-        ~has_messages,  # Sessions with no messages only
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            ~has_messages,
+        )
+        .first()
     )
-
-    if demo_data_enabled is not None:
-        query = query.filter(BuildSession.demo_data_enabled == demo_data_enabled)
-
-    return query.first()
 
 
 def update_session_activity(
@@ -453,7 +452,7 @@ def _is_port_available(port: int) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("0.0.0.0", port))
+            sock.bind(("0.0.0.0", port))  # noqa: S104 — port availability probe; binds wildcard to detect any listener
             logger.debug("Port %s IPv4 wildcard bind successful", port)
     except OSError as e:
         logger.debug("Port %s IPv4 wildcard not available: %s", port, e)

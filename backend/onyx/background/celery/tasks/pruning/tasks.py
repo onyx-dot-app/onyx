@@ -73,6 +73,7 @@ from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
@@ -129,7 +130,7 @@ class PruneCallback(IndexingCallbackBase):
 
 def _resolve_and_update_document_parents(
     db_session: Session,
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     raw_id_to_parent: dict[str, str | None],
 ) -> None:
@@ -318,7 +319,7 @@ def try_creating_prune_generator_task(
     celery_app: Celery,
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     tenant_id: str,
 ) -> str | None:
     """Checks for any conditions that should block the pruning generator task from being
@@ -760,7 +761,7 @@ def connector_pruning_generator_task(
 def monitor_ccpair_pruning_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,
     db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
@@ -781,11 +782,14 @@ def monitor_ccpair_pruning_taskset(
     if initial is None:
         return
 
-    remaining = redis_connector.prune.get_remaining()
-    task_logger.info(
-        f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
-    )
-    if remaining > 0:
+    # Check if the taskset still exists in Redis without reading its size.
+    # redis.exists() is O(1) and very cheap, whereas scard() on a large taskset
+    # (1M+ items during a big pruning fan-out) was OOMKilling the monitoring
+    # pod. Mirrors the deletion-side fix in #11155.
+    if r.exists(redis_connector.prune.taskset_key):
+        task_logger.info(
+            f"Connector pruning progress: cc_pair={cc_pair_id} initial={initial}"
+        )
         return
 
     mark_ccpair_as_pruned(int(cc_pair_id), db_session)
@@ -810,8 +814,8 @@ def monitor_ccpair_pruning_taskset(
 
 def validate_pruning_fences(
     tenant_id: str,
-    r: Redis,
-    r_replica: Redis,
+    r: TenantRedisClient,
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -861,7 +865,7 @@ def validate_pruning_fence(
     key_bytes: bytes,
     reserved_tasks: set[str],
     queued_tasks: set[str],
-    r: Redis,
+    r: TenantRedisClient,
     r_celery: Redis,
 ) -> None:
     """See validate_indexing_fence for an overall idea of validation flows.
@@ -944,8 +948,7 @@ def validate_pruning_fence(
     for member in r.sscan_iter(redis_connector.prune.taskset_key):
         tasks_scanned += 1
 
-        member_bytes = cast(bytes, member)
-        member_str = member_bytes.decode("utf-8")
+        member_str = member.decode("utf-8")
         if member_str in queued_tasks:
             continue
 

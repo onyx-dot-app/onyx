@@ -873,9 +873,9 @@ class TestS3BackedFileStore:
 
         # Verify all operations completed successfully
         assert len(errors) == 0, f"Concurrent operations had errors: {errors}"
-        assert (
-            len(results) == 10
-        ), f"Expected 10 successful operations, got {len(results)}"
+        assert len(results) == 10, (
+            f"Expected 10 successful operations, got {len(results)}"
+        )
 
         # Verify all files were saved correctly
         for file_id, expected_content in results:
@@ -946,15 +946,15 @@ class TestS3BackedFileStore:
 
         # Verify all prefixed files are returned
         for expected_file_id in prefixed_files:
-            assert (
-                expected_file_id in returned_file_ids
-            ), f"File '{expected_file_id}' should be in results but was not found. Returned files: {returned_file_ids}"
+            assert expected_file_id in returned_file_ids, (
+                f"File '{expected_file_id}' should be in results but was not found. Returned files: {returned_file_ids}"
+            )
 
         # Verify no non-prefixed files are returned
         for unexpected_file_id in non_prefixed_files:
-            assert (
-                unexpected_file_id not in returned_file_ids
-            ), f"File '{unexpected_file_id}' should NOT be in results but was found. Returned files: {returned_file_ids}"
+            assert unexpected_file_id not in returned_file_ids, (
+                f"File '{unexpected_file_id}' should NOT be in results but was found. Returned files: {returned_file_ids}"
+            )
 
         # Verify the returned records have correct properties
         for record in prefix_results:
@@ -970,15 +970,15 @@ class TestS3BackedFileStore:
 
         # Should include all our test files
         for file_id in saved_file_ids:
-            assert (
-                file_id in all_returned_ids
-            ), f"File '{file_id}' should be in results for empty prefix"
+            assert file_id in all_returned_ids, (
+                f"File '{file_id}' should be in results for empty prefix"
+            )
 
         # Test with non-existent prefix
         nonexistent_results = file_store.list_files_by_prefix("nonexistent-prefix-")
-        assert (
-            len(nonexistent_results) == 0
-        ), "Should return empty list for non-existent prefix"
+        assert len(nonexistent_results) == 0, (
+            "Should return empty list for non-existent prefix"
+        )
 
     def test_get_file_size(self, file_store: S3BackedFileStore) -> None:
         """Test getting file size from S3"""

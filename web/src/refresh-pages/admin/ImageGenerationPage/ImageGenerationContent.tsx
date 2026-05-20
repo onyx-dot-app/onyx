@@ -7,7 +7,10 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
+import {
+  LLMProviderResponse,
+  LLMProviderView,
+} from "@/lib/languageModels/types";
 import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
@@ -26,7 +29,7 @@ import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { getModelIcon } from "@/lib/llmConfig";
+import { getModelIcon } from "@/lib/languageModels";
 
 const NO_DEFAULT_VALUE = "__none__";
 

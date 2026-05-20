@@ -344,7 +344,7 @@ export function TextFormField({
             placeholder:font-description
             placeholder:${sizeClass.placeholder}
             caret-accent
-            focus-visible:outline-none
+            focus-visible:outline-hidden
             focus-visible:ring-1
             focus-visible:ring-lighter-agent
             focus-visible:ring-offset-1
@@ -644,7 +644,7 @@ export const MarkdownFormField = ({
           <button
             type="button"
             onClick={togglePreview}
-            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-none"
+            className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-hidden"
           >
             {isPreviewOpen ? "Write" : "Preview"}
           </button>
@@ -850,7 +850,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
-                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded p-2"
+                          className="my-auto w-10 h-10 cursor-pointer hover:bg-background-neutral-02 rounded-sm p-2"
                           onClick={() => {
                             if (!disabled) {
                               arrayHelpers.remove(index);

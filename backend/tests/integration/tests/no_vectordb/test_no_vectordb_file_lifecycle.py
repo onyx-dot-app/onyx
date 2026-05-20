@@ -89,37 +89,37 @@ def test_file_upload_process_delete_lifecycle(
     _poll_file_status(file_id, admin_user, UserFileStatus.COMPLETED)
 
     project_files = ProjectManager.get_project_files(project.id, admin_user)
-    assert any(
-        f.id == file_id for f in project_files
-    ), "File should be listed in project files after processing"
+    assert any(f.id == file_id for f in project_files), (
+        "File should be listed in project files after processing"
+    )
 
     # Unlink the file from the project so the delete endpoint will proceed
     unlink_resp = requests.delete(
         f"{API_SERVER_URL}/user/projects/{project.id}/files/{file_id}",
         headers=admin_user.headers,
     )
-    assert (
-        unlink_resp.status_code == 204
-    ), f"Expected 204 on unlink, got {unlink_resp.status_code}: {unlink_resp.text}"
+    assert unlink_resp.status_code == 204, (
+        f"Expected 204 on unlink, got {unlink_resp.status_code}: {unlink_resp.text}"
+    )
 
     delete_resp = requests.delete(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )
-    assert (
-        delete_resp.ok
-    ), f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
+    assert delete_resp.ok, (
+        f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
+    )
     body = delete_resp.json()
-    assert (
-        body["has_associations"] is False
-    ), f"File still has associations after unlink: {body}"
+    assert body["has_associations"] is False, (
+        f"File still has associations after unlink: {body}"
+    )
 
     _file_is_gone(file_id, admin_user)
 
     project_files_after = ProjectManager.get_project_files(project.id, admin_user)
-    assert not any(
-        f.id == file_id for f in project_files_after
-    ), "Deleted file should not appear in project files"
+    assert not any(f.id == file_id for f in project_files_after), (
+        "Deleted file should not appear in project files"
+    )
 
 
 def test_delete_blocked_while_associated(

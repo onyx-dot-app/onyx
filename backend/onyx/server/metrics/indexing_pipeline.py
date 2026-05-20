@@ -210,9 +210,7 @@ class QueueDepthCollector(_CachedCollector):
         inaccurate, which is the safest behavior for alerting.
         """
         try:
-            raw: bytes | str | None = redis_client.lindex(
-                queue_name, -1
-            )  # ty: ignore[invalid-assignment]
+            raw: bytes | str | None = redis_client.lindex(queue_name, -1)  # ty: ignore[invalid-assignment]
             if raw is None:
                 return None
             msg = json.loads(raw)

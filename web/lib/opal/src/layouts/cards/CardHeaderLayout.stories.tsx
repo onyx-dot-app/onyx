@@ -28,7 +28,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
+    <div className="w-112 border rounded-16">
       <Card.Header>
         <ContentAction
           sizePreset="main-ui"
@@ -50,7 +50,7 @@ export const Default: Story = {
 
 export const WithCurrentDefault: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
+    <div className="w-112 border rounded-16">
       <Card.Header>
         <ContentAction
           sizePreset="main-ui"
@@ -76,7 +76,7 @@ export const WithCurrentDefault: Story = {
 
 export const NoRightAction: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
+    <div className="w-112 border rounded-16">
       <Card.Header>
         <ContentAction
           sizePreset="main-ui"
@@ -93,7 +93,7 @@ export const NoRightAction: Story = {
 
 export const WithBottomChildren: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
+    <div className="w-112 border rounded-16">
       <Card.Header
         bottomChildren={
           <div className="flex gap-1 px-2 pb-2">
@@ -130,7 +130,7 @@ export const WithBottomChildren: Story = {
 
 export const LongContent: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
+    <div className="w-112 border rounded-16">
       <Card.Header>
         <ContentAction
           sizePreset="main-ui"

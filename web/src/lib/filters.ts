@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 import { DocumentSetSummary, ValidSources } from "./types";
 import { getSourcesForPersona } from "./sources";
 
@@ -7,7 +7,7 @@ export function computeAvailableFilters({
   availableSources,
   availableDocumentSets,
 }: {
-  selectedPersona: Persona | undefined | null;
+  selectedPersona: Agent | undefined | null;
   availableSources: ValidSources[];
   availableDocumentSets: DocumentSetSummary[];
 }): [ValidSources[], DocumentSetSummary[]] {

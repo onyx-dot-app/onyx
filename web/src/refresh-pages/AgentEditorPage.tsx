@@ -6,8 +6,8 @@ import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
-import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildAgentAvatarUrl } from "@/app/app/components/files/images/utils";
+import { FullAgent } from "@/lib/agents/types";
+import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -22,7 +22,7 @@ import {
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import {
   STARTER_MESSAGES_EXAMPLES,
@@ -35,6 +35,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -49,7 +50,7 @@ import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/app/projects/projectsService";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
@@ -67,13 +68,10 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents } from "@/hooks/useAgents";
-import {
-  createPersona,
-  updatePersona,
-  PersonaUpsertParameters,
-} from "@/app/admin/agents/lib";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useAgents } from "@/lib/agents/hooks";
+import { createAgent, updateAgent } from "@/lib/agents/svc";
+import { AgentUpsertParameters } from "@/lib/agents/types";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
@@ -87,7 +85,7 @@ import {
   deleteAgent,
   updateAgentFeaturedStatus,
   updateAgentSharedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
@@ -95,10 +93,11 @@ import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 interface AgentIconEditorProps {
-  existingAgent?: FullPersona | null;
+  existingAgent?: FullAgent | null;
 }
 
 function FormWarningsEffect() {
@@ -212,7 +211,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
-            <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
+            <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
               <CustomAgentAvatar
                 size={imageSrc ? 7.5 * 16 : 40}
@@ -243,7 +242,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-1">
+              <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton
                   key="default-icon"
                   icon={() => (
@@ -433,7 +432,7 @@ function MCPServerCard({
   );
 }
 
-function StarterMessages() {
+function AgentStarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
   const { values } = useFormikContext<{
@@ -477,7 +476,7 @@ function StarterMessages() {
 }
 
 export interface AgentEditorPageProps {
-  agent?: FullPersona;
+  agent?: FullAgent;
   refreshAgent?: () => void;
 }
 
@@ -493,41 +492,7 @@ export default function AgentEditorPage({
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  // LLM Model Selection
-  const getCurrentLlm = useCallback(
-    (values: any, llmProviders: any) =>
-      values.llm_model_version_override && values.llm_model_provider_override
-        ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
-            );
-            return structureValue(
-              values.llm_model_provider_override,
-              provider?.provider || "",
-              values.llm_model_version_override
-            );
-          })()
-        : null,
-    []
-  );
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName && name) {
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
-        }
-      }
-    },
-    []
-  );
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -542,6 +507,48 @@ export default function AgentEditorPage({
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
+
+  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
+  const getCurrentLlm = useCallback((values: any, providers: any) => {
+    // Canonical path: resolve from model configuration ID.
+    if (values.default_model_configuration_id != null) {
+      for (const p of providers ?? []) {
+        const mc = p.model_configurations?.find(
+          (m: any) => m.id === values.default_model_configuration_id
+        );
+        if (mc) {
+          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  const onLlmSelect = useCallback(
+    (selected: string | null, setFieldValue: any) => {
+      if (selected === null) {
+        setFieldValue("default_model_configuration_id", null);
+      } else {
+        const { modelName, name } = parseLlmDescriptor(selected);
+        if (modelName) {
+          // `name` is either the display name or String(provider.id) for nameless
+          // providers, so we match by both.
+          const provider = llmProviders?.find(
+            (p: any) => p.name === name || String(p.id) === name
+          );
+          const modelConfig = provider?.model_configurations?.find(
+            (mc: any) => mc.name === modelName
+          );
+          setFieldValue(
+            "default_model_configuration_id",
+            modelConfig?.id ?? null
+          );
+        }
+      }
+    },
+    [llmProviders]
+  );
+
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
@@ -566,6 +573,9 @@ export default function AgentEditorPage({
   );
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const codingAgentTool = availableTools?.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
@@ -625,10 +635,8 @@ export default function AgentEditorPage({
     selected_sources: [] as ValidSources[],
 
     // Advanced
-    llm_model_provider_override:
-      existingAgent?.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      existingAgent?.llm_model_version_override ?? null,
+    default_model_configuration_id:
+      existingAgent?.default_model_configuration_id ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -660,6 +668,12 @@ export default function AgentEditorPage({
       !!codeInterpreterTool &&
       (existingAgent?.tools?.some(
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
+    coding_agent:
+      !!codingAgentTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
       ) ??
         false),
     // MCP servers - dynamically add fields for each server with nested tool fields
@@ -737,8 +751,7 @@ export default function AgentEditorPage({
     selected_sources: Yup.array().of(Yup.string()),
 
     // Advanced
-    llm_model_provider_override: Yup.string().nullable().optional(),
-    llm_model_version_override: Yup.string().nullable().optional(),
+    default_model_configuration_id: Yup.number().nullable().optional(),
     knowledge_cutoff_date: Yup.date()
       .nullable()
       .optional()
@@ -778,7 +791,7 @@ export default function AgentEditorPage({
         }));
 
       // Send null instead of empty array if no starter messages
-      const finalStarterMessages =
+      const finalAgentStarterMessages =
         starterMessages.length > 0 ? starterMessages : null;
 
       // Always look up tools in availableTools to ensure we can find all tools
@@ -800,6 +813,9 @@ export default function AgentEditorPage({
       }
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
+      }
+      if (values.coding_agent && codingAgentTool) {
+        toolIds.push(codingAgentTool.id);
       }
 
       // Collect enabled MCP tool IDs
@@ -834,16 +850,16 @@ export default function AgentEditorPage({
       });
 
       // Build submission data
-      const submissionData: PersonaUpsertParameters = {
+      const submissionData: AgentUpsertParameters = {
         name: values.name,
         description: values.description,
         document_set_ids: values.enable_knowledge
           ? values.document_set_ids
           : [],
         is_public: values.is_public,
-        llm_model_provider_override: values.llm_model_provider_override || null,
-        llm_model_version_override: values.llm_model_version_override || null,
-        starter_messages: finalStarterMessages,
+        default_model_configuration_id:
+          (values as any).default_model_configuration_id ?? null,
+        starter_messages: finalAgentStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
         tool_ids: toolIds,
@@ -870,10 +886,10 @@ export default function AgentEditorPage({
 
       // Call API
       let personaResponse;
-      if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+      if (existingAgent) {
+        personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
-        personaResponse = await createPersona(submissionData);
+        personaResponse = await createAgent(submissionData);
       }
 
       // Handle response
@@ -913,16 +929,19 @@ export default function AgentEditorPage({
   async function handleDeleteAgent() {
     if (!existingAgent) return;
 
-    const error = await deleteAgent(existingAgent.id);
-
-    if (error) {
-      toast.error(`Failed to delete agent: ${error}`);
-    } else {
+    try {
+      await deleteAgent(existingAgent.id);
       toast.success("Agent deleted successfully");
-
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
+    } catch (e) {
+      console.error("Delete agent error:", e);
+      toast.error(
+        `Failed to delete agent: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -1155,7 +1174,7 @@ export default function AgentEditorPage({
                           userIds,
                           groupIds,
                           isPublic,
-                          isPaidEnterpriseFeaturesEnabled,
+                          businessTier,
                           labelIds
                         );
                       } catch (error) {
@@ -1346,7 +1365,7 @@ export default function AgentEditorPage({
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
                         >
-                          <StarterMessages />
+                          <AgentStarterMessages />
                         </InputVertical>
                       </GeneralLayouts.Section>
 
@@ -1472,6 +1491,22 @@ export default function AgentEditorPage({
                                   <SwitchField
                                     name="code_interpreter"
                                     disabled={!codeInterpreterTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
+
+                            <Disabled disabled={!codingAgentTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="coding_agent"
+                                  title="Coding Agent"
+                                  description="Investigate a GitHub repository and answer questions about its code."
+                                  disabled={!codingAgentTool}
+                                >
+                                  <SwitchField
+                                    name="coding_agent"
+                                    disabled={!codingAgentTool}
                                   />
                                 </InputHorizontal>
                               </Card>

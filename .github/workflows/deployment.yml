@@ -32,6 +32,7 @@ jobs:
       is-beta: ${{ steps.check.outputs.is-beta }}
       is-beta-standalone: ${{ steps.check.outputs.is-beta-standalone }}
       is-latest: ${{ steps.check.outputs.is-latest }}
+      is-experimental-cc4a: ${{ steps.check.outputs.is-experimental-cc4a }}
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
@@ -69,6 +70,7 @@ jobs:
           IS_BETA_STANDALONE=false
           IS_LATEST=false
           IS_PROD_TAG=false
+          IS_EXPERIMENTAL_CC4A=false
           IS_TEST_RUN=false
           BUILD_DESKTOP=false
           BUILD_WEB=false
@@ -93,9 +95,16 @@ jobs:
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta(\.[0-9]+)?$ ]]; then
             IS_BETA=true
           fi
+          if [[ "$TAG" == experimental-cc4a.* ]]; then
+            IS_EXPERIMENTAL_CC4A=true
+          fi
 
           # Determine what to build based on tag type
-          if [[ "$IS_CLOUD" == "true" ]]; then
+          if [[ "$IS_EXPERIMENTAL_CC4A" == "true" ]]; then
+            # experimental-cc4a tags: craft backend + web + model-server, no regular backend
+            BUILD_BACKEND=false
+            BUILD_WEB=true
+          elif [[ "$IS_CLOUD" == "true" ]]; then
             BUILD_WEB_CLOUD=true
           else
             BUILD_WEB=true
@@ -122,8 +131,9 @@ jobs:
             fi
           fi
 
-          # Build craft-latest backend alongside the regular latest.
-          if [[ "$IS_LATEST" == "true" ]]; then
+          # Build craft backend for stable releases (tagged craft-latest) and
+          # experimental cc4a tags (tagged craft-edge for dev clusters).
+          if [[ "$IS_LATEST" == "true" ]] || [[ "$IS_EXPERIMENTAL_CC4A" == "true" ]]; then
             BUILD_BACKEND_CRAFT=true
           fi
 
@@ -148,6 +158,7 @@ jobs:
             echo "is-beta=$IS_BETA"
             echo "is-beta-standalone=$IS_BETA_STANDALONE"
             echo "is-latest=$IS_LATEST"
+            echo "is-experimental-cc4a=$IS_EXPERIMENTAL_CC4A"
             echo "is-test-run=$IS_TEST_RUN"
             echo "sanitized-tag=$SANITIZED_TAG"
             echo "short-sha=$SHORT_SHA"
@@ -156,7 +167,7 @@ jobs:
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
-    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ !startsWith(github.ref_name, 'nightly-latest') && !startsWith(github.ref_name, 'experimental-') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -432,7 +443,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -482,12 +493,9 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-amd64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -506,7 +514,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -556,12 +564,9 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-arm64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -580,7 +585,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -616,6 +621,7 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('web-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta == 'true' && 'beta' || '' }}
 
@@ -646,7 +652,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -707,12 +713,8 @@ jobs:
             SENTRY_RELEASE=${{ github.sha }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-amd64,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -731,7 +733,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -792,12 +794,8 @@ jobs:
             SENTRY_RELEASE=${{ github.sha }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:cloudweb-cache-arm64,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -816,7 +814,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -878,7 +876,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -927,12 +925,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-amd64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -951,7 +946,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -1000,12 +995,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-arm64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -1024,7 +1016,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -1089,7 +1081,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -1138,12 +1130,8 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             ENABLE_CRAFT=true
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-amd64,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -1162,7 +1150,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -1211,12 +1199,8 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
             ENABLE_CRAFT=true
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-craft-cache-arm64,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+          cache-to: type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
@@ -1236,7 +1220,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -1269,7 +1253,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=craft-latest
+            type=raw,value=${{ needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || 'craft-latest' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && github.ref_name || '' }}
 
       - name: Create and push manifest
         env:
@@ -1299,7 +1284,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -1352,12 +1337,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-amd64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
@@ -1379,7 +1361,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -1432,12 +1414,9 @@ jobs:
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
-          cache-to: |
-            type=inline
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-arm64,mode=max
+          cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
           provenance: false
@@ -1458,7 +1437,7 @@ jobs:
     env:
       REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
@@ -1494,6 +1473,7 @@ jobs:
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('model-server-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'craft-latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-experimental-cc4a == 'true' && 'craft-edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
             type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
 
@@ -1515,12 +1495,14 @@ jobs:
       - merge-web
       - merge-web-cloud
       - merge-backend
+      - merge-backend-craft
       - merge-model-server
     if: >-
       always() && !cancelled() &&
       (needs.merge-web.result == 'success' ||
        needs.merge-web-cloud.result == 'success' ||
        needs.merge-backend.result == 'success' ||
+       needs.merge-backend-craft.result == 'success' ||
        needs.merge-model-server.result == 'success')
     runs-on:
       - runs-on
@@ -1550,7 +1532,13 @@ jobs:
           case "$COMPONENT" in
             web) RESULT="$MERGE_WEB" ;;
             web-cloud) RESULT="$MERGE_WEB_CLOUD" ;;
-            backend) RESULT="$MERGE_BACKEND" ;;
+            backend)
+              if [ "$MERGE_BACKEND" == "success" ] || [ "$MERGE_BACKEND_CRAFT" == "success" ]; then
+                RESULT="success"
+              else
+                RESULT="skipped"
+              fi
+              ;;
             model-server) RESULT="$MERGE_MODEL_SERVER" ;;
           esac
           if [ "$RESULT" == "success" ]; then
@@ -1563,9 +1551,10 @@ jobs:
           MERGE_WEB: ${{ needs.merge-web.result }}
           MERGE_WEB_CLOUD: ${{ needs.merge-web-cloud.result }}
           MERGE_BACKEND: ${{ needs.merge-backend.result }}
+          MERGE_BACKEND_CRAFT: ${{ needs.merge-backend-craft.result }}
           MERGE_MODEL_SERVER: ${{ needs.merge-model-server.result }}
 
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout

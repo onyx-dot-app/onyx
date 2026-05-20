@@ -7,14 +7,15 @@ import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -49,7 +50,7 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +88,7 @@ export default function EditUserModal({
     );
   }, [memberGroupIds, initialMemberGroupIds]);
 
-  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+  const visibleRoles = businessTier
     ? ASSIGNABLE_ROLES
     : ASSIGNABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
 
@@ -220,9 +221,7 @@ export default function EditUserModal({
                   ) : (
                     <ShadowDiv
                       shadowHeight="0.75rem"
-                      className={cn(
-                        "flex flex-col gap-1 max-h-[15rem] rounded-08"
-                      )}
+                      className={cn("flex flex-col gap-1 max-h-60 rounded-08")}
                     >
                       {dropdownGroups.map((group) => {
                         const isMember = memberGroupIds.has(group.id);
@@ -247,7 +246,7 @@ export default function EditUserModal({
               </Popover>
 
               <ShadowDiv
-                className={cn(" max-h-[11rem] flex flex-col gap-1 rounded-08")}
+                className={cn(" max-h-44 flex flex-col gap-1 rounded-08")}
                 shadowHeight="0.75rem"
               >
                 {joinedGroups.length === 0 ? (

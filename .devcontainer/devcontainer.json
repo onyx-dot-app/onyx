@@ -1,6 +1,6 @@
 {
   "name": "Onyx Dev Sandbox",
-  "image": "onyxdotapp/onyx-devcontainer@sha256:e663b2bfed88cfc9fd7c86cae25885816692a1e19d9e88110a97ff8d4f700a25",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:b5b6e7a3c66085b65dc3aec5af7da879ab4dd6e5c36cfccb7f3b4e9b1e970d5a",
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
@@ -13,12 +13,15 @@
     "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",
     "source=onyx-devcontainer-cache,target=/home/dev/.cache,type=volume",
-    "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume"
+    "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume",
+    "source=onyx-devcontainer-web-node-modules,target=/workspace/web/node_modules,type=volume",
+    "source=onyx-devcontainer-web-next,target=/workspace/web/.next,type=volume"
   ],
   "containerEnv": {
     "COLORTERM": "truecolor",
     "GH_TOKEN": "${localEnv:GH_TOKEN}",
     "MODEL_SERVER_HOST": "inference_model_server",
+    "ONYX_DEVCONTAINER_FIREWALL": "${localEnv:ONYX_DEVCONTAINER_FIREWALL}",
     "OPENSEARCH_HOST": "opensearch",
     "POSTGRES_HOST": "relational_db",
     "REDIS_HOST": "cache",
@@ -31,6 +34,6 @@
   "initializeCommand": "docker network create onyx_default 2>/dev/null || true",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && sudo bash /workspace/.devcontainer/init-firewall.sh",
+  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && if [ \"${ONYX_DEVCONTAINER_FIREWALL:-}\" = \"1\" ]; then sudo bash /workspace/.devcontainer/init-firewall.sh; else echo 'Devcontainer firewall disabled. Set ONYX_DEVCONTAINER_FIREWALL=1 on the host before starting the container to enable it.'; fi",
   "waitFor": "postStartCommand"
 }

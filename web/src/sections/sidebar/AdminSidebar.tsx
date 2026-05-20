@@ -9,8 +9,8 @@ import { useSidebarFolded } from "@/layouts/sidebar-layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { CombinedSettings } from "@/interfaces/settings";
+import { CombinedSettings, Tier } from "@/interfaces/settings";
+import { tierAtLeast } from "@/lib/tiers";
 import { Divider, SidebarTab } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import Spacer from "@/refresh-components/Spacer";
@@ -45,12 +45,13 @@ interface SidebarItemEntry {
   link: string;
   error?: boolean;
   disabled?: boolean;
+  requiredTier?: Tier;
 }
 
 function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
-  enableEnterprise: boolean,
+  tier: Tier | undefined,
   settings: CombinedSettings | null,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
@@ -63,12 +64,17 @@ function buildItems(
     items.push({ ...sidebarItem(route), section });
   };
 
-  const addDisabled = (
+  const addGated = (
     section: string,
     route: Parameters<typeof sidebarItem>[0],
-    isDisabled: boolean
+    requiredTier: Tier
   ) => {
-    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+    items.push({
+      ...sidebarItem(route),
+      section,
+      disabled: !tierAtLeast(tier, requiredTier),
+      requiredTier,
+    });
   };
 
   // 1. No header — core configuration (admin only)
@@ -81,16 +87,17 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (!enableCloud && customAnalyticsEnabled) {
-      addDisabled(
+      addGated(
         SECTIONS.UNLABELED,
         ADMIN_ROUTES.CUSTOM_ANALYTICS,
-        !enableEnterprise
+        Tier.ENTERPRISE
       );
     }
   }
 
   // 2. Agents & Actions
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.SKILLS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
@@ -106,27 +113,24 @@ function buildItems(
         error: settings?.settings.needs_reindexing,
       });
     }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
-    }
   }
 
   // 4. Integrations (admin only)
   if (!isCurator) {
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
+    addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS, Tier.BUSINESS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
     if (hooksEnabled) {
-      add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS);
+      addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS, Tier.ENTERPRISE);
     }
   }
 
   // 5. Permissions
   if (!isCurator) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
-  } else if (enableEnterprise) {
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, Tier.ENTERPRISE);
+  } else if (tierAtLeast(tier, Tier.BUSINESS)) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
@@ -135,23 +139,19 @@ function buildItems(
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
-    addDisabled(
+    addGated(
       SECTIONS.ORGANIZATION,
       ADMIN_ROUTES.TOKEN_RATE_LIMITS,
-      !enableEnterprise
+      Tier.ENTERPRISE
     );
-    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
+    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
   }
 
   // 7. Usage (admin only)
   if (!isCurator) {
-    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     if (settings?.settings.query_history_type !== "disabled") {
-      addDisabled(
-        SECTIONS.USAGE,
-        ADMIN_ROUTES.QUERY_HISTORY,
-        !enableEnterprise
-      );
+      addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
   }
 
@@ -198,7 +198,7 @@ function AdminSidebarInner() {
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-  const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const tier = settings?.settings.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
@@ -210,15 +210,17 @@ function AdminSidebarInner() {
       ? true
       : Boolean(
           (billingData && hasActiveSubscription(billingData)) ||
-            licenseData?.has_license
+          licenseData?.has_license
         );
+  // Hooks are ENTERPRISE-only and only available for self-hosted single-tenant.
   const hooksEnabled =
-    enableEnterprise && (settings?.settings.hooks_enabled ?? false);
+    tierAtLeast(tier, Tier.ENTERPRISE) &&
+    (settings?.settings.hooks_enabled ?? false);
 
   const allItems = buildItems(
     isCurator,
     NEXT_PUBLIC_CLOUD_ENABLED,
-    enableEnterprise,
+    tier,
     settings,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
@@ -292,13 +294,15 @@ function AdminSidebarInner() {
             title={group.section}
             disabled
           >
-            {group.items.map(({ link, icon, name }) => (
+            {group.items.map(({ link, icon, name, requiredTier }) => (
               <SidebarTab
                 key={link}
                 disabled
                 icon={icon}
                 tooltip={markdown(
-                  "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                  requiredTier === Tier.ENTERPRISE
+                    ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+                    : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
                 )}
               >
                 {name}

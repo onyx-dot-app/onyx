@@ -20,7 +20,7 @@ if DISABLE_MODEL_SERVER:
     INDEXING_MODEL_SERVER_HOST = "disabled"
 else:
     MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
+    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"  # noqa: S104 — model server allowed-host default; intentional for containerized deployment
     INDEXING_MODEL_SERVER_HOST = (
         os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
     )
@@ -169,8 +169,9 @@ DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
 
 
 async def async_return_default_schema(
-    *args: Any, **kwargs: Any  # noqa: ARG001
-) -> str:  # noqa: ARG001
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
+) -> str:
     return POSTGRES_DEFAULT_SCHEMA
 
 

@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -58,9 +58,13 @@ def admin_search(
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)
     else:
-        query_embedding = get_query_embedding(query, db_session)
-        matching_chunks = document_index.admin_retrieval(
-            query=query, query_embedding=query_embedding, filters=final_filters
+        matching_chunks = document_index.keyword_retrieval(
+            query=query,
+            filters=final_filters,
+            num_to_retrieve=NUM_RETURNED_HITS,
+            # Admin search should expose hidden documents so admins can inspect
+            # / unhide them.
+            include_hidden=True,
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)

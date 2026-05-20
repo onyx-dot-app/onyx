@@ -147,7 +147,6 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
 def test_salesforce_connector_poll_source(
     salesforce_connector: SalesforceConnector,
 ) -> None:
-
     intermediate_time = datetime(
         2024, 6, 3, 0, 0, 0, tzinfo=timezone.utc
     )  # roughly 92 docs

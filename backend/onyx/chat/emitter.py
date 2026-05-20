@@ -38,3 +38,19 @@ class Emitter:
             obj=packet.obj,
         )
         self._merged_queue.put((self._model_idx, tagged))
+
+
+class NullEmitter(Emitter):
+    """Emitter that silently discards all packets.
+
+    Used by callers that run tools outside the chat streaming context
+    (e.g. the Search API, MCP server).
+    """
+
+    def __init__(self) -> None:
+        self._model_idx = 0
+        self._merged_queue = None  # type: ignore[assignment]
+        self._drain_done = None
+
+    def emit(self, packet: Packet) -> None:
+        pass

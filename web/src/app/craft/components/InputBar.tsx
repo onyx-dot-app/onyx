@@ -5,14 +5,18 @@ import {
   forwardRef,
   useImperativeHandle,
   useCallback,
+  useMemo,
   useRef,
+  useState,
   type ChangeEvent,
   type ClipboardEvent,
   type KeyboardEvent,
+  type SyntheticEvent,
 } from "react";
-import { useRouter } from "next/navigation";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { isImageFile } from "@/lib/utils";
+import PasteTilePopover from "@/sections/input/PasteTilePopover";
+import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
@@ -20,12 +24,8 @@ import {
   BuildFile,
   UploadFileStatus,
 } from "@/app/craft/contexts/UploadFilesContext";
-import { useDemoDataEnabled } from "@/app/craft/hooks/useBuildSessionStore";
-import { CRAFT_CONFIGURE_PATH } from "@/app/craft/v1/constants";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import SelectButton from "@/refresh-components/buttons/SelectButton";
-import { Button } from "@opal/components";
-import { Tooltip } from "@opal/components";
+import { Button, Tooltip } from "@opal/components";
 import {
   SvgArrowUp,
   SvgClock,
@@ -34,10 +34,13 @@ import {
   SvgLoader,
   SvgX,
   SvgPaperclip,
-  SvgOrganization,
   SvgAlertCircle,
 } from "@opal/icons";
 import { useContentEditable } from "@/hooks/useContentEditable";
+import { useUser } from "@/providers/UserProvider";
+import useUserSkills from "@/hooks/useUserSkills";
+import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import { getTextContent } from "@/lib/contentEditable";
 
 export interface InputBarHandle {
   reset: () => void;
@@ -46,20 +49,12 @@ export interface InputBarHandle {
 }
 
 export interface InputBarProps {
-  onSubmit: (
-    message: string,
-    files: BuildFile[],
-    demoDataEnabled: boolean
-  ) => void;
+  onSubmit: (message: string, files: BuildFile[]) => void;
   isRunning: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /** When true, shows spinner on send button with "Initializing sandbox..." tooltip */
   sandboxInitializing?: boolean;
-  /** When true, removes bottom rounding to allow seamless connection with components below */
   noBottomRounding?: boolean;
-  /** Whether this is the welcome page (no existing session in URL). Used for Demo Data pill. */
-  isWelcomePage?: boolean;
 }
 
 /**
@@ -107,7 +102,7 @@ function BuildFileCard({
       </span>
       <button
         onClick={() => onRemove(file.id)}
-        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded"
+        className="ml-1 p-0.5 hover:bg-background-neutral-02 rounded-sm"
       >
         <SvgX className="h-3 w-3 text-text-03" />
       </button>
@@ -157,12 +152,10 @@ const InputBar = memo(
         placeholder = "Describe your task...",
         sandboxInitializing = false,
         noBottomRounding = false,
-        isWelcomePage = false,
       },
       ref
     ) => {
-      const router = useRouter();
-      const demoDataEnabled = useDemoDataEnabled();
+      const { user } = useUser();
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
         ref: inputRef,
@@ -172,10 +165,19 @@ const InputBar = memo(
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
-        insertTextAtCursor,
+        pasteText,
+        handleCopy,
+        handleCut,
         setCursorToEnd,
+        handleTileMouseDown,
+        handleTileClick,
+        handleTileKeyDown,
+        tilePopover,
+        dismissTilePopover,
+        updateTileText,
       } = useContentEditable({
         wrapperRef: inputWrapperRef,
+        pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
       });
 
       const containerRef = useRef<HTMLDivElement>(null);
@@ -188,6 +190,108 @@ const InputBar = memo(
         clearFiles,
         hasUploadingFiles,
       } = useUploadFilesContext();
+
+      // `/` skill picker state. The picker watches contentEditable input,
+      // shows accessible skills, and on select replaces the `/<query>` token
+      // with `/<slug> `.
+      const { data: skillsData } = useUserSkills();
+      const pickerSkills = useMemo(
+        () => toPickerSkills(skillsData),
+        [skillsData]
+      );
+      const [skillPicker, setSkillPicker] = useState<{
+        open: boolean;
+        anchorRect: DOMRect | null;
+        query: string;
+        slashIndex: number;
+      }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
+
+      const getTextBeforeCursor = useCallback((): string | null => {
+        const el = inputRef.current;
+        if (!el) return null;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0);
+        if (!el.contains(range.startContainer)) return null;
+        const cloned = range.cloneRange();
+        cloned.selectNodeContents(el);
+        cloned.setEnd(range.startContainer, range.startOffset);
+        const tmp = document.createElement("div");
+        tmp.appendChild(cloned.cloneContents());
+        return getTextContent(tmp);
+      }, [inputRef]);
+
+      const getCaretRect = useCallback((): DOMRect | null => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0).cloneRange();
+        range.collapse(true);
+        const rect = range.getBoundingClientRect();
+        if (
+          rect.top === 0 &&
+          rect.left === 0 &&
+          rect.width === 0 &&
+          rect.height === 0
+        ) {
+          return inputRef.current?.getBoundingClientRect() ?? null;
+        }
+        return rect;
+      }, [inputRef]);
+
+      const evaluateSkillPicker = useCallback(() => {
+        const textBefore = getTextBeforeCursor();
+        if (textBefore === null) {
+          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
+          return;
+        }
+        const trigger = detectSlashTrigger(textBefore);
+        if (!trigger) {
+          setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
+          return;
+        }
+        setSkillPicker({
+          open: true,
+          anchorRect: getCaretRect(),
+          query: trigger.query,
+          slashIndex: trigger.slashIndex,
+        });
+      }, [getCaretRect, getTextBeforeCursor]);
+
+      const handleEnhancedInput = useCallback(
+        (event: SyntheticEvent<HTMLDivElement>) => {
+          onInput(event);
+          evaluateSkillPicker();
+        },
+        [onInput, evaluateSkillPicker]
+      );
+
+      // Re-evaluate the slash trigger when the caret moves without input
+      // (arrow keys, Home/End, mouse clicks). Without this, the picker can
+      // hold a stale `slashIndex`/`query` from a previous position and
+      // replace the wrong text on select.
+      const handleSelectionChange = useCallback(() => {
+        evaluateSkillPicker();
+      }, [evaluateSkillPicker]);
+
+      const closeSkillPicker = useCallback(() => {
+        setSkillPicker((s) => ({ ...s, open: false }));
+      }, []);
+
+      const handleSkillPickerSelect = useCallback(
+        (slug: string) => {
+          setSkillPicker((prev) => {
+            if (!prev.open) return prev;
+            const replacement = `/${slug} `;
+            const newText =
+              message.slice(0, prev.slashIndex) +
+              replacement +
+              message.slice(prev.slashIndex + 1 + prev.query.length);
+            setMessage(newText);
+            return { ...prev, open: false };
+          });
+        },
+        [message, setMessage]
+      );
 
       useImperativeHandle(ref, () => ({
         reset: () => {
@@ -227,9 +331,10 @@ const InputBar = memo(
           event.preventDefault();
           const text = event.clipboardData.getData("text/plain");
           if (!text) return;
-          insertTextAtCursor(text);
+
+          pasteText(text);
         },
-        [disabled, uploadFiles, insertTextAtCursor]
+        [disabled, uploadFiles, pasteText]
       );
 
       const handleSubmit = useCallback(() => {
@@ -240,7 +345,7 @@ const InputBar = memo(
         const hasFiles = currentMessageFiles.length > 0;
 
         if (hasMessage) {
-          onSubmit(message.trim(), currentMessageFiles, demoDataEnabled);
+          onSubmit(message.trim(), currentMessageFiles);
           clearMessage();
           clearFiles({ suppressRefetch: true });
         } else if (hasFiles) {
@@ -255,12 +360,13 @@ const InputBar = memo(
         onSubmit,
         currentMessageFiles,
         clearFiles,
-        demoDataEnabled,
         clearMessage,
       ]);
 
       const handleKeyDown = useCallback(
         (event: KeyboardEvent<HTMLDivElement>) => {
+          if (handleTileKeyDown(event)) return;
+
           // Shift+Enter falls through to browser default: inserts <br>
           if (
             event.key === "Enter" &&
@@ -271,7 +377,7 @@ const InputBar = memo(
             handleSubmit();
           }
         },
-        [handleSubmit]
+        [handleSubmit, handleTileKeyDown]
       );
 
       const canSubmit =
@@ -320,18 +426,20 @@ const InputBar = memo(
                 contentEditable={!disabled}
                 suppressContentEditableWarning
                 onPaste={handlePaste}
-                onInput={onInput}
+                onInput={handleEnhancedInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
+                onKeyUp={handleSelectionChange}
+                onMouseUp={handleSelectionChange}
                 className={cn(
                   "w-full",
                   "h-full",
                   "min-h-[44px]",
-                  "outline-none",
+                  "outline-hidden",
                   "bg-transparent",
                   "whitespace-pre-wrap",
-                  "break-words",
+                  "wrap-break-word",
                   "overscroll-contain",
                   "overflow-y-auto",
                   "px-3",
@@ -350,6 +458,10 @@ const InputBar = memo(
                 aria-placeholder={placeholder}
                 data-placeholder={placeholder}
                 data-empty={!message ? "" : undefined}
+                onCopy={handleCopy}
+                onCut={handleCut}
+                onMouseDown={handleTileMouseDown}
+                onClick={handleTileClick}
               />
             </div>
 
@@ -365,27 +477,6 @@ const InputBar = memo(
                   prominence="tertiary"
                   onClick={() => fileInputRef.current?.click()}
                 />
-                {/* Demo Data indicator pill - only show on welcome page (no session) when demo data is enabled */}
-                {demoDataEnabled && isWelcomePage && (
-                  <Tooltip
-                    tooltip="Switch to your data in the Configure panel!"
-                    side="top"
-                  >
-                    <span>
-                      <SelectButton
-                        disabled={disabled}
-                        leftIcon={SvgOrganization}
-                        engaged={demoDataEnabled}
-                        action
-                        folded
-                        onClick={() => router.push(CRAFT_CONFIGURE_PATH)}
-                        className="bg-action-link-01"
-                      >
-                        Demo Data Active
-                      </SelectButton>
-                    </span>
-                  </Tooltip>
-                )}
               </div>
 
               {/* Bottom right controls */}
@@ -406,6 +497,22 @@ const InputBar = memo(
               </div>
             </div>
           </div>
+          {tilePopover && (
+            <PasteTilePopover
+              text={tilePopover.text}
+              tileElement={tilePopover.tile}
+              onDismiss={dismissTilePopover}
+              onTextChange={updateTileText}
+            />
+          )}
+          <SkillPickerPopover
+            open={skillPicker.open}
+            anchorRect={skillPicker.anchorRect}
+            query={skillPicker.query}
+            skills={pickerSkills}
+            onSelect={handleSkillPickerSelect}
+            onClose={closeSkillPicker}
+          />
         </Disabled>
       );
     }

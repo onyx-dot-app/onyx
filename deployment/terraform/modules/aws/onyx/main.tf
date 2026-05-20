@@ -74,6 +74,10 @@ module "eks" {
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
 
+  main_node_subnet_ids = length(var.main_node_subnet_ids) > 0 ? var.main_node_subnet_ids : (
+    var.main_node_private_subnets_only ? local.private_subnets : []
+  )
+
   # Wire RDS IAM connection for the same IRSA service account used by apps
   enable_rds_iam_for_service_account = var.enable_iam_auth
   rds_db_username                    = var.postgres_username

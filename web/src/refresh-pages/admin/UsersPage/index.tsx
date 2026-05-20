@@ -5,7 +5,8 @@ import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import { useScimToken } from "@/hooks/useScimToken";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
 import type { StatusFilter } from "./interfaces";
@@ -19,10 +20,10 @@ import InviteUsersModal from "./InviteUsersModal";
 // ---------------------------------------------------------------------------
 
 function UsersContent() {
-  const isEe = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const { data: scimToken } = useScimToken();
-  const showScim = isEe && !!scimToken;
+  const showScim = enterpriseTier && !!scimToken;
 
   const { activeCount, invitedCount, pendingCount, roleCounts, statusCounts } =
     useUserCounts();

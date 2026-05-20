@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { PopoverMenu } from "@/refresh-components/Popover";
+import { PopoverMenu } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { LLMOption } from "./interfaces";
 import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   Collapsible,
   CollapsibleContent,

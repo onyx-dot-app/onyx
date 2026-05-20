@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
@@ -18,7 +19,7 @@ import (
 // Model is the root Bubble Tea model.
 type Model struct {
 	config config.OnyxCliConfig
-	client *api.Client
+	client api.ClientAPI
 
 	viewport *viewport
 	input    inputModel
@@ -26,6 +27,8 @@ type Model struct {
 
 	width  int
 	height int
+
+	startMode startMode
 
 	// Chat state
 	chatSessionID   *string
@@ -41,6 +44,9 @@ type Model struct {
 	needsRename     bool
 	agentStarted bool
 
+	// Configure state
+	configState *configState
+
 	// Quit state
 	quitPending    bool
 	splashShown    bool
@@ -48,8 +54,7 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model.
-func NewModel(cfg config.OnyxCliConfig) Model {
-	client := api.NewClient(cfg)
+func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 	parentID := -1
 
 	return Model{
@@ -65,8 +70,18 @@ func NewModel(cfg config.OnyxCliConfig) Model {
 	}
 }
 
+// NewFirstRunModel creates a TUI model that auto-enters configure mode on startup.
+func NewFirstRunModel(cfg config.OnyxCliConfig) Model {
+	model := NewModel(cfg, nil)
+	model.startMode = startFirstRun
+	return model
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
 	return loadAgentsCmd(m.client)
 }
 
@@ -91,13 +106,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.textInput.Width = msg.Width - 4
 		if !m.splashShown {
 			m.splashShown = true
-			// bottomHeight = sep + input + sep + status = 4 (approx)
 			viewportHeight := msg.Height - 4
 			if viewportHeight < 1 {
 				viewportHeight = msg.Height
 			}
 			m.viewport.addSplash(viewportHeight)
-			// Delay input focus to let terminal query responses flush
 			return m, tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 				return inputReadyMsg{}
 			})
@@ -126,10 +139,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InitDoneMsg:
 		return m.handleInitDone(msg)
 
-	case api.StreamEventMsg:
+	case StreamEventMsg:
 		return m.handleStreamEvent(msg)
 
-	case api.StreamDoneMsg:
+	case StreamDoneMsg:
 		return m.handleStreamDone(msg)
 
 	case AgentsLoadedMsg:
@@ -141,6 +154,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionResumedMsg:
 		return m.handleSessionResumed(msg)
 
+	case ConfigTestResultMsg:
+		return m.handleConfigTestResult(msg)
+
+	case spinner.TickMsg:
+		return m.handleConfigureSpinnerTick(msg)
+
 	case FileUploadedMsg:
 		return m.handleFileUploaded(msg)
 
@@ -148,6 +167,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initInputReady = true
 		m.input.textInput.Focus()
 		m.input.textInput.SetValue("")
+		if m.startMode == startFirstRun {
+			m, cmd := enterConfigureMode(m)
+			return m, tea.Batch(m.input.textInput.Cursor.BlinkCmd(), cmd)
+		}
 		return m, m.input.textInput.Cursor.BlinkCmd()
 
 	case resetQuitMsg:
@@ -212,15 +235,16 @@ func (m Model) View() string {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEscape:
-		// Cancel streaming or close menu
 		if m.input.menuVisible {
 			m.input.menuVisible = false
 			return m, nil
 		}
+		if m.configState != nil {
+			return m.cancelConfigure()
+		}
 		if m.isStreaming {
 			return m.cancelStream()
 		}
-		// Dismiss picker
 		if m.viewport.pickerActive {
 			m.viewport.pickerActive = false
 			return m, nil
@@ -228,7 +252,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyCtrlD:
-		// If streaming, cancel first; require a fresh Ctrl+D pair to quit
+		if m.configState != nil {
+			return m.cancelConfigure()
+		}
 		if m.isStreaming {
 			return m.cancelStream()
 		}
@@ -246,6 +272,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
+		if m.configState != nil {
+			text := strings.TrimSpace(m.input.textInput.Value())
+			m.input.textInput.SetValue("")
+			return m.handleConfigureSubmit(text)
+		}
 		if m.viewport.pickerActive {
 			if len(m.viewport.pickerItems) > 0 {
 				item := m.viewport.pickerItems[m.viewport.pickerIndex]
@@ -358,10 +389,10 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 	)
 	m.streamCh = ch
 
-	return m, api.WaitForStreamEvent(ch)
+	return m, WaitForStreamEvent(ch)
 }
 
-func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	// Ignore stale events after cancellation
 	if !m.isStreaming {
 		return m, nil
@@ -442,10 +473,10 @@ func (m Model) handleStreamEvent(msg api.StreamEventMsg) (tea.Model, tea.Cmd) {
 		return m.finishStream(nil)
 	}
 
-	return m, api.WaitForStreamEvent(m.streamCh)
+	return m, WaitForStreamEvent(m.streamCh)
 }
 
-func (m Model) handleStreamDone(msg api.StreamDoneMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
 	// Ignore if already cancelled
 	if !m.isStreaming {
 		return m, nil

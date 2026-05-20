@@ -114,18 +114,18 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
 def _assert_is_valid_external_access(
     external_access: ExternalAccess,
 ) -> None:
-    assert (
-        not external_access.external_user_group_ids
-    ), f"{external_access.external_user_group_ids=} should be empty for MS Teams"
+    assert not external_access.external_user_group_ids, (
+        f"{external_access.external_user_group_ids=} should be empty for MS Teams"
+    )
 
     if external_access.is_public:
-        assert (
-            not external_access.external_user_emails
-        ), f"{external_access.external_user_emails=} should be empty for public channels"
+        assert not external_access.external_user_emails, (
+            f"{external_access.external_user_emails=} should be empty for public channels"
+        )
     else:
-        assert (
-            external_access.external_user_emails
-        ), f"{external_access.external_user_emails=} should contains at least one user for private channels"
+        assert external_access.external_user_emails, (
+            f"{external_access.external_user_emails=} should contains at least one user for private channels"
+        )
 
 
 @pytest.mark.parametrize(
@@ -167,9 +167,9 @@ def test_slim_docs_retrieval_from_teams_connector(
     for slim_doc in slim_docs:
         if isinstance(slim_doc, HierarchyNode):
             continue
-        assert (
-            slim_doc.external_access
-        ), f"ExternalAccess should always be available, instead got {slim_doc=}"
+        assert slim_doc.external_access, (
+            f"ExternalAccess should always be available, instead got {slim_doc=}"
+        )
         _assert_is_valid_external_access(external_access=slim_doc.external_access)
 
 
@@ -192,7 +192,7 @@ def test_load_from_checkpoint_with_perm_sync(
     assert len(docs) > 0, "Expected to find at least one document"
 
     for doc in docs:
-        assert (
-            doc.external_access is not None
-        ), f"Document {doc.id} should have external_access when using perm sync"
+        assert doc.external_access is not None, (
+            f"Document {doc.id} should have external_access when using perm sync"
+        )
         _assert_is_valid_external_access(external_access=doc.external_access)

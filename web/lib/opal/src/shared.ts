@@ -45,28 +45,28 @@ const containerSizeVariants: Record<
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: {
-    height: "h-[var(--opal-line-height-lg)]",
-    minWidth: "min-w-[var(--opal-line-height-lg)]",
+    height: "h-(--opal-line-height-lg)",
+    minWidth: "min-w-(--opal-line-height-lg)",
     padding: "p-2",
   },
   md: {
-    height: "h-[var(--opal-line-height-md)]",
-    minWidth: "min-w-[var(--opal-line-height-md)]",
+    height: "h-(--opal-line-height-md)",
+    minWidth: "min-w-(--opal-line-height-md)",
     padding: "p-1",
   },
   sm: {
-    height: "h-[var(--opal-line-height-sm)]",
-    minWidth: "min-w-[var(--opal-line-height-sm)]",
+    height: "h-(--opal-line-height-sm)",
+    minWidth: "min-w-(--opal-line-height-sm)",
     padding: "p-1",
   },
   xs: {
-    height: "h-[var(--opal-line-height-xs)]",
-    minWidth: "min-w-[var(--opal-line-height-xs)]",
+    height: "h-(--opal-line-height-xs)",
+    minWidth: "min-w-(--opal-line-height-xs)",
     padding: "p-0.5",
   },
   "2xs": {
-    height: "h-[var(--opal-line-height-2xs)]",
-    minWidth: "min-w-[var(--opal-line-height-2xs)]",
+    height: "h-(--opal-line-height-2xs)",
+    minWidth: "min-w-(--opal-line-height-2xs)",
     padding: "p-0.5",
   },
 } as const;

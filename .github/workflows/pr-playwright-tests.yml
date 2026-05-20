@@ -9,6 +9,11 @@ on:
     branches:
       - main
       - "release/**"
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test matrix runs. This
+    # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
+    # workflow can race the real workflow's same-named status check under
+    # branch protection.
   push:
     tags:
       - "v*.*.*"
@@ -48,6 +53,13 @@ env:
   MCP_API_KEY_SERVER_HOST: 0.0.0.0
   MCP_API_KEY_SERVER_PUBLIC_HOST: host.docker.internal
 
+  # for MCP per-user API key (multi-field template) tests
+  MCP_PER_USER_KEY_TEST_PORT: 8007
+  MCP_PER_USER_KEY_TEST_URL: http://host.docker.internal:8007/mcp
+  MCP_PER_USER_KEY_REQUIRED_HEADER: X-Username
+  MCP_PER_USER_KEY_SERVER_HOST: 0.0.0.0
+  MCP_PER_USER_KEY_SERVER_PUBLIC_HOST: host.docker.internal
+
   MOCK_LLM_RESPONSE: true
   MCP_TEST_SERVER_PORT: 8004
   MCP_TEST_SERVER_URL: http://host.docker.internal:8004/mcp
@@ -62,7 +74,38 @@ env:
   PLAYWRIGHT_S3_BUCKET: onyx-playwright-artifacts
 
 jobs:
+  changes:
+    # Decides whether the playwright matrix runs. On pull_request / merge_group
+    # we use paths-filter; on push (tags, release branches) we default to
+    # `true` so everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      playwright: ${{ steps.filter.outputs.playwright || 'true' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            playwright:
+              - 'backend/**'
+              - 'web/**'
+              - 'deployment/docker_compose/**'
+              - 'docker-bake.hcl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-playwright-tests.yml'
+              - '.github/actions/setup-test-license/**'
+
   build-web-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -72,7 +115,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -124,6 +167,8 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -133,7 +178,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -185,6 +230,8 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -194,7 +241,7 @@ jobs:
       ]
     timeout-minutes: 45
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -263,7 +310,7 @@ jobs:
       matrix:
         project: [admin, exclusive]
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -333,7 +380,7 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d
         id: start_docker
 
       - name: Wait for service to be ready
@@ -410,6 +457,29 @@ jobs:
 
             if curl -sf "http://localhost:${MCP_API_KEY_TEST_PORT:-8005}/healthz" > /dev/null; then
               echo "MCP API Key mock server is ready!"
+              break
+            fi
+
+            sleep 3
+          done
+
+      - name: Wait for MCP per-user key mock server
+        run: |
+          echo "Waiting for MCP per-user key mock server on port ${MCP_PER_USER_KEY_TEST_PORT:-8007}..."
+          start_time=$(date +%s)
+          timeout=120
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. MCP per-user key mock server did not become ready in ${timeout}s."
+              exit 1
+            fi
+
+            if curl -sf "http://localhost:${MCP_PER_USER_KEY_TEST_PORT:-8007}/healthz" > /dev/null; then
+              echo "MCP per-user key mock server is ready!"
               break
             fi
 
@@ -616,7 +686,7 @@ jobs:
       - "extras=ecr-cache"
     timeout-minutes: 30
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -723,7 +793,8 @@ jobs:
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
-      needs.playwright-tests.result != 'cancelled'
+      needs.playwright-tests.result != 'cancelled' &&
+      needs.playwright-tests.result != 'skipped'
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -811,11 +882,36 @@ jobs:
 
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    # This job is the single required status check for the playwright suite. It
+    # always runs so branch protection has something to wait on, and it passes
+    # cleanly when `changes` reports no relevant paths changed (i.e. the test
+    # matrix was legitimately skipped).
     runs-on: ubuntu-slim
-    timeout-minutes: 45
-    needs: [playwright-tests, playwright-tests-lite]
+    timeout-minutes: 5
+    needs: [changes, playwright-tests, playwright-tests-lite]
     if: ${{ always() }}
     steps:
       - name: Check job status
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
-        run: exit 1
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.playwright }}
+          TESTS_RESULT: ${{ needs.playwright-tests.result }}
+          LITE_RESULT: ${{ needs.playwright-tests-lite.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed — required check passes."
+            exit 0
+          fi
+          if [ "${TESTS_RESULT}" != "success" ] || [ "${LITE_RESULT}" != "success" ]; then
+            echo "Test results: playwright-tests=${TESTS_RESULT}, playwright-tests-lite=${LITE_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

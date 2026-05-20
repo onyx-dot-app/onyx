@@ -6,7 +6,7 @@ from logging.handlers import RotatingFileHandler
 import psutil
 
 from onyx.utils.logger import setup_logger
-from onyx.utils.platform import is_running_in_container
+from onyx.utils.platform_utils import is_running_in_container
 
 # Regular application logger
 logger = setup_logger()
@@ -64,10 +64,7 @@ def emit_process_memory(
         metadata_str = f" {metadata_str}" if metadata_str else ""
 
         memory_logger.info(
-            "PROCESS_MEMORY process_name=%s pid=%s "
-            "rss_mb=%s "
-            "vms_mb=%s "
-            "cpu=%s%s",
+            "PROCESS_MEMORY process_name=%s pid=%s rss_mb=%s vms_mb=%s cpu=%s%s",
             process_name,
             pid,
             format(memory_info.rss / (1024 * 1024), ".2f"),

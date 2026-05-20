@@ -19,12 +19,12 @@ describe("stripSessionPrefix", () => {
     ).toBe("outputs/web/AGENTS.md");
   });
 
-  it("strips local sandboxes/sessions prefix for files/ directory", () => {
+  it("strips local sandboxes/sessions prefix for user_library/ directory", () => {
     expect(
       stripSessionPrefix(
-        "/Users/wenxi-onyx/data/sandboxes/b29c196e-fa14-46b8-8182-ff4a7f67b47b/sessions/9c7662c1-785f-4f1c-b9e0-9021ddbf2893/files/linear/Engineering/ticket.json"
+        "/Users/wenxi-onyx/data/sandboxes/b29c196e-fa14-46b8-8182-ff4a7f67b47b/sessions/9c7662c1-785f-4f1c-b9e0-9021ddbf2893/user_library/docs/report.pdf"
       )
-    ).toBe("files/linear/Engineering/ticket.json");
+    ).toBe("user_library/docs/report.pdf");
   });
 
   it("strips sandboxes/sessions even with non-standard prefix", () => {
@@ -47,8 +47,8 @@ describe("stripSessionPrefix", () => {
 
   it("strips kubernetes sessions with short prefix", () => {
     expect(
-      stripSessionPrefix("/some/path/sessions/def-456/files/data.json")
-    ).toBe("files/data.json");
+      stripSessionPrefix("/some/path/sessions/def-456/user_library/data.json")
+    ).toBe("user_library/data.json");
   });
 
   // ── Already relative ────────────────────────────────────────────────
@@ -132,9 +132,9 @@ describe("sanitizePathsInText", () => {
   it("strips local paths from find output", () => {
     expect(
       sanitizePathsInText(
-        "find /Users/wenxi/data/sandboxes/abc/sessions/def/files/linear -type d"
+        "find /Users/wenxi/data/sandboxes/abc/sessions/def/user_library/docs -type d"
       )
-    ).toBe("find files/linear -type d");
+    ).toBe("find user_library/docs -type d");
   });
 
   // ── No paths — passthrough ──────────────────────────────────────────

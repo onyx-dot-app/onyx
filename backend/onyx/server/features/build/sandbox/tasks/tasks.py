@@ -1,38 +1,23 @@
-"""Celery tasks for sandbox operations (cleanup, file sync, etc.)."""
-
-from collections.abc import Iterator
-from contextlib import contextmanager
-from typing import TYPE_CHECKING
-from uuid import UUID
+"""Celery tasks for sandbox operations (cleanup, etc.)."""
 
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
 
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import SandboxStatus
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.configs import USER_LIBRARY_SOURCE_DIR
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
-)
 
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
@@ -94,13 +79,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
         sandbox_manager = get_sandbox_manager()
 
-        # Type guard for kubernetes-specific methods
-        if not isinstance(sandbox_manager, KubernetesSandboxManager):
-            task_logger.debug(
-                "cleanup_idle_sandboxes_task skipped (not kubernetes backend)"
-            )
-            return
-
         with get_session_with_current_tenant() as db_session:
             idle_sandboxes = get_idle_sandboxes(
                 db_session, SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -124,18 +102,20 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
 
                 try:
-                    # List session directories in the pod
-                    session_ids = _list_session_directories(sandbox_manager, sandbox_id)
+                    # List session directories in the sandbox via the
+                    # backend-agnostic manager API. K8s lists pod paths via
+                    # exec; Docker lists container paths via exec; Local
+                    # walks the on-disk sessions/ directory.
+                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
                     task_logger.info(
                         f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
                     )
 
                     # Snapshot each session
-                    for session_id_str in session_ids:
+                    for session_id in session_ids:
                         try:
-                            session_id = UUID(session_id_str)
                             task_logger.debug(
-                                f"Creating snapshot for session {session_id_str}"
+                                f"Creating snapshot for session {session_id}"
                             )
                             snapshot_result = sandbox_manager.create_snapshot(
                                 sandbox_id, session_id, tenant_id
@@ -149,11 +129,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                     snapshot_result.size_bytes,
                                 )
                                 task_logger.debug(
-                                    f"Snapshot created for session {session_id_str}"
+                                    f"Snapshot created for session {session_id}"
                                 )
                         except Exception as e:
                             task_logger.warning(
-                                f"Failed to create snapshot for session {session_id_str}: {e}"
+                                f"Failed to create snapshot for session {session_id}: {e}"
                             )
                             # Continue with other sessions even if one fails
 
@@ -196,202 +176,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
-
-
-def _list_session_directories(
-    sandbox_manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-) -> list[str]:
-    """List session directory names in the pod's /workspace/sessions/.
-
-    Args:
-        sandbox_manager: The kubernetes sandbox manager
-        sandbox_id: The sandbox ID
-
-    Returns:
-        List of session ID strings (directory names)
-    """
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream as k8s_stream
-
-    pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
-
-    # List directories in /workspace/sessions/
-    exec_command = [
-        "/bin/sh",
-        "-c",
-        'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
-    ]
-
-    try:
-        resp = k8s_stream(
-            sandbox_manager._core_api.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=sandbox_manager._namespace,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-
-        # Parse output - one directory name per line
-        session_ids = []
-        for line in resp.strip().split("\n"):
-            line = line.strip()
-            if line:
-                # Validate it looks like a UUID
-                try:
-                    UUID(line)
-                    session_ids.append(line)
-                except ValueError:
-                    # Not a valid UUID, skip
-                    pass
-
-        return session_ids
-
-    except ApiException as e:
-        task_logger.warning(f"Failed to list session directories: {e}")
-        return []
-
-
-@contextmanager
-def _acquire_sandbox_file_sync_lock(lock: RedisLock) -> Iterator[bool]:
-    """Acquire the sandbox file-sync lock with blocking timeout; release on exit."""
-    acquired = lock.acquire(
-        blocking_timeout=CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT,
-    )
-    try:
-        yield acquired
-    finally:
-        if lock.owned():
-            lock.release()
-
-
-def _get_disabled_user_library_paths(db_session: "Session", user_id: str) -> list[str]:
-    """Get list of disabled user library file paths for exclusion during sync.
-
-    Queries the document table for CRAFT_FILE documents with sync_disabled=True
-    and returns their relative paths within user_library/.
-
-    Args:
-        db_session: Database session
-        user_id: The user ID to filter documents
-
-    Returns:
-        List of relative file paths to exclude (e.g., ["/data/file.xlsx", "/old/report.pdf"])
-    """
-    from uuid import UUID
-
-    from onyx.configs.constants import DocumentSource
-    from onyx.db.document import get_documents_by_source
-
-    disabled_paths: list[str] = []
-
-    # Get CRAFT_FILE documents for this user (filtered at SQL level)
-    documents = get_documents_by_source(
-        db_session=db_session,
-        source=DocumentSource.CRAFT_FILE,
-        creator_id=UUID(user_id),
-    )
-
-    for doc in documents:
-        doc_metadata = doc.doc_metadata or {}
-        if not doc_metadata.get("sync_disabled"):
-            continue
-
-        # Extract file path from semantic_id
-        # semantic_id format: "user_library/path/to/file.xlsx"
-        # Include both files AND directories - the shell script in
-        # setup_session_workspace() handles directory exclusion by
-        # checking if paths are children of an excluded directory.
-        semantic_id = doc.semantic_id or ""
-        if semantic_id.startswith(USER_LIBRARY_SOURCE_DIR):
-            file_path = semantic_id[len(USER_LIBRARY_SOURCE_DIR) :]
-            if file_path:
-                disabled_paths.append(file_path)
-
-    return disabled_paths
-
-
-@shared_task(
-    name=OnyxCeleryTask.SANDBOX_FILE_SYNC,
-    soft_time_limit=TIMEOUT_SECONDS,
-    bind=True,
-    ignore_result=True,
-)
-def sync_sandbox_files(
-    self: Task,  # noqa: ARG001
-    *,
-    user_id: str,
-    tenant_id: str,
-    source: str | None = None,
-) -> bool:
-    """Sync files from S3 to a user's running sandbox.
-
-    This task is triggered after documents are written to S3 during indexing.
-    It executes `s5cmd sync` in the file-sync sidecar container to download
-    any new or changed files.
-
-    Per-user locking ensures only one sync runs at a time for a given user.
-    If a sync is already in progress, this task will wait until it completes.
-
-    Note: File visibility in sessions is controlled via filtered symlinks in
-    setup_session_workspace(), not at the sync level. The sync mirrors S3
-    faithfully; disabled files are excluded only when creating new sessions.
-
-    Args:
-        user_id: The user ID whose sandbox should be synced
-        tenant_id: The tenant ID for S3 path construction
-        source: Optional source type (e.g., "gmail", "google_drive", "user_library").
-                If None, syncs all sources.
-
-    Returns:
-        True if sync was successful, False if skipped or failed
-    """
-    source_info = f" source={source}" if source else " (all sources)"
-    task_logger.info(
-        f"sync_sandbox_files starting for user {user_id} in tenant {tenant_id}{source_info}"
-    )
-
-    lock_timeout = CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    lock = redis_client.lock(
-        f"{OnyxRedisLocks.SANDBOX_FILE_SYNC_LOCK_PREFIX}:{user_id}",
-        timeout=lock_timeout,
-    )
-
-    with _acquire_sandbox_file_sync_lock(lock) as acquired:
-        if not acquired:
-            task_logger.warning(
-                f"sync_sandbox_files - failed to acquire lock for user {user_id} after {lock_timeout}s, skipping"
-            )
-            return False
-
-        with get_session_with_current_tenant() as db_session:
-            sandbox = get_sandbox_by_user_id(db_session, UUID(user_id))
-            if sandbox is None:
-                task_logger.debug(f"No sandbox found for user {user_id}, skipping sync")
-                return False
-            if sandbox.status != SandboxStatus.RUNNING:
-                task_logger.debug(
-                    f"Sandbox {sandbox.id} not running (status={sandbox.status}), skipping sync"
-                )
-                return False
-
-            sandbox_manager = get_sandbox_manager()
-            result = sandbox_manager.sync_files(
-                sandbox_id=sandbox.id,
-                user_id=UUID(user_id),
-                tenant_id=tenant_id,
-                source=source,
-            )
-            if result:
-                task_logger.info(f"File sync completed for user {user_id}{source_info}")
-            else:
-                task_logger.warning(f"File sync failed for user {user_id}{source_info}")
-            return result
 
 
 # NOTE: in the future, may need to add this. For now, will do manual cleanup.

@@ -180,7 +180,8 @@ def test_find_summary_for_branch_returns_matching_branch() -> None:
     ]
 
     result = find_summary_for_branch(
-        mock_db, branch_history  # ty: ignore[invalid-argument-type]
+        mock_db,
+        branch_history,  # ty: ignore[invalid-argument-type]
     )
 
     assert result == matching_summary
@@ -211,7 +212,8 @@ def test_find_summary_for_branch_ignores_other_branch() -> None:
     ]
 
     result = find_summary_for_branch(
-        mock_db, branch_b_history  # ty: ignore[invalid-argument-type]
+        mock_db,
+        branch_b_history,  # ty: ignore[invalid-argument-type]
     )
 
     assert result is None
@@ -260,7 +262,8 @@ def test__build_llm_messages_for_summarization_user_messages() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages, {}  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2
@@ -276,7 +279,8 @@ def test__build_llm_messages_for_summarization_assistant_messages() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages, {}  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 1
@@ -312,7 +316,8 @@ def test__build_llm_messages_for_summarization_skips_tool_responses() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages, {}  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2
@@ -329,7 +334,8 @@ def test__build_llm_messages_for_summarization_skips_empty() -> None:
     ]
 
     result = _build_llm_messages_for_summarization(
-        messages, {}  # ty: ignore[invalid-argument-type]
+        messages,  # ty: ignore[invalid-argument-type]
+        {},
     )
 
     assert len(result) == 2

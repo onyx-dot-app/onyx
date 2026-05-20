@@ -162,14 +162,17 @@ def validate_persona_ids_exist(
     return fetched_persona_ids, missing_personas
 
 
-def get_personas_using_provider(
-    db_session: Session, provider_name: str
-) -> list[Persona]:
-    """Get all non-deleted personas that use a specific LLM provider."""
+def get_personas_using_provider(db_session: Session, provider_id: int) -> list[Persona]:
+    """Get all non-deleted personas whose default_model_configuration references this provider."""
     return list(
         db_session.scalars(
-            select(Persona).where(
-                Persona.llm_model_provider_override == provider_name,
+            select(Persona)
+            .join(
+                ModelConfiguration,
+                Persona.default_model_configuration_id == ModelConfiguration.id,
+            )
+            .where(
+                ModelConfiguration.llm_provider_id == provider_id,
                 Persona.deleted == False,  # noqa: E712
             )
         ).all()
@@ -220,18 +223,7 @@ def upsert_llm_provider(
                 f"LLM provider with id {llm_provider_upsert_request.id} not found"
             )
 
-        if existing_llm_provider.name != llm_provider_upsert_request.name:
-            raise ValueError(
-                f"LLM provider with id {llm_provider_upsert_request.id} name change not allowed"
-            )
     else:
-        existing_llm_provider = fetch_existing_llm_provider(
-            name=llm_provider_upsert_request.name, db_session=db_session
-        )
-        if existing_llm_provider:
-            raise ValueError(
-                f"LLM provider with name '{llm_provider_upsert_request.name}' already exists"
-            )
         existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
@@ -247,6 +239,12 @@ def upsert_llm_provider(
         }
 
     api_base = llm_provider_upsert_request.api_base or None
+    # Only update name when it was explicitly present in the request payload.
+    # Absent = "don't change"; explicit null = "clear"; string = "set".
+    # Pydantic v2 only includes a field in model_fields_set when it appeared
+    # in the input data, so absent and null are distinguishable.
+    if "name" in llm_provider_upsert_request.model_fields_set:
+        existing_llm_provider.name = llm_provider_upsert_request.name
     existing_llm_provider.provider = llm_provider_upsert_request.provider
     # EncryptedString accepts str for writes, returns SensitiveValue for reads
     existing_llm_provider.api_key = (  # ty: ignore[invalid-assignment]
@@ -307,10 +305,11 @@ def upsert_llm_provider(
         db_session.flush()
 
     for model_config in llm_provider_upsert_request.model_configurations:
-
         supported_flows = [LLMModelFlowType.CHAT]
         if model_config.supports_image_input:
             supported_flows.append(LLMModelFlowType.VISION)
+        if model_config.supports_reasoning:
+            supported_flows.append(LLMModelFlowType.REASONING)
 
         existing = existing_by_name.get(model_config.name)
         if existing:
@@ -321,6 +320,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -331,6 +331,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
 
     # Make sure the relationship table stays up to date
@@ -390,6 +391,8 @@ def sync_model_configurations(
             supported_flows = [LLMModelFlowType.CHAT]
             if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
+            if model.supports_reasoning:
+                supported_flows.append(LLMModelFlowType.REASONING)
 
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
@@ -521,6 +524,72 @@ def fetch_existing_llm_provider_by_id(
     return provider_model
 
 
+def fetch_existing_llm_provider_by_name_and_type(
+    name: str, provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return the provider matching both display name and provider type.
+
+    Returns None if zero or multiple matches are found — multiple matches mean
+    the name is ambiguous (user may have created a provider with the same name)
+    so the caller should not assume which one to use.
+    """
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.name == name,
+                LLMProviderModel.provider == provider_type,
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+    )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d providers with name='%s' and type='%s'; skipping ambiguous match.",
+            len(results),
+            name,
+            provider_type,
+        )
+        return None
+    return results[0] if results else None
+
+
+def fetch_existing_llm_provider_by_type_nameless(
+    provider_type: str, db_session: Session
+) -> LLMProviderModel | None:
+    """Return the first unnamed provider of the given type (e.g. "openai").
+
+    Logs a warning if more than one nameless provider of the type exists, since
+    the choice is ambiguous.
+    """
+    results = list(
+        db_session.scalars(
+            select(LLMProviderModel)
+            .where(
+                LLMProviderModel.provider == provider_type,
+                LLMProviderModel.name.is_(None),
+            )
+            .options(
+                selectinload(LLMProviderModel.model_configurations),
+                selectinload(LLMProviderModel.groups),
+                selectinload(LLMProviderModel.personas),
+            )
+        )
+    )
+    if len(results) > 1:
+        logger.warning(
+            "Found %d nameless providers of type '%s'; returning the first (id=%d).",
+            len(results),
+            provider_type,
+            results[0].id,
+        )
+    return results[0] if results else None
+
+
 def fetch_embedding_provider(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProviderModel | None:
@@ -562,6 +631,18 @@ def fetch_default_model(
     return model_config
 
 
+def fetch_model_configuration_by_id(
+    db_session: Session, model_configuration_id: int | None
+) -> ModelConfiguration | None:
+    if model_configuration_id is None:
+        return None
+    return db_session.scalar(
+        select(ModelConfiguration)
+        .options(selectinload(ModelConfiguration.llm_provider))
+        .where(ModelConfiguration.id == model_configuration_id)
+    )
+
+
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:
@@ -590,51 +671,28 @@ def remove_embedding_provider(
     db_session.commit()
 
 
-def remove_llm_provider(db_session: Session, provider_id: int) -> None:
+def remove_llm_provider(
+    db_session: Session, provider_id: int, commit: bool = True
+) -> None:
     provider = db_session.get(LLMProviderModel, provider_id)
     if not provider:
         raise ValueError("LLM Provider not found")
 
-    # Clear the provider override from any personas using it
-    # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
-    for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
+    for persona in get_personas_using_provider(db_session, provider_id):
+        persona.default_model_configuration_id = None
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
             LLMProvider__UserGroup.llm_provider_id == provider_id
         )
     )
-    # Remove LLMProvider
     db_session.execute(
         delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
     )
-    db_session.commit()
-
-
-def remove_llm_provider__no_commit(db_session: Session, provider_id: int) -> None:
-    """Remove LLM provider."""
-    provider = db_session.get(LLMProviderModel, provider_id)
-    if not provider:
-        raise ValueError("LLM Provider not found")
-
-    # Clear the provider override from any personas using it
-    # This causes them to fall back to the default provider
-    personas_using_provider = get_personas_using_provider(db_session, provider.name)
-    for persona in personas_using_provider:
-        persona.llm_model_provider_override = None
-
-    db_session.execute(
-        delete(LLMProvider__UserGroup).where(
-            LLMProvider__UserGroup.llm_provider_id == provider_id
-        )
-    )
-    # Remove LLMProvider
-    db_session.execute(
-        delete(LLMProviderModel).where(LLMProviderModel.id == provider_id)
-    )
-    db_session.flush()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
 
 
 def update_default_provider(
@@ -690,40 +748,20 @@ def update_no_default_contextual_rag_provider(
 def update_default_contextual_model(
     db_session: Session,
     enable_contextual_rag: bool,
-    contextual_rag_llm_provider: str | None,
-    contextual_rag_llm_name: str | None,
+    model_configuration_id: int | None,
 ) -> None:
     """Sets or clears the default contextual RAG model.
 
     Should be called whenever the PRESENT search settings change
     (e.g. inline update or FUTURE → PRESENT swap).
     """
-    if (
-        not enable_contextual_rag
-        or not contextual_rag_llm_name
-        or not contextual_rag_llm_provider
-    ):
+    if not enable_contextual_rag or model_configuration_id is None:
         update_no_default_contextual_rag_provider(db_session=db_session)
         return
 
-    provider = fetch_existing_llm_provider(
-        name=contextual_rag_llm_provider, db_session=db_session
-    )
-    if not provider:
-        raise ValueError(f"Provider '{contextual_rag_llm_provider}' not found")
-
-    model_config = next(
-        (
-            mc
-            for mc in provider.model_configurations
-            if mc.name == contextual_rag_llm_name
-        ),
-        None,
-    )
+    model_config = db_session.get(ModelConfiguration, model_configuration_id)
     if not model_config:
-        raise ValueError(
-            f"Model '{contextual_rag_llm_name}' not found for provider '{contextual_rag_llm_provider}'"
-        )
+        raise ValueError(f"model_configuration id={model_configuration_id} not found")
 
     add_model_to_flow(
         db_session=db_session,
@@ -732,8 +770,8 @@ def update_default_contextual_model(
     )
     _update_default_model(
         db_session=db_session,
-        provider_id=provider.id,
-        model=contextual_rag_llm_name,
+        provider_id=model_config.llm_provider_id,
+        model=model_config.name,
         flow_type=LLMModelFlowType.CONTEXTUAL_RAG,
     )
 
@@ -897,6 +935,7 @@ def insert_new_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -906,6 +945,7 @@ def insert_new_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .on_conflict_do_nothing()
@@ -934,6 +974,7 @@ def update_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -941,6 +982,7 @@ def update_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .where(ModelConfiguration.id == model_configuration_id)

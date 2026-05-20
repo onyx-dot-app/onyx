@@ -1,4 +1,5 @@
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import React, { useState, useEffect } from "react";
 import { FormikProps } from "formik";
 import { UserRole } from "@/lib/types";
@@ -31,11 +32,11 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 }) => {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isAdmin, user, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const [shouldHideContent, setShouldHideContent] = useState(false);
 
   useEffect(() => {
-    if (user && userGroups && isPaidEnterpriseFeaturesEnabled) {
+    if (user && userGroups && businessTier) {
       const isUserAdmin = user.role === UserRole.ADMIN;
       if (!isUserAdmin && userGroups.length > 0) {
         formikProps.setFieldValue("is_public", false);
@@ -54,12 +55,12 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         setShouldHideContent(false);
       }
     }
-  }, [user, userGroups, isPaidEnterpriseFeaturesEnabled]);
+  }, [user, userGroups, businessTier]);
 
   if (userGroupsIsLoading) {
     return <div>Loading...</div>;
   }
-  if (!isPaidEnterpriseFeaturesEnabled) {
+  if (!businessTier) {
     return null;
   }
 

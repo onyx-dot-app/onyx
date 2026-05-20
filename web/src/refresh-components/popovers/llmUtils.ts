@@ -1,4 +1,4 @@
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { LLMOption } from "./interfaces";
 
 /**
@@ -35,13 +35,16 @@ export function buildLlmOptions(
         seenKeys.add(key);
 
         options.push({
-          name: llmProvider.name,
+          name: llmProvider.name ?? "",
           provider: llmProvider.provider,
           providerDisplayName:
             llmProvider.provider_display_name || llmProvider.provider,
           modelName: modelConfiguration.name,
+          modelConfigurationId: modelConfiguration.id ?? null,
           displayName:
-            modelConfiguration.display_name || modelConfiguration.name,
+            modelConfiguration.custom_display_name ||
+            modelConfiguration.display_name ||
+            modelConfiguration.name,
           vendor: modelConfiguration.vendor || null,
           maxInputTokens: modelConfiguration.max_input_tokens,
           region: modelConfiguration.region || null,

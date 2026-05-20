@@ -148,7 +148,7 @@ class ProcessManager:
                 return False
 
             try:
-                with urllib.request.urlopen(url, timeout=2) as response:
+                with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310 — polls locally-launched dev server URL constructed in process
                     if response.status == 200:
                         logger.debug(
                             "Server ready after %ss and %s attempts",

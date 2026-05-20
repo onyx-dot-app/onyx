@@ -75,6 +75,7 @@ from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
+from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
 from onyx.server.features.build.api.api import public_build_router
 from onyx.server.features.build.api.api import router as build_router
 from onyx.server.features.default_assistant.api import (
@@ -99,6 +100,9 @@ from onyx.server.features.persona.api import admin_router as admin_persona_route
 from onyx.server.features.persona.api import agents_router
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
+from onyx.server.features.search.api import router as search_api_router
+from onyx.server.features.skill.api import admin_router as skill_admin_router
+from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
@@ -148,6 +152,7 @@ from onyx.server.token_rate_limits.api import router as token_rate_limit_setting
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
+from onyx.skills.builtins import register_builtin_skills
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.logger import setup_logger
@@ -355,6 +360,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # fill up Postgres connection pools
     await warm_up_connections()
 
+    # Tenant-agnostic; sits outside the multi-tenant fork below.
+    register_builtin_skills()
+
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
         CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
@@ -468,11 +476,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, public_build_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, hierarchy_router)
+    include_router_with_global_prefix_prepended(application, search_api_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router
@@ -520,6 +530,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(application, skill_router)
+    include_router_with_global_prefix_prepended(application, skill_admin_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)

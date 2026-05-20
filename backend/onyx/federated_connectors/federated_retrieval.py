@@ -39,7 +39,6 @@ def get_federated_retrieval_functions(
     document_set_names: list[str] | None,
     slack_context: SlackContext | None = None,
 ) -> list[FederatedRetrievalInfo]:
-
     # Check for Slack bot context first (regardless of user_id)
     if slack_context:
         logger.debug("Slack context detected, checking for Slack bot setup...")

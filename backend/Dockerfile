@@ -127,6 +127,23 @@ tiktoken.get_encoding('cl100k_base')"
 # Set up application files
 WORKDIR /app
 
+# Craft template setup runs BEFORE the bulk ./onyx copy so its 3-5 min
+# pip/npm install only invalidates on its own inputs, not on every PR.
+COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
+RUN chmod +x /app/scripts/setup_craft_templates.sh
+COPY --chown=onyx:onyx \
+    ./onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt \
+    /app/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
+COPY --chown=onyx:onyx \
+    ./onyx/server/features/build/sandbox/kubernetes/docker/templates \
+    /app/onyx/server/features/build/sandbox/kubernetes/docker/templates
+RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
+        echo "Running Craft template setup at build time..." && \
+        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
+    fi
+ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
+ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+
 # Enterprise Version Files
 COPY --chown=onyx:onyx ./ee /app/ee
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -145,23 +162,10 @@ COPY --chown=onyx:onyx ./keys /app/keys
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
 COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
 COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
-COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
 COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
 COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
-RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
-
-# Run Craft template setup at build time when ENABLE_CRAFT=true
-# This pre-bakes demo data, Python venv, and npm dependencies into the image
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Running Craft template setup at build time..." && \
-        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
-    fi
-
-# Set Craft template paths to the in-image locations
-# These match the paths where setup_craft_templates.sh creates the templates
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets
