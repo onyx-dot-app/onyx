@@ -56,7 +56,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
-from kubernetes import config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
@@ -68,6 +67,9 @@ from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
@@ -86,6 +88,11 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,
 )
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -126,6 +133,93 @@ RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
+
+_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
+_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
+_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
+_PROXY_CA_BUNDLE_VOLUME = "sandbox-ca-bundle"
+_PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
+
+
+def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
+    if not SANDBOX_PROXY_HOST:
+        return []
+    proxy_url = f"http://sandbox-proxy:{SANDBOX_PROXY_PORT}"
+    no_proxy = _compute_no_proxy_list()
+    return [
+        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
+        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
+        client.V1EnvVar(name="https_proxy", value=proxy_url),
+        client.V1EnvVar(name="http_proxy", value=proxy_url),
+        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
+        client.V1EnvVar(name="no_proxy", value=no_proxy),
+        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
+        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
+        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
+    ]
+
+
+def _compute_no_proxy_list() -> str:
+    entries = ["127.0.0.1", "localhost"]
+    if SANDBOX_API_SERVER_URL:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(SANDBOX_API_SERVER_URL)
+        if parsed.hostname:
+            entries.append(parsed.hostname)
+    return ",".join(entries)
+
+
+def _proxy_init_container() -> client.V1Container:
+    return client.V1Container(
+        name="sandbox-init",
+        image=SANDBOX_CONTAINER_IMAGE,
+        image_pull_policy="IfNotPresent",
+        command=["/workspace/firewall-init.sh"],
+        env=[
+            client.V1EnvVar(name="SANDBOX_PROXY_HOST", value=SANDBOX_PROXY_HOST),
+            client.V1EnvVar(name="SANDBOX_PROXY_PORT", value=str(SANDBOX_PROXY_PORT)),
+            client.V1EnvVar(name="SANDBOX_PROXY_BOOTSTRAP_MODE", value="initcontainer"),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_SRC",
+                value=f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
+            ),
+            client.V1EnvVar(
+                name="SANDBOX_PROXY_CA_BUNDLE_DST",
+                value=_PROXY_CA_BUNDLE_FILE,
+            ),
+        ],
+        volume_mounts=[
+            client.V1VolumeMount(
+                name=_PROXY_CA_SOURCE_VOLUME,
+                mount_path=_PROXY_CA_SOURCE_DIR,
+                read_only=True,
+            ),
+            client.V1VolumeMount(
+                name=_PROXY_CA_BUNDLE_VOLUME,
+                mount_path=_PROXY_CA_BUNDLE_DIR,
+            ),
+        ],
+        resources=client.V1ResourceRequirements(
+            requests={"cpu": "50m", "memory": "32Mi"},
+            limits={"cpu": "500m", "memory": "128Mi"},
+        ),
+        security_context=client.V1SecurityContext(
+            # Overrides pod-level runAsNonRoot so this container can
+            # run iptables.
+            run_as_non_root=False,
+            run_as_user=0,
+            allow_privilege_escalation=False,
+            read_only_root_filesystem=False,
+            privileged=False,
+            capabilities=client.V1Capabilities(drop=["ALL"], add=["NET_ADMIN"]),
+        ),
+    )
+
 
 _push_private_key: Ed25519PrivateKey | None = None
 _push_public_key_b64: str | None = None
@@ -256,18 +350,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _initialize(self) -> None:
         """Initialize Kubernetes client and configuration."""
-        # Load Kubernetes config (in-cluster or kubeconfig)
-        try:
-            config.load_incluster_config()
-            logger.info("Loaded in-cluster Kubernetes configuration")
-        except config.ConfigException:
-            try:
-                config.load_kube_config()
-                logger.info("Loaded kubeconfig from default location")
-            except config.ConfigException as e:
-                raise RuntimeError(
-                    f"Failed to load Kubernetes configuration: {e}"
-                ) from e
+        load_kube_config()
 
         # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
         # The kubernetes.stream.stream function monkey-patches the ApiClient's request
@@ -377,6 +460,7 @@ class KubernetesSandboxManager(SandboxManager):
             env=[
                 client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
                 client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+                *_proxy_main_container_env_vars(),
             ],
             volume_mounts=[
                 client.V1VolumeMount(
@@ -384,6 +468,17 @@ class KubernetesSandboxManager(SandboxManager):
                 ),
                 client.V1VolumeMount(
                     name="managed", mount_path="/workspace/managed", read_only=True
+                ),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
                 ),
             ],
             resources=client.V1ResourceRequirements(
@@ -468,8 +563,28 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
+        init_containers: list[client.V1Container] = []
+        if SANDBOX_PROXY_HOST:
+            init_containers.append(_proxy_init_container())
+            volumes.extend(
+                [
+                    client.V1Volume(
+                        name=_PROXY_CA_SOURCE_VOLUME,
+                        config_map=client.V1ConfigMapVolumeSource(
+                            name=SANDBOX_PROXY_CA_CONFIGMAP,
+                            optional=False,
+                        ),
+                    ),
+                    client.V1Volume(
+                        name=_PROXY_CA_BUNDLE_VOLUME,
+                        empty_dir=client.V1EmptyDirVolumeSource(),
+                    ),
+                ]
+            )
+
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
+            init_containers=init_containers or None,
             containers=[sandbox_container, sidecar_container],
             share_process_namespace=False,
             volumes=volumes,
@@ -511,10 +626,10 @@ class KubernetesSandboxManager(SandboxManager):
                 name=pod_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
                     "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id,
-                    "onyx.app/tenant-id": tenant_id,
+                    LABEL_SANDBOX_ID: sandbox_id,
+                    LABEL_TENANT_ID: tenant_id,
                     "admission.datadoghq.com/enabled": "false",
                 },
             ),
@@ -559,15 +674,15 @@ class KubernetesSandboxManager(SandboxManager):
                 name=service_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
                     "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id_str,
-                    "onyx.app/tenant-id": tenant_id_str,
+                    LABEL_SANDBOX_ID: sandbox_id_str,
+                    LABEL_TENANT_ID: tenant_id_str,
                 },
             ),
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
-                selector={"onyx.app/sandbox-id": sandbox_id_str},
+                selector={LABEL_SANDBOX_ID: sandbox_id_str},
                 ports=ports,
             ),
         )

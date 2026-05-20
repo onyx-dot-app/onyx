@@ -19,6 +19,17 @@
 FROM node:20-slim
 
 # Install system dependencies
+#
+# Networking tooling notes:
+# - `iptables` is required by /workspace/firewall-init.sh, which the
+#   K8s initContainer runs as root with CAP_NET_ADMIN to install the
+#   egress lockdown. Pre-installed here so we don't maintain a second
+#   image.
+# - `gosu` is consumed by firewall-init.sh's entrypoint mode (used in
+#   docker-compose deployments) to drop privileges after the lockdown
+#   is in place. Harmless in K8s mode.
+# - `ca-certificates` + `update-ca-certificates` are required for the
+#   CA trust-store population step.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -27,6 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     procps \
     unzip \
+    iptables \
+    gosu \
+    ca-certificates \
     \
     libreoffice-core \
     libreoffice-common \
@@ -107,6 +121,12 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
+
+# Egress proxy bootstrap script. Lives in the sandbox image because
+# it's the sandbox that executes it (as the K8s initContainer command
+# or the docker-compose entrypoint wrapper).
+COPY firewall-init.sh /workspace/firewall-init.sh
+RUN chmod +x /workspace/firewall-init.sh
 
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace

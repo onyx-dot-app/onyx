@@ -97,6 +97,8 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -117,12 +119,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# Labels used to find sandbox containers/volumes/networks. Match the K8s
-# label keys where reasonable so dashboards/queries don't drift.
 LABEL_COMPONENT = "onyx.app/component"
 LABEL_COMPONENT_VALUE = "craft-sandbox"
-LABEL_SANDBOX_ID = "onyx.app/sandbox-id"
-LABEL_TENANT_ID = "onyx.app/tenant-id"
 LABEL_USER_ID = "onyx.app/user-id"
 
 # Path conventions inside the sandbox container — must match the K8s image.
