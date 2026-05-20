@@ -171,19 +171,44 @@ def handle_external_app_oauth_callback(
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
-    response = requests.post(
-        provider.token_url,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "grant_type": "authorization_code",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": request.code,
-            "redirect_uri": _frontend_callback_url(),
-        },
-        timeout=30,
-    )
-    response_data = response.json()
+    try:
+        response = requests.post(
+            provider.token_url,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": request.code,
+                "redirect_uri": _frontend_callback_url(),
+            },
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        logger.warning(
+            "%s OAuth token exchange network error for app %d: %s",
+            app.name,
+            app.id,
+            exc,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Could not reach {app.name} to complete OAuth.",
+        )
+
+    try:
+        response_data = response.json()
+    except ValueError:
+        logger.warning(
+            "%s OAuth token response was not JSON (status=%d)",
+            app.name,
+            response.status_code,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"{app.name} returned a non-JSON response during OAuth.",
+            status_code_override=response.status_code,
+        )
 
     error = _token_response_is_error(response, response_data)
     if error:

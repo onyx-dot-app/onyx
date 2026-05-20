@@ -18,9 +18,21 @@ _PROVIDER_CLASSES: list[type[OAuth]] = [
     LinearOAuth,
 ]
 
-PROVIDERS: dict[ExternalAppType, OAuth] = {
-    cls.app_type: cls() for cls in _PROVIDER_CLASSES
-}
+
+def _build_providers() -> dict[ExternalAppType, OAuth]:
+    providers: dict[ExternalAppType, OAuth] = {}
+    for cls in _PROVIDER_CLASSES:
+        if cls.app_type in providers:
+            existing = type(providers[cls.app_type]).__name__
+            raise RuntimeError(
+                f"Duplicate OAuth provider registration for "
+                f"app_type={cls.app_type}: {existing} and {cls.__name__}."
+            )
+        providers[cls.app_type] = cls()
+    return providers
+
+
+PROVIDERS: dict[ExternalAppType, OAuth] = _build_providers()
 
 
 def get_provider_for_app(app: ExternalApp) -> OAuth | None:
