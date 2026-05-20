@@ -100,10 +100,20 @@ class CABootstrap:
             cert = x509.load_pem_x509_certificate(cert_pem)
         except ValueError as e:
             raise RuntimeError(f"proxy CA cert is not valid PEM: {e}") from e
-        not_after = cert.not_valid_after_utc
-        if not_after <= dt.datetime.now(dt.timezone.utc):
+        now = dt.datetime.now(dt.timezone.utc)
+        # 5-minute skew tolerance matches the not_before backdating in
+        # `_generate_ca` so we accept a freshly-generated cert under
+        # clock drift.
+        skew = dt.timedelta(minutes=5)
+        if cert.not_valid_before_utc > now + skew:
             raise RuntimeError(
-                f"proxy CA cert has expired (not_valid_after={not_after.isoformat()}); "
+                f"proxy CA cert is not yet valid "
+                f"(not_valid_before={cert.not_valid_before_utc.isoformat()})"
+            )
+        if cert.not_valid_after_utc <= now:
+            raise RuntimeError(
+                f"proxy CA cert has expired "
+                f"(not_valid_after={cert.not_valid_after_utc.isoformat()}); "
                 "rotate the CA Secret to recover"
             )
 
@@ -178,19 +188,22 @@ class CABootstrap:
         # mitmproxy reads key+cert from one PEM. Atomic via rename so a
         # partial write can't leave it reading a half-file.
         self._pem_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # `mkdir(mode=, exist_ok=True)` only sets the mode on creation;
+        # if the dir already exists (e.g. created by the container
+        # entrypoint), enforce 0o700 explicitly.
+        os.chmod(self._pem_path.parent, 0o700)
         tmp_path = self._pem_path.with_suffix(self._pem_path.suffix + ".tmp")
-        # If a stale .tmp file is sitting around from a prior crash,
-        # remove it so O_EXCL can succeed.
+        # Remove a stale .tmp from a prior crash so O_EXCL can succeed.
         try:
             os.unlink(tmp_path)
-        except FileNotFoundError:
+        except (FileNotFoundError, PermissionError):
             pass
         payload = key_pem + b"\n" + cert_pem
-        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        tmp_fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
-            os.write(fd, payload)
+            os.write(tmp_fd, payload)
         finally:
-            os.close(fd)
+            os.close(tmp_fd)
         os.replace(tmp_path, self._pem_path)
         return MaterializedCA(
             cert_pem=cert_pem, key_pem=key_pem, pem_path=self._pem_path

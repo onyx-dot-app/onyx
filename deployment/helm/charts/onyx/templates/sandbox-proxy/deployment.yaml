@@ -36,8 +36,11 @@ spec:
         fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
-      {{- if gt (int .Values.sandboxProxy.replicaCount) 1 }}
+      {{- if or .Values.sandboxProxy.affinity (gt (int .Values.sandboxProxy.replicaCount) 1) }}
       affinity:
+        {{- if .Values.sandboxProxy.affinity }}
+        {{- toYaml .Values.sandboxProxy.affinity | nindent 8 }}
+        {{- else }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
@@ -47,10 +50,7 @@ spec:
                   matchLabels:
                     {{- include "onyx.selectorLabels" . | nindent 20 }}
                     app.kubernetes.io/component: sandbox-proxy
-      {{- end }}
-      {{- with .Values.sandboxProxy.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       containers:
         - name: sandbox-proxy
@@ -74,7 +74,6 @@ spec:
             - name: SANDBOX_PROXY_HEALTHZ_PORT
               value: {{ .Values.sandboxProxy.containerPorts.healthz | quote }}
             {{- include "onyx.envSecrets" . | nindent 12}}
-            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}

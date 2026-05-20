@@ -747,16 +747,6 @@ def acp_event_sequence() -> Callable[[Iterable[ACPEvent]], list[ACPEvent]]:
 # ---------------------------------------------------------------------------
 
 
-def _load_kube_config() -> None:
-    """Load in-cluster config if available, otherwise fall back to kubeconfig."""
-    from kubernetes import config as k8s_config_module
-
-    try:
-        k8s_config_module.load_incluster_config()
-    except k8s_config_module.ConfigException:
-        k8s_config_module.load_kube_config()
-
-
 @pytest.fixture(scope="session")
 def k8s_client() -> "k8s_client_module.CoreV1Api":
     """Session-scope CoreV1Api client.
@@ -767,7 +757,11 @@ def k8s_client() -> "k8s_client_module.CoreV1Api":
     """
     from kubernetes import client as k8s_client_module
 
-    _load_kube_config()
+    from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
+        load_kube_config,
+    )
+
+    load_kube_config()
     return k8s_client_module.CoreV1Api()
 
 

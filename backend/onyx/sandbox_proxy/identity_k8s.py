@@ -187,9 +187,9 @@ class K8sInformerLookup(SandboxIPLookup):
         return listing.metadata.resource_version
 
     def _watch_loop(self, resource_version: str) -> None:
-        w = watch.Watch()
+        pod_watch = watch.Watch()
         try:
-            stream = w.stream(
+            stream = pod_watch.stream(
                 self._core.list_namespaced_pod,
                 namespace=self._namespace,
                 label_selector=_SANDBOX_POD_SELECTOR,
@@ -198,11 +198,11 @@ class K8sInformerLookup(SandboxIPLookup):
             )
             for event in stream:
                 if self._stop_event.is_set():
-                    w.stop()
+                    pod_watch.stop()
                     return
                 self._apply_event(event)
         finally:
-            w.stop()
+            pod_watch.stop()
 
     def _apply_event(self, event: dict) -> None:
         event_type = event.get("type")
@@ -226,20 +226,21 @@ class K8sInformerLookup(SandboxIPLookup):
             # Evict any prior IP for this pod — covers CNI-assigned IP
             # changes on pod restart.
             stale_ips = [
-                ip
-                for ip, ident in self._cache.items()
-                if ident.sandbox_name == pod_name and ip != identity.sandbox_ip
+                cached_ip
+                for cached_ip, cached_identity in self._cache.items()
+                if cached_identity.sandbox_name == pod_name
+                and cached_ip != identity.sandbox_ip
             ]
-            for ip in stale_ips:
-                del self._cache[ip]
+            for stale_ip in stale_ips:
+                del self._cache[stale_ip]
             self._cache[identity.sandbox_ip] = identity
 
     def _evict_by_pod_name(self, pod_name: str) -> None:
         with self._cache_lock:
-            stale = [
-                ip
-                for ip, ident in self._cache.items()
-                if ident.sandbox_name == pod_name
+            stale_ips = [
+                cached_ip
+                for cached_ip, cached_identity in self._cache.items()
+                if cached_identity.sandbox_name == pod_name
             ]
-            for ip in stale:
-                del self._cache[ip]
+            for stale_ip in stale_ips:
+                del self._cache[stale_ip]

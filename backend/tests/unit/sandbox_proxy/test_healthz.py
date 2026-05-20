@@ -13,8 +13,23 @@ class _FakeLookup:
     def __init__(self, synced: bool) -> None:
         self._synced = synced
 
+    def start(self) -> None:
+        return None
+
+    def lookup(self, src_ip: str) -> None:  # noqa: ARG002
+        return None
+
+    def wait_for_initial_sync(
+        self,
+        timeout_seconds: float,  # noqa: ARG002
+    ) -> bool:
+        return self._synced
+
     def is_synced(self) -> bool:
         return self._synced
+
+    def stop(self) -> None:
+        return None
 
 
 def _serve(handler_cls: type) -> tuple[HTTPServer, int]:
@@ -38,7 +53,7 @@ def _get(port: int, path: str) -> tuple[int, str]:
 def healthz() -> Iterator[tuple[_Readiness, _FakeLookup, int]]:
     readiness = _Readiness()
     lookup = _FakeLookup(synced=False)
-    handler_cls = _build_healthz_handler(readiness, lookup)  # ty: ignore[invalid-argument-type]
+    handler_cls = _build_healthz_handler(readiness, lookup)
     server, port = _serve(handler_cls)
     try:
         yield readiness, lookup, port

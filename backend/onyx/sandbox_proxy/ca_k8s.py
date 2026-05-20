@@ -20,6 +20,9 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_SECRET
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -29,8 +32,13 @@ _CA_CERT_SECRET_KEY = "ca.crt"
 _CA_KEY_SECRET_KEY = "ca.key"
 _CA_CERT_CONFIGMAP_KEY = "ca.crt"
 
-_CONFIGMAP_REPLACE_MAX_ATTEMPTS = 5
-_CONFIGMAP_REPLACE_MAX_BACKOFF = 1.6
+_COMPONENT_VALUE_PROXY = "sandbox-proxy"
+_RESOURCE_LABEL_KEY = "onyx.app/resource"
+_SECRET_RESOURCE_LABEL = "sandbox-proxy-ca"
+_CONFIGMAP_RESOURCE_LABEL = "sandbox-proxy-ca-bundle"
+
+_CONFIGMAP_REPLACE_MAX_ATTEMPTS = 7
+_CONFIGMAP_REPLACE_MAX_BACKOFF = 3.2
 
 
 def _decode_cert_for_configmap(cert_pem: bytes) -> str:
@@ -101,9 +109,9 @@ class K8sSecretCAStore(CAStore):
                 name=self._secret_name,
                 namespace=self._proxy_ns,
                 labels={
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "app.kubernetes.io/component": "sandbox-proxy",
-                    "onyx.app/resource": "sandbox-proxy-ca",
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_K8S_COMPONENT: _COMPONENT_VALUE_PROXY,
+                    _RESOURCE_LABEL_KEY: _SECRET_RESOURCE_LABEL,
                 },
             ),
             data={
@@ -132,9 +140,9 @@ class K8sSecretCAStore(CAStore):
                 name=self._configmap_name,
                 namespace=self._sandbox_ns,
                 labels={
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "app.kubernetes.io/component": "sandbox-proxy",
-                    "onyx.app/resource": "sandbox-proxy-ca-bundle",
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_K8S_COMPONENT: _COMPONENT_VALUE_PROXY,
+                    _RESOURCE_LABEL_KEY: _CONFIGMAP_RESOURCE_LABEL,
                 },
             ),
             data={_CA_CERT_CONFIGMAP_KEY: _decode_cert_for_configmap(cert_pem)},

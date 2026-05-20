@@ -1,19 +1,25 @@
 from types import SimpleNamespace
-from typing import Any
+from typing import cast
 from uuid import uuid4
+
+from mitmproxy import http
 
 from onyx.sandbox_proxy.addons.passthrough import PassthroughAddon
 from onyx.sandbox_proxy.identity import SessionContext
 
 
-def _make_flow(src_ip: str | None, host: str = "api.slack.com") -> SimpleNamespace:
+def _make_flow(src_ip: str | None, host: str = "api.slack.com") -> http.HTTPFlow:
     """Stand-in for `mitmproxy.http.HTTPFlow`. Mirrors only the fields
-    the addon reads (peername, request.host/path, metadata)."""
+    the addon reads (peername, request.host/path, metadata). Cast to
+    HTTPFlow so the type system trusts the duck-typed surface."""
     peername = (src_ip, 12345) if src_ip is not None else None
-    return SimpleNamespace(
-        client_conn=SimpleNamespace(peername=peername),
-        request=SimpleNamespace(host=host, path="/api/whatever"),
-        metadata={},
+    return cast(
+        http.HTTPFlow,
+        SimpleNamespace(
+            client_conn=SimpleNamespace(peername=peername),
+            request=SimpleNamespace(host=host, path="/api/whatever"),
+            metadata={},
+        ),
     )
 
 
@@ -47,7 +53,7 @@ def test_request_attaches_session_context_on_identified_flow() -> None:
     ctx = _make_session_context()
     flow = _make_flow("10.0.0.1")
 
-    PassthroughAddon(identity=_StubResolver(ctx)).request(flow)  # ty: ignore[invalid-argument-type]
+    PassthroughAddon(identity=_StubResolver(ctx)).request(flow)
 
     assert flow.metadata[PassthroughAddon.METADATA_KEY] is ctx
 
@@ -55,7 +61,7 @@ def test_request_attaches_session_context_on_identified_flow() -> None:
 def test_request_does_not_attach_on_unidentified_flow() -> None:
     flow = _make_flow("10.0.0.1")
 
-    PassthroughAddon(identity=_StubResolver(None)).request(flow)  # ty: ignore[invalid-argument-type]
+    PassthroughAddon(identity=_StubResolver(None)).request(flow)
 
     assert PassthroughAddon.METADATA_KEY not in flow.metadata
 
@@ -65,7 +71,7 @@ def test_request_forwards_without_context_when_resolver_raises() -> None:
     # take down sandbox egress.
     flow = _make_flow("10.0.0.1")
 
-    PassthroughAddon(identity=_RaisingResolver()).request(flow)  # ty: ignore[invalid-argument-type]
+    PassthroughAddon(identity=_RaisingResolver()).request(flow)
 
     assert PassthroughAddon.METADATA_KEY not in flow.metadata
 
@@ -74,23 +80,25 @@ def test_request_handles_missing_peername() -> None:
     resolver = _StubResolver(_make_session_context())
     flow = _make_flow(None)
 
-    PassthroughAddon(identity=resolver).request(flow)  # ty: ignore[invalid-argument-type]
+    PassthroughAddon(identity=resolver).request(flow)
 
     assert resolver.calls == []
     assert PassthroughAddon.METADATA_KEY not in flow.metadata
 
 
 def test_request_handles_non_string_peer_addr() -> None:
-    # Defensive: peer[0] should be a str, but a misbehaving transport
-    # could return bytes/None. The addon should refuse to look up a
-    # non-string IP.
+    # peer[0] should be a str, but a misbehaving transport could return
+    # bytes/None. The addon must refuse to look up a non-string IP.
     resolver = _StubResolver(_make_session_context())
-    flow: Any = SimpleNamespace(
-        client_conn=SimpleNamespace(peername=(b"10.0.0.1", 12345)),
-        request=SimpleNamespace(host="x", path="/"),
-        metadata={},
+    flow = cast(
+        http.HTTPFlow,
+        SimpleNamespace(
+            client_conn=SimpleNamespace(peername=(b"10.0.0.1", 12345)),
+            request=SimpleNamespace(host="x", path="/"),
+            metadata={},
+        ),
     )
 
-    PassthroughAddon(identity=resolver).request(flow)  # ty: ignore[invalid-argument-type]
+    PassthroughAddon(identity=resolver).request(flow)
 
     assert resolver.calls == []

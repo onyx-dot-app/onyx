@@ -111,7 +111,10 @@ step_self_verify() {
 
     grep -qE "^-P OUTPUT DROP$" <<<"$rules" \
         || die "self-verify: OUTPUT default policy is not DROP"
-    grep -qE "ACCEPT.*-d ${PROXY_IP//./\\.}/32 .*--dport ${SANDBOX_PROXY_PORT}\b" <<<"$rules" \
+    # iptables -S emits each rule as: -A OUTPUT -p tcp -d <ip>[/32]
+    # --dport <port> -j ACCEPT. iptables normalises single IPs to /32
+    # but accept the bare form too.
+    grep -qE "^-A OUTPUT .*-d ${PROXY_IP//./\\.}(/32)?[[:space:]].*--dport ${SANDBOX_PROXY_PORT}[[:space:]].*-j ACCEPT$" <<<"$rules" \
         || die "self-verify: no ACCEPT rule for ${PROXY_IP}:${SANDBOX_PROXY_PORT}"
     grep -qE "^-A OUTPUT -m conntrack --ctstate (RELATED,ESTABLISHED|ESTABLISHED,RELATED) -j ACCEPT$" <<<"$rules" \
         || die "self-verify: no conntrack ESTABLISHED/RELATED rule"
