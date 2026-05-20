@@ -90,12 +90,6 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
-    # NOTE: Craft's Docker sandbox backend needs additional env vars, a host
-    # Docker socket bind-mount, and the dedicated ``onyx_craft_sandbox``
-    # bridge network. Those are kept out of this default file so non-Craft
-    # deployments never inherit the socket exposure. Layer
-    # ``docker-compose.craft.yml`` on top to enable them
-    # (``install.sh --include-craft`` does this automatically).
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -177,8 +171,6 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
-    # NOTE: see api_server above — Craft sandbox env vars, the Docker socket
-    # mount, and the sandbox bridge network live in docker-compose.craft.yml.
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
