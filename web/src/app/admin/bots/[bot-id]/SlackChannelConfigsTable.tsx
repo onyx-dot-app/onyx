@@ -87,7 +87,10 @@ export default function SlackChannelConfigsTable({
                       <TableCell>
                         <div className="flex gap-x-2">
                           <div className="my-auto">
-                            <SvgEdit className="text-muted-foreground" />
+                            <SvgEdit
+                              size={16}
+                              className="text-muted-foreground"
+                            />
                           </div>
                           <div className="my-auto">
                             {"#" +
