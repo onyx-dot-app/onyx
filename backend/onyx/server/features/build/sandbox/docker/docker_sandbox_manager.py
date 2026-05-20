@@ -145,6 +145,26 @@ CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
 
 
+def _build_org_info_script(
+    session_path: str, user_work_area: str | None, user_level: str | None
+) -> str:
+    """Shell snippet that writes org_info/ files when a persona is configured."""
+    if not user_work_area:
+        return ""
+    persona = get_persona_info(user_work_area, user_level)
+    if persona is None:
+        return ""
+    agents_md = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
+    identity = generate_user_identity_content(persona).replace("'", "'\\''")
+    org_structure = json.dumps(ORGANIZATION_STRUCTURE, indent=2).replace("'", "'\\''")
+    return f"""
+mkdir -p {session_path}/org_info
+printf '%s' '{agents_md}' > {session_path}/org_info/AGENTS.md
+printf '%s' '{identity}' > {session_path}/org_info/user_identity_profile.txt
+printf '%s' '{org_structure}' > {session_path}/org_info/organization_structure.json
+"""
+
+
 def _build_nextjs_start_script(
     session_path: str,
     nextjs_port: int,
@@ -558,39 +578,62 @@ class DockerSandboxManager(SandboxManager):
             tenant_id,
         )
 
-        # Idempotency: if the container exists and is running, reuse it.
+        # 1. Idempotency: reuse an existing container if at all possible.
+        container = self._reuse_existing_container(sandbox_id)
+        if container is None:
+            # 2. Otherwise create a fresh one.
+            self._ensure_sandbox_network()
+            volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
+            container = self._create_sandbox_container(
+                sandbox_id=sandbox_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                onyx_pat=onyx_pat,
+                volume_name=volume_name,
+            )
+
+        if not self._wait_for_container_running(container):
+            raise RuntimeError(
+                f"Timeout waiting for sandbox container {container.name} to be running"
+            )
+        self._apply_imds_block(container)
+
+        logger.info(
+            "Provisioned Docker sandbox %s, container=%s", sandbox_id, container.name
+        )
+        return SandboxInfo(
+            sandbox_id=sandbox_id,
+            directory_path=f"docker://{container.name}",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+
+    def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
+        """Return a running/restarted container if one exists, else None."""
         existing = self._get_container(sandbox_id)
-        if existing is not None:
-            existing.reload()
-            status = ((existing.attrs or {}).get("State") or {}).get("Status")
-            if status == "running":
-                logger.info("Reusing existing running sandbox %s", sandbox_id)
-                return SandboxInfo(
-                    sandbox_id=sandbox_id,
-                    directory_path=f"docker://{existing.name}",
-                    status=SandboxStatus.RUNNING,
-                    last_heartbeat=None,
-                )
-            if status in ("exited", "created"):
-                logger.info(
-                    "Starting existing stopped sandbox container %s", existing.name
-                )
-                existing.start()
-                if not self._wait_for_container_running(existing):
-                    raise RuntimeError(
-                        f"Timeout waiting for restarted container {existing.name}"
-                    )
-                self._apply_imds_block(existing)
-                return SandboxInfo(
-                    sandbox_id=sandbox_id,
-                    directory_path=f"docker://{existing.name}",
-                    status=SandboxStatus.RUNNING,
-                    last_heartbeat=None,
-                )
+        if existing is None:
+            return None
+        existing.reload()
+        status = ((existing.attrs or {}).get("State") or {}).get("Status")
+        if status == "running":
+            logger.info("Reusing existing running sandbox %s", sandbox_id)
+            return existing
+        if status in ("exited", "created"):
+            logger.info("Starting existing stopped sandbox %s", existing.name)
+            existing.start()
+            return existing
+        return None
 
-        self._ensure_sandbox_network()
-        volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
-
+    def _create_sandbox_container(
+        self,
+        *,
+        sandbox_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+        onyx_pat: str,
+        volume_name: str,
+    ) -> Container:
+        """Run docker create + start with our security/network/labels invariants."""
         create_kwargs = build_container_create_kwargs(
             sandbox_id=sandbox_id,
             user_id=user_id,
@@ -607,39 +650,17 @@ class DockerSandboxManager(SandboxManager):
         )
         # ``_block_imds`` is a sentinel for post-start setup, not a docker arg.
         create_kwargs.pop("_block_imds", None)
-
         try:
             # ty can't statically verify TypedDict-unpack against ``run``'s
-            # 50+ named-parameter overloads; the keys/types are checked by
+            # 50+ named-parameter overloads; types are pinned by
             # ``ContainerCreateKwargs`` at construction time.
-            container = self._docker.containers.run(**create_kwargs)  # ty: ignore[no-matching-overload]
+            return self._docker.containers.run(**create_kwargs)  # ty: ignore[no-matching-overload]
         except APIError as e:
-            # 409 means another concurrent request created it — reuse it.
+            # 409 means a concurrent request created the same container.
             if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
                 logger.info("Sandbox container %s already exists, reusing", sandbox_id)
-                container = self._require_container(sandbox_id)
-            else:
-                logger.error("Failed to create sandbox container %s: %s", sandbox_id, e)
-                raise RuntimeError(f"Failed to create sandbox container: {e}") from e
-
-        if not self._wait_for_container_running(container):
-            raise RuntimeError(
-                f"Timeout waiting for sandbox container {container.name} to be running"
-            )
-        self._apply_imds_block(container)
-
-        logger.info(
-            "Provisioned Docker sandbox %s, container=%s, volume=%s",
-            sandbox_id,
-            container.name,
-            volume_name,
-        )
-        return SandboxInfo(
-            sandbox_id=sandbox_id,
-            directory_path=f"docker://{container.name}",
-            status=SandboxStatus.RUNNING,
-            last_heartbeat=None,
-        )
+                return self._require_container(sandbox_id)
+            raise RuntimeError(f"Failed to create sandbox container: {e}") from e
 
     def terminate(self, sandbox_id: UUID) -> None:
         container = self._get_container(sandbox_id)
@@ -681,70 +702,46 @@ class DockerSandboxManager(SandboxManager):
     # Session workspace setup
     # ------------------------------------------------------------------
 
-    def _build_setup_script(
+    def _render_session_files(
         self,
         *,
-        session_path: str,
-        agent_instructions: str,
-        opencode_json: str,
+        llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        user_work_area: str | None,
-        user_level: str | None,
-    ) -> str:
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
-        agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+        skills_section: str,
+        user_name: str | None = None,
+        user_role: str | None = None,
+        include_org_info: bool = False,
+    ) -> tuple[str, str]:
+        """Render shell-escaped (AGENTS.md, opencode.json) for a session.
 
-        org_info_setup = ""
-        if user_work_area:
-            persona = get_persona_info(user_work_area, user_level)
-            if persona:
-                agents_md_escaped = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-                identity_escaped = generate_user_identity_content(persona).replace(
-                    "'", "'\\''"
-                )
-                org_structure_escaped = json.dumps(
-                    ORGANIZATION_STRUCTURE, indent=2
-                ).replace("'", "'\\''")
-                org_info_setup = f"""
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md_escaped}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
-"""
-
-        outputs_setup = f"""
-echo "Copying outputs template"
-if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
-    cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    cd {session_path}/outputs/web && npm install
-else
-    echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
-    mkdir -p {session_path}/outputs/web
-fi
-"""
-
-        nextjs_start_script = (
-            _build_nextjs_start_script(
-                session_path, nextjs_port, check_node_modules=False
-            )
-            if nextjs_port is not None
-            else ""
+        Shared between fresh setup and post-restore regeneration since
+        neither AGENTS.md nor opencode.json is included in snapshots.
+        """
+        agent_instructions = generate_agent_instructions(
+            template_path=self._agent_instructions_template_path,
+            skills_section=skills_section,
+            provider=llm_config.provider,
+            model_name=llm_config.model_name,
+            nextjs_port=nextjs_port,
+            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            user_name=user_name,
+            user_role=user_role,
+            include_org_info=include_org_info,
         )
-
-        return f"""
-set -e
-echo "Creating session directory: {session_path}"
-mkdir -p {session_path}/outputs
-mkdir -p {session_path}/attachments
-{outputs_setup}
-mkdir -p {session_path}/.opencode
-ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-{org_info_setup}
-{nextjs_start_script}
-echo "Session workspace setup complete"
-"""
+        opencode_json = json.dumps(
+            build_opencode_config(
+                provider=llm_config.provider,
+                model_name=llm_config.model_name,
+                api_key=llm_config.api_key or None,
+                api_base=llm_config.api_base,
+                disabled_tools=OPENCODE_DISABLED_TOOLS,
+            )
+        )
+        # Escape single quotes for ``printf '%s' '...'``.
+        return (
+            agent_instructions.replace("'", "'\\''"),
+            opencode_json.replace("'", "'\\''"),
+        )
 
     def setup_session_workspace(
         self,
@@ -770,35 +767,41 @@ echo "Session workspace setup complete"
 
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-
-        agent_instructions = generate_agent_instructions(
-            template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
+        agents_md, opencode_json = self._render_session_files(
+            llm_config=llm_config,
             nextjs_port=nextjs_port,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            skills_section=skills_section,
             user_name=user_name,
             user_role=user_role,
             include_org_info=bool(user_work_area),
         )
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-        opencode_json = json.dumps(opencode_config)
 
-        setup_script = self._build_setup_script(
-            session_path=session_path,
-            agent_instructions=agent_instructions,
-            opencode_json=opencode_json,
-            nextjs_port=nextjs_port,
-            user_work_area=user_work_area,
-            user_level=user_level,
+        org_info_setup = _build_org_info_script(
+            session_path, user_work_area, user_level
         )
+        nextjs_start = (
+            _build_nextjs_start_script(session_path, nextjs_port)
+            if nextjs_port is not None
+            else ""
+        )
+        setup_script = f"""
+set -e
+echo "Creating session directory: {session_path}"
+mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
+if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
+    cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
+    cd {session_path}/outputs/web && npm install
+else
+    echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
+    mkdir -p {session_path}/outputs/web
+fi
+ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{opencode_json}' > {session_path}/opencode.json
+{org_info_setup}
+{nextjs_start}
+echo "Session workspace setup complete"
+"""
 
         logger.info(
             "Setting up session workspace %s in sandbox %s", session_id, sandbox_id
@@ -806,12 +809,6 @@ echo "Session workspace setup complete"
         try:
             run_in_container(container, ["/bin/sh", "-c", setup_script])
         except ExecError as e:
-            logger.error(
-                "Failed to setup session workspace %s in sandbox %s: %s",
-                session_id,
-                sandbox_id,
-                e,
-            )
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
             ) from e
@@ -1045,40 +1042,23 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         skills_section: str,
     ) -> None:
-        agent_instructions = generate_agent_instructions(
-            template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            nextjs_port=nextjs_port,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=None,
-            user_role=None,
-            include_org_info=False,
-        )
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-        opencode_json = json.dumps(opencode_config)
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
-        agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+        """Rewrite AGENTS.md, opencode.json, and the skills symlink post-restore.
 
-        # ``.opencode/skills`` is a symlink to the shared
-        # ``/workspace/managed/skills`` directory and is NOT included in the
-        # snapshot tar (which only carries ``outputs/``, ``attachments/``,
-        # ``.opencode-data/``). Recreate it here so restored sessions still
-        # see the pushed skill files.
+        The snapshot tar only carries ``outputs/``, ``attachments/``, and
+        ``.opencode-data/`` — the symlink and config files are regenerated
+        here so restored sessions still see the pushed skill files.
+        """
+        agents_md, opencode_json = self._render_session_files(
+            llm_config=llm_config,
+            nextjs_port=nextjs_port,
+            skills_section=skills_section,
+        )
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
-printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-echo "Session config regeneration complete"
+printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+printf '%s' '{opencode_json}' > {session_path}/opencode.json
 """
         try:
             run_in_container(container, ["/bin/sh", "-c", script])
@@ -1561,51 +1541,32 @@ echo WRITE_OK"""
 
 
 class _GeneratorReader:
-    """Adapt a ``Generator[bytes, None, int]`` into a ``read()``-based reader.
+    """Adapt a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
 
     ``SnapshotManager.create_snapshot_from_stream`` (and ``shutil.copyfileobj``
-    under it) only need ``read(n)`` — not the full :class:`typing.IO[bytes]`
-    surface — so we don't bother implementing the rest. Buffers leftover
-    bytes between reads so the producer's chunk size doesn't constrain the
-    consumer's.
+    under it) only need ``read(n)``. We buffer leftover bytes so the
+    producer's chunk size doesn't constrain the consumer's.
     """
 
     def __init__(self, gen: Generator[bytes, None, int]) -> None:
         self._gen = gen
-        self._leftover = b""
-        self._exhausted = False
+        self._buf = b""
 
     def read(self, size: int = -1) -> bytes:
         if size is None or size < 0:
-            chunks: list[bytes] = []
-            if self._leftover:
-                chunks.append(self._leftover)
-                self._leftover = b""
-            for chunk in self._gen:
-                chunks.append(chunk)
-            self._exhausted = True
-            return b"".join(chunks)
-
-        out = bytearray(self._leftover)
-        self._leftover = b""
-        while len(out) < size and not self._exhausted:
+            data = self._buf + b"".join(self._gen)
+            self._buf = b""
+            return data
+        while len(self._buf) < size:
             try:
-                chunk = next(self._gen)
+                self._buf += next(self._gen)
             except StopIteration:
-                self._exhausted = True
                 break
-            out.extend(chunk)
-
-        if len(out) > size:
-            self._leftover = bytes(out[size:])
-            return bytes(out[:size])
-        return bytes(out)
+        data, self._buf = self._buf[:size], self._buf[size:]
+        return data
 
     def readable(self) -> bool:
         return True
 
     def close(self) -> None:
-        try:
-            self._gen.close()
-        except Exception:
-            pass
+        self._gen.close()
