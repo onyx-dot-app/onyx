@@ -99,7 +99,6 @@ services:
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
-      - SANDBOX_DOCKER_BLOCK_IMDS=${SANDBOX_DOCKER_BLOCK_IMDS:-false}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -202,7 +201,6 @@ services:
       - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
       - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
-      - SANDBOX_DOCKER_BLOCK_IMDS=${SANDBOX_DOCKER_BLOCK_IMDS:-false}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro

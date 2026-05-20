@@ -98,7 +98,6 @@ def kwargs() -> ContainerCreateKwargs:
         volume_name="onyx-craft-sandbox-12345678",
         memory_limit="2g",
         cpu_limit=1.0,
-        block_imds=False,
     )
 
 
@@ -159,27 +158,6 @@ def test_container_kwargs_labels_and_volume(kwargs: ContainerCreateKwargs) -> No
 def test_container_kwargs_uses_sandbox_network(kwargs: ContainerCreateKwargs) -> None:
     """Sandbox must join only the dedicated bridge, not compose's default."""
     assert kwargs["network"] == "onyx_craft_sandbox"
-
-
-def test_container_kwargs_block_imds_does_not_leak_into_docker_args() -> None:
-    """``block_imds`` is a manager-level sentinel, not a Docker create arg."""
-    kw = build_container_create_kwargs(
-        sandbox_id=SANDBOX_ID,
-        user_id=USER_ID,
-        tenant_id=TENANT_ID,
-        image="onyxdotapp/sandbox:test",
-        onyx_pat="pat",
-        api_server_url="http://api:8080",
-        network="net",
-        volume_name="vol",
-        memory_limit="2g",
-        cpu_limit=1.0,
-        block_imds=True,
-    )
-    assert kw["_block_imds"] is True
-    # ``_block_imds`` must be filtered out before passing to docker run.
-    # The manager does the pop; this just documents the contract.
-    assert "_block_imds" in kw
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +259,6 @@ def test_container_kwargs_warns_on_internal_compose_host(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
-            block_imds=False,
         )
     assert any(
         "looks like an internal compose hostname" in r.getMessage()
@@ -307,7 +284,6 @@ def test_container_kwargs_no_warning_for_public_url(
             volume_name="vol",
             memory_limit="2g",
             cpu_limit=1.0,
-            block_imds=False,
         )
     assert not any(
         "looks like an internal compose hostname" in r.getMessage()

@@ -57,7 +57,6 @@ def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) 
         self._network_name = "fake"
         self._memory_limit = "2g"
         self._cpu_limit = 1.0
-        self._block_imds = False
         self._snapshot_manager = None
         from pathlib import Path
 

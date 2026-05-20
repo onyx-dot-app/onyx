@@ -60,7 +60,6 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from typing import NotRequired
 from typing import TypedDict
 from uuid import UUID
 
@@ -76,7 +75,6 @@ from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_DOCKER_BLOCK_IMDS
 from onyx.server.features.build.configs import SANDBOX_DOCKER_CPU_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
@@ -303,8 +301,7 @@ class ContainerCreateKwargs(TypedDict):
     """Kwargs we pass to ``DockerClient.containers.run``.
 
     Typed so ``test_docker_manager_config.py`` can read specific fields
-    without ``cast``. ``_block_imds`` is a manager-level sentinel popped
-    before invoking docker.
+    without ``cast``.
     """
 
     name: str
@@ -323,7 +320,6 @@ class ContainerCreateKwargs(TypedDict):
     mem_limit: str
     nano_cpus: int
     restart_policy: dict[str, str]
-    _block_imds: NotRequired[bool]
 
 
 def build_container_create_kwargs(
@@ -338,7 +334,6 @@ def build_container_create_kwargs(
     volume_name: str,
     memory_limit: str,
     cpu_limit: float,
-    block_imds: bool,
     compose_project: str | None = None,
 ) -> ContainerCreateKwargs:
     """Build the kwargs dict for ``DockerClient.containers.create``.
@@ -402,9 +397,6 @@ def build_container_create_kwargs(
         nano_cpus=int(cpu_limit * 1_000_000_000),
         restart_policy={"Name": "unless-stopped"},
         # No docker socket mount. No S3/MinIO env. No FileStore credentials.
-        # ``_block_imds`` is a manager-level sentinel — popped before
-        # invoking docker.run().
-        _block_imds=block_imds,
     )
 
 
@@ -431,7 +423,6 @@ class DockerSandboxManager(SandboxManager):
         self._network_name = SANDBOX_DOCKER_NETWORK
         self._memory_limit = SANDBOX_DOCKER_MEMORY_LIMIT
         self._cpu_limit = SANDBOX_DOCKER_CPU_LIMIT
-        self._block_imds = SANDBOX_DOCKER_BLOCK_IMDS
         self._snapshot_manager = SnapshotManager(get_default_file_store())
 
         build_dir = Path(__file__).parent.parent.parent
@@ -525,33 +516,6 @@ class DockerSandboxManager(SandboxManager):
             time.sleep(CONTAINER_READY_POLL_INTERVAL_SECONDS)
         return False
 
-    def _apply_imds_block(self, container: Container) -> None:
-        """Best-effort iptables DROP for 169.254.169.254 inside the container.
-
-        Requires NET_ADMIN, which we don't grant. Logs a warning and
-        continues if the rule can't be installed; the host-level rule is the
-        real protection.
-        """
-        if not self._block_imds:
-            return
-        try:
-            run_in_container(
-                container,
-                [
-                    "/bin/sh",
-                    "-c",
-                    "iptables -A OUTPUT -d 169.254.169.254 -j DROP 2>/dev/null || true",
-                ],
-                user="root",
-                check=False,
-            )
-        except ExecError as e:
-            logger.warning(
-                "[DOCKER-SANDBOX] In-container IMDS block could not be installed "
-                "(host-level block is the real protection): %s",
-                e,
-            )
-
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -596,7 +560,6 @@ class DockerSandboxManager(SandboxManager):
             raise RuntimeError(
                 f"Timeout waiting for sandbox container {container.name} to be running"
             )
-        self._apply_imds_block(container)
 
         logger.info(
             "Provisioned Docker sandbox %s, container=%s", sandbox_id, container.name
@@ -645,11 +608,8 @@ class DockerSandboxManager(SandboxManager):
             volume_name=volume_name,
             memory_limit=self._memory_limit,
             cpu_limit=self._cpu_limit,
-            block_imds=self._block_imds,
             compose_project=self._compose_project,
         )
-        # ``_block_imds`` is a sentinel for post-start setup, not a docker arg.
-        create_kwargs.pop("_block_imds", None)
         try:
             # ty can't statically verify TypedDict-unpack against ``run``'s
             # 50+ named-parameter overloads; types are pinned by

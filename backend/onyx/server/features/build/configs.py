@@ -141,15 +141,6 @@ SANDBOX_DOCKER_VOLUME_PREFIX = os.environ.get(
 SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g")
 SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
 
-# If true, install an iptables rule inside each sandbox at provision time to
-# DROP traffic to 169.254.169.254 (EC2/GCE metadata service). The install
-# script must enable this on cloud VMs; the host must also block IMDS in its
-# Docker bridge rules. Application-level blocking is best-effort and is not a
-# substitute for host configuration.
-SANDBOX_DOCKER_BLOCK_IMDS = (
-    os.environ.get("SANDBOX_DOCKER_BLOCK_IMDS", "false").lower() == "true"
-)
-
 # ============================================================================
 # SSE Streaming Configuration
 # ============================================================================
