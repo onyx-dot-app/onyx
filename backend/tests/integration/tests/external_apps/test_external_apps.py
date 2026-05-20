@@ -71,9 +71,9 @@ def _assert_user_response_shape_is_safe(
     }
     actual_fields = set(user_app.model_fields.keys())
     leaked = forbidden_fields & actual_fields
-    assert (
-        not leaked
-    ), f"User-facing ExternalAppUserResponse leaked admin-only fields: {leaked}"
+    assert not leaked, (
+        f"User-facing ExternalAppUserResponse leaked admin-only fields: {leaked}"
+    )
     for org_key in _ORG_CREDENTIALS:
         assert org_key not in user_app.credential_keys
         assert org_key not in user_app.credential_values
