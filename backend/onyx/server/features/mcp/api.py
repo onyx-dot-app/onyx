@@ -157,13 +157,19 @@ class OnyxTokenStorage(TokenStorage):
             }
             config.config["headers"] = cfg_headers
             update_connection_config(config.id, db_session, config.config)
-            if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config.config)
 
-                # signal the oauth callback that token exchange is complete
-                r = get_redis_client()
-                r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
-                r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+        # The shared admin row is intentionally NOT written here: it
+        # serves as the OAuth `client_info` registry shared across all
+        # users of this MCP server (see `get_client_info`). Per-user
+        # state (access tokens and resolved `Authorization` headers)
+        # belongs only on the per-user row. The Redis push below is
+        # what `process_oauth_callback` blocks on to know token exchange
+        # has completed; the admin config id is the only stable
+        # identifier shared between the two contexts.
+        if self.alt_config_id:
+            r = get_redis_client()
+            r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
+            r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -186,13 +192,23 @@ class OnyxTokenStorage(TokenStorage):
                         )
             return None
 
-    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+    async def set_client_info(  # ty: ignore[invalid-method-override]
+        self, info: OAuthClientInformationFull
+    ) -> None:
+        info_payload = info.model_dump(mode="json")
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
-            config.config[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
+            config.config[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
             update_connection_config(config.id, db_session, config.config)
+
+            # Cache only the `client_info` field on the shared admin row;
+            # never propagate per-user state (tokens / Authorization header).
             if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config.config)
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                alt_config.config[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
+                update_connection_config(
+                    self.alt_config_id, db_session, alt_config.config
+                )
 
 
 def make_oauth_provider(
@@ -903,9 +919,17 @@ def _db_mcp_server_to_api_mcp_server(
                 admin_credentials = {}
                 logger.warning(f"No client info found for server {db_server.name}")
 
-    # Get auth template if this is a per-user auth server
+    # The header template is only meaningful for per-user API_TOKEN
+    # servers, where it surfaces placeholder strings (e.g.
+    # `Bearer {API_KEY}`) for the user-side credential prompt. OAuth
+    # per-user servers do not get an `auth_template`: OAuth uses the
+    # handshake URL (`/oauth/connect`) rather than a header template,
+    # so the frontend never consumes one for OAuth flows.
     auth_template = None
-    if auth_performer == MCPAuthenticationPerformer.PER_USER:
+    if (
+        auth_performer == MCPAuthenticationPerformer.PER_USER
+        and db_server.auth_type != MCPAuthenticationType.OAUTH
+    ):
         try:
             template_config = db_server.admin_connection_config
             if template_config:
