@@ -394,6 +394,7 @@ def index_doc_batch_with_handler(
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
@@ -407,6 +408,7 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
+            from_beginning=from_beginning,
             enable_contextual_rag=enable_contextual_rag,
             llm=llm,
         )
@@ -1150,12 +1152,17 @@ def _maybe_push_documents(
     adapter: IndexingBatchAdapter,
     filtered_documents: list[Document],
     insertion_records: list[DocumentInsertionRecord],
+    from_beginning: bool = False,
 ) -> None:
     """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
+    Does not fire during initial indexing (from_beginning=True).
     """
+    if from_beginning:
+        return
+
     if MULTI_TENANT:
         return
 
@@ -1223,6 +1230,7 @@ def index_doc_batch(
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
     ] = filter_documents,
@@ -1450,6 +1458,7 @@ def index_doc_batch(
         adapter=adapter,
         filtered_documents=filtered_documents,
         insertion_records=primary_doc_idx_insertion_records,
+        from_beginning=from_beginning,
     )
 
     return IndexingPipelineResult(
@@ -1475,6 +1484,7 @@ def run_indexing_pipeline(
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
     if db_session is not None:
@@ -1527,4 +1537,5 @@ def run_indexing_pipeline(
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,
         ignore_time_skip=ignore_time_skip,
+        from_beginning=from_beginning,
     )
