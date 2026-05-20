@@ -1020,7 +1020,73 @@ else
     if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
+        # Ensure SANDBOX_BACKEND=docker is written explicitly (docker-compose
+        # defaults to it already, but a literal entry in .env makes the
+        # selection visible/auditable to operators).
+        if grep -q "^#* *SANDBOX_BACKEND=" "$ENV_FILE"; then
+            sed -i.bak 's/^#* *SANDBOX_BACKEND=.*/SANDBOX_BACKEND=docker/' "$ENV_FILE"
+        else
+            echo "SANDBOX_BACKEND=docker" >> "$ENV_FILE"
+        fi
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
+
+        # Pre-create the dedicated sandbox bridge. docker-compose references
+        # it as external=true so it must exist before `compose up`.
+        SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+        if ! docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+            if docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+                print_success "Created sandbox bridge network: $SANDBOX_NET"
+            else
+                print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+                echo "    docker network create $SANDBOX_NET"
+            fi
+        fi
+
+        # Trust boundary warning. api_server + background mount the host
+        # Docker socket so they can drive sandbox containers. Anything that
+        # can talk to that socket is effectively root on the host.
+        echo ""
+        print_warning "Craft + docker backend: api_server and background mount"
+        print_warning "/var/run/docker.sock. Compromise of either container ="
+        print_warning "root on the host. Only enable on hosts you fully control."
+        echo ""
+
+        # EC2 IMDS: the Docker daemon's bridge networks route to 169.254.169.254
+        # by default, which can hand out IAM role credentials to a sandboxed
+        # workload. We can't fix this from app code alone — host-level
+        # DOCKER-USER iptables rules are the right place. Offer to install
+        # the rule on EC2; otherwise require an explicit opt-out.
+        if curl -sf -m 1 http://169.254.169.254/latest/meta-data/instance-id >/dev/null 2>&1; then
+            print_info "EC2 detected. Sandbox containers can currently reach the"
+            print_info "Instance Metadata Service at 169.254.169.254, which would"
+            print_info "leak IAM role credentials to any code running in a sandbox."
+            echo ""
+            if [ "${CRAFT_ALLOW_UNBLOCKED_IMDS:-false}" = "true" ]; then
+                print_warning "CRAFT_ALLOW_UNBLOCKED_IMDS=true set — skipping IMDS block."
+                print_warning "You are accepting that sandbox workloads can read IAM credentials."
+            else
+                # Best-effort: drop bridge traffic to IMDS in the DOCKER-USER chain.
+                if sudo -n iptables -L DOCKER-USER >/dev/null 2>&1; then
+                    if sudo iptables -C DOCKER-USER -d 169.254.169.254 -j DROP >/dev/null 2>&1; then
+                        print_success "DOCKER-USER IMDS block already installed."
+                    else
+                        if sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP; then
+                            print_success "Installed DOCKER-USER iptables rule to block sandbox→IMDS."
+                            print_info "Persist this rule across reboots — see iptables-persistent or your OS docs."
+                        else
+                            print_error "Failed to install DOCKER-USER IMDS block."
+                            print_error "Set CRAFT_ALLOW_UNBLOCKED_IMDS=true to acknowledge the risk and continue."
+                            exit 1
+                        fi
+                    fi
+                else
+                    print_error "Cannot reach iptables non-interactively. Install the rule manually:"
+                    echo "    sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP"
+                    print_error "Or set CRAFT_ALLOW_UNBLOCKED_IMDS=true to skip this check."
+                    exit 1
+                fi
+            fi
+        fi
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
     fi

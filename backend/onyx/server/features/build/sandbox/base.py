@@ -20,6 +20,7 @@ from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -42,6 +43,20 @@ logger = setup_logger()
 # Using Any here to avoid circular imports - the actual type checking
 # happens in the implementation modules
 ACPEvent = Any
+
+
+@dataclass
+class SSEKeepalive:
+    """Marker event yielded by sandbox-manager ACP clients when no real ACP
+    events have arrived for ``SSE_KEEPALIVE_INTERVAL`` seconds.
+
+    Defined here (rather than in any one backend's exec client) so every
+    backend yields the same class and ``isinstance`` checks in the
+    session-manager SSE pipeline work uniformly. Otherwise a Docker-emitted
+    keepalive would be a different class than a K8s-emitted keepalive and
+    one would fall through the manager's isinstance chain as "unrecognized"
+    and be silently dropped.
+    """
 
 
 class SandboxManager(ABC):
@@ -661,15 +676,12 @@ def get_sandbox_manager() -> SandboxManager:
                     _sandbox_manager_instance = KubernetesSandboxManager()
                     logger.info("Using KubernetesSandboxManager for sandbox operations")
                 elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
-                    # The DockerSandboxManager module ships in a follow-up PR.
-                    # Until then, fail with a clear message rather than a
-                    # cryptic ModuleNotFoundError if someone sets
-                    # SANDBOX_BACKEND=docker against this version.
-                    raise NotImplementedError(
-                        "SANDBOX_BACKEND=docker is not available yet — "
-                        "DockerSandboxManager lands in a follow-up PR. "
-                        "Use SANDBOX_BACKEND=kubernetes or local for now."
+                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+                        DockerSandboxManager,
                     )
+
+                    _sandbox_manager_instance = DockerSandboxManager()
+                    logger.info("Using DockerSandboxManager for sandbox operations")
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
 
