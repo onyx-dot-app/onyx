@@ -8,11 +8,10 @@ metadata:
     app.kubernetes.io/component: sandbox-proxy
 spec:
   replicas: {{ .Values.sandboxProxy.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.sandboxProxy.progressDeadlineSeconds }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      # Keep both replicas up during rollout so new connections always
-      # have somewhere to land.
       maxUnavailable: 0
       maxSurge: 1
   selector:
@@ -37,6 +36,22 @@ spec:
         fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
+      {{- if gt (int .Values.sandboxProxy.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "onyx.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: sandbox-proxy
+      {{- end }}
+      {{- with .Values.sandboxProxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: sandbox-proxy
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
@@ -58,6 +73,8 @@ spec:
               value: {{ .Values.sandboxProxy.containerPorts.proxy | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
               value: {{ .Values.sandboxProxy.containerPorts.healthz | quote }}
+            {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
@@ -71,8 +88,8 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 2
-          # Liveness has a higher threshold than readiness so a
-          # transient informer reconnect doesn't restart the container.
+          # Liveness threshold > readiness so a transient informer
+          # reconnect can flip readiness without restarting the pod.
           livenessProbe:
             httpGet:
               path: /healthz
@@ -86,6 +103,8 @@ spec:
             readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 1001
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               drop:
                 - ALL
@@ -94,17 +113,14 @@ spec:
               mountPath: /var/run/sandbox-proxy
       volumes:
         - name: confdir
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ .Values.sandboxProxy.confdirSizeLimit }}
       {{- with .Values.sandboxProxy.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.sandboxProxy.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.sandboxProxy.affinity }}
-      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 from kubernetes import client
 
 from onyx.sandbox_proxy.identity_k8s import _identity_from_pod
@@ -12,8 +13,11 @@ def _make_pod(
     pod_ip: str | None = "10.0.0.1",
     sandbox_id: str | None = "11111111-1111-1111-1111-111111111111",
     tenant_id: str | None = "public",
+    managed_by: str | None = "onyx",
 ) -> client.V1Pod:
     labels: dict[str, str] = {"app.kubernetes.io/component": "sandbox"}
+    if managed_by is not None:
+        labels["app.kubernetes.io/managed-by"] = managed_by
     if sandbox_id is not None:
         labels["onyx.app/sandbox-id"] = sandbox_id
     if tenant_id is not None:
@@ -93,6 +97,28 @@ def test_apply_event_modified_without_ip_evicts_pending_pod() -> None:
     assert lookup.lookup("10.0.0.1") is None
 
 
-def test_lookup_returns_none_for_unknown_ip() -> None:
-    lookup = _make_lookup()
-    assert lookup.lookup("203.0.113.99") is None
+def test_identity_from_pod_rejects_missing_managed_by() -> None:
+    assert _identity_from_pod(_make_pod(managed_by=None)) is None
+
+
+def test_identity_from_pod_rejects_foreign_managed_by() -> None:
+    # An attacker who can create pods in the namespace can set every
+    # other label correctly; managed-by is the integrity check.
+    assert _identity_from_pod(_make_pod(managed_by="someone-else")) is None
+
+
+def test_initial_list_raises_on_duplicate_ip() -> None:
+    other_uuid = "22222222-2222-2222-2222-222222222222"
+    listing = client.V1PodList(
+        metadata=client.V1ListMeta(resource_version="1"),
+        items=[
+            _make_pod(name="sandbox-a", pod_ip="10.0.0.1"),
+            _make_pod(name="sandbox-b", pod_ip="10.0.0.1", sandbox_id=other_uuid),
+        ],
+    )
+    core_api = MagicMock(spec=client.CoreV1Api)
+    core_api.list_namespaced_pod.return_value = listing
+    lookup = K8sInformerLookup(core_api=core_api)
+
+    with pytest.raises(RuntimeError, match="duplicate sandbox IP"):
+        lookup._initial_list()

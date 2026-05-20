@@ -1470,6 +1470,8 @@ sandboxProxy:
   service:
     proxyPort: 8080
   terminationGracePeriodSeconds: 200
+  progressDeadlineSeconds: 300
+  confdirSizeLimit: 100Mi
   caSecretName: "sandbox-proxy-ca"
   caConfigMapName: "sandbox-proxy-ca-bundle"
   resources:

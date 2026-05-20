@@ -71,13 +71,14 @@ class CABootstrap:
         existing = self._store.load()
         if existing is not None:
             cert_pem, key_pem = existing
-            logger.info("loaded existing proxy CA from store")
+            self._validate_loaded_cert(cert_pem)
+            self._log_cert_metadata(cert_pem, "loaded existing proxy CA")
             return self._materialize(cert_pem, key_pem)
 
         cert_pem, key_pem = self._generate_ca()
         try:
             self._store.persist(cert_pem, key_pem)
-            logger.info("generated and persisted new proxy CA")
+            self._log_cert_metadata(cert_pem, "generated and persisted new proxy CA")
             return self._materialize(cert_pem, key_pem)
         except CAStoreConflictError:
             logger.info("lost CA persist race; reloading winner's CA")
@@ -89,7 +90,34 @@ class CABootstrap:
                     "CAStore raised conflict but subsequent load returned None"
                 )
             cert_pem, key_pem = winner
+            self._validate_loaded_cert(cert_pem)
+            self._log_cert_metadata(cert_pem, "loaded race winner's proxy CA")
             return self._materialize(cert_pem, key_pem)
+
+    @staticmethod
+    def _validate_loaded_cert(cert_pem: bytes) -> None:
+        try:
+            cert = x509.load_pem_x509_certificate(cert_pem)
+        except ValueError as e:
+            raise RuntimeError(f"proxy CA cert is not valid PEM: {e}") from e
+        not_after = cert.not_valid_after_utc
+        if not_after <= dt.datetime.now(dt.timezone.utc):
+            raise RuntimeError(
+                f"proxy CA cert has expired (not_valid_after={not_after.isoformat()}); "
+                "rotate the CA Secret to recover"
+            )
+
+    @staticmethod
+    def _log_cert_metadata(cert_pem: bytes, prefix: str) -> None:
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        fingerprint = cert.fingerprint(hashes.SHA256()).hex()
+        logger.info(
+            "%s sha256=%s not_before=%s not_after=%s",
+            prefix,
+            fingerprint,
+            cert.not_valid_before_utc.isoformat(),
+            cert.not_valid_after_utc.isoformat(),
+        )
 
     def _generate_ca(self) -> tuple[bytes, bytes]:
         private_key = rsa.generate_private_key(
@@ -149,10 +177,16 @@ class CABootstrap:
     def _materialize(self, cert_pem: bytes, key_pem: bytes) -> MaterializedCA:
         # mitmproxy reads key+cert from one PEM. Atomic via rename so a
         # partial write can't leave it reading a half-file.
-        self._pem_path.parent.mkdir(parents=True, exist_ok=True)
+        self._pem_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         tmp_path = self._pem_path.with_suffix(self._pem_path.suffix + ".tmp")
+        # If a stale .tmp file is sitting around from a prior crash,
+        # remove it so O_EXCL can succeed.
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
         payload = key_pem + b"\n" + cert_pem
-        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             os.write(fd, payload)
         finally:
