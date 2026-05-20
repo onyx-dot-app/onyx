@@ -122,12 +122,15 @@ class LangfuseTracingProcessor(TracingProcessor):
                 name=trace.name,
             )
 
-            # Always update the trace-level properties to set the trace name
-            # session_id is optional but name should always be set
+            # Promote first-class Langfuse fields out of metadata so they
+            # populate the dedicated UI facets (Sessions, Users) rather than
+            # only the metadata JSON blob.
             session_id = metadata.get("chat_session_id")
+            user_id = metadata.get("user_id")
             langfuse_span.update_trace(
                 name=trace.name,
                 session_id=session_id if session_id else None,
+                user_id=str(user_id) if user_id else None,
                 metadata=metadata if metadata else None,
             )
 
