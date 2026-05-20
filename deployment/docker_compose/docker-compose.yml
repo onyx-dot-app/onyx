@@ -444,10 +444,7 @@ services:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
-    # if api_server / web_server are not up. Waiting on `service_healthy`
-    # means nginx no longer has to reimplement the wait loop in shell — see
-    # run-nginx.sh, which used to poll api_server with curl from inside the
-    # nginx-alpine container (broken under some musl + Docker DNS configs).
+    # if api_server / web_server are not up
     depends_on:
       api_server:
         condition: service_healthy
