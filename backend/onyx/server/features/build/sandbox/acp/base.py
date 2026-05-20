@@ -91,8 +91,20 @@ class ACPExecClientBase(ABC):
     """
 
     # ``transport_name`` drives the log prefix (``[K8S-ACP]`` / ``[DOCKER-ACP]``)
-    # and the ``context=`` value the packet logger receives.
+    # and the ``context=`` value the packet logger receives. Enforced via
+    # ``__init_subclass__`` below since Python has no ``@abstractmethod``
+    # equivalent for class variables.
     transport_name: ClassVar[str]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if "transport_name" not in cls.__dict__ or not isinstance(
+            cls.__dict__["transport_name"], str
+        ):
+            raise TypeError(
+                f"{cls.__name__} must define a `transport_name: ClassVar[str]` "
+                "class attribute (e.g. 'k8s', 'docker')."
+            )
 
     def __init__(
         self,
