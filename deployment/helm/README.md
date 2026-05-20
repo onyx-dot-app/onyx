@@ -121,6 +121,33 @@ auth:
 When `externalSecret.enabled: false` (the default) the chart renders exactly
 as before — no `ExternalSecret` CR is created and `envFrom` is unchanged.
 
+### First-install reconciliation window
+
+The Helm release renders both the `ExternalSecret` CR and the Deployments that
+reference the materialized Secret in the same apply. ESO reconciles the CR
+asynchronously, typically within a few seconds. During that brief window,
+backend pods will be in `CreateContainerConfigError` because their
+`envFrom: secretRef` references a Secret that does not yet exist. The kubelet
+retries pod creation automatically; once ESO materializes the Secret, pods
+transition to `Running` without manual intervention.
+
+We intentionally leave the `secretRef` non-optional. Marking it optional would
+allow pods to boot with empty env vars and fail later in a way that is harder
+to diagnose; the brief `CreateContainerConfigError` is the clearer failure
+mode if anything is misconfigured (wrong SM path, missing IRSA permissions,
+missing keys in the upstream blob).
+
+If you need pods to be `Ready` before traffic is routed, rely on the existing
+readiness probes — they will not pass until the env vars are present.
+
+### Model-server pods
+
+`indexing-model-deployment` and `inference-model-deployment` deliberately do
+**not** consume `extraEnvFromSecret`. Model servers only need model-config
+env vars (already in the chart's `configMap`), so injecting application-level
+secrets like `POSTGRES_PASSWORD` would needlessly widen their secret-exposure
+surface.
+
 # Values that come from docker-compose (do not copy them)
 
 The Onyx docker-compose stack uses service-name hostnames like `api_server`,
