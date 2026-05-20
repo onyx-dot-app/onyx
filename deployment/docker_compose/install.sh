@@ -15,6 +15,8 @@ USE_LOCAL_FILES=false # Disabled by default, use --local to skip downloading con
 NO_PROMPT=false
 DRY_RUN=false
 VERBOSE=false
+NO_WAIT=false  # When false (default), pass --wait to `docker compose up`
+WAIT_TIMEOUT_SECONDS=600
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --no-wait)
+            NO_WAIT=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
@@ -64,6 +70,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
             echo "  --dry-run        Show what would be done without making changes"
             echo "  --verbose        Show detailed output for debugging"
+            echo "  --no-wait        Skip 'docker compose up --wait'; return as soon as"
+            echo "                   containers are started (they may still be initializing)"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
@@ -261,7 +269,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=10
+TOTAL_STEPS=9
 
 # Print colored output
 print_success() {
@@ -292,7 +300,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
-    
+
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         print_info "Stopping Onyx containers..."
 
@@ -1197,136 +1205,54 @@ else
     exit 1
 fi
 
+# Build the up flags. With --wait (default), Compose waits until every
+# container with a healthcheck reports healthy before returning, and names any
+# service that stays unhealthy past the timeout.
+UP_WAIT_ARGS=()
+if [[ "$NO_WAIT" = false ]]; then
+    UP_WAIT_ARGS=(--wait --wait-timeout "${WAIT_TIMEOUT_SECONDS}")
+fi
+
 # Start services
 print_step "Starting Onyx services"
 print_info "Launching containers..."
+if [[ "$NO_WAIT" = false ]]; then
+    print_info "Waiting up to ${WAIT_TIMEOUT_SECONDS}s for all services to become healthy..."
+fi
 echo ""
+UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
-if [ $? -ne 0 ]; then
+if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
-    exit 1
-fi
-
-# Monitor container startup
-print_step "Verifying container health"
-print_info "Waiting for containers to initialize (10 seconds)..."
-
-# Progress bar for waiting
-for i in {1..10}; do
-    printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
-    sleep 1
-done
-echo ""
-echo ""
-
-# Check for restart loops
-print_info "Checking container health status..."
-RESTART_ISSUES=false
-CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
-
-for CONTAINER in $CONTAINERS; do
-    PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
-    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
-    RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
-
-    if [ "$STATUS" = "running" ]; then
-        if [ "$RESTART_COUNT" -gt 2 ]; then
-            print_error "$CONTAINER_NAME is in a restart loop (restarted $RESTART_COUNT times)"
-            RESTART_ISSUES=true
-        else
-            print_success "$CONTAINER_NAME is healthy"
-        fi
-    elif [ "$STATUS" = "restarting" ]; then
-        print_error "$CONTAINER_NAME is stuck restarting"
-        RESTART_ISSUES=true
-    else
-        print_warning "$CONTAINER_NAME status: $STATUS"
-    fi
-done
-
-echo ""
-
-if [ "$RESTART_ISSUES" = true ]; then
-    print_error "Some containers are experiencing issues!"
     echo ""
-    print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
-
+    print_info "Current container status:"
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps)
+    echo ""
+    print_info "Check the logs of any unhealthy service:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
-    echo "Include the output of the logs command in your message."
     exit 1
 fi
-
-# Health check function
-check_onyx_health() {
-    local max_attempts=600  # 10 minutes * 60 attempts per minute (every 1 second)
-    local attempt=1
-    local port=${HOST_PORT:-3000}
-
-    print_info "Checking Onyx service health..."
-    echo "Containers are healthy, waiting for database migrations and service initialization to finish."
-    echo ""
-
-    while [ $attempt -le $max_attempts ]; do
-        local http_code=""
-        if [[ "$DOWNLOADER" == "curl" ]]; then
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port" 2>/dev/null || echo "000")
-        else
-            http_code=$(wget -q --spider -S "http://localhost:$port" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
-        fi
-        if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
-            return 0
-        fi
-
-        # Show animated progress with time elapsed
-        local elapsed=$((attempt))
-        local minutes=$((elapsed / 60))
-        local seconds=$((elapsed % 60))
-
-        # Create animated dots with fixed spacing (cycle through 1-3 dots)
-        local dots=""
-        case $((attempt % 3)) in
-            0) dots=".  " ;;
-            1) dots=".. " ;;
-            2) dots="..." ;;
-        esac
-
-        # Clear line and show progress with fixed spacing
-        printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
-
-        sleep 1
-        attempt=$((attempt + 1))
-    done
-
-    echo ""  # New line after the progress line
-    return 1
-}
 
 # Success message
 print_step "Installation Complete!"
-print_success "All containers are running successfully!"
 echo ""
-
-# Run health check
-if check_onyx_health; then
-    echo ""
+if [[ "$NO_WAIT" = false ]]; then
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}   🎉 Onyx service is ready! 🎉${NC}"
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 else
-    print_warning "Health check timed out after 10 minutes"
-    print_info "Containers are running, but the web service may still be initializing (or something went wrong)"
-    echo ""
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers are running ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    print_info "Services may still be initializing. Check status with:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) ps)"
 fi
 echo ""
 print_info "Access Onyx at:"

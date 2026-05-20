@@ -173,4 +173,9 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # If you want to run this without compose, specify the ports to
 # expose via cli
 
+# Next.js standalone server.js reads HOSTNAME to decide what to bind to.
+# Docker auto-sets HOSTNAME to the container ID, which makes Next bind to that
+# name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
+ENV HOSTNAME="0.0.0.0"
+
 CMD ["node", "server.js"]
