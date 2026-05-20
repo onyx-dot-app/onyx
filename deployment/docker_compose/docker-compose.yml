@@ -90,15 +90,12 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
-      # Craft sandbox backend selection. With --include-craft on docker-compose
-      # the install script sets SANDBOX_BACKEND=docker, which makes api_server
-      # drive sandbox container lifecycle directly via the Docker Engine API.
-      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
-      - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
-      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.44}
-      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
-      - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
-      - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+    # NOTE: Craft's Docker sandbox backend needs additional env vars, a host
+    # Docker socket bind-mount, and the dedicated ``onyx_craft_sandbox``
+    # bridge network. Those are kept out of this default file so non-Craft
+    # deployments never inherit the socket exposure. Layer
+    # ``docker-compose.craft.yml`` on top to enable them
+    # (``install.sh --include-craft`` does this automatically).
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -126,19 +123,6 @@ services:
       - api_server_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
-      # Craft Docker backend: mount the host Docker socket so api_server can
-      # provision/exec/terminate sandbox containers. Trust boundary: anything
-      # with access to /var/run/docker.sock is effectively root on the host.
-      # Only mount when ENABLE_CRAFT=true + SANDBOX_BACKEND=docker; the
-      # install script wires this via --include-craft.
-      - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
-    # Join the dedicated craft sandbox bridge so api_server can proxy the
-    # Next.js preview iframe to per-session sandbox containers. The sandbox
-    # itself never joins compose's default network — postgres/redis/minio
-    # remain unreachable from inside a sandbox.
-    networks:
-      - default
-      - onyx_craft_sandbox
 
   background:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
@@ -193,14 +177,8 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
-      # Craft sandbox backend — must match api_server so the idle-cleanup
-      # celery task uses the same backend to snapshot and terminate sandboxes.
-      - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
-      - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
-      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.44}
-      - SANDBOX_DOCKER_NETWORK=${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}
-      - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
-      - SANDBOX_DOCKER_CPU_LIMIT=${SANDBOX_DOCKER_CPU_LIMIT:-1.0}
+    # NOTE: see api_server above — Craft sandbox env vars, the Docker socket
+    # mount, and the sandbox bridge network live in docker-compose.craft.yml.
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -211,13 +189,6 @@ services:
       - background_logs:/var/log/onyx
       # Shared volume for persistent document storage (Craft file-system mode)
       - file-system:/app/file-system
-      # Same Docker socket trust boundary as api_server — background owns
-      # idle-sandbox cleanup (snapshot + terminate) so it needs lifecycle
-      # access too.
-      - ${SANDBOX_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
-    networks:
-      - default
-      - onyx_craft_sandbox
     logging:
       driver: json-file
       options:
@@ -574,20 +545,6 @@ services:
   #       max-size: "50m"
   #       max-file: "6"
   #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-
-networks:
-  # Compose's implicit default network — used by all the trusted services
-  # (api_server, postgres, redis, minio, model servers, etc).
-  default:
-  # Dedicated bridge for Craft sandbox containers. Sandboxes join *only*
-  # this network — they cannot resolve postgres/redis/minio/model_server
-  # by compose DNS. api_server and background also join this network so
-  # they can drive sandboxes (lifecycle via Docker socket; preview iframe
-  # via HTTP to the sandbox's bridge IP). external=true lets install.sh
-  # create it ahead of time and survive `docker compose down`.
-  onyx_craft_sandbox:
-    name: onyx_craft_sandbox
-    external: true
 
 volumes:
   # Necessary for persisting data for use
