@@ -1460,6 +1460,51 @@ echo "Session cleanup complete"
             )
             return False
 
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID session directories under /workspace/sessions/ in the pod.
+
+        Used by idle cleanup to discover sessions that need snapshotting.
+        Non-UUID directory names are silently filtered out.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+        except ApiException as e:
+            logger.warning(
+                "Failed to list session directories for sandbox %s: %s",
+                sandbox_id,
+                e,
+            )
+            return []
+
+        result: list[UUID] = []
+        for raw_line in resp.strip().split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                result.append(UUID(line))
+            except ValueError:
+                continue
+        return result
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
