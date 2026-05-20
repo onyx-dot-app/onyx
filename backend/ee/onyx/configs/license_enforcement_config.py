@@ -1,10 +1,16 @@
 """Constants for license enforcement and per-feature tier gating.
 
-Two related concerns live here, both consumed by the `tier_gate` middleware:
+Three related concerns live here:
 
-1. `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` — paths that bypass license
-   enforcement entirely (auth, billing, health checks, etc.).
-2. `PATH_PREFIX_MIN_TIER` — minimum tier required to access a given path
+1. `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` — paths that bypass the
+   self-hosted `license_enforcement` middleware (auth, billing, health,
+   etc.) when the license is expired/gated.
+2. `MULTI_TENANT_GATING_ALLOWED_PREFIXES` — paths that bypass the
+   multi-tenant cloud gate in `tenant_tracking` when a tenant's
+   subscription is inactive (`gated_tenants` Redis set). Cloud uses
+   subscriptions, not licenses, and has cloud-specific billing endpoints
+   (e.g. Stripe publishable key) that the resubscribe flow needs.
+3. `PATH_PREFIX_MIN_TIER` — minimum tier required to access a given path
    prefix. `Tier.BUSINESS` = Business+. `Tier.ENTERPRISE` = Enterprise only.
    Longest-prefix-wins, so a nested path can resolve to a stricter tier
    than its parent (e.g. `/admin/enterprise-settings/scim` is ENTERPRISE
@@ -54,6 +60,40 @@ LICENSE_ENFORCEMENT_ALLOWED_PREFIXES: frozenset[str] = frozenset(
         "/users",
         # Notifications - needed for UI to load properly
         "/notifications",
+    }
+)
+
+
+# Paths reachable by a tenant whose subscription is inactive (cloud only).
+# Strict resubscribe surface — anything not on this list returns 402. Kept
+# narrow on purpose; the self-hosted allowlist above has entries that do
+# not apply in cloud (seat-limit user management, `/license`, `/proxy`),
+# and the cloud-only Stripe endpoints don't exist in self-hosted. Add
+# entries here only if the resubscribe flow actually fails without them.
+#
+# Direct evidence of who calls what (web/src/components/errorPages/AccessRestrictedPage.tsx
+# and SettingsProvider):
+#   /api/tenants/stripe-publishable-key   — Stripe SDK init
+#   /api/tenants/create-subscription-session — Stripe checkout
+#   /api/tenants/create-customer-portal-session — Stripe portal (payment method update)
+#   /api/tenants/billing-information — current billing state for the UI
+#   /api/billing, /api/admin/billing — unified billing API
+#   /api/me — basic user info needed to render the gated page
+#   /api/settings — application_status flag the gated page reads
+#   /api/auth — login / logout while gated
+#   /health — load-balancer probes
+MULTI_TENANT_GATING_ALLOWED_PREFIXES: frozenset[str] = frozenset(
+    {
+        "/auth",
+        "/health",
+        "/me",
+        "/settings",
+        "/billing",
+        "/admin/billing",
+        "/tenants/billing-information",
+        "/tenants/create-customer-portal-session",
+        "/tenants/create-subscription-session",
+        "/tenants/stripe-publishable-key",
     }
 )
 

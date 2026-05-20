@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from ee.onyx.configs.license_enforcement_config import (
-    LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
+    MULTI_TENANT_GATING_ALLOWED_PREFIXES,
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.auth.utils import extract_tenant_from_auth_header
@@ -52,10 +52,9 @@ def add_api_server_tenant_id_middleware(
             # (bots with stored auth, PATs, scripts) used to walk past it and
             # keep burning the cloud LLM key. Skip the lookup for the default
             # schema (unauthenticated requests) — it is never in the gated set
-            # and the round-trip is wasted. Allowlist reuses the self-hosted
-            # `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` list (auth, /billing, /me,
-            # /settings, /notifications, …) plus the multi-tenant Stripe
-            # publishable-key endpoint that the resubscribe flow needs.
+            # and the round-trip is wasted. Allowlist is the cloud-only
+            # `MULTI_TENANT_GATING_ALLOWED_PREFIXES` (auth, /me, /settings,
+            # billing endpoints) — see that constant for the exact surface.
             if (
                 MULTI_TENANT
                 and tenant_id != POSTGRES_DEFAULT_SCHEMA
@@ -98,10 +97,9 @@ def add_api_server_tenant_id_middleware(
 def _is_path_allowed(path: str) -> bool:
     if path.startswith("/api/"):
         path = path[4:]
-    if any(path.startswith(prefix) for prefix in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES):
-        return True
-    # Multi-tenant billing uses the tenants namespace instead of /admin/billing.
-    return path.startswith("/tenants/stripe-publishable-key")
+    return any(
+        path.startswith(prefix) for prefix in MULTI_TENANT_GATING_ALLOWED_PREFIXES
+    )
 
 
 async def _get_tenant_id_from_request(
