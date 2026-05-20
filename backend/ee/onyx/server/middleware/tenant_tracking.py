@@ -10,7 +10,7 @@ from fastapi import Response
 from fastapi.responses import JSONResponse
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
-from ee.onyx.configs.license_enforcement_config import (
+from ee.onyx.configs.multi_tenant_gating_config import (
     MULTI_TENANT_GATING_ALLOWED_PREFIXES,
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
