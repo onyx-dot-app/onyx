@@ -1,4 +1,4 @@
-{{- if and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") .Values.sandboxProxy.enabled (gt (int .Values.sandboxProxy.replicaCount) 1) }}
+{{- if and (eq (include "onyx.sandboxProxyEnabled" .) "true") (gt (int .Values.sandboxProxy.replicaCount) 1) }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:

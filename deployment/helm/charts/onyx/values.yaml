@@ -1474,6 +1474,10 @@ sandboxProxy:
   confdirSizeLimit: 100Mi
   caSecretName: "sandbox-proxy-ca"
   caConfigMapName: "sandbox-proxy-ca-bundle"
+  podAnnotations: {}
+  # Matches the `onyx` user (uid 1001) baked into the backend image.
+  runAsUser: 1001
+  fsGroup: 1001
   resources:
     requests:
       cpu: 100m

@@ -160,11 +160,12 @@ def main() -> int:
     logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
 
     lookup = _build_lookup()
+    healthz_server: HTTPServer | None = None
     try:
         readiness.lookup_ready = True
         logger.info("informer initial sync complete")
 
-        _start_healthz_server(readiness, lookup)
+        healthz_server = _start_healthz_server(readiness, lookup)
 
         identity = IdentityResolver(ip_lookup=lookup)
         addon = PassthroughAddon(identity=identity)
@@ -182,6 +183,9 @@ def main() -> int:
             loop.close()
     finally:
         lookup.stop()
+        if healthz_server is not None:
+            healthz_server.shutdown()
+            healthz_server.server_close()
 
     logger.info("sandbox proxy exiting cleanly")
     return 0

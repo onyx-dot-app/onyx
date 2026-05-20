@@ -174,9 +174,9 @@ class K8sInformerLookup(SandboxIPLookup):
                 # Duplicate IPs = deploy-time bug; fail loud rather
                 # than route traffic with ambiguous identity.
                 raise RuntimeError(
-                    "duplicate sandbox IP %s mapped to %s and %s; refusing to "
-                    "serve traffic with ambiguous identity"
-                    % (identity.sandbox_ip, existing.sandbox_id, identity.sandbox_id)
+                    f"duplicate sandbox IP {identity.sandbox_ip} mapped to "
+                    f"{existing.sandbox_id} and {identity.sandbox_id}; "
+                    "refusing to serve traffic with ambiguous identity"
                 )
             new_cache[identity.sandbox_ip] = identity
 
@@ -184,7 +184,16 @@ class K8sInformerLookup(SandboxIPLookup):
             self._cache = new_cache
 
         logger.info("informer initial sync: %d sandbox pods cached", len(new_cache))
-        return listing.metadata.resource_version
+
+        # K8s always sets metadata.resourceVersion on successful list,
+        # but the python client types it as Optional. Defend explicitly.
+        list_metadata = listing.metadata
+        if list_metadata is None or not list_metadata.resource_version:
+            raise RuntimeError(
+                "K8s list response missing metadata.resource_version; "
+                "cannot start incremental watch"
+            )
+        return list_metadata.resource_version
 
     def _watch_loop(self, resource_version: str) -> None:
         pod_watch = watch.Watch()
