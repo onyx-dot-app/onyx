@@ -2,6 +2,21 @@
 
 Reference: [approvals-plan.md](./approvals-plan.md) for architecture rationale.
 
+## Scope
+
+**Kubernetes sandbox backend in this phase; docker-compose support
+lands in [Phase 5](./phase-5-docker.md).** The infrastructure layer
+(iptables installation, CA distribution, identity resolution, proxy
+delivery) is K8s-native here. The proxy core, addons, Approval
+Service, chat UI, and policy are backend-agnostic.
+
+**Design constraint for shared modules.** Anything Phase 5 will need
+to swap (identity-resolver source, CA persistence backend, the
+sandbox bootstrap script) must be implemented behind a small interface
+in Phase 1, not as inline K8s-specific code. Concrete extension points
+called out in the relevant tasks below — landing them as interfaces
+now means Phase 5 is a slot-in, not a refactor.
+
 ## Goal
 
 Stand up `sandbox_proxy` as cluster infrastructure in **pass-through mode**:
@@ -69,19 +84,28 @@ Sandbox pod modifications (existing helm chart):
 
 ### T1.2 — CA bootstrap
 
-`sandbox_proxy/ca.py`:
+CA generation and rotation policy is backend-agnostic; **persistence**
+is backend-specific (K8s Secret here, named volume in Phase 5). Split
+`sandbox_proxy/ca.py` along that line:
 
 ```python
-class CABootstrap:
-    def __init__(self, k8s, secret_name: str, configmap_name: str,
-                 sandbox_namespace: str): ...
+class CAStore(Protocol):
+    """Persistence backend for the proxy CA. K8s = Secret;
+    docker = shared named volume (Phase 5)."""
+    def load(self) -> tuple[bytes, bytes] | None: ...
+    def persist(self, cert: bytes, key: bytes) -> None: ...
 
+class CABootstrap:
+    def __init__(self, store: CAStore): ...
     def ensure_ca(self) -> tuple[bytes, bytes]: ...
     def _generate_ca(self) -> tuple[bytes, bytes]: ...
-    def _persist(self, cert: bytes, key: bytes) -> None: ...
 ```
 
-Invariants:
+Phase 1 ships `K8sSecretCAStore`. Phase 5 adds `VolumeCAStore`. The
+bootstrap orchestration (load-or-generate, key params, rotation
+hooks) lives in `CABootstrap` and is unchanged across backends.
+
+Invariants for the K8s store:
 
 - The Secret is the source of truth. The ConfigMap is derived from it.
 - On startup: load if the Secret exists, otherwise generate and persist
@@ -92,13 +116,28 @@ Invariants:
   without cross-namespace ConfigMap mounting.
 - RBAC: proxy SA gets `get,create` on its own Secret; `get,create,update` on
   the sandbox-namespace ConfigMap.
-- Key params: 5-year RSA-4096 (or ECDSA P-256) via `cryptography`.
+- Key params (defined on `CABootstrap`, shared across stores):
+  5-year RSA-4096 (or ECDSA P-256) via `cryptography`.
 
 ### T1.3 — Sandbox bootstrap initContainer
 
+The four-step bootstrap (CA trust-store population, iptables egress
+lockdown, proxy address resolution, self-verify) is implemented as a
+**single shared script** — `firewall-init.sh`, baked into the sandbox
+image. Phase 1 runs it as the K8s initContainer command;
+[Phase 5](./phase-5-docker.md) runs the same script as the docker
+container's entrypoint, ending in `exec gosu` to drop privileges. The
+script reads the proxy address and bootstrap mode from env vars so it
+doesn't need backend-specific branches:
+
+- `SANDBOX_PROXY_HOST`, `SANDBOX_PROXY_PORT` — proxy address.
+- `SANDBOX_PROXY_BOOTSTRAP_MODE=initcontainer` — K8s; script exits 0
+  after self-verify. (Phase 5 adds `entrypoint` mode for docker.)
+
 A single `sandbox-init` initContainer using the **existing sandbox image**
 (no separate image to maintain — we install `iptables` into that image),
-running as root with `CAP_NET_ADMIN`, does four things sequentially before
+running as root with `CAP_NET_ADMIN`, runs `firewall-init.sh` in
+`initcontainer` mode. It does four things sequentially before
 the main sandbox container starts:
 
 1. **CA trust-store population.** Mount the CA ConfigMap read-only, copy
@@ -148,7 +187,10 @@ would otherwise backstop.
 
 ### T1.4 — Identity resolver
 
-`sandbox_proxy/identity.py`:
+The K8s informer is the IP-to-sandbox lookup *source*; the rest of
+identity resolution (sandbox → user → active session) is backend-
+agnostic. Split `sandbox_proxy/identity.py` along that line so the
+docker source from [Phase 5](./phase-5-docker.md) is a slot-in:
 
 ```python
 @dataclass
@@ -157,22 +199,37 @@ class SessionContext:
     user_id: UUID
     sandbox_id: UUID
     tenant_id: str
-    pod_name: str
-    pod_ip: str
+    sandbox_name: str   # pod name in K8s; container name in docker
+    sandbox_ip: str
+
+class SandboxIPLookup(Protocol):
+    """Backend-specific IP → {sandbox_id, tenant_id, sandbox_name}
+    resolver. K8s = informer-backed cache; docker = events-stream-
+    backed cache (Phase 5). Both expose the same lookup signature."""
+    def lookup(self, src_ip: str) -> SandboxIdentity | None: ...
 
 class IdentityResolver:
+    def __init__(self, ip_lookup: SandboxIPLookup, db_factory): ...
     def resolve(self, src_ip: str) -> SessionContext | None: ...
-    def _resolve_pod_to_session(self, pod) -> SessionContext | None: ...
-    def _start_informer(self, namespace: str): ...
 ```
+
+Phase 1 ships `K8sInformerLookup`; Phase 5 adds `DockerEventsLookup`.
+The sandbox-row read, user lookup, and active-session resolution
+(steps 2–4 below) live on `IdentityResolver` and are unchanged across
+backends.
 
 Sandbox → session resolution rule:
 
-1. Map `src_ip` to a sandbox pod via the K8s informer-backed cache.
-2. Read `onyx.app/sandbox-id` and `onyx.app/tenant-id` from the pod labels.
-   Both are set by `kubernetes_sandbox_manager.py` at pod creation
-   (`_create_sandbox_pod`, lines 508-514). `tenant_id` is sourced from the
-   pod label, not from the DB — the `Sandbox` model does not carry one.
+1. Map `src_ip` to a sandbox via `SandboxIPLookup`. K8s impl reads the
+   pod from the informer-backed cache; the docker impl (Phase 5) reads
+   the container from a docker-events-backed cache. Both return
+   `{sandbox_id, tenant_id, sandbox_name}` from labels.
+2. The lookup reads `onyx.app/sandbox-id` and `onyx.app/tenant-id` —
+   identical label keys are set by both backends:
+   `kubernetes_sandbox_manager.py` (`_create_sandbox_pod`,
+   lines 508-514) and `docker_sandbox_manager.py` on container
+   creation. `tenant_id` is sourced from the label, not from the DB —
+   the `Sandbox` model does not carry one.
 3. Look up the `Sandbox` row by id to read `sandbox.user_id`.
 4. Resolve the active `BuildSession`: most-recent row where
    `user_id == sandbox.user_id AND user_id IS NOT NULL AND

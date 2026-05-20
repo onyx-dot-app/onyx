@@ -69,7 +69,10 @@ monorepo, same package, same data layer.
 
 - Secret injection (next interception-layer workstream).
 - Non-HTTP egress (gRPC, raw TCP).
-- Local-sandbox support; Kubernetes only.
+- Local-sandbox support (`SANDBOX_BACKEND=local`); local Craft has no
+  realistic blast radius and there's no customer driver. Kubernetes
+  and docker-compose backends are both in scope (Phases 1 and 5
+  respectively).
 - Opencode-native tool gating (bash, file ops); separate mechanism, deferred.
 
 ---
@@ -238,6 +241,24 @@ share it. The schema is structured for a future per-user override layer
 but the UI is admin-only in v0.
 
 Deliverable: requirements met in full.
+
+### Phase 5 — Docker-compose backend support
+
+Run the same proxy against the docker-compose sandbox backend
+(`SANDBOX_BACKEND=docker`). The proxy core, gate logic, Approval
+Service, chat UI, and policy layer are unchanged from Phases 1–4 —
+this phase is exclusively the infrastructure delta: a Docker-events-
+based identity-resolver source slotting into the Phase 1 interface,
+shared-volume CA distribution, the same `firewall-init.sh` bootstrap
+script run as the docker container's entrypoint wrapper instead of as
+a K8s initContainer, and the proxy delivered as a compose service.
+
+Phase 1 lands the swappable interfaces (`SandboxIPLookup`, `CAStore`,
+the `SANDBOX_PROXY_BOOTSTRAP_MODE` switch in `firewall-init.sh`) so
+this phase is a slot-in rather than a refactor of shared modules.
+
+Deliverable: docker-compose Craft deployments get the same gating
+behavior as K8s.
 
 ---
 
