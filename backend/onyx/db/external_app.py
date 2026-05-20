@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -243,9 +244,10 @@ def get_external_app_credentials(
 
     Returns None when any of:
     - no enabled app's `upstream_url_patterns` fully match the URL
-    - the auth template references a placeholder that no credential
-      supplies — either user-missing or app-misconfigured. Fail closed
-      rather than inject a partially-templated header.
+    - the auth template fails to resolve — missing placeholder
+      (user-missing or app-misconfigured), malformed brace, bad format
+      spec, etc. Fail closed rather than inject a partially-templated
+      header.
 
     `re.fullmatch` is used (not `re.search`/`re.match`) so a pattern like
     `https://api\\.example\\.com/.*` does not accidentally match
@@ -262,6 +264,7 @@ def get_external_app_credentials(
     # matching is a footgun.
     stmt = (
         select(ExternalApp, ExternalAppUserCredential)
+        .join(Skill, Skill.id == ExternalApp.skill_id)
         .outerjoin(
             ExternalAppUserCredential,
             and_(
@@ -269,7 +272,7 @@ def get_external_app_credentials(
                 ExternalAppUserCredential.user_id == user_id,
             ),
         )
-        .where(ExternalApp.enabled.is_(True))
+        .where(Skill.enabled.is_(True))
         .order_by(ExternalApp.id)
     )
 
@@ -286,9 +289,11 @@ def _resolve_credentials(
 ) -> dict[str, Any] | None:
     """Substitute org + user credentials into the app's auth_template.
 
-    Returns None if the template references a placeholder no credential
-    supplies (org_credentials ∪ user_credentials). Output keys in
-    `auth_template` are independent of placeholder names: a template
+    Returns None on any template-resolution failure — missing
+    placeholder, malformed brace, bad format spec, positional reference
+    against a mapping, etc. Fail closed rather than inject a
+    partially-templated header. Output keys in `auth_template` are
+    independent of placeholder names: a template
     `{"Authorization": "Bearer {access_token}"}` requires the credential
     key `access_token`, not `Authorization`.
     """
@@ -306,7 +311,7 @@ def _resolve_credentials(
         if isinstance(value, str):
             try:
                 resolved[key] = value.format_map(combined_creds)
-            except KeyError:
+            except (LookupError, ValueError, AttributeError, TypeError):
                 return None
         else:
             resolved[key] = value
