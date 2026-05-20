@@ -1208,7 +1208,7 @@ def get_ollama_available_models(
             context_limit = ollama_model_details.model_info.get(
                 architecture + ".context_length", None
             )
-            modelfile_num_ctx: int | None = ollama_model_details.parsed_num_ctx()
+            modelfile_num_ctx = ollama_model_details.parsed_num_ctx
             if modelfile_num_ctx is not None:
                 context_limit = modelfile_num_ctx
             supports_image_input = ollama_model_details.supports_image_input()
