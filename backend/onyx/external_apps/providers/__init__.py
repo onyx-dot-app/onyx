@@ -40,7 +40,7 @@ def get_provider_for_app(app: ExternalApp) -> OAuth | None:
 
 
 def get_provider_or_raise(app: ExternalApp) -> OAuth:
-    provider = PROVIDERS.get(app.app_type)
+    provider = get_provider_for_app(app)
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
