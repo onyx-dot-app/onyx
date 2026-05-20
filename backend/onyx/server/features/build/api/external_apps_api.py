@@ -89,8 +89,8 @@ def _to_user_response(
 
     return ExternalAppUserResponse(
         id=app.id,
-        name=app.name,
-        description=app.description,
+        name=app.skill.name,
+        description=app.skill.description,
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
