@@ -1,6 +1,8 @@
 # Recent chart changes (0.5.0)
 
-If you are upgrading from an earlier 0.4.x release, note:
+If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](../MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
+
+Other 0.5.0 changes:
 
 * **Redis** — the chart now bundles the `redis-operator` subchart alongside the
   `redis` subchart. The operator installs the CRD that the Redis CR binds to,

@@ -1,0 +1,21 @@
+{{- /*
+Detect upgrades from chart < 0.5.0, which bundled Vespa as a subchart.
+Chart 0.5.0 dropped that subchart, so a naive `helm upgrade` from 0.4.x
+would delete the `da-vespa` StatefulSet and orphan the Vespa data
+volume. The api-server would then crash-loop trying to deploy its Vespa
+application package against localhost:19071.
+
+Fail fast at install/upgrade time with a clear migration message. The
+check is a `lookup` against the live cluster, so it only fires during
+`helm install`/`helm upgrade` (not during local `helm template`).
+
+If the legacy StatefulSet has already been migrated away and only the
+PV is hanging around, set `legacyVespaCheck.acknowledged=true` to
+override the check.
+*/}}
+{{- if .Values.legacyVespaCheck.enabled }}
+{{- $legacyVespa := lookup "apps/v1" "StatefulSet" .Release.Namespace "da-vespa" }}
+{{- if and $legacyVespa (not .Values.legacyVespaCheck.acknowledged) }}
+{{- fail (printf "\n\nERROR: legacy `da-vespa` StatefulSet detected in namespace %q.\n\nChart 0.5.0 removed the bundled Vespa subchart. Upgrading without first\nmigrating to external/managed Vespa will delete the StatefulSet and you\nwill lose access to the indexed data managed by it. The api-server will\nfail to start (connection refused on localhost:19071) until Vespa is\nreachable again.\n\nWhat to do:\n  1. Provision an external Vespa cluster (Vespa Cloud, self-hosted, etc.)\n  2. Re-index documents into the new cluster\n  3. Re-run `helm upgrade` once the legacy StatefulSet is deleted, OR\n     set `legacyVespaCheck.acknowledged=true` in your values to bypass\n     this check explicitly.\n\nSee deployment/helm/MIGRATION.md (chart 0.4.x → 0.5.x section) for details.\n" .Release.Namespace) }}
+{{- end }}
+{{- end }}
