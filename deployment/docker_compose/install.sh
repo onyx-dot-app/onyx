@@ -1220,13 +1220,13 @@ if [[ "$NO_WAIT" = false ]]; then
     print_info "Waiting up to ${WAIT_TIMEOUT_SECONDS}s for all services to become healthy..."
 fi
 echo ""
+UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}")
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}")
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
-UP_EXIT=$?
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
