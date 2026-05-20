@@ -493,6 +493,7 @@ def process_jira_issue(
         primary_owners=list(people) or None,
         metadata=metadata_dict,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.source,
     )
 
 
@@ -835,6 +836,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
