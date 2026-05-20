@@ -71,6 +71,56 @@ auth:
       REDIS_PASSWORD: redis_password
 ```
 
+## Sourcing secrets from an external secret manager (ESO)
+
+The chart can render an `ExternalSecret` CR that has [External Secrets
+Operator](https://external-secrets.io/) materialize a single Kubernetes Secret
+from an upstream provider (AWS Secrets Manager, GCP Secret Manager, Vault,
+etc.). All `auth.*` sections then read their per-section keys from that
+materialized Secret, and any loose env-var secrets are projected into pods
+via `envFrom`.
+
+**Prerequisite:** the chart does *not* install ESO. Install it separately and
+create a `SecretStore` or `ClusterSecretStore` (e.g. `aws-secrets-manager`)
+before enabling `externalSecret`. See https://external-secrets.io/ for setup.
+
+The upstream secret should be a JSON object whose top-level keys map 1:1 to
+the keys the chart expects in the materialized Secret (the union of every
+`auth.<section>.secretKeys` value plus any loose env-var names you project via
+`extraEnvFromSecret`).
+
+```yaml
+externalSecret:
+  enabled: true
+  # Identifier of the upstream secret (e.g. AWS Secrets Manager secret name).
+  refPath: "onyx/<customer>/app-secrets"
+  # Name of the materialized k8s Secret. Point auth.*.existingSecret here.
+  secretName: onyx-app-secrets
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  refreshInterval: 1h
+
+# Inject every key from onyx-app-secrets as an env var on backend pods.
+# Use for secrets that today live as plaintext in `configMap:` blocks.
+extraEnvFromSecret: onyx-app-secrets
+
+auth:
+  postgresql:
+    existingSecret: onyx-app-secrets
+    secretKeys:
+      POSTGRES_USER: postgres_user
+      POSTGRES_PASSWORD: postgres_password
+  redis:
+    existingSecret: onyx-app-secrets
+    secretKeys:
+      REDIS_PASSWORD: redis_password
+  # ...repeat for any other auth section that should read from the shared Secret.
+```
+
+When `externalSecret.enabled: false` (the default) the chart renders exactly
+as before — no `ExternalSecret` CR is created and `envFrom` is unchanged.
+
 # Values that come from docker-compose (do not copy them)
 
 The Onyx docker-compose stack uses service-name hostnames like `api_server`,

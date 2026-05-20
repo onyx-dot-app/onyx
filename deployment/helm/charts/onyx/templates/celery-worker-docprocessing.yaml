@@ -84,6 +84,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_docprocessing.enableMiniChunk }}"

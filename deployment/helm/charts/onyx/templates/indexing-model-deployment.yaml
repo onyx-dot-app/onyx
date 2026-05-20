@@ -64,6 +64,10 @@ spec:
         envFrom:
           - configMapRef:
               name: {{ .Values.config.envConfigMapName }}
+          {{- with .Values.extraEnvFromSecret }}
+          - secretRef:
+              name: {{ . }}
+          {{- end }}
         env:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"

@@ -1158,6 +1158,37 @@ letsencrypt:
   enabled: false
   email: "abc@abc.com"
 
+# -- Sync secret material from an external secret manager (AWS Secrets Manager,
+# GCP Secret Manager, Vault, ...) via External Secrets Operator. When enabled,
+# the chart renders a single ExternalSecret CR that materializes one Kubernetes
+# Secret containing all keys from the upstream blob. Point each auth.<X>.existingSecret
+# at externalSecret.secretName so the chart's per-section secretKeys mappings
+# read from the materialized Secret. Loose env-var secrets (those that today
+# live in configMap blocks) can be projected into pods via extraEnvFromSecret.
+#
+# PREREQUISITE: External Secrets Operator and a matching SecretStore /
+# ClusterSecretStore must exist in the cluster before enabling this. The chart
+# does NOT install ESO.
+externalSecret:
+  enabled: false
+  # -- Path/ID of the secret in the upstream provider (e.g. AWS Secrets Manager
+  # secret name "onyx/<customer>/app-secrets"). Required when enabled=true.
+  refPath: ""
+  # -- Name of the materialized Kubernetes Secret. Point auth.<X>.existingSecret
+  # and extraEnvFromSecret at this name.
+  secretName: onyx-app-secrets
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  refreshInterval: 1h
+
+# -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
+# deployment so all keys in the named Secret are injected as env vars. Intended
+# for secrets that today live in plaintext under the `configMap:` block and
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# Typically set to the same value as externalSecret.secretName.
+extraEnvFromSecret: ""
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:

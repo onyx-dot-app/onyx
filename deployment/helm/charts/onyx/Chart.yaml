@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.3
+version: 0.5.4
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,15 +17,13 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Bundle ot-container-kit redis-operator subchart so the Redis CR
-        installs cleanly on a fresh cluster (no manual CRD step).
-    - kind: added
-      description: Render the CloudNativePG Cluster CR from the chart instead of
-        relying on an out-of-band manifest; controlled by postgresql.cluster.*.
-    - kind: fixed
-      description: REDIS_HOST in the configmap no longer appends "-master"; it now
-        points at the redis-operator standalone service name directly. Override
-        REDIS_HOST in values if you depended on the old suffix.
+      description: Optional External Secrets Operator support. Set
+        externalSecret.enabled=true to render an ExternalSecret CR that
+        materializes one shared Secret from an upstream secret manager (AWS
+        Secrets Manager, GCP Secret Manager, Vault, ...). Point each
+        auth.*.existingSecret at externalSecret.secretName, and use
+        extraEnvFromSecret to project loose env-var secrets via envFrom. Off
+        by default; rendered output is unchanged when disabled.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
