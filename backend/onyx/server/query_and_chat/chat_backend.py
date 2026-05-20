@@ -457,6 +457,7 @@ def rename_chat_session(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": str(chat_session_id),
+            "user_id": str(user_id) if user_id else None,
         },
     ):
         new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
