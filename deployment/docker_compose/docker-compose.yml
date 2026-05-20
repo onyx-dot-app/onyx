@@ -111,7 +111,11 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-      start_period: 25s
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
+      # Healthy is reported as soon as /health responds, so this does not slow
+      # down fast boots.
+      start_period: 600s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
@@ -316,6 +320,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   indexing_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -365,6 +372,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   relational_db:
     image: postgres:15.2-alpine
@@ -434,10 +444,15 @@ services:
     image: nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
-    # if api_server / web_server are not up
+    # if api_server / web_server are not up. Waiting on `service_healthy`
+    # means nginx no longer has to reimplement the wait loop in shell — see
+    # run-nginx.sh, which used to poll api_server with curl from inside the
+    # nginx-alpine container (broken under some musl + Docker DNS configs).
     depends_on:
-      - api_server
-      - web_server
+      api_server:
+        condition: service_healthy
+      web_server:
+        condition: service_healthy
     env_file:
       - path: .env
         required: false

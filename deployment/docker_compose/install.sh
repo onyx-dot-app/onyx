@@ -15,6 +15,8 @@ USE_LOCAL_FILES=false # Disabled by default, use --local to skip downloading con
 NO_PROMPT=false
 DRY_RUN=false
 VERBOSE=false
+NO_WAIT=false  # When false (default), pass --wait to `docker compose up`
+WAIT_TIMEOUT_SECONDS=600
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --no-wait)
+            NO_WAIT=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
@@ -64,6 +70,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
             echo "  --dry-run        Show what would be done without making changes"
             echo "  --verbose        Show detailed output for debugging"
+            echo "  --no-wait        Skip 'docker compose up --wait'; use the legacy"
+            echo "                   sleep + restart-count health check instead"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
@@ -1197,71 +1205,96 @@ else
     exit 1
 fi
 
+# Build the up flags. With --wait (default), Compose waits until every
+# container with a healthcheck reports healthy before returning, and names any
+# service that stays unhealthy past the timeout.
+UP_WAIT_ARGS=""
+if [[ "$NO_WAIT" = false ]]; then
+    UP_WAIT_ARGS="--wait --wait-timeout ${WAIT_TIMEOUT_SECONDS}"
+fi
+
 # Start services
 print_step "Starting Onyx services"
 print_info "Launching containers..."
+if [[ "$NO_WAIT" = false ]]; then
+    print_info "Waiting up to ${WAIT_TIMEOUT_SECONDS}s for all services to become healthy..."
+fi
 echo ""
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate $UP_WAIT_ARGS)
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d $UP_WAIT_ARGS)
 fi
-if [ $? -ne 0 ]; then
+UP_EXIT=$?
+if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
+    if [[ "$NO_WAIT" = false ]]; then
+        echo ""
+        print_info "Current container status:"
+        (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps)
+        echo ""
+        print_info "Check the logs of any unhealthy service:"
+        echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
+        echo ""
+        print_info "If the issue persists, please contact: founders@onyx.app"
+    fi
     exit 1
 fi
 
-# Monitor container startup
 print_step "Verifying container health"
-print_info "Waiting for containers to initialize (10 seconds)..."
+if [[ "$NO_WAIT" = false ]]; then
+    print_success "All services reported healthy (verified by 'docker compose up --wait')"
+else
+    print_info "Waiting for containers to initialize (10 seconds)..."
 
-# Progress bar for waiting
-for i in {1..10}; do
-    printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
-    sleep 1
-done
-echo ""
-echo ""
+    # Progress bar for waiting
+    for i in {1..10}; do
+        printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
+        sleep 1
+    done
+    echo ""
+    echo ""
 
-# Check for restart loops
-print_info "Checking container health status..."
-RESTART_ISSUES=false
-CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
+    # Check for restart loops
+    print_info "Checking container health status..."
+    RESTART_ISSUES=false
+    CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
 
-for CONTAINER in $CONTAINERS; do
-    PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
-    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
-    RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
+    for CONTAINER in $CONTAINERS; do
+        PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
+        CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
+        RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
+        STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
 
-    if [ "$STATUS" = "running" ]; then
-        if [ "$RESTART_COUNT" -gt 2 ]; then
-            print_error "$CONTAINER_NAME is in a restart loop (restarted $RESTART_COUNT times)"
+        if [ "$STATUS" = "running" ]; then
+            if [ "$RESTART_COUNT" -gt 2 ]; then
+                print_error "$CONTAINER_NAME is in a restart loop (restarted $RESTART_COUNT times)"
+                RESTART_ISSUES=true
+            else
+                print_success "$CONTAINER_NAME is healthy"
+            fi
+        elif [ "$STATUS" = "restarting" ]; then
+            print_error "$CONTAINER_NAME is stuck restarting"
             RESTART_ISSUES=true
         else
-            print_success "$CONTAINER_NAME is healthy"
+            print_warning "$CONTAINER_NAME status: $STATUS"
         fi
-    elif [ "$STATUS" = "restarting" ]; then
-        print_error "$CONTAINER_NAME is stuck restarting"
-        RESTART_ISSUES=true
-    else
-        print_warning "$CONTAINER_NAME status: $STATUS"
+    done
+
+    echo ""
+
+    if [ "$RESTART_ISSUES" = true ]; then
+        print_error "Some containers are experiencing issues!"
+        echo ""
+        print_info "Please check the logs for more information:"
+        echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
+
+        echo ""
+        print_info "If the issue persists, please contact: founders@onyx.app"
+        echo "Include the output of the logs command in your message."
+        exit 1
     fi
-done
-
-echo ""
-
-if [ "$RESTART_ISSUES" = true ]; then
-    print_error "Some containers are experiencing issues!"
-    echo ""
-    print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
-
-    echo ""
-    print_info "If the issue persists, please contact: founders@onyx.app"
-    echo "Include the output of the logs command in your message."
-    exit 1
 fi
 
 # Health check function
