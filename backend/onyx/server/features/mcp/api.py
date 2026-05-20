@@ -285,13 +285,19 @@ class OnyxTokenStorage(TokenStorage):
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
             update_connection_config(config.id, db_session, config_data)
-            if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config_data)
 
-                # signal the oauth callback that token exchange is complete
-                r = get_redis_client()
-                r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
-                r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+        # The shared admin row is intentionally NOT written here: it is
+        # cross-user state (it serves as the OAuth `client_info` registry
+        # for every user of this MCP server, see `get_client_info`), and
+        # writing this user's tokens / Authorization header into it would
+        # leak them to every other user of the same server (GHSA-q62f-rv3h-f822).
+        # The Redis push below is what `process_oauth_callback` blocks on
+        # to know token exchange has completed; the admin config id is the
+        # only stable identifier shared between the two contexts.
+        if self.alt_config_id:
+            r = get_redis_client()
+            r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
+            r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -319,13 +325,29 @@ class OnyxTokenStorage(TokenStorage):
     async def set_client_info(  # ty: ignore[invalid-method-override]
         self, info: OAuthClientInformationFull
     ) -> None:
+        info_payload = info.model_dump(mode="json")
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
-            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
+            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
             update_connection_config(config.id, db_session, config_data)
+
+            # The shared admin row holds the OAuth `client_info` registry
+            # used by every user of this MCP server (see `get_client_info`).
+            # When DCR runs we want to cache the discovered client_info there
+            # so future users can re-use it — but ONLY the `client_info`
+            # field. The per-user `config_data` carries this user's
+            # `tokens` and resolved `Authorization` header by the time the
+            # SDK calls `set_client_info`, and writing the whole payload
+            # into the shared admin row would leak those secrets to every
+            # other user of the same server (GHSA-q62f-rv3h-f822).
             if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config_data)
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                alt_config_data = extract_connection_data(alt_config)
+                alt_config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
+                update_connection_config(
+                    self.alt_config_id, db_session, alt_config_data
+                )
 
 
 def make_oauth_provider(
@@ -1072,9 +1094,20 @@ def _db_mcp_server_to_api_mcp_server(
                 admin_credentials = {}
                 logger.warning("No client info found for server %s", db_server.name)
 
-    # Get auth template if this is a per-user auth server
+    # Get auth template if this is a per-user API_TOKEN server.
+    #
+    # OAUTH per-user servers intentionally do NOT get an `auth_template`:
+    # OAuth uses the handshake URL (`/oauth/connect`) rather than a
+    # header template, so the frontend never consumes one for OAuth
+    # flows. Returning the admin row's headers for OAuth servers is the
+    # exposure path of GHSA-q62f-rv3h-f822 — the admin row is shared
+    # cross-user, so anything stamped onto its `headers` would leak to
+    # every authenticated caller of `/api/mcp/servers*`.
     auth_template = None
-    if auth_performer == MCPAuthenticationPerformer.PER_USER:
+    if (
+        auth_performer == MCPAuthenticationPerformer.PER_USER
+        and db_server.auth_type != MCPAuthenticationType.OAUTH
+    ):
         try:
             template_config = db_server.admin_connection_config
             if template_config:
