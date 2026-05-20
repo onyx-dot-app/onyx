@@ -1240,69 +1240,19 @@ if [ $UP_EXIT -ne 0 ]; then
     exit 1
 fi
 
-# Health check function
-check_onyx_health() {
-    local max_attempts=600  # 10 minutes * 60 attempts per minute (every 1 second)
-    local attempt=1
-    local port=${HOST_PORT:-3000}
-
-    print_info "Checking Onyx service health..."
-    echo "Containers are healthy, waiting for database migrations and service initialization to finish."
-    echo ""
-
-    while [ $attempt -le $max_attempts ]; do
-        local http_code=""
-        if [[ "$DOWNLOADER" == "curl" ]]; then
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port" 2>/dev/null || echo "000")
-        else
-            http_code=$(wget -q --spider -S "http://localhost:$port" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
-        fi
-        if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
-            return 0
-        fi
-
-        # Show animated progress with time elapsed
-        local elapsed=$((attempt))
-        local minutes=$((elapsed / 60))
-        local seconds=$((elapsed % 60))
-
-        # Create animated dots with fixed spacing (cycle through 1-3 dots)
-        local dots=""
-        case $((attempt % 3)) in
-            0) dots=".  " ;;
-            1) dots=".. " ;;
-            2) dots="..." ;;
-        esac
-
-        # Clear line and show progress with fixed spacing
-        printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
-
-        sleep 1
-        attempt=$((attempt + 1))
-    done
-
-    echo ""  # New line after the progress line
-    return 1
-}
-
 # Success message
 print_step "Installation Complete!"
-print_success "All containers are running successfully!"
 echo ""
-
-# Run health check
-if check_onyx_health; then
-    echo ""
+if [[ "$NO_WAIT" = false ]]; then
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}   🎉 Onyx service is ready! 🎉${NC}"
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 else
-    print_warning "Health check timed out after 10 minutes"
-    print_info "Containers are running, but the web service may still be initializing (or something went wrong)"
-    echo ""
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers are running ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started (--no-wait) ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    print_info "Services may still be initializing. Check status with:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
