@@ -13,6 +13,9 @@ class _StaticLookup(SandboxIPLookup):
     def __init__(self, cache: dict[str, SandboxIdentity]) -> None:
         self._cache = cache
 
+    def start(self) -> None:
+        return None
+
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         return self._cache.get(src_ip)
 
