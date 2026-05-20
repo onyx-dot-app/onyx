@@ -47,14 +47,14 @@ def test_basic_search_returns_results(
     resp = _search(doc_content, admin_user)
     assert resp.status_code == 200
 
-    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
-    # so the API must return exactly one result that contains it.
+    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
+    # seeded by prior tests may still match. Find the seeded doc by content
+    # rather than asserting on result count.
     data = resp.json()
-    assert len(data["results"]) == 1
-    result = data["results"][0]
-    assert doc_content in result["content"]
-    assert result["citation_id"] is not None
-    assert result["source_type"]
+    matches = [r for r in data["results"] if doc_content in r["content"]]
+    assert len(matches) == 1
+    assert matches[0]["citation_id"] is not None
+    assert matches[0]["source_type"]
 
 
 def test_document_set_filtering(
