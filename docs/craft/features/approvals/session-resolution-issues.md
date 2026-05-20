@@ -4,7 +4,7 @@ How the egress proxy decides which `BuildSession` an approval card belongs to, a
 
 ## Decision (v0)
 
-The proxy uses a **most-recent-active heuristic**: pod IP → `Sandbox` row → `sandbox.user_id` → the user's `BuildSession` with `status == ACTIVE` and the most recent `last_activity_at`. The exact rule lives in `phase-1-proxy.md` §"Sandbox → session resolution rule."
+The proxy uses a **most-recent-active heuristic**: sandbox IP → `Sandbox` row → `sandbox.user_id` → the user's `BuildSession` with `status == ACTIVE` and the most recent `last_activity_at`. ("Sandbox IP" is the K8s pod IP or the docker container's bridge IP, depending on backend — Phase 1's `SandboxIPLookup` Protocol abstracts the difference.) The exact rule lives in `phase-1-proxy.md` §"Sandbox → session resolution rule."
 
 ## Why it works for v0
 
@@ -41,11 +41,13 @@ The proxy allocates a unique listening port per `BuildSession`. Opencode for tha
 
 **What it would have bought us:** precise card routing by default. Each outbound HTTPS call arrives on the originating session's port; no ambiguity in the common case.
 
-**Why we did not ship this in v0:** the identity is not strictly enforced. `HTTPS_PROXY` is a userland convention. The agent or a flawed skill could override it and connect to a different session's port. A cross-check (pod IP → user must match port → session user) prevents cross-user impersonation, but within-user misrouting remains possible. Adding the operational complexity of per-session port allocation, listener configuration, and lifecycle to get a non-strict identity didn't feel worth it — we either wanted a strict mechanism or were willing to live with the heuristic.
+**Why we did not ship this in v0:** the identity is not strictly enforced. `HTTPS_PROXY` is a userland convention. The agent or a flawed skill could override it and connect to a different session's port. A cross-check (sandbox IP → user must match port → session user) prevents cross-user impersonation, but within-user misrouting remains possible. Adding the operational complexity of per-session port allocation, listener configuration, and lifecycle to get a non-strict identity didn't feel worth it — we either wanted a strict mechanism or were willing to live with the heuristic.
 
 ### Per-session UID + iptables marking + mitmproxy
 
 Allocate a distinct Linux UID per `BuildSession`. A launcher binary drops to that UID before `exec`-ing opencode. A privileged sidecar installs iptables `OUTPUT` rules with `-m owner --uid-owner` that mark egress packets with the session's UID. The proxy reads the fwmark (or routes via per-UID listening ports) to recover session identity.
+
+(The constraints below are framed against K8s posture, which was the deployment target at the time. The docker-compose backend (Phase 5) faces a different but comparable cost model — extra entrypoint complexity, expanded container caps, gosu invocation per session — that doesn't change the heuristic-vs-strict trade-off.)
 
 **What it would have bought us:** strict, kernel-enforced identity. The agent cannot change its UID without `CAP_SETUID` (which it does not have); iptables rules are installed by a privileged component the agent cannot reach; the network stack is the source of truth. This is the pattern Anthropic Claude Cowork reportedly uses for the same problem.
 

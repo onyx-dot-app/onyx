@@ -123,7 +123,11 @@ def list_stale_pending_approvals(db, older_than) -> list[ApprovalRequest]: ...
 
 `backend/onyx/server/features/build/approvals/service.py`.
 
-`create(db, *, session_id, requesting_user_id, kind, summary, payload) -> UUID`
+`create(db, *, session_id, tenant_id, requesting_user_id, kind, summary, payload) -> UUID`
+
+`tenant_id` is carried through from `SessionContext.tenant_id` (Phase
+1) so the cache key and any tenant-scoped audit query can use it
+without re-deriving from the DB.
 
 In one DB transaction:
 
@@ -149,18 +153,28 @@ WHERE id = :id AND status = 'PENDING'
 RETURNING session_id, kind;
 ```
 
-If zero rows affected, raise `OnyxError(CONFLICT)`. Otherwise, in the
-same transaction, insert the resolution `BuildMessage`
-(`message_metadata={"type": "approval_resolved", "approval_id": ...,
-"decision": ..., "decided_by": ...}` at the current max `turn_index`).
-After commit, `rpush` the wakeup signal.
+Implemented via `approval.transition_to_terminal_if_pending__no_commit`
+(T2.2): if it returns `None`, raise `OnyxError(CONFLICT)`. Otherwise,
+in the same transaction, insert the resolution `BuildMessage`
+(`MessageType.ASSISTANT`, `message_metadata={"type":
+"approval_resolved", "approval_id": ..., "decision": ...,
+"decided_by": ...}` at the current max `turn_index`). After commit,
+`rpush` the wakeup signal with the decision string (one of
+`"approve"` / `"reject"` — see T2.5 for the wire format).
 
-`await_decision(approval_id, timeout_seconds) -> ApprovalStatus`
+`await_decision(db_factory, wakeup, approval_id, timeout_seconds) -> ApprovalStatus`
 
-Block on `WakeupChannel.wait`. Re-read the row on entry to handle the
-race where the decision lands before BLPOP starts. On wakeup, re-read
-the row and return its status. The sweeper task (T2.6) owns expiration
-writes, so this function never writes — it only reads.
+Block on `wakeup.wait`. Critically, **re-read the row on entry**
+before calling wait — otherwise a decision that lands between
+`service.create` returning and the addon entering `wait()` would be
+silently missed. On wakeup, re-read the row and return its status.
+On `None` (timeout), return whatever status is on the row at that
+point (the sweeper or another caller may already have marked it
+`EXPIRED`).
+
+The gate addon (T2.8) calls `await_decision` rather than reaching
+into the wakeup wrapper directly, so the race-safe entry-time re-read
+isn't duplicated at every call site.
 
 `record_silent_decision(db, *, session_id, requesting_user_id, kind,
 summary, payload, decision)` — for Phase 4's policy evaluator. Inserts
@@ -256,6 +270,18 @@ via the existing beat schedule pattern; supply `expires=` on enqueue.
 This is the safety net for the sandbox-disconnect path: even if the
 proxy coroutine vanishes silently, the row reaches a terminal state.
 
+**Hard proxy crash (OOM, kill) consequence.** If the proxy process
+itself dies, the gate addon's `CancelledError` handler never runs and
+the sandbox-side TCP socket drops with RST. The row sits `PENDING`
+until the sweeper picks it up at the 5-minute threshold. During that
+window, a user can still POST a decision — `respond()` succeeds and
+writes the resolution `BuildMessage`, but there's no addon listening,
+the sandbox's HTTP call already failed, and the upstream API was
+never hit. The audit row will say "approved" or "rejected" for a
+request that never went through. Phase 1's two-replica deploy makes
+this rare (in-flight flows on the surviving replica continue); the
+sweeper window bounds the worst-case staleness.
+
 ### T2.7 — Action-kind matching
 
 Two layers:
@@ -293,8 +319,16 @@ matching parser, then `service.create`.
 `dane/ea-craft-5` is unmerged at implementation time, define the
 `AppMatcher` Protocol that the proxy expects and ship a temporary
 implementation that hardcodes Slack `chat.postMessage`. Both
-implementations (temporary and real) live in the proxy and conform to
-the same Protocol so the swap is mechanical.
+implementations conform to the same Protocol so the swap is
+mechanical:
+
+```python
+class App(Protocol):
+    app_type: str   # e.g. "slack", keys into parsers dict
+
+class AppMatcher(Protocol):
+    def find(self, url: str) -> App | None: ...
+```
 
 ### T2.8 — Gate addon
 
@@ -327,6 +361,7 @@ class GateAddon:
             approval_id = service.create(
                 db,
                 session_id=ctx.session_id,
+                tenant_id=ctx.tenant_id,
                 requesting_user_id=ctx.user_id,
                 kind=match.kind,
                 summary=match.summary,
@@ -334,7 +369,9 @@ class GateAddon:
             )
 
         try:
-            decision = await self._wakeup.wait(approval_id, self._timeout)
+            status = await service.await_decision(
+                self._db, self._wakeup, approval_id, self._timeout,
+            )
         except asyncio.CancelledError:
             # Best-effort terminal mark; sweeper is the real safety net.
             with self._db() as db:
@@ -345,31 +382,37 @@ class GateAddon:
                 db.commit()
             raise
 
-        if decision == "approve":
+        if status == ApprovalStatus.APPROVED:
             return
-        if decision == "reject":
+        if status == ApprovalStatus.REJECTED:
             flow.response = http.Response.make(
                 403, b'{"error":"user_rejected"}',
                 {"content-type": "application/json"},
             )
             return
+        # PENDING (timed out before sweeper updated) or EXPIRED.
         flow.response = http.Response.make(
             403, b'{"error":"not_authorized"}',
             {"content-type": "application/json"},
         )
 ```
 
-**SDK-bypass detection.** Log mitmproxy TLS handshake failures as a
-structured event with `source_ip` and `destination_host`. Agent code
-that tries to bypass our CA (custom truststore, `verify=False`) shows
-up here; this is the canary, paired with the in-pod iptables lockdown
-(Phase 1) that already fails such requests closed.
+SDK-bypass detection (logging mitmproxy TLS handshake failures as a
+canary for agents trying to bypass our CA) belongs in Phase 1's
+pass-through addon, not in the gate addon — it's a proxy-core concern
+that wants to fire even before gating is enabled.
 
 ### T2.9 — Notification type
 
 Add `APPROVAL_REQUESTED` to `NotificationType` in
 `backend/onyx/configs/constants.py`. Dispatch from `service.create`
-mirrors `scheduled_tasks/executor.py:394-403`.
+mirrors `scheduled_tasks/executor.py:394-403`. Notification body:
+`{approval_id, session_id, kind, summary}` — enough for the popover
+to render a one-line preview and deep-link to the session. The full
+payload lives on the `BuildMessage`, fetched when the chat loads.
+
+`require_permission` lives in `onyx.auth.permissions`; `Permission`
+lives in `onyx.db.enums`.
 
 ### T2.10 — Bash-tool timeout (verify-and-document)
 
@@ -423,9 +466,11 @@ histogram on the proxy side.
 - Phase 1 complete.
 - External Apps' app-level matcher (`_find_enabled_app_for_url`) from
   `dane/ea-craft-5`, or the temporary Protocol-conformant fallback.
-- **Redis-backed `CacheBackend`.** The Postgres `CacheBackend` does not
-  implement blocking BLPOP meaningfully; deployed environments must run
-  the Redis backend.
+- **`CacheBackend` with BLPOP.** Redis is the production backend. The
+  Postgres `CacheBackend.blpop` (`backend/onyx/cache/postgres_backend.py:257`)
+  is a polling fallback with `_BLPOP_POLL_INTERVAL` latency — it works
+  but adds per-poll DB load. Acceptable for local dev / single-tenant
+  testing; Redis required for any non-trivial deployment.
 
 ## Open during phase
 

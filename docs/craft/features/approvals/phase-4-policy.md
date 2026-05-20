@@ -148,9 +148,10 @@ def evaluate(db: Session, *, tenant_id: str, kind: str) -> PolicyDecision:
     return action.default_policy
 ```
 
-`tenant_id` comes from the `SessionContext` resolved by the proxy
-(Phase 1 adds `tenant_id` to the context); the evaluator does not
-re-derive it.
+`tenant_id` comes from `SessionContext.tenant_id`, which Phase 1
+already populates from the `onyx.app/tenant-id` sandbox label
+(see [phase-1-proxy.md §T1.4](./phase-1-proxy.md#t14--identity-resolver)).
+The evaluator does not re-derive it.
 
 **Cache strategy (v0): no cache.** Each gated request runs one DB
 lookup against `tenant_action_policy`. At v0 traffic this is
@@ -200,23 +201,36 @@ router = APIRouter(
 )
 
 @router.get("/actions")
-def list_actions(db: Session, tenant_id: str) -> list[ActionPolicyView]:
+def list_actions(
+    db: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> list[ActionPolicyView]:
     """Return every registered GatedAction plus its current effective
     policy for the caller's tenant."""
 
 @router.put("/actions/{kind}/policy")
-def set_policy(kind: str, body: PolicyBody, db: Session,
-               tenant_id: str, user: User) -> None:
-    """Upsert TenantActionPolicy row; 404 if kind is not registered."""
+def set_policy(
+    kind: str,
+    body: PolicyBody,
+    db: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+    user: User = Depends(current_user),
+) -> None:
+    """Upsert TenantActionPolicy row; raise OnyxError(NOT_FOUND) if
+    kind is not registered."""
 
 @router.delete("/actions/{kind}/policy")
-def reset_policy(kind: str, db: Session, tenant_id: str) -> None:
+def reset_policy(
+    kind: str,
+    db: Session = Depends(get_session),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> None:
     """Delete the tenant-specific row; revert to the action's default."""
 ```
 
-`tenant_id` is resolved from `get_current_tenant_id()` (matches the
-enterprise-settings router pattern). Raise `OnyxError(NOT_FOUND, ...)`
-for unknown kinds. No `response_model`.
+`tenant_id` and `db` come from FastAPI dependencies — same pattern as
+the enterprise-settings router. Raise `OnyxError(NOT_FOUND, ...)` for
+unknown kinds. No `response_model`.
 
 ### T4.7 — Admin audit API
 

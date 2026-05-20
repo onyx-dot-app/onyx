@@ -10,12 +10,12 @@ lands in [Phase 5](./phase-5-docker.md).** The infrastructure layer
 delivery) is K8s-native here. The proxy core, addons, Approval
 Service, chat UI, and policy are backend-agnostic.
 
-**Design constraint for shared modules.** Anything Phase 5 will need
-to swap (identity-resolver source, CA persistence backend, the
-sandbox bootstrap script) must be implemented behind a small interface
-in Phase 1, not as inline K8s-specific code. Concrete extension points
-called out in the relevant tasks below — landing them as interfaces
-now means Phase 5 is a slot-in, not a refactor.
+**Design constraint for shared modules.** Phase 1 lands the
+backend-swappable interfaces; the K8s implementations are the
+concrete instances. The three extension points are `SandboxIPLookup`
+(T1.4), `CAStore` (T1.2), and the env-driven mode switch in
+`firewall-init.sh` (T1.3). Land them as interfaces now and Phase 5 is
+a slot-in, not a refactor of shared code.
 
 ## Goal
 
@@ -39,12 +39,18 @@ module tree; no HTTP hop between proxy and api-server):
 ```
 sandbox_proxy/
 ├── server.py              # mitmproxy entrypoint, addon chain
-├── ca.py                  # CA bootstrap + persist
-├── identity.py            # pod-IP → session resolution + K8s informer
+├── ca.py                  # CABootstrap + CAStore Protocol
+├── ca_k8s.py              # K8sSecretCAStore (this phase); Phase 5 adds ca_docker.py
+├── identity.py            # src-IP → session resolution + SandboxIPLookup Protocol
+├── identity_k8s.py        # K8sInformerLookup (this phase); Phase 5 adds identity_docker.py
 ├── cache.py               # placeholder; Phase 2 wires Redis BLPOP/RPUSH here
 ├── config.py              # env-driven config (listen port, namespace, etc.)
 ├── addons/
 │   └── passthrough.py         # pass-through addon that logs identified flows
+├── scripts/
+│   └── firewall-init.sh       # shared sandbox bootstrap; runs as initContainer
+│                              # command in K8s, as entrypoint wrapper in docker
+│                              # (Phase 5). Mode selected via env.
 ├── Dockerfile
 └── requirements.txt
 ```
@@ -91,7 +97,14 @@ is backend-specific (K8s Secret here, named volume in Phase 5). Split
 ```python
 class CAStore(Protocol):
     """Persistence backend for the proxy CA. K8s = Secret;
-    docker = shared named volume (Phase 5)."""
+    docker = shared named volume (Phase 5).
+
+    `persist` must be idempotent under concurrent callers: if two
+    proxy replicas race on a cold cluster, exactly one write wins
+    and the loser's next `load()` returns the winner's CA. K8s
+    achieves this via conditional create on the Secret (resourceVersion="");
+    docker volumes use the same load-then-create-with-O_EXCL pattern.
+    """
     def load(self) -> tuple[bytes, bytes] | None: ...
     def persist(self, cert: bytes, key: bytes) -> None: ...
 
@@ -104,6 +117,11 @@ class CABootstrap:
 Phase 1 ships `K8sSecretCAStore`. Phase 5 adds `VolumeCAStore`. The
 bootstrap orchestration (load-or-generate, key params, rotation
 hooks) lives in `CABootstrap` and is unchanged across backends.
+
+`CABootstrap.ensure_ca` retries on `persist` conflict: re-`load()`,
+return the winner's CA. K8s `persist` translates a `409 Conflict`
+from the conditional create into a no-op so the next `load()`
+succeeds.
 
 Invariants for the K8s store:
 
@@ -121,24 +139,37 @@ Invariants for the K8s store:
 
 ### T1.3 — Sandbox bootstrap initContainer
 
-The four-step bootstrap (CA trust-store population, iptables egress
-lockdown, proxy address resolution, self-verify) is implemented as a
-**single shared script** — `firewall-init.sh`, baked into the sandbox
-image. Phase 1 runs it as the K8s initContainer command;
-[Phase 5](./phase-5-docker.md) runs the same script as the docker
-container's entrypoint, ending in `exec gosu` to drop privileges. The
-script reads the proxy address and bootstrap mode from env vars so it
-doesn't need backend-specific branches:
+The bootstrap (CA trust-store population, iptables egress lockdown,
+proxy address resolution, self-verify) is implemented as a **single
+shared script** — `firewall-init.sh`, baked into the sandbox image
+(no separate image to maintain; the existing sandbox image picks up
+`iptables` as a new dependency, plus `gosu` which Phase 5 needs but
+Phase 1 ignores). Phase 1 runs the script as the K8s initContainer
+command; [Phase 5](./phase-5-docker.md) runs the same script as the
+docker container's entrypoint, ending in `exec gosu` to drop
+privileges. The two modes share steps 1–2 (CA + iptables) and step
+4 (self-verify); they diverge only on step 3 and on what the script
+does after step 4:
 
-- `SANDBOX_PROXY_HOST`, `SANDBOX_PROXY_PORT` — proxy address.
-- `SANDBOX_PROXY_BOOTSTRAP_MODE=initcontainer` — K8s; script exits 0
-  after self-verify. (Phase 5 adds `entrypoint` mode for docker.)
+| Env var | K8s value | Docker value (Phase 5) |
+|---|---|---|
+| `SANDBOX_PROXY_HOST` | proxy ClusterIP | `sandbox-proxy` (compose DNS) |
+| `SANDBOX_PROXY_PORT` | proxy port | proxy port |
+| `SANDBOX_PROXY_BOOTSTRAP_MODE` | `initcontainer` | `entrypoint` |
 
-A single `sandbox-init` initContainer using the **existing sandbox image**
-(no separate image to maintain — we install `iptables` into that image),
-running as root with `CAP_NET_ADMIN`, runs `firewall-init.sh` in
-`initcontainer` mode. It does four things sequentially before
-the main sandbox container starts:
+`initcontainer` mode:
+- Step 3: write `<proxy_ip> sandbox-proxy` to `/etc/hosts` so the
+  main container's `HTTPS_PROXY` resolves without DNS.
+- Post-step-4: `exit 0`; the main container starts unchanged.
+
+`entrypoint` mode (Phase 5):
+- Step 3: skipped — docker-compose service DNS resolves `sandbox-proxy`
+  without `/etc/hosts` injection.
+- Post-step-4: `exec gosu 1000:1000 <real-entrypoint>`.
+
+In Phase 1, the script runs in an initContainer using the existing
+sandbox image, as root with `CAP_NET_ADMIN`. Sequentially before the
+main sandbox container starts:
 
 1. **CA trust-store population.** Mount the CA ConfigMap read-only, copy
    the cert into `/usr/local/share/ca-certificates/sandbox-proxy.crt`, run
@@ -202,10 +233,17 @@ class SessionContext:
     sandbox_name: str   # pod name in K8s; container name in docker
     sandbox_ip: str
 
+@dataclass
+class SandboxIdentity:
+    sandbox_id: UUID
+    tenant_id: str
+    sandbox_name: str
+    sandbox_ip: str
+
 class SandboxIPLookup(Protocol):
-    """Backend-specific IP → {sandbox_id, tenant_id, sandbox_name}
-    resolver. K8s = informer-backed cache; docker = events-stream-
-    backed cache (Phase 5). Both expose the same lookup signature."""
+    """Backend-specific IP → SandboxIdentity resolver.
+    K8s = informer-backed cache; docker = events-stream-backed cache
+    (Phase 5). Both expose the same lookup signature."""
     def lookup(self, src_ip: str) -> SandboxIdentity | None: ...
 
 class IdentityResolver:
@@ -225,10 +263,10 @@ Sandbox → session resolution rule:
    the container from a docker-events-backed cache. Both return
    `{sandbox_id, tenant_id, sandbox_name}` from labels.
 2. The lookup reads `onyx.app/sandbox-id` and `onyx.app/tenant-id` —
-   identical label keys are set by both backends:
-   `kubernetes_sandbox_manager.py` (`_create_sandbox_pod`,
-   lines 508-514) and `docker_sandbox_manager.py` on container
-   creation. `tenant_id` is sourced from the label, not from the DB —
+   identical label keys are set by both backends
+   (`kubernetes_sandbox_manager._create_sandbox_pod`
+   and `docker_sandbox_manager` on container creation).
+   `tenant_id` is sourced from the label, not from the DB —
    the `Sandbox` model does not carry one.
 3. Look up the `Sandbox` row by id to read `sandbox.user_id`.
 4. Resolve the active `BuildSession`: most-recent row where
@@ -245,18 +283,24 @@ if we ever loosen the serialization rule.
 
 Identity edge cases / preconditions:
 
-- **No SNAT** on the pod-to-proxy path. SNAT would mask the sandbox pod IP.
-- **No service-mesh sidecar** (Istio/Linkerd) on sandbox pods, which would
-  rewrite the source IP at the proxy. Document this as a prerequisite.
-- Startup self-check: if the proxy cannot reach the K8s API on boot, or if
-  the sandbox-namespace pod list reveals duplicate pod IPs, fail loud and
+- **No SNAT** on the sandbox-to-proxy path. SNAT would mask the
+  sandbox source IP.
+- **No service-mesh sidecar** (Istio/Linkerd) on sandbox pods, which
+  would rewrite the source IP at the proxy. Document this as a K8s
+  prerequisite.
+- Startup self-check: if the lookup source can't be reached on boot, or
+  if the initial sandbox list reveals duplicate IPs, fail loud and
   exit non-zero. Don't silently serve traffic with broken identity.
 
-The informer:
+`K8sInformerLookup` (this phase):
 
 - Watches pods in the sandbox namespace.
 - Evicts cache entries on `DELETED` or on `MODIFIED` with an IP change.
 - Background thread; reconnects with exponential backoff on K8s API blips.
+
+`DockerEventsLookup` ([Phase 5](./phase-5-docker.md)) plugs into the
+same `SandboxIPLookup` Protocol with the Docker events stream as its
+watch source.
 
 ### T1.5 — Pass-through addon
 
@@ -301,8 +345,9 @@ in-flight flows on the crashed replica drop with TCP RST to the
 sandbox; new connections still succeed via the survivor. Cross-replica
 flow resumption is not supported (out of scope for v0).
 
-**Health endpoint** `GET /healthz`: returns 200 once the informer has
-synced and the CA is loaded.
+**Health endpoint** `GET /healthz`: returns 200 once the
+`SandboxIPLookup` source has finished its initial sync and the CA is
+loaded.
 
 **Metrics — deferred.** v0 ships with no Prometheus surface. Add the
 metrics module and wire counters when we move toward a production
@@ -323,19 +368,24 @@ environment with observability.
 
 ## Dependencies
 
-- Deployment target allows PSS Baseline (`CAP_NET_ADMIN` on the
-  initContainer; main container stays restricted). PSS Restricted is
-  incompatible.
+- **Deployment target accepts `CAP_NET_ADMIN` on the initContainer.**
+  PSS Baseline disallows added capabilities outside
+  `NET_BIND_SERVICE`, so strict Baseline admission will reject the
+  init container as-written; deployments must allow the capability
+  via namespace-level policy carve-out or run under a less
+  restrictive profile. The main container itself stays restricted
+  (UID 1000, no added caps). PSS Restricted is incompatible.
 - K8s ServiceAccount and RBAC for the proxy.
 - DB read access from the proxy pod (Sandbox, BuildSession, User tables);
   same Postgres credential pattern as api-server.
 
 ## Open during phase
 
-- Exact sandbox-id label key set by the K8s sandbox manager (see T1.4 TODO).
 - Final `terminationGracePeriodSeconds` value (200s starting point).
 - JVM SDK trust-store onboarding path if a JVM-based gated action lands in
   v0 (currently none planned).
+- Whether the proxy's `values.yaml` lives in the existing Onyx chart
+  or as a sub-chart (T1.1 currently assumes the existing chart).
 
 ## Definition of done
 

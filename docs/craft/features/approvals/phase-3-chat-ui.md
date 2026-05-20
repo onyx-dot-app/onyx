@@ -89,7 +89,13 @@ Per-kind rendering for the v0 action set:
   truncated description.
 - `gcal.create_event` (GCal `events.insert`): event title, start time,
   attendee count.
-- Fallback for unrecognized kinds: JSON pretty-print of `payload`.
+- **Malformed-payload fallback for known kinds.** If a known-kind
+  payload is missing fields the renderer expects (e.g.
+  `slack.send_message` without `channel`), render the kind label and
+  fall through to the JSON pretty-print path with a small "Payload
+  did not match expected shape" notice. Do not throw or render a
+  blank card.
+- **Fallback for unrecognized kinds**: JSON pretty-print of `payload`.
 
 ### T3.5 — `postApprovalDecision` helper
 
@@ -120,7 +126,10 @@ Two paths feed the chat:
    `GET /api/build/sessions/{sessionId}/messages` every 10s while the
    session has at least one in-flight tool call (or any unresolved
    `approval_request` message). Stop polling when the session goes
-   idle.
+   idle. The 10s cadence gives ~18 polls inside the proxy's 180s
+   wait window — fast enough for the card to appear within one user
+   beat if the notification dropped, slow enough that the polling
+   cost is negligible.
 
 The popover itself needs no logic change for v0; `APPROVAL_REQUESTED`
 notifications render with default UI and deep-link to the session.

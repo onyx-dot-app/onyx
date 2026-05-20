@@ -1,5 +1,14 @@
 # Craft Approvals — Project Proposal
 
+> **Review status.** [Phase 1](./phase-1-proxy.md) has been reviewed
+> in detail and is the document to trust for implementation specifics.
+> [Phase 2](./phase-2-service-and-gating.md),
+> [Phase 3](./phase-3-chat-ui.md), [Phase 4](./phase-4-policy.md),
+> and [Phase 5](./phase-5-docker.md) are **rough proposals** —
+> directionally correct, but the task-level detail has not been
+> through the same review pass. Expect refactoring of those plans
+> before implementation begins.
+
 ## Summary
 
 Craft agents can take actions in external systems without user oversight. This
@@ -164,8 +173,11 @@ Each phase delivers value and unblocks the next.
 
 ### Phase 1 — Egress Interception Proxy
 
-Stand up the proxy as infrastructure, in pass-through mode (no gating yet).
-This is the foundation everything else builds on. Concretely:
+Stand up the proxy as infrastructure, in pass-through mode (no gating
+yet). This is the foundation everything else builds on. Phase 1 also
+lands the **backend-swappable interfaces** (`SandboxIPLookup`,
+`CAStore`, `firewall-init.sh` mode switch) that [Phase 5](#phase-5--docker-compose-backend-support)
+plugs the docker implementations into. Concretely:
 
 - The proxy itself, built on mitmproxy in a new `sandbox_proxy/` package.
 - **In-pod iptables egress lockdown** installed by a privileged
@@ -175,22 +187,27 @@ This is the foundation everything else builds on. Concretely:
   fails and the pod doesn't start (fail-closed by construction). The
   alternative — a K8s NetworkPolicy at the CNI layer — was rejected
   because it fails *open* if the cluster's CNI ever stops enforcing,
-  and didn't cover DNS or IPv6 in any case. Requires PSS Baseline (PSS
-  Restricted forbids `CAP_NET_ADMIN`).
+  and didn't cover DNS or IPv6 in any case. Requires `CAP_NET_ADMIN`
+  on the initContainer (PSS Baseline disallows added caps by default;
+  a capability exception or a less-strict profile is required).
 - **CA distribution to heterogeneous trust stores.** Proxy auto-generates
-  its CA at bootstrap and publishes the public cert via a ConfigMap. The
-  same initContainer above runs `update-ca-certificates` to install the
-  cert into the system trust store. Node (`NODE_EXTRA_CA_CERTS`), Python
-  `requests` (`REQUESTS_CA_BUNDLE`), AWS SDK (`AWS_CA_BUNDLE`), and Go
-  (`SSL_CERT_FILE`) each consult their own trust mechanism; pod env must
-  fan these out. Any SDK we haven't explicitly configured will fall
-  through to its bundled CAs, reject the proxy's leaf cert, and fail
-  closed at the iptables lockdown.
-- **Identity resolution** via TCP source IP. Source IP is auto-attached by
-the kernel and un-spoofable by the agent. The proxy resolves
-`source_ip → pod → sandbox → session` against the K8s API, backed by a  
-small in-memory cache fed by a K8s pod informer for invalidation on pod  
-restart. Rejected alternatives are spoofable or overkill respectively for v0.
+  its CA at bootstrap (persisted via the `CAStore` interface — K8s
+  Secret in Phase 1, named volume in Phase 5) and publishes the
+  public cert via a ConfigMap. The same initContainer above runs
+  `update-ca-certificates` to install the cert into the system trust
+  store. Node (`NODE_EXTRA_CA_CERTS`), Python `requests`
+  (`REQUESTS_CA_BUNDLE`), AWS SDK (`AWS_CA_BUNDLE`), and Go
+  (`SSL_CERT_FILE`) each consult their own trust mechanism; pod env
+  must fan these out. Any SDK we haven't explicitly configured will
+  fall through to its bundled CAs, reject the proxy's leaf cert, and
+  fail closed at the iptables lockdown.
+- **Identity resolution** via TCP source IP. Source IP is
+  auto-attached by the kernel and un-spoofable by the agent. The
+  proxy resolves `source_ip → sandbox → session` via the
+  `SandboxIPLookup` Protocol (K8s informer-backed cache in Phase 1;
+  Docker events stream in Phase 5) and a DB lookup for the active
+  `BuildSession`. Rejected alternatives are spoofable or overkill
+  respectively for v0.
 
 Deliverable: all sandbox HTTPS traffic flows through the proxy, MITM'd,
 identifiable to a session, and passed through unmodified. Security posture
@@ -264,18 +281,21 @@ behavior as K8s.
 
 ## Open Decisions
 
-1. **Action-kind taxonomy.** Lock the namespace convention (`slack
-  .send_message`, etc.) before Phase 4.
+None outstanding. The action-kind taxonomy is locked in [Phase 4 T4.2](./phase-4-policy.md).
 
 ---
 
 ## Risks
 
-- **Two-replica proxy is not full HA.** v0 ships `replicas: 2` so a
-rolling deploy or single-replica crash doesn't take down all egress —
-the survivor keeps accepting new connections. But in-flight flows on a
-crashed replica still drop without resumption; the user re-prompts.
-True HA (cross-replica flow handoff) is a future workstream.
+- **Two-replica K8s proxy is not full HA; docker-compose ships single-instance.**
+v0 K8s ships `replicas: 2` so a rolling deploy or single-replica
+crash doesn't take down all egress — the survivor keeps accepting
+new connections. In-flight flows on a crashed replica still drop
+without resumption; the user re-prompts. The docker-compose deploy
+(Phase 5) ships single-instance; the same crash drops in-flight
+flows and briefly refuses new connections until `restart:
+unless-stopped` brings the proxy back. True HA (cross-replica flow
+handoff) is a future workstream for both backends.
 - **Structured-error guarantee depends on SDK socket timeouts.** The proxy
 returns `403 not_authorized` cleanly when its 180s wait fires first. For
 SDKs (or agent code) that set socket timeouts shorter than 180s, the
