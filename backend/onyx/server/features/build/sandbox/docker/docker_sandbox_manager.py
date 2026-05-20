@@ -1142,7 +1142,7 @@ printf '%s' '{opencode_json}' > {session_path}/opencode.json
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d") or is_symlink
+            is_directory = line.startswith("d")
             size_str = parts[4]
             try:
                 size = int(size_str) if not is_directory else None
