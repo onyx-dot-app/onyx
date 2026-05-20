@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
@@ -354,6 +355,8 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
+    # Newline-delimited "<key>  <value>" pairs from the Modelfile.
+    parameters: str | None = None
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -362,6 +365,26 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+    @cached_property
+    def _parsed_parameters(self) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for line in (self.parameters or "").splitlines():
+            tokens = line.split(maxsplit=1)
+            if len(tokens) == 2:
+                parsed[tokens[0]] = tokens[1].strip()
+        return parsed
+
+    @property
+    def num_ctx(self) -> int | None:
+        raw = self._parsed_parameters.get("num_ctx")
+        if raw is None:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        return value if value > 0 else None
 
 
 # OpenRouter dynamic models fetch
