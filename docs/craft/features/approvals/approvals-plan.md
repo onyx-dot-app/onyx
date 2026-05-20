@@ -164,7 +164,7 @@ Each phase delivers value and unblocks the next.
 Stand up the proxy as infrastructure, in pass-through mode (no gating yet).
 This is the foundation everything else builds on. Concretely:
 
-- The proxy itself, built on mitmproxy in a new `craft_proxy/` package.
+- The proxy itself, built on mitmproxy in a new `sandbox_proxy/` package.
 - **Default-deny egress NetworkPolicy** on the sandbox namespace, with the
 proxy as the only permitted destination. Requires NetworkPolicy
 enforcement at the CNI layer; our EKS deployment has VPC CNI native
