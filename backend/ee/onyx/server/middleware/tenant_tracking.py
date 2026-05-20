@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -43,20 +45,29 @@ def add_api_server_tenant_id_middleware(
 
             CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            # Block GATED_ACCESS tenants on every non-allowlisted path.
-            # The frontend ProductGatingWrapper only stops UI rendering — direct
-            # API callers (bots with stored auth, PATs, scripts) bypass it and
-            # have historically continued burning the cloud LLM key after their
-            # trial expired or payment failed. Allowlist mirrors the self-hosted
-            # `license_enforcement` middleware so a gated tenant can still reach
-            # /auth, /billing, /me, etc. to resubscribe, plus the multi-tenant
-            # Stripe publishable key endpoint needed to render the checkout flow.
-            if MULTI_TENANT and not _is_path_allowed(request.url.path):
+            # Block tenants whose subscription has lapsed (`application_status =
+            # GATED_ACCESS` in the cloud control plane → `gated_tenants` Redis
+            # set) from reaching anything outside the resubscribe surface. The
+            # frontend ProductGatingWrapper only swaps UI; direct API callers
+            # (bots with stored auth, PATs, scripts) used to walk past it and
+            # keep burning the cloud LLM key. Skip the lookup for the default
+            # schema (unauthenticated requests) — it is never in the gated set
+            # and the round-trip is wasted. Allowlist reuses the self-hosted
+            # `LICENSE_ENFORCEMENT_ALLOWED_PREFIXES` list (auth, /billing, /me,
+            # /settings, /notifications, …) plus the multi-tenant Stripe
+            # publishable-key endpoint that the resubscribe flow needs.
+            if (
+                MULTI_TENANT
+                and tenant_id != POSTGRES_DEFAULT_SCHEMA
+                and not _is_path_allowed(request.url.path)
+            ):
                 try:
-                    gated = is_tenant_gated(tenant_id)
+                    # `is_tenant_gated` uses the sync Redis client; offload so
+                    # the SISMEMBER round-trip does not block the event loop.
+                    gated = await asyncio.to_thread(is_tenant_gated, tenant_id)
                 except Exception:
-                    # Fail open on Redis errors — don't lock paying users out
-                    # because of cache connectivity.
+                    # Fail open on Redis errors — don't lock paying tenants out
+                    # because of cache connectivity issues.
                     logger.warning(
                         "[tenant_tracking] is_tenant_gated check failed; allowing request"
                     )
@@ -68,13 +79,12 @@ def add_api_server_tenant_id_middleware(
                         tenant_id,
                         request.url.path,
                     )
+                    code, status = OnyxErrorCode.SUBSCRIPTION_INACTIVE.value
                     return JSONResponse(
-                        status_code=402,
+                        status_code=status,
                         content={
-                            "detail": {
-                                "error": "license_expired",
-                                "message": "Your subscription has expired. Please update your billing.",
-                            }
+                            "error_code": code,
+                            "detail": "Your subscription is inactive. Update your billing to restore access.",
                         },
                     )
 
