@@ -17,12 +17,12 @@ resolution-markers = [
 [manifest]
 overrides = [
     { name = "aiohttp", specifier = ">=3.10" },
-    { name = "brotli", specifier = ">=1.0" },
+    { name = "brotli", specifier = ">=1.0,<2.0" },
     { name = "click" },
-    { name = "cryptography", specifier = ">=42.0" },
+    { name = "cryptography", specifier = ">=42.0,<50.0" },
     { name = "fastuuid", specifier = ">=0.13.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.38.0" },
-    { name = "h11", specifier = ">=0.11" },
+    { name = "h11", specifier = ">=0.11,<1.0" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.23.0" },
     { name = "importlib-metadata", specifier = ">=6.8.0" },
     { name = "jinja2", specifier = ">=3.1.2,<4.0.0" },

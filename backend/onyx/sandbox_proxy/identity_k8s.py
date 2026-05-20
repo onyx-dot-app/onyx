@@ -21,6 +21,8 @@ from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
 from onyx.utils.logger import setup_logger
@@ -29,7 +31,12 @@ _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
 _WATCH_TIMEOUT_SECONDS = 300
 
-_SANDBOX_POD_SELECTOR = f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_SANDBOX}"
+_SANDBOX_POD_SELECTOR = ",".join(
+    [
+        f"{LABEL_K8S_COMPONENT}={LABEL_K8S_COMPONENT_SANDBOX}",
+        f"{LABEL_K8S_MANAGED_BY}={LABEL_K8S_MANAGED_BY_ONYX}",
+    ]
+)
 
 logger = setup_logger()
 
@@ -44,6 +51,10 @@ def _identity_from_pod(pod: client.V1Pod) -> SandboxIdentity | None:
         return None
 
     labels = metadata.labels or {}
+    # Watch selector already filters on managed-by, but re-check
+    # defensively so loosening the selector can't enable label spoofing.
+    if labels.get(LABEL_K8S_MANAGED_BY) != LABEL_K8S_MANAGED_BY_ONYX:
+        return None
     sandbox_id_raw = labels.get(LABEL_SANDBOX_ID)
     tenant_id = labels.get(LABEL_TENANT_ID)
     if not sandbox_id_raw or not tenant_id:
@@ -83,7 +94,7 @@ class K8sInformerLookup(SandboxIPLookup):
 
         self._initial_sync_done = threading.Event()
         self._stop_event = threading.Event()
-        self._synced = False
+        self._synced = threading.Event()
 
         self._thread = threading.Thread(
             target=self._run, name="sandbox-proxy-informer", daemon=True
@@ -101,7 +112,7 @@ class K8sInformerLookup(SandboxIPLookup):
         return self._initial_sync_done.wait(timeout=timeout_seconds)
 
     def is_synced(self) -> bool:
-        return self._synced
+        return self._synced.is_set()
 
     def lookup(self, src_ip: str) -> SandboxIdentity | None:
         with self._cache_lock:
@@ -113,11 +124,11 @@ class K8sInformerLookup(SandboxIPLookup):
             try:
                 resource_version = self._initial_list()
                 self._initial_sync_done.set()
-                self._synced = True
+                self._synced.set()
                 backoff = _RECONNECT_INITIAL_SECONDS
                 self._watch_loop(resource_version)
             except ApiException as e:
-                self._synced = False
+                self._synced.clear()
                 logger.warning(
                     "informer error: %s (status=%s); reconnecting in %.1fs",
                     e.reason,
@@ -130,14 +141,14 @@ class K8sInformerLookup(SandboxIPLookup):
                 ConnectionError,
                 OSError,
             ) as e:
-                self._synced = False
+                self._synced.clear()
                 logger.warning(
                     "informer connection error: %s; reconnecting in %.1fs",
                     e,
                     backoff,
                 )
             except Exception:
-                self._synced = False
+                self._synced.clear()
                 logger.exception(
                     "unexpected informer failure; reconnecting in %.1fs",
                     backoff,

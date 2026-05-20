@@ -25,7 +25,12 @@ dependencies = [
     "claude-agent-sdk>=0.1.19",
     "agent-client-protocol>=0.7.1",
     "discord-py==2.4.0",
+    # K8s client API surface changes across minor versions; bump
+    # deliberately and verify sandbox manager + proxy informer.
     "kubernetes==31.0.0",
+    # 11.0.2 is the last stable that supports Python 3.11; 11.1+ needs
+    # 3.12. Transitive deps (brotli/h11/cryptography) need overrides
+    # below to coexist with the backend's pins.
     "mitmproxy==11.0.2",
 ]
 
@@ -217,14 +222,12 @@ override-dependencies = [
     "tokenizers",
     "google-cloud-aiplatform>=1.38.0",
     # mitmproxy 11.0.2 caps brotli<=1.1.0, h11<=0.14.0, and
-    # cryptography<44.1. The backend has all three pinned above those
-    # caps (brotli==1.2.0, h11==0.16 transitively via httpcore==1.0.9,
-    # cryptography==46.0.7). Override mitmproxy's declared ranges so
-    # the resolver can pick the backend's versions; in practice the
-    # proxy's mitmproxy use is unaffected by these bumps.
-    "brotli>=1.0",
-    "h11>=0.11",
-    "cryptography>=42.0",
+    # cryptography<44.1. Override so the resolver can pick the
+    # backend's newer versions. Upper bounds match the next major to
+    # keep a future major bump from sneaking in without review.
+    "brotli>=1.0,<2.0",
+    "h11>=0.11,<1.0",
+    "cryptography>=42.0,<50.0",
 ]
 
 [tool.ty.environment]

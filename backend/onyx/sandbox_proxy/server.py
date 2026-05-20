@@ -15,6 +15,7 @@ from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
 from onyx.sandbox_proxy.identity import IdentityResolver
+from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
@@ -36,13 +37,10 @@ class _Readiness:
         self.lookup_ready = False
         self.draining = False
 
-    def is_ready(self) -> bool:
-        return self.ca_ready and self.lookup_ready and not self.draining
-
 
 def _build_healthz_handler(
     readiness: _Readiness,
-    lookup: K8sInformerLookup,
+    lookup: SandboxIPLookup,
 ) -> type[BaseHTTPRequestHandler]:
     class _HealthzHandler(BaseHTTPRequestHandler):
         def log_message(
@@ -78,9 +76,7 @@ def _build_healthz_handler(
     return _HealthzHandler
 
 
-def _start_healthz_server(
-    readiness: _Readiness, lookup: K8sInformerLookup
-) -> HTTPServer:
+def _start_healthz_server(readiness: _Readiness, lookup: SandboxIPLookup) -> HTTPServer:
     handler = _build_healthz_handler(readiness, lookup)
     server = HTTPServer(
         ("0.0.0.0", SANDBOX_PROXY_HEALTHZ_PORT),  # noqa: S104 — container scope
@@ -135,7 +131,7 @@ def _install_signal_handlers(
     loop: asyncio.AbstractEventLoop,
     master: DumpMaster,
     readiness: _Readiness,
-    lookup: K8sInformerLookup,
+    lookup: SandboxIPLookup,
 ) -> None:
     def _on_signal() -> None:
         if readiness.draining:
@@ -164,25 +160,28 @@ def main() -> int:
     logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
 
     lookup = _build_lookup()
-    readiness.lookup_ready = True
-    logger.info("informer initial sync complete")
-
-    _start_healthz_server(readiness, lookup)
-
-    identity = IdentityResolver(ip_lookup=lookup)
-    addon = PassthroughAddon(identity=identity)
-
-    options = _build_mitm_options(str(materialized_ca.pem_path))
-    master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
-    master.addons.add(addon)
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    _install_signal_handlers(loop, master, readiness, lookup)
     try:
-        loop.run_until_complete(_run_master(master))
+        readiness.lookup_ready = True
+        logger.info("informer initial sync complete")
+
+        _start_healthz_server(readiness, lookup)
+
+        identity = IdentityResolver(ip_lookup=lookup)
+        addon = PassthroughAddon(identity=identity)
+
+        options = _build_mitm_options(str(materialized_ca.pem_path))
+        master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
+        master.addons.add(addon)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        _install_signal_handlers(loop, master, readiness, lookup)
+        try:
+            loop.run_until_complete(_run_master(master))
+        finally:
+            loop.close()
     finally:
-        loop.close()
+        lookup.stop()
 
     logger.info("sandbox proxy exiting cleanly")
     return 0

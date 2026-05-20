@@ -1,9 +1,16 @@
 """Pass-through addon: identifies every flow, logs it, forwards it."""
 
+from typing import Protocol
+
 from mitmproxy import http
 
-from onyx.sandbox_proxy.identity import IdentityResolver
+from onyx.sandbox_proxy.identity import SessionContext
 from onyx.utils.logger import setup_logger
+
+
+class _Resolver(Protocol):
+    def resolve(self, src_ip: str) -> SessionContext | None: ...
+
 
 logger = setup_logger()
 
@@ -14,7 +21,7 @@ class PassthroughAddon:
 
     METADATA_KEY = "onyx_session_context"
 
-    def __init__(self, identity: IdentityResolver) -> None:
+    def __init__(self, identity: _Resolver) -> None:
         self._identity = identity
 
     def request(self, flow: http.HTTPFlow) -> None:

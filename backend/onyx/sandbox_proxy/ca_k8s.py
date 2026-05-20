@@ -7,6 +7,7 @@ cross-namespace ConfigMap mounts).
 """
 
 import base64
+import binascii
 import time
 
 from kubernetes import client
@@ -27,6 +28,16 @@ logger = setup_logger()
 _CA_CERT_SECRET_KEY = "ca.crt"
 _CA_KEY_SECRET_KEY = "ca.key"
 _CA_CERT_CONFIGMAP_KEY = "ca.crt"
+
+_CONFIGMAP_REPLACE_MAX_ATTEMPTS = 5
+_CONFIGMAP_REPLACE_MAX_BACKOFF = 1.6
+
+
+def _decode_cert_for_configmap(cert_pem: bytes) -> str:
+    try:
+        return cert_pem.decode("ascii")
+    except UnicodeDecodeError as e:
+        raise RuntimeError(f"proxy CA cert is not ASCII-encodable PEM: {e}") from e
 
 
 class K8sSecretCAStore(CAStore):
@@ -66,8 +77,14 @@ class K8sSecretCAStore(CAStore):
                 f"is missing {_CA_CERT_SECRET_KEY} or {_CA_KEY_SECRET_KEY}"
             )
 
-        cert_pem = base64.b64decode(data[_CA_CERT_SECRET_KEY])
-        key_pem = base64.b64decode(data[_CA_KEY_SECRET_KEY])
+        try:
+            cert_pem = base64.b64decode(data[_CA_CERT_SECRET_KEY])
+            key_pem = base64.b64decode(data[_CA_KEY_SECRET_KEY])
+        except (binascii.Error, ValueError) as e:
+            raise RuntimeError(
+                f"Secret {self._proxy_ns}/{self._secret_name} has malformed "
+                f"base64 data: {e}"
+            ) from e
 
         # Re-project on every load so a deleted ConfigMap self-heals
         # on the next proxy restart.
@@ -120,7 +137,7 @@ class K8sSecretCAStore(CAStore):
                     "onyx.app/resource": "sandbox-proxy-ca-bundle",
                 },
             ),
-            data={_CA_CERT_CONFIGMAP_KEY: cert_pem.decode()},
+            data={_CA_CERT_CONFIGMAP_KEY: _decode_cert_for_configmap(cert_pem)},
         )
 
         try:
@@ -132,7 +149,12 @@ class K8sSecretCAStore(CAStore):
             if e.status != 409:
                 raise
 
-        for attempt in range(2):
+        # Replace path — another proxy replica may be updating
+        # concurrently. Retry on 409 with exponential backoff. Both
+        # replicas hold the same cert, so whichever write lands last
+        # converges the ConfigMap to the same value.
+        backoff = 0.1
+        for attempt in range(_CONFIGMAP_REPLACE_MAX_ATTEMPTS):
             try:
                 self._core.replace_namespaced_config_map(
                     name=self._configmap_name,
@@ -141,7 +163,9 @@ class K8sSecretCAStore(CAStore):
                 )
                 return
             except ApiException as e:
-                if e.status == 409 and attempt == 0:
-                    time.sleep(0.1)
+                last_attempt = attempt == _CONFIGMAP_REPLACE_MAX_ATTEMPTS - 1
+                if e.status == 409 and not last_attempt:
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, _CONFIGMAP_REPLACE_MAX_BACKOFF)
                     continue
                 raise
