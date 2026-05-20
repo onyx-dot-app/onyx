@@ -370,7 +370,6 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -407,7 +406,7 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
             --wait --wait-timeout 300 \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
             api_server \
@@ -493,8 +492,7 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e VESPA_HOST=index \
-              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+              -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
@@ -728,10 +726,9 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
-          OPENSEARCH_FOR_ONYX_ENABLED=false \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
             api_server \
@@ -782,8 +779,7 @@ jobs:
             -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+            -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \

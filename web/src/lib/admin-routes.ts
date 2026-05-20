@@ -2,7 +2,6 @@ import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
   SvgActivity,
-  SvgArrowExchange,
   SvgAudio,
   SvgBlocks,
   SvgShareWebhook,
@@ -222,12 +221,6 @@ export const ADMIN_ROUTES = {
     icon: SvgWallet,
     title: "Plans & Billing",
     sidebarLabel: "Plans & Billing",
-  },
-  INDEX_MIGRATION: {
-    path: "/admin/document-index-migration",
-    icon: SvgArrowExchange,
-    title: "Document Index Migration",
-    sidebarLabel: "Document Index Migration",
   },
   HOOKS: {
     path: "/admin/hooks",

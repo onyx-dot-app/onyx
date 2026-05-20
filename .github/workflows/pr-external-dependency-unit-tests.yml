@@ -125,9 +125,8 @@ jobs:
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
+          COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
-          OPENSEARCH_FOR_ONYX_ENABLED=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -140,7 +139,6 @@ jobs:
             minio \
             relational_db \
             cache \
-            index \
             opensearch \
             code-interpreter
 
