@@ -15,6 +15,7 @@ Conventions:
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
@@ -24,10 +25,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -123,6 +127,49 @@ def make_skill(
     db_session.add(skill)
     db_session.flush()
     return skill
+
+
+def make_external_app(
+    db_session: Session,
+    *,
+    skill: Skill | None = None,
+    app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    auth_template: dict[str, Any] | None = None,
+    organization_credentials: dict[str, Any] | None = None,
+) -> ExternalApp:
+    """Create an ``ExternalApp`` linked to ``skill`` (a new one if not
+    supplied). Defaults: empty auth_template/org_creds, `CUSTOM` type."""
+    if skill is None:
+        skill = make_skill(db_session)
+    app = ExternalApp(
+        skill_id=skill.id,
+        app_type=app_type,
+        upstream_url_patterns=[],
+        auth_template=auth_template or {},
+        organization_credentials=organization_credentials or {},
+    )
+    db_session.add(app)
+    db_session.flush()
+    return app
+
+
+def make_user_credential(
+    db_session: Session,
+    *,
+    app: ExternalApp,
+    user: User,
+    user_credentials: dict[str, Any] | None = None,
+) -> ExternalAppUserCredential:
+    """Create an ``ExternalAppUserCredential`` row for *user* on *app*.
+    Defaults to an empty credential dict (no keys filled)."""
+    cred = ExternalAppUserCredential(
+        external_app_id=app.id,
+        user_id=user.id,
+        user_credentials=user_credentials or {},
+    )
+    db_session.add(cred)
+    db_session.flush()
+    return cred
 
 
 def grant_skill_to_group(

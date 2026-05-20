@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills_for_user
+from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
@@ -110,16 +110,19 @@ def _assemble_fileset(
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
+    """``{path: bytes}`` of every skill delivered into the user's
+    sandbox. Includes external-app-backed skills the user has
+    authenticated for (the skills endpoint excludes those — the
+    sandbox doesn't)."""
     builtins = BuiltinSkillRegistry.instance().list_available(db_session)
-    customs = list_skills_for_user(user=user, db_session=db_session)
+    customs = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     return _assemble_fileset(builtins, customs, user, db_session)
 
 
 def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
     """Return (skills_section, fileset) sharing one set of DB reads."""
     builtins = BuiltinSkillRegistry.instance().list_available(db_session)
-    customs = list_skills_for_user(user=user, db_session=db_session)
+    customs = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     section = build_skills_section_from_data(builtins, customs)
     files = _assemble_fileset(builtins, customs, user, db_session)
     return section, files
