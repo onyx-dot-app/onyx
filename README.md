@@ -35,7 +35,7 @@ Onyx comes loaded with advanced features like Agents, Web Search, RAG, MCP, Deep
 > [!TIP]
 > Run Onyx with one command (or see deployment section below):
 > ```
-> curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh && chmod +x install.sh && ./install.sh
+> curl -fsSL https://onyx.app/install_onyx.sh | bash
 > ```
 
 ****
