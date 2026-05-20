@@ -9,15 +9,11 @@ on:
     branches:
       - main
       - "release/**"
-    paths:
-      - "backend/**"
-      - "cli/**"
-      - "deployment/docker_compose/**"
-      - "docker-bake.hcl"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/pr-integration-tests.yml"
-      - ".github/actions/setup-test-license/**"
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test matrix runs. This
+    # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
+    # workflow can race the real workflow's same-named status check under
+    # branch protection.
   push:
     tags:
       - "v*.*.*"
@@ -51,8 +47,39 @@ env:
   GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
+  changes:
+    # Decides whether the integration test matrix runs. On pull_request /
+    # merge_group we use paths-filter; on push (tags) we default to `true` so
+    # everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      integration: ${{ steps.filter.outputs.integration || 'true' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            integration:
+              - 'backend/**'
+              - 'cli/**'
+              - 'deployment/docker_compose/**'
+              - 'docker-bake.hcl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-integration-tests.yml'
+              - '.github/actions/setup-test-license/**'
+
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-slim
     timeout-minutes: 45
     outputs:
@@ -95,6 +122,8 @@ jobs:
           fi
 
   build-backend-image:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
@@ -158,6 +187,8 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
@@ -217,6 +248,8 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
   build-integration-image:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
@@ -337,7 +370,6 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
@@ -374,7 +406,7 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
             --wait --wait-timeout 300 \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
             api_server \
@@ -460,8 +492,7 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e VESPA_HOST=index \
-              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+              -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=api_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
@@ -695,10 +726,9 @@ jobs:
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
-          OPENSEARCH_FOR_ONYX_ENABLED=false \
           docker compose -f docker-compose.multitenant-dev.yml up \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
             api_server \
@@ -749,8 +779,7 @@ jobs:
             -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+            -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
@@ -794,11 +823,39 @@ jobs:
 
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    # This job is the single required status check for the integration suite. It
+    # always runs so branch protection has something to wait on, and it passes
+    # cleanly when `changes` reports no relevant paths changed (i.e. the test
+    # matrix was legitimately skipped).
     runs-on: ubuntu-slim
-    timeout-minutes: 45
-    needs: [integration-tests, onyx-lite-tests, multitenant-tests]
+    timeout-minutes: 5
+    needs: [changes, integration-tests, onyx-lite-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
-        run: exit 1
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.integration }}
+          INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
+          LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
+          MULTITENANT_RESULT: ${{ needs.multitenant-tests.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed — required check passes."
+            exit 0
+          fi
+          if [ "${INTEGRATION_RESULT}" != "success" ] \
+             || [ "${LITE_RESULT}" != "success" ] \
+             || [ "${MULTITENANT_RESULT}" != "success" ]; then
+            echo "Test results: integration-tests=${INTEGRATION_RESULT}, onyx-lite-tests=${LITE_RESULT}, multitenant-tests=${MULTITENANT_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
@@ -176,6 +177,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_image_input: bool | None = None
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
+    custom_display_name: str | None = None  # Admin-specified override
 
     @classmethod
     def from_model(
@@ -191,6 +193,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
                 in model_configuration_model.llm_model_flow_types
             ),
             display_name=model_configuration_model.display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
         )
 
 
@@ -202,6 +205,7 @@ class ModelConfigurationView(BaseModel):
     supports_image_input: bool
     supports_reasoning: bool = False
     display_name: str | None = None
+    custom_display_name: str | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None
@@ -245,6 +249,7 @@ class ModelConfigurationView(BaseModel):
                     )
                 ),
                 display_name=model_configuration_model.display_name,
+                custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
                 vendor=vendor,
                 version=None,
@@ -298,6 +303,7 @@ class ModelConfigurationView(BaseModel):
             ),
             # Populate display fields from parsed model name
             display_name=display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
             provider_display_name=parsed.provider_display_name,
             vendor=parsed.vendor,
             version=parsed.version,
@@ -349,6 +355,8 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
+    # Newline-delimited "<key>  <value>" pairs from the Modelfile.
+    parameters: str | None = None
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -357,6 +365,26 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+    @cached_property
+    def _parsed_parameters(self) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for line in (self.parameters or "").splitlines():
+            tokens = line.split(maxsplit=1)
+            if len(tokens) == 2:
+                parsed[tokens[0]] = tokens[1].strip()
+        return parsed
+
+    @property
+    def num_ctx(self) -> int | None:
+        raw = self._parsed_parameters.get("num_ctx")
+        if raw is None:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        return value if value > 0 else None
 
 
 # OpenRouter dynamic models fetch

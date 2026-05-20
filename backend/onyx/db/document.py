@@ -830,6 +830,19 @@ def update_docs_chunk_count__no_commit(
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
+def update_docs_content_hash__no_commit(
+    ids_to_new_hash: dict[str, str],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_new_hash.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.content_hash = ids_to_new_hash[doc.id]
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,

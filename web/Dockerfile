@@ -13,20 +13,19 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files first for better layer caching
-# This layer will be cached unless package.json or package-lock.json changes
-COPY package.json package-lock.json ./
-COPY lib/opal/package.json ./lib/opal/
+# Copy package files + the full opal workspace source so that opal's `prepare`
+# lifecycle hook (which runs during `npm ci` for workspace packages) can build
+# `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
+# extends web's `tsconfig.json`, so that file must also be present at install
+# time for the DTS build to succeed.
+COPY package.json package-lock.json tsconfig.json ./
+COPY lib/opal/ ./lib/opal/
 
-# Install dependencies
+# Install dependencies. opal's `prepare` script builds dist/ as part of install.
 RUN npm ci
 
-# pull in source code / package.json / package-lock.json
+# pull in remaining source code
 COPY . .
-
-# Build the opal design-system package so dist/ artifacts (colors.css, root.css,
-# styles.css, JS bundles) exist before Next.js resolves package exports.
-RUN npm run build --workspace=lib/opal
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true

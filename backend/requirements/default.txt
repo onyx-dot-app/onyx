@@ -711,6 +711,7 @@ cryptography==46.0.7 \
     #   pyjwt
     #   secretstorage
     #   sendgrid
+    #   types-paramiko
     #   unstructured-client
 cyclopts==4.2.4 \
     --hash=sha256:27e1d175df2889aba72cd960c4e34c8b0a501c5b0161e849c72d9fee5903ecbb \
@@ -761,6 +762,9 @@ dnspython==2.8.0 \
     --hash=sha256:01d9bbc4a2d76bf0db7c1f729812ded6d912bd318d3b1cf81d30c0f845dbf3af \
     --hash=sha256:181d3c6996452cb1189c4046c61599b84a5a86e099562ffde77d26984ff26d0f
     # via email-validator
+docker==7.1.0 \
+    --hash=sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c \
+    --hash=sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0
 docstring-parser==0.17.0 \
     --hash=sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912 \
     --hash=sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708
@@ -2949,6 +2953,7 @@ pywin32==311 ; sys_platform == 'win32' \
     --hash=sha256:e286f46a9a39c4a18b319c28f59b61de793654af2f395c102b4f819e584b5852 \
     --hash=sha256:f95ba5a847cba10dd8c4d8fefa9f2a6cf283b8b88ed6178fa8a6c1ab16054d0d
     # via
+    #   docker
     #   mcp
     #   pympler
 pywin32-ctypes==0.2.3 ; sys_platform == 'win32' \
@@ -3194,6 +3199,7 @@ requests==2.33.0 \
     #   atlassian-python-api
     #   braintrust
     #   cohere
+    #   docker
     #   dropbox
     #   exa-py
     #   google-api-core
@@ -3597,13 +3603,22 @@ types-awscrt==0.28.4 \
     --hash=sha256:15929da84802f27019ee8e4484fb1c102e1f6d4cf22eb48688c34a5a86d02eb6 \
     --hash=sha256:2d453f9e27583fcc333771b69a5255a5a4e2c52f86e70f65f3c5a6789d3443d0
     # via botocore-stubs
+types-docker==7.1.0.20260518 \
+    --hash=sha256:59893937816bfe40eb2915c84b31c3131107537500287c47d4a10dd7a9d59deb \
+    --hash=sha256:d194c4b82a4110fc58c84af05a5d9de6d3e54f94357ff745d01b5dca12c8eaaa
 types-openpyxl==3.0.4.7 \
     --hash=sha256:0ad60cf7a76c7b550a66199211c94dcc4facb515a0f09d4981d0181b3bac6b15 \
     --hash=sha256:55713e2dfb6c3db2e3e2ade2f8dc20b3dea30c0d1bd3efc5b51d52c010e0a64a
+types-paramiko==4.0.0.20260518 \
+    --hash=sha256:0ffaf1a6eb796833a49653cba4c7be13af51c8269d75234972d6239763dda270 \
+    --hash=sha256:286f6830945cba63797eedf375ed87138d93198121253afe66c5d6dbcf91318d
+    # via types-docker
 types-requests==2.32.0.20250328 \
     --hash=sha256:72ff80f84b15eb3aa7a8e2625fffb6a93f2ad5a0c20215fc1dcfa61117bcb2a2 \
     --hash=sha256:c9e67228ea103bd811c96984fac36ed2ae8da87a36a633964a21f199d60baf32
-    # via cohere
+    # via
+    #   cohere
+    #   types-docker
 types-s3transfer==0.14.0 \
     --hash=sha256:108134854069a38b048e9b710b9b35904d22a9d0f37e4e1889c2e6b58e5b3253 \
     --hash=sha256:17f800a87c7eafab0434e9d87452c809c290ae906c2024c24261c564479e9c95
@@ -3701,6 +3716,7 @@ urllib3==2.7.0 \
     #   botocore
     #   courlan
     #   distributed
+    #   docker
     #   htmldate
     #   hubspot-api-client
     #   kubernetes
@@ -3710,6 +3726,7 @@ urllib3==2.7.0 \
     #   requests
     #   sentry-sdk
     #   trafilatura
+    #   types-docker
     #   types-requests
 uuid-utils==0.14.0 \
     --hash=sha256:00ac3c6edfdaff7e1eed041f4800ae09a3361287be780d7610a90fdcde9befdc \

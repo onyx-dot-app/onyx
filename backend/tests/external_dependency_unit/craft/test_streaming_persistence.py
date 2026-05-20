@@ -36,9 +36,7 @@ from onyx.db.models import User
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    SSEKeepalive,
-)
+from onyx.server.features.build.sandbox.base import SSEKeepalive
 from onyx.server.features.build.session.manager import BuildStreamingState
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager

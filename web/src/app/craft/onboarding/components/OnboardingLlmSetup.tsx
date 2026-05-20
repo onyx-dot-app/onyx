@@ -5,7 +5,10 @@ import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
-import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  LLMProviderName,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
 
 // Provider configurations
 export type ProviderKey = "anthropic" | "openai" | "openrouter";

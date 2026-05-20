@@ -68,7 +68,9 @@ spec:
               "--pool=threads",
               "--concurrency=2",
               "--prefetch-multiplier=1",
-              {{ printf "--loglevel=%s" .Values.celery_worker_docfetching.logLevel | quote }},
+              {{- with .Values.celery_worker_docfetching.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=docfetching@%n",
               "-Q",
               "connector_doc_fetching",
@@ -82,6 +84,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with .Values.celery_worker_docfetching.extraEnv }}

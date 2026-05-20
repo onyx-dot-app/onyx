@@ -2,7 +2,10 @@
 
 import { useMemo } from "react";
 import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";

@@ -127,6 +127,37 @@ class TestUserLibrarySync:
         assert "my_folder" not in fileset
         assert "real_file.csv" in fileset
 
+    def test_session_workspace_links_user_library(
+        self,
+        db_session: Session,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        """Pins: setup_session_workspace creates a {session}/user_library
+        symlink pointing at the sandbox-wide managed/user_library, so the
+        agent sees synced files at a stable per-session path."""
+        user = make_user(db_session)
+        db_session.commit()
+
+        content = b"row1,row2"
+        _seed_file(db_session, user, "table.csv", content)
+
+        handle = running_sandbox(user=user, with_session=True)
+        assert handle.session_id is not None
+
+        hydrate_user_library(handle.sandbox_id, user.id, db_session)
+
+        link = (
+            handle.workspace_path / "sessions" / str(handle.session_id) / "user_library"
+        )
+        assert link.is_symlink(), f"Expected symlink at {link}"
+        assert (
+            link.resolve()
+            == (handle.workspace_path / "managed" / "user_library").resolve()
+        )
+
+        # Files visible through the session-scoped symlink.
+        assert (link / "table.csv").read_bytes() == content
+
     def test_sync_after_delete_removes_file(
         self,
         db_session: Session,

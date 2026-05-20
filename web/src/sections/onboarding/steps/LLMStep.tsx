@@ -12,7 +12,7 @@ import {
 import {
   LLMProviderFormProps,
   WellKnownLLMProviderDescriptor,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";

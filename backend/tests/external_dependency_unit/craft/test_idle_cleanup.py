@@ -1,11 +1,11 @@
 """Idle cleanup (Celery task).
 
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
-Redis. The Kubernetes-only pod operations (``_list_session_directories``,
+Redis. The sandbox operations (``list_session_workspaces``,
 ``create_snapshot``, ``terminate``) are routed through the
-``StubSandboxManager`` from ``conftest.py`` after monkeypatching the module-
-level ``KubernetesSandboxManager`` reference so the task's ``isinstance``
-guard passes.
+``StubSandboxManager`` from ``conftest.py``. The task body is now
+backend-agnostic, so we only need to install the stub via
+``get_sandbox_manager`` and force ``SANDBOX_BACKEND`` away from ``LOCAL``.
 """
 
 from __future__ import annotations
@@ -58,25 +58,14 @@ def stubbed_cleanup(
 ) -> StubSandboxManager:
     """Wire the stub so the cleanup task runs entirely against it.
 
-    Patches three module-level symbols in
-    ``onyx.server.features.build.sandbox.tasks.tasks``:
-
-    - ``get_sandbox_manager`` -> returns the stub
-    - ``KubernetesSandboxManager`` -> the stub's class (the task does an
-      ``isinstance`` guard, which would otherwise reject our test double)
-    - ``_list_session_directories`` -> returns ``[]`` by default so we do
-      not try to ``kubectl exec`` into a nonexistent pod
+    The task body is backend-agnostic now: it calls
+    ``sandbox_manager.list_session_workspaces(sandbox_id)`` rather than a
+    Kubernetes-only helper, so we just need to redirect
+    ``get_sandbox_manager`` to the stub. Per-test bodies can override
+    ``stub.list_session_workspaces_returns`` to drive the snapshot loop.
     """
     monkeypatch.setattr(
         tasks_module, "get_sandbox_manager", lambda: stub_sandbox_manager
-    )
-    monkeypatch.setattr(
-        tasks_module, "KubernetesSandboxManager", type(stub_sandbox_manager)
-    )
-    monkeypatch.setattr(
-        tasks_module,
-        "_list_session_directories",
-        lambda _manager, _sandbox_id: [],
     )
     return stub_sandbox_manager
 
@@ -139,7 +128,6 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
     short_idle_threshold: int,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Happy path: snapshot session, terminate pod, mark sandbox SLEEPING."""
     user = make_user(db_session)
@@ -155,13 +143,9 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
 
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
-    # Return our session id from the (stubbed) pod-directory listing so the
+    # Return our session id from the (stubbed) workspace listing so the
     # task tries to snapshot it.
-    monkeypatch.setattr(
-        tasks_module,
-        "_list_session_directories",
-        lambda _manager, _sandbox_id: [str(session_row.id)],
-    )
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path=f"s3://snapshots/{sandbox.id}/{session_row.id}.tar.gz",
         size_bytes=1234,
@@ -225,6 +209,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     sandbox = make_sandbox(db_session, user)
     _backdate_created_at(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
+    stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
@@ -263,11 +248,7 @@ def test_snapshot_failure_continues_to_termination(
 
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
-    monkeypatch.setattr(
-        tasks_module,
-        "_list_session_directories",
-        lambda _manager, _sandbox_id: [str(session_row.id)],
-    )
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
 
     def _boom(
         _sandbox_id: object, _session_id: object, _tenant_id: object
@@ -323,6 +304,7 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     db_session.refresh(session_b)
 
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+    stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)

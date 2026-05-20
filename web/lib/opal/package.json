@@ -64,7 +64,7 @@
   },
   "scripts": {
     "build": "tsup && node scripts/bundle-css.mjs",
-    "prepublishOnly": "npm run build"
+    "prepare": "npm run build"
   },
   "dependencies": {
     "clsx": "^2.0.0",
