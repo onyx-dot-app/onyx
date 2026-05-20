@@ -145,6 +145,24 @@ download_file() {
     fi
 }
 
+# --- Docker Compose detection ---
+# Sets COMPOSE_CMD to "docker compose" (plugin) or "docker-compose" (standalone).
+# Returns 0 if either is available, 1 otherwise. Safe to re-run after installing
+# compose mid-script.
+COMPOSE_CMD=""
+detect_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+        return 0
+    fi
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+        return 0
+    fi
+    COMPOSE_CMD=""
+    return 1
+}
+
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
 # failure (caller should handle the exit).
@@ -271,12 +289,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
 
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            # Determine compose command
-            if docker compose version &> /dev/null; then
-                COMPOSE_CMD="docker compose"
-            elif command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="docker-compose"
-            else
+            if ! detect_compose_cmd; then
                 print_error "Docker Compose not found. Cannot stop containers."
                 exit 1
             fi
@@ -329,12 +342,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            # Determine compose command
-            if docker compose version &> /dev/null; then
-                COMPOSE_CMD="docker compose"
-            elif command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="docker-compose"
-            else
+            if ! detect_compose_cmd; then
                 print_error "Docker Compose not found. Cannot remove containers."
                 exit 1
             fi
@@ -429,8 +437,7 @@ fi
 
 # --- Auto-install Docker Compose plugin (Linux only) ---
 if command -v docker &> /dev/null \
-    && ! docker compose version &> /dev/null \
-    && ! command -v docker-compose &> /dev/null \
+    && ! detect_compose_cmd \
     && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
 
     print_info "Docker Compose is required but not installed."
@@ -446,7 +453,7 @@ if command -v docker &> /dev/null \
     if download_file "$COMPOSE_URL" "$COMPOSE_TMP"; then
         sudo mv "$COMPOSE_TMP" "$COMPOSE_DIR/docker-compose"
         sudo chmod +x "$COMPOSE_DIR/docker-compose"
-        if docker compose version &> /dev/null; then
+        if detect_compose_cmd && [[ "$COMPOSE_CMD" == "docker compose" ]]; then
             print_success "Docker Compose plugin installed"
         else
             print_error "Docker Compose plugin installed but not detected."
@@ -530,29 +537,25 @@ DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 print_success "Docker $DOCKER_VERSION is installed"
 
 # Check Docker Compose
-if docker compose version &> /dev/null; then
-    COMPOSE_VERSION=$(docker compose version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    COMPOSE_CMD="docker compose"
-    if [ -z "$COMPOSE_VERSION" ]; then
-        # Handle non-standard versions like "dev" - assume recent enough
-        COMPOSE_VERSION="dev"
-        print_success "Docker Compose (dev build) is installed (plugin)"
-    else
-        print_success "Docker Compose $COMPOSE_VERSION is installed (plugin)"
-    fi
-elif command -v docker-compose &> /dev/null; then
-    COMPOSE_VERSION=$(docker-compose --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    COMPOSE_CMD="docker-compose"
-    if [ -z "$COMPOSE_VERSION" ]; then
-        COMPOSE_VERSION="dev"
-        print_success "Docker Compose (dev build) is installed (standalone)"
-    else
-        print_success "Docker Compose $COMPOSE_VERSION is installed (standalone)"
-    fi
-else
+if ! detect_compose_cmd; then
     print_error "Docker Compose is not installed. Please install Docker Compose first."
     echo "Visit: https://docs.docker.com/compose/install/"
     exit 1
+fi
+
+if [[ "$COMPOSE_CMD" == "docker compose" ]]; then
+    COMPOSE_VERSION=$($COMPOSE_CMD version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    COMPOSE_TYPE="plugin"
+else
+    COMPOSE_VERSION=$($COMPOSE_CMD --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    COMPOSE_TYPE="standalone"
+fi
+if [ -z "$COMPOSE_VERSION" ]; then
+    # Handle non-standard versions like "dev" - assume recent enough
+    COMPOSE_VERSION="dev"
+    print_success "Docker Compose (dev build) is installed (${COMPOSE_TYPE})"
+else
+    print_success "Docker Compose $COMPOSE_VERSION is installed (${COMPOSE_TYPE})"
 fi
 
 # Returns 0 if $1 <= $2, 1 if $1 > $2
@@ -818,29 +821,17 @@ ENV_FILE="${INSTALL_ROOT}/deployment/.env"
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-    # Determine compose command
-    if docker compose version &> /dev/null; then
-        COMPOSE_CMD="docker compose"
-    elif command -v docker-compose &> /dev/null; then
-        COMPOSE_CMD="docker-compose"
-    else
-        COMPOSE_CMD=""
-    fi
-
-    if [ -n "$COMPOSE_CMD" ]; then
-        # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
-        if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
-            print_error "Onyx services are currently running!"
-            echo ""
-            print_info "To make configuration changes, you must first shut down the services."
-            echo ""
-            print_info "Please run the following command to shut down Onyx:"
-            echo -e "   ${BOLD}./install.sh --shutdown${NC}"
-            echo ""
-            print_info "Then run this script again to make your changes."
-            exit 1
-        fi
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
+    if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
+        print_error "Onyx services are currently running!"
+        echo ""
+        print_info "To make configuration changes, you must first shut down the services."
+        echo ""
+        print_info "Please run the following command to shut down Onyx:"
+        echo -e "   ${BOLD}./install.sh --shutdown${NC}"
+        echo ""
+        print_info "Then run this script again to make your changes."
+        exit 1
     fi
 fi
 
