@@ -145,6 +145,7 @@ def update_external_app(
 
     Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
     """
+    _validate_upstream_url_patterns(upstream_url_patterns)
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
@@ -242,12 +243,9 @@ def get_external_app_credentials(
 
     Returns None when any of:
     - no enabled app's `upstream_url_patterns` fully match the URL
-    - the user has no stored credentials for the matched app
-    - the user's stored credentials don't cover every key the app expects
-      them to provide
     - the auth template references a placeholder that no credential
-      supplies (a misconfigured app — fail closed rather than inject a
-      partially-templated header)
+      supplies — either user-missing or app-misconfigured. Fail closed
+      rather than inject a partially-templated header.
 
     `re.fullmatch` is used (not `re.search`/`re.match`) so a pattern like
     `https://api\\.example\\.com/.*` does not accidentally match
@@ -288,18 +286,15 @@ def _resolve_credentials(
 ) -> dict[str, Any] | None:
     """Substitute org + user credentials into the app's auth_template.
 
-    Returns None if the user hasn't stored every required key, or if
-    the template references a placeholder no credential supplies.
+    Returns None if the template references a placeholder no credential
+    supplies (org_credentials ∪ user_credentials). Output keys in
+    `auth_template` are independent of placeholder names: a template
+    `{"Authorization": "Bearer {access_token}"}` requires the credential
+    key `access_token`, not `Authorization`.
     """
     stored_user_creds: dict[str, Any] = (
         user_cred.user_credentials if user_cred is not None else {}
     )
-
-    required_user_keys = set(app.auth_template.keys()) - set(
-        app.organization_credentials.keys()
-    )
-    if not required_user_keys.issubset(stored_user_creds.keys()):
-        return None
 
     combined_creds: dict[str, Any] = {
         **app.organization_credentials,
