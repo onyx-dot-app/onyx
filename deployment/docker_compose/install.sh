@@ -300,7 +300,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
-    
+
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         print_info "Stopping Onyx containers..."
 
@@ -1249,7 +1249,7 @@ if [[ "$NO_WAIT" = false ]]; then
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 else
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started (--no-wait) ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
     echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) ps)"
