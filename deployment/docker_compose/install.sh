@@ -269,7 +269,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=10
+TOTAL_STEPS=9
 
 # Print colored output
 print_success() {
@@ -1229,72 +1229,15 @@ fi
 UP_EXIT=$?
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
-    if [[ "$NO_WAIT" = false ]]; then
-        echo ""
-        print_info "Current container status:"
-        (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps)
-        echo ""
-        print_info "Check the logs of any unhealthy service:"
-        echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
-        echo ""
-        print_info "If the issue persists, please contact: founders@onyx.app"
-    fi
+    echo ""
+    print_info "Current container status:"
+    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps)
+    echo ""
+    print_info "Check the logs of any unhealthy service:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
+    echo ""
+    print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
-fi
-
-print_step "Verifying container health"
-if [[ "$NO_WAIT" = false ]]; then
-    print_success "All services reported healthy (verified by 'docker compose up --wait')"
-else
-    print_info "Waiting for containers to initialize (10 seconds)..."
-
-    # Progress bar for waiting
-    for i in {1..10}; do
-        printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
-        sleep 1
-    done
-    echo ""
-    echo ""
-
-    # Check for restart loops
-    print_info "Checking container health status..."
-    RESTART_ISSUES=false
-    CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
-
-    for CONTAINER in $CONTAINERS; do
-        PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
-        CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
-        RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
-        STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
-
-        if [ "$STATUS" = "running" ]; then
-            if [ "$RESTART_COUNT" -gt 2 ]; then
-                print_error "$CONTAINER_NAME is in a restart loop (restarted $RESTART_COUNT times)"
-                RESTART_ISSUES=true
-            else
-                print_success "$CONTAINER_NAME is healthy"
-            fi
-        elif [ "$STATUS" = "restarting" ]; then
-            print_error "$CONTAINER_NAME is stuck restarting"
-            RESTART_ISSUES=true
-        else
-            print_warning "$CONTAINER_NAME status: $STATUS"
-        fi
-    done
-
-    echo ""
-
-    if [ "$RESTART_ISSUES" = true ]; then
-        print_error "Some containers are experiencing issues!"
-        echo ""
-        print_info "Please check the logs for more information:"
-        echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
-
-        echo ""
-        print_info "If the issue persists, please contact: founders@onyx.app"
-        echo "Include the output of the logs command in your message."
-        exit 1
-    fi
 fi
 
 # Health check function
