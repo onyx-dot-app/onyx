@@ -10,7 +10,10 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
-import { LLMProviderView, ModelConfiguration } from "@/interfaces/llm";
+import type {
+  LLMProviderView,
+  ModelConfiguration,
+} from "@/lib/languageModels/types";
 import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
@@ -114,6 +117,14 @@ export function APIKeyField({
 }
 
 // ─── APIBaseField ───────────────────────────────────────────────────────────
+
+/**
+ * Sentence appended to an API Base URL `subDescription` when Onyx is detected
+ * to be running inside a container — explains why the default uses
+ * `host.docker.internal`.
+ */
+export const CONTAINERIZED_HOST_NOTE =
+  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
 
 export interface APIBaseFieldProps {
   optional?: boolean;
@@ -462,6 +473,15 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
+  function setCustomDisplayName(modelName: string, value: string | undefined) {
+    const updated = models.map((m) =>
+      m.name === modelName
+        ? { ...m, custom_display_name: value || undefined }
+        : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
@@ -522,28 +542,52 @@ export function ModelSelectionField({
                 <>
                   {shownModels.map((model) =>
                     isAutoMode ? (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state="selected"
-                        icon={() => <Checkbox checked />}
-                        title={model.display_name || model.name}
-                      />
+                      <div key={model.name} data-model-name={model.name}>
+                        <LineItemButton
+                          variant="section"
+                          sizePreset="main-ui"
+                          selectVariant="select-heavy"
+                          state="selected"
+                          icon={() => <Checkbox checked />}
+                          title={
+                            model.custom_display_name ||
+                            model.display_name ||
+                            model.name
+                          }
+                          editable
+                          onTitleChange={(newTitle) =>
+                            setCustomDisplayName(
+                              model.name,
+                              newTitle || undefined
+                            )
+                          }
+                        />
+                      </div>
                     ) : (
-                      <LineItemButton
-                        key={model.name}
-                        variant="section"
-                        sizePreset="main-ui"
-                        selectVariant="select-heavy"
-                        state={model.is_visible ? "selected" : "empty"}
-                        icon={() => <Checkbox checked={model.is_visible} />}
-                        title={model.name}
-                        onClick={() =>
-                          setVisibility(model.name, !model.is_visible)
-                        }
-                      />
+                      <div key={model.name} data-model-name={model.name}>
+                        <LineItemButton
+                          variant="section"
+                          sizePreset="main-ui"
+                          selectVariant="select-heavy"
+                          state={model.is_visible ? "selected" : "empty"}
+                          icon={() => <Checkbox checked={model.is_visible} />}
+                          title={
+                            model.custom_display_name ||
+                            model.display_name ||
+                            model.name
+                          }
+                          onClick={() =>
+                            setVisibility(model.name, !model.is_visible)
+                          }
+                          editable
+                          onTitleChange={(newTitle) =>
+                            setCustomDisplayName(
+                              model.name,
+                              newTitle || undefined
+                            )
+                          }
+                        />
+                      </div>
                     )
                   )}
                   {isFoldable && (

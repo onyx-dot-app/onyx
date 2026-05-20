@@ -125,7 +125,7 @@ def tenant_schema_at_head(
     engine: Engine, current_head_rev: str
 ) -> Generator[str, None, None]:
     """Create a temporary tenant schema whose alembic_version is at head."""
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(
@@ -151,7 +151,7 @@ def tenant_schema_empty(engine: Engine) -> Generator[str, None, None]:
     Alembic will treat it as a fresh schema and run every migration from base
     to head.
     """
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.commit()
@@ -166,7 +166,7 @@ def tenant_schema_bad_rev(engine: Engine) -> Generator[str, None, None]:
     """Create a tenant schema whose alembic_version points to a non-existent
     revision.  Alembic cannot find a migration path from this revision, so
     it will fail."""
-    schema = f"tenant_test_{uuid.uuid4().hex[:12]}"
+    schema = f"tenant_{uuid.uuid4()}"
     with engine.connect() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
         conn.execute(

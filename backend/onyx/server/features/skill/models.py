@@ -44,6 +44,7 @@ class CustomSkillResponse(BaseModel):
     is_public: bool
     enabled: bool
     author_user_id: UUID | None = None
+    author_email: str | None = None
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
@@ -58,6 +59,7 @@ class CustomSkillResponse(BaseModel):
             is_public=skill.is_public,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
+            author_email=skill.author.email if skill.author is not None else None,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             granted_group_ids=group_ids,
@@ -70,9 +72,6 @@ class SkillsList(BaseModel):
 
 
 class SkillPatchRequest(BaseModel):
-    slug: str | None = None
-    name: str | None = None
-    description: str | None = None
     is_public: bool | None = None
     enabled: bool | None = None
 
@@ -81,7 +80,7 @@ class SkillPatchRequest(BaseModel):
     def _reject_explicit_nulls(cls, data: Any) -> Any:
         """Omitting a field = 'leave unchanged'. Sending null = invalid."""
         if isinstance(data, dict):
-            for field in ("slug", "name", "description", "is_public", "enabled"):
+            for field in ("is_public", "enabled"):
                 if field in data and data[field] is None:
                     raise ValueError(f"{field} cannot be null")
         return data

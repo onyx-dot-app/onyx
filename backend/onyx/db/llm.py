@@ -320,6 +320,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -330,6 +331,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
 
     # Make sure the relationship table stays up to date
@@ -933,6 +935,7 @@ def insert_new_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -942,6 +945,7 @@ def insert_new_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .on_conflict_do_nothing()
@@ -970,6 +974,7 @@ def update_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -977,6 +982,7 @@ def update_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .where(ModelConfiguration.id == model_configuration_id)

@@ -78,7 +78,7 @@ runs:
         cd deployment/docker_compose
         docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait \
           relational_db \
-          index \
+          opensearch \
           cache \
           minio \
           api_server \
@@ -118,7 +118,7 @@ runs:
             -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_POOL_PRE_PING=true \
             -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
+            -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
             -e TEST_WEB_HOSTNAME=test-runner \

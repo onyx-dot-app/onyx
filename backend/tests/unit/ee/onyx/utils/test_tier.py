@@ -29,9 +29,17 @@ def _metadata(
     return m
 
 
+@patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", True)
 @patch("ee.onyx.utils.tier.MULTI_TENANT", False)
 class TestSelfHostedTierCacheFailure:
-    """`_self_hosted_tier` must not leak RedisError to callers."""
+    """`_self_hosted_tier` must not leak RedisError to callers.
+
+    `LICENSE_ENFORCEMENT_ENABLED` is patched to True so the legacy
+    no-enforcement bypass (which short-circuits to ENTERPRISE) doesn't
+    mask the cache/db code paths under test. CI sets the env var to
+    False by default, so without this patch the assertions accidentally
+    pass-by-luck on the cache-hit path and fail on every other path.
+    """
 
     @patch("ee.onyx.utils.tier.get_cached_license_metadata")
     def test_cache_hit_returns_cached_tier(self, mock_get_cached: MagicMock) -> None:
@@ -84,6 +92,46 @@ class TestSelfHostedTierCacheFailure:
 
         with pytest.raises(ValueError, match="unexpected"):
             get_tier()
+
+
+@patch("ee.onyx.utils.tier.MULTI_TENANT", False)
+class TestSelfHostedTierLegacyBypass:
+    """`_self_hosted_tier` must mirror `apply_license_status_to_settings`
+    and `require_business_tier_for_sync_access` for the legacy
+    LICENSE_ENFORCEMENT_ENABLED=False case: treat as ENTERPRISE so tier_gate
+    doesn't 402 dev / legacy installs that load EE code but have no license.
+    """
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
+    @patch("ee.onyx.utils.tier.global_version")
+    @patch("ee.onyx.utils.tier.get_cached_license_metadata")
+    def test_ee_loaded_returns_enterprise_without_license_lookup(
+        self,
+        mock_get_cached: MagicMock,
+        mock_global_version: MagicMock,
+    ) -> None:
+        from ee.onyx.utils.tier import get_tier
+
+        mock_global_version.is_ee_version.return_value = True
+
+        assert get_tier() == Tier.ENTERPRISE
+        mock_get_cached.assert_not_called()
+
+    @patch("ee.onyx.utils.tier.LICENSE_ENFORCEMENT_ENABLED", False)
+    @patch("ee.onyx.utils.tier.global_version")
+    @patch("ee.onyx.utils.tier.get_cached_license_metadata")
+    def test_ee_not_loaded_returns_community(
+        self,
+        mock_get_cached: MagicMock,
+        mock_global_version: MagicMock,
+    ) -> None:
+        """Without EE code paths loaded there's nothing to upgrade to."""
+        from ee.onyx.utils.tier import get_tier
+
+        mock_global_version.is_ee_version.return_value = False
+
+        assert get_tier() == Tier.COMMUNITY
+        mock_get_cached.assert_not_called()
 
 
 class TestTierFromLicenseMetadata:

@@ -26,7 +26,7 @@ def _update_relationship_shelves(
         str_child_id = str(child_id)
 
         # First update child to parent mapping
-        with shelve.open(
+        with shelve.open(  # noqa: S301 — connector-local persistence
             get_child_to_parent_shelf_path(),
             flag="c",
             protocol=None,
@@ -45,7 +45,7 @@ def _update_relationship_shelves(
         # Then update parent to child mapping in a single transaction
         if not parent_ids_to_remove and not parent_ids_to_add:
             return
-        with shelve.open(
+        with shelve.open(  # noqa: S301 — connector-local persistence
             get_parent_to_child_shelf_path(),
             flag="c",
             protocol=None,
@@ -84,7 +84,7 @@ def get_child_ids(parent_id: str) -> set[str]:
     Returns:
         A set of child object IDs
     """
-    with shelve.open(get_parent_to_child_shelf_path()) as parent_to_child_db:
+    with shelve.open(get_parent_to_child_shelf_path()) as parent_to_child_db:  # noqa: S301 — connector-local persistence
         return set(parent_to_child_db.get(parent_id, []))
 
 
@@ -117,10 +117,10 @@ def update_sf_db_with_csv(
                     del row[field]
 
             # Update the main object shelf
-            with shelve.open(shelf_path) as object_type_db:
+            with shelve.open(shelf_path) as object_type_db:  # noqa: S301 — connector-local persistence
                 object_type_db[id] = row
             # Update the ID-to-type mapping shelf
-            with shelve.open(get_id_type_shelf_path()) as id_type_db:
+            with shelve.open(get_id_type_shelf_path()) as id_type_db:  # noqa: S301 — connector-local persistence
                 id_type_db[id] = object_type
 
             updated_ids.append(id)
@@ -132,7 +132,7 @@ def update_sf_db_with_csv(
 def get_type_from_id(object_id: str) -> str | None:
     """Get the type of an object from its ID."""
     # Look up the object type from the ID-to-type mapping
-    with shelve.open(get_id_type_shelf_path()) as id_type_db:
+    with shelve.open(get_id_type_shelf_path()) as id_type_db:  # noqa: S301 — connector-local persistence
         if object_id not in id_type_db:
             logger.warning("Object ID %s not found in ID-to-type mapping", object_id)
             return None
@@ -151,7 +151,7 @@ def get_record(
             return None
 
     shelf_path = get_object_shelf_path(object_type)
-    with shelve.open(shelf_path) as db:
+    with shelve.open(shelf_path) as db:  # noqa: S301 — connector-local persistence
         if object_id not in db:
             logger.warning("Object ID %s not found in %s", object_id, shelf_path)
             return None
@@ -169,7 +169,7 @@ def find_ids_by_type(object_type: str) -> list[str]:
     """
     shelf_path = get_object_shelf_path(object_type)
     try:
-        with shelve.open(shelf_path) as db:
+        with shelve.open(shelf_path) as db:  # noqa: S301 — connector-local persistence
             return list(db.keys())
     except FileNotFoundError:
         return []
@@ -199,7 +199,7 @@ def get_affected_parent_ids_by_type(
             continue
 
         # Get parents of this ID and add them if they're of a parent type
-        with shelve.open(get_child_to_parent_shelf_path()) as child_to_parent_db:
+        with shelve.open(get_child_to_parent_shelf_path()) as child_to_parent_db:  # noqa: S301 — connector-local persistence
             parent_ids = child_to_parent_db.get(updated_id, [])
             for parent_id in parent_ids:
                 parent_type = get_type_from_id(parent_id)
