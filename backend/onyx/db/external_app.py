@@ -3,11 +3,13 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.skill import create_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -16,14 +18,22 @@ def get_external_app_by_id(
     db_session: Session,
     external_app_id: int,
 ) -> ExternalApp | None:
-    stmt = select(ExternalApp).where(ExternalApp.id == external_app_id)
+    stmt = (
+        select(ExternalApp)
+        .options(selectinload(ExternalApp.skill))
+        .where(ExternalApp.id == external_app_id)
+    )
     return db_session.scalar(stmt)
 
 
 def get_external_apps(
     db_session: Session,
 ) -> list[ExternalApp]:
-    stmt = select(ExternalApp).order_by(ExternalApp.id)
+    stmt = (
+        select(ExternalApp)
+        .options(selectinload(ExternalApp.skill))
+        .order_by(ExternalApp.id)
+    )
     return list(db_session.scalars(stmt).all())
 
 
@@ -43,22 +53,45 @@ def get_user_credentials_by_app_id(
 
 def create_external_app__no_commit(
     db_session: Session,
+    slug: str,
     name: str,
     description: str,
+    bundle_file_id: str,
+    bundle_sha256: str,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
-    enabled: bool,
+    enabled: bool = True,
+    is_public: bool = False,
+    author_user_id: UUID | None = None,
 ) -> ExternalApp:
-    app = ExternalApp(
+    """Create the backing Skill row and the ExternalApp that references
+    it in one transaction. The skill row owns display metadata
+    (name/description) and lifecycle (enabled); the external_app row
+    owns gateway state (auth_template, upstream patterns, org creds).
+
+    `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision.
+    """
+    skill = create_skill(
+        slug=slug,
         name=name,
         description=description,
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=bundle_sha256,
+        is_public=is_public,
+        author_user_id=author_user_id,
+        db_session=db_session,
+    )
+    # `create_skill` hardcodes enabled=True; honour the caller's intent.
+    if not enabled:
+        skill.enabled = False
+    app = ExternalApp(
+        skill_id=skill.id,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
-        enabled=enabled,
     )
     db_session.add(app)
     db_session.flush()
@@ -70,15 +103,22 @@ def update_external_app__no_commit(
     external_app_id: int,
     name: str,
     description: str,
+    enabled: bool,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
-    enabled: bool,
 ) -> ExternalApp:
-    """Replace all mutable fields of an existing external app.
+    """Replace mutable fields on the external app and its linked skill.
 
-    Raises OnyxError(NOT_FOUND) if no row with `external_app_id` exists.
+    Skill-side fields: name, description, enabled.
+    External-app-side fields: app_type, upstream_url_patterns,
+    auth_template, organization_credentials.
+
+    Slug, bundle, and sharing scope are out of scope here (each has its
+    own update path in ``onyx.db.skill``).
+
+    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -87,13 +127,14 @@ def update_external_app__no_commit(
             f"External app with id {external_app_id} not found.",
         )
 
-    app.name = name
-    app.description = description
+    app.skill.name = name
+    app.skill.description = description
+    app.skill.enabled = enabled
+
     app.app_type = app_type
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
-    app.enabled = enabled
 
     db_session.flush()
     return app
@@ -102,10 +143,12 @@ def update_external_app__no_commit(
 def delete_external_app__no_commit(
     db_session: Session,
     external_app_id: int,
-) -> None:
-    """Delete an external app and (via FK ON DELETE CASCADE) its user credentials.
+) -> str | None:
+    """Delete the linked Skill (FK ON DELETE CASCADE removes the
+    external_app row as well as user credentials). Returns the skill's
+    ``bundle_file_id`` so the caller can clean up FileStore.
 
-    Raises OnyxError(NOT_FOUND) if no row with `external_app_id` exists.
+    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -114,8 +157,10 @@ def delete_external_app__no_commit(
             f"External app with id {external_app_id} not found.",
         )
 
-    db_session.delete(app)
+    bundle_file_id = app.skill.bundle_file_id
+    db_session.delete(app.skill)
     db_session.flush()
+    return bundle_file_id
 
 
 def upsert_external_app_user_credential__no_commit(
@@ -129,7 +174,7 @@ def upsert_external_app_user_credential__no_commit(
     Atomic via ON CONFLICT against the unique (external_app_id, user_id)
     constraint, so concurrent callers can't both insert a duplicate row.
 
-    Raises OnyxError(NOT_FOUND) if no app with `external_app_id` exists.
+    Raises ``OnyxError(NOT_FOUND)`` if no app with `external_app_id` exists.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:

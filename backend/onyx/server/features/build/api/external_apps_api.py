@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -23,15 +25,16 @@ router = APIRouter()
 
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
+    # Display + lifecycle fields live on the linked Skill row.
     return ExternalAppAdminResponse(
         id=app.id,
-        name=app.name,
-        description=app.description,
+        name=app.skill.name,
+        description=app.skill.description,
         app_type=app.app_type,
         upstream_url_patterns=list(app.upstream_url_patterns),
         auth_template=app.auth_template,
         organization_credentials=app.organization_credentials,
-        enabled=app.enabled,
+        enabled=app.skill.enabled,
     )
 
 
@@ -56,8 +59,8 @@ def _to_user_response(
 
     return ExternalAppUserResponse(
         id=app.id,
-        name=app.name,
-        description=app.description,
+        name=app.skill.name,
+        description=app.skill.description,
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
@@ -85,22 +88,33 @@ def upsert_external_app(
             external_app_id=request.id,
             name=request.name,
             description=request.description,
+            enabled=request.enabled,
             app_type=request.app_type,
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
-            enabled=request.enabled,
         )
     else:
+        # Skill identity is server-derived: a fresh slug per instance
+        # so multiple connections of the same provider don't collide;
+        # default-public so every org user sees it once it's connected.
+        # The bundle is intentionally empty for now — we'll attach the
+        # provider's skill_bundles/<provider>/ blob when the rendering
+        # path lands.
+        slug = f"{request.app_type.value.lower()}-{uuid.uuid4().hex[:8]}"
         app = create_external_app__no_commit(
             db_session=db_session,
+            slug=slug,
             name=request.name,
             description=request.description,
+            bundle_file_id="",
+            bundle_sha256="",
+            enabled=request.enabled,
+            is_public=True,
             app_type=request.app_type,
             upstream_url_patterns=request.upstream_url_patterns,
             auth_template=request.auth_template,
             organization_credentials=request.organization_credentials,
-            enabled=request.enabled,
         )
 
     db_session.commit()
@@ -177,5 +191,5 @@ def list_external_apps(
     return [
         _to_user_response(app, user_creds_by_app.get(app.id))
         for app in apps
-        if app.enabled
+        if app.skill.enabled
     ]

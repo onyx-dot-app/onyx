@@ -332,20 +332,25 @@ class PptxPreviewResponse(BaseModel):
 class UpsertExternalAppRequest(BaseModel):
     """Create or update an external app.
 
-    If `id` is provided, the row with that id is updated; otherwise a new
-    row is inserted. `upstream_url_patterns` is a list of regex patterns
-    matched by the egress proxy against outbound request URLs. `enabled`
-    is the kill switch the proxy checks before injecting credentials.
+    If `id` is provided, the row with that id is updated; otherwise a
+    new row is inserted (and a backing ``Skill`` row is created in the
+    same transaction). ``upstream_url_patterns`` is a list of regex
+    patterns matched by the egress proxy against outbound request URLs.
+    ``enabled`` (stored on the linked skill) is the kill switch the
+    proxy checks before injecting credentials.
+
+    Skill identity (slug, bundle bytes, sharing scope) is derived
+    server-side from ``app_type``; admins don't supply it.
     """
 
     id: int | None = None
     name: str
     description: str
+    enabled: bool
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
-    enabled: bool
 
 
 class ExternalAppAdminResponse(BaseModel):
