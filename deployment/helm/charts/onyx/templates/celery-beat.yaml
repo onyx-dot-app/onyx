@@ -63,7 +63,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.beat",
               "beat",
-              {{ printf "--loglevel=%s" .Values.celery_beat.logLevel | quote }},
+              {{- with .Values.celery_beat.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
             ]
           resources:
             {{- toYaml .Values.celery_beat.resources | nindent 12 }}
@@ -72,6 +74,9 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with .Values.celery_beat.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- with .Values.celery_beat.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}

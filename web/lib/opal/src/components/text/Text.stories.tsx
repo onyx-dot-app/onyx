@@ -42,7 +42,7 @@ export const AsParagraph: Story = {
 
 export const Nowrap: Story = {
   render: () => (
-    <div className="w-48 border border-border-02 rounded p-2">
+    <div className="w-48 border border-border-02 rounded-sm p-2">
       <Text font="main-ui-body" color="text-05" nowrap>
         This text will not wrap even though the container is narrow
       </Text>
@@ -154,53 +154,53 @@ export const InvertedColors: Story = {
 // ---------------------------------------------------------------------------
 
 export const MarkdownBold: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown("This is **bold** text"),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown("This is **bold** text")}
+    </Text>
+  ),
 };
 
 export const MarkdownItalic: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown("This is *italic* text"),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown("This is *italic* text")}
+    </Text>
+  ),
 };
 
 export const MarkdownCode: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown("Run `npm install` to get started"),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown("Run `npm install` to get started")}
+    </Text>
+  ),
 };
 
 export const MarkdownLink: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown("Visit [Onyx](https://www.onyx.app/) for more info"),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown("Visit [Onyx](https://www.onyx.app/) for more info")}
+    </Text>
+  ),
 };
 
 export const MarkdownStrikethrough: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown("This is ~~deleted~~ text"),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown("This is ~~deleted~~ text")}
+    </Text>
+  ),
 };
 
 export const MarkdownCombined: Story = {
-  args: {
-    font: "main-ui-body",
-    color: "text-05",
-    children: markdown(
-      "*Hello*, **world**! Check out [Onyx](https://www.onyx.app/) and run `onyx start` to begin."
-    ),
-  },
+  render: () => (
+    <Text font="main-ui-body" color="text-05">
+      {markdown(
+        "*Hello*, **world**! Check out [Onyx](https://www.onyx.app/) and run `onyx start` to begin."
+      )}
+    </Text>
+  ),
 };
 
 export const MarkdownAtDifferentSizes: Story = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   Collapsible,
   CollapsibleContent,
@@ -179,7 +179,7 @@ export default function ToolCallPill({ toolCall }: ToolCallPillProps) {
               <SvgChevronDown
                 className={cn(
                   "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
-                  !isOpen && "rotate-[-90deg]"
+                  !isOpen && "-rotate-90"
                 )}
               />
             </div>

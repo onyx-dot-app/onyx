@@ -20,7 +20,6 @@ import requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
 
-
 # How long to wait for the celery task to run and sync models
 # This should be longer than AUTO_LLM_UPDATE_INTERVAL_SECONDS
 MAX_WAIT_TIME_SECONDS = 120
@@ -198,9 +197,9 @@ def test_auto_mode_provider_gets_synced_from_github_config(
     synced_model_names = {m["name"] for m in synced_model_configs}
     print(f"Synced models: {synced_model_names}")
 
-    assert expected_models.issubset(
-        synced_model_names
-    ), f"Expected models {expected_models} not found in synced models {synced_model_names}"
+    assert expected_models.issubset(synced_model_names), (
+        f"Expected models {expected_models} not found in synced models {synced_model_names}"
+    )
 
     # Verify the outdated model still exists but is not visible
     # (Auto mode marks removed models as not visible, it doesn't delete them)
@@ -208,12 +207,12 @@ def test_auto_mode_provider_gets_synced_from_github_config(
         (m for m in synced_model_configs if m["name"] == "outdated-model-name"),
         None,
     )
-    assert (
-        outdated_model is not None
-    ), "Outdated model should still exist after sync (marked invisible, not deleted)"
-    assert not outdated_model[
-        "is_visible"
-    ], "Outdated model should not be visible after sync"
+    assert outdated_model is not None, (
+        "Outdated model should still exist after sync (marked invisible, not deleted)"
+    )
+    assert not outdated_model["is_visible"], (
+        "Outdated model should not be visible after sync"
+    )
 
 
 def test_manual_mode_provider_not_affected_by_auto_sync(
@@ -256,6 +255,6 @@ def test_manual_mode_provider_not_affected_by_auto_sync(
     updated_provider = _get_provider_by_id(admin_user, provider["id"])
     current_models = {m["name"] for m in updated_provider["model_configurations"]}
 
-    assert (
-        current_models == initial_models
-    ), f"Manual mode provider models should not change. Initial: {initial_models}, Current: {current_models}"
+    assert current_models == initial_models, (
+        f"Manual mode provider models should not change. Initial: {initial_models}, Current: {current_models}"
+    )

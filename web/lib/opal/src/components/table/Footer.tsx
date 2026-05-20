@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Pagination, SelectButton } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgEye, SvgXCircle } from "@opal/icons";
 import type { ReactNode } from "react";
@@ -193,23 +193,25 @@ function SelectionLeft({
   const showActions = hasSelection || isViewingSelected;
 
   return (
-    <div className="flex flex-row gap-1 items-center justify-center w-fit flex-shrink-0 h-fit px-1">
+    <div className="flex flex-row gap-1 items-center justify-center w-fit shrink-0 h-fit px-1">
       {isSmall ? (
         <Text
-          secondaryAction={hasSelection}
-          secondaryBody={!hasSelection}
-          text03
+          font={hasSelection ? "secondary-action" : "secondary-body"}
+          color="text-03"
         >
           {message}
         </Text>
       ) : (
-        <Text mainUiBody={hasSelection} mainUiMuted={!hasSelection} text03>
+        <Text
+          font={hasSelection ? "main-ui-body" : "main-ui-muted"}
+          color="text-03"
+        >
           {message}
         </Text>
       )}
 
       {showActions && (
-        <div className="flex flex-row items-center w-fit flex-shrink-0 h-fit">
+        <div className="flex flex-row items-center w-fit shrink-0 h-fit">
           {onView && (
             <SelectButton
               icon={SvgEye}
@@ -250,33 +252,22 @@ function SummaryLeft({
   isSmall,
 }: SummaryLeftProps) {
   const suffix = units ? ` ${units}` : "";
+  const bodyFont = isSmall ? "secondary-body" : "main-ui-muted";
+  const monoFont = isSmall ? "secondary-mono" : "main-ui-mono";
   return (
-    <div className="flex flex-row gap-1 items-center w-fit h-fit px-1">
-      {isSmall ? (
-        <Text secondaryBody text03>
-          Showing{" "}
-          <Text as="span" secondaryMono text03>
-            {rangeStart}~{rangeEnd}
-          </Text>{" "}
-          of{" "}
-          <Text as="span" secondaryMono text03>
-            {totalItems}
-          </Text>
-          {suffix}
-        </Text>
-      ) : (
-        <Text mainUiMuted text03>
-          Showing{" "}
-          <Text as="span" mainUiMono text03>
-            {rangeStart}~{rangeEnd}
-          </Text>{" "}
-          of{" "}
-          <Text as="span" mainUiMono text03>
-            {totalItems}
-          </Text>
-          {suffix}
-        </Text>
-      )}
+    <div className="flex flex-row items-center w-fit h-fit px-1">
+      <Text font={bodyFont} color="text-03">
+        {`Showing `}
+      </Text>
+      <Text font={monoFont} color="text-03">
+        {`${rangeStart}~${rangeEnd}`}
+      </Text>
+      <Text font={bodyFont} color="text-03">
+        {` of `}
+      </Text>
+      <Text font={monoFont} color="text-03">
+        {`${totalItems}${suffix}`}
+      </Text>
     </div>
   );
 }

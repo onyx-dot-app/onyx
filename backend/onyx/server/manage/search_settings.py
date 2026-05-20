@@ -4,16 +4,15 @@ from fastapi import HTTPException
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
@@ -27,6 +26,8 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import delete_unstructured_api_key
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import update_unstructured_api_key
@@ -46,7 +47,7 @@ logger = setup_logger()
 @router.post("/set-new-search-settings", dependencies=[Depends(require_vector_db)])
 def set_new_search_settings(
     search_settings_new: SearchSettingsCreationRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> IdReturn:
     """
@@ -76,8 +77,7 @@ def set_new_search_settings(
             )
 
     validate_contextual_rag_model(
-        provider_name=search_settings_new.contextual_rag_llm_provider,
-        model_name=search_settings_new.contextual_rag_llm_name,
+        model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
         db_session=db_session,
     )
 
@@ -121,11 +121,11 @@ def set_new_search_settings(
     # Ensure the document indices have the new index immediately.
     document_indices = get_all_document_indices(search_settings, new_search_settings)
     for document_index in document_indices:
-        document_index.ensure_indices_exist(
-            primary_embedding_dim=search_settings.final_embedding_dim,
-            primary_embedding_precision=search_settings.embedding_precision,
-            secondary_index_embedding_dim=new_search_settings.final_embedding_dim,
-            secondary_index_embedding_precision=new_search_settings.embedding_precision,
+        # Pair instances already know about their secondary search settings via
+        # the factory; only the primary embedding info needs to be passed in.
+        document_index.verify_and_create_index_if_necessary(
+            embedding_dim=search_settings.final_embedding_dim,
+            embedding_precision=search_settings.embedding_precision,
         )
 
     # Pause index attempts for the currently in-use index to preserve resources.
@@ -146,7 +146,7 @@ def set_new_search_settings(
 
 @router.post("/cancel-new-embedding", dependencies=[Depends(require_vector_db)])
 def cancel_new_embedding(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     secondary_search_settings = get_secondary_search_settings(db_session)
@@ -167,19 +167,16 @@ def cancel_new_embedding(
         document_index = get_default_document_index(
             primary_search_settings, None, db_session
         )
-        document_index.ensure_indices_exist(
-            primary_embedding_dim=primary_search_settings.final_embedding_dim,
-            primary_embedding_precision=primary_search_settings.embedding_precision,
-            # just finished swap, no more secondary index
-            secondary_index_embedding_dim=None,
-            secondary_index_embedding_precision=None,
+        document_index.verify_and_create_index_if_necessary(
+            embedding_dim=primary_search_settings.final_embedding_dim,
+            embedding_precision=primary_search_settings.embedding_precision,
         )
 
 
 @router.delete("/delete-search-settings")
 def delete_search_settings_endpoint(
     deletion_request: SearchSettingsDeleteRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     try:
@@ -193,7 +190,7 @@ def delete_search_settings_endpoint(
 
 @router.get("/get-current-search-settings")
 def get_current_search_settings_endpoint(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings:
     current_search_settings = get_current_search_settings(db_session)
@@ -202,7 +199,7 @@ def get_current_search_settings_endpoint(
 
 @router.get("/get-secondary-search-settings")
 def get_secondary_search_settings_endpoint(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SavedSearchSettings | None:
     secondary_search_settings = get_secondary_search_settings(db_session)
@@ -214,7 +211,7 @@ def get_secondary_search_settings_endpoint(
 
 @router.get("/get-all-search-settings")
 def get_all_search_settings(
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> FullModelVersionResponse:
     current_search_settings = get_current_search_settings(db_session)
@@ -233,7 +230,7 @@ def get_all_search_settings(
 @router.post("/update-inference-settings")
 def update_saved_search_settings(
     search_settings: SavedSearchSettings,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     # Disallow contextual RAG for cloud deployments
@@ -244,8 +241,7 @@ def update_saved_search_settings(
         )
 
     validate_contextual_rag_model(
-        provider_name=search_settings.contextual_rag_llm_provider,
-        model_name=search_settings.contextual_rag_llm_name,
+        model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
     )
 
@@ -254,7 +250,7 @@ def update_saved_search_settings(
     )
 
     logger.info(
-        f"Updated current search settings to {search_settings.model_dump_json()}"
+        "Updated current search settings to %s", search_settings.model_dump_json()
     )
 
     # Re-sync default to match PRESENT search settings
@@ -263,7 +259,7 @@ def update_saved_search_settings(
 
 @router.get("/unstructured-api-key-set")
 def unstructured_api_key_set(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> bool:
     api_key = get_unstructured_api_key()
     return api_key is not None
@@ -272,51 +268,31 @@ def unstructured_api_key_set(
 @router.put("/upsert-unstructured-api-key")
 def upsert_unstructured_api_key(
     unstructured_api_key: str,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     update_unstructured_api_key(unstructured_api_key)
 
 
 @router.delete("/delete-unstructured-api-key")
 def delete_unstructured_api_key_endpoint(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     delete_unstructured_api_key()
 
 
 def validate_contextual_rag_model(
-    provider_name: str | None,
-    model_name: str | None,
+    model_configuration_id: int | None,
     db_session: Session,
 ) -> None:
-    if error_msg := _validate_contextual_rag_model(
-        provider_name=provider_name,
-        model_name=model_name,
-        db_session=db_session,
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+    if model_configuration_id is None:
+        return
+    from onyx.db.models import ModelConfiguration
 
-
-def _validate_contextual_rag_model(
-    provider_name: str | None,
-    model_name: str | None,
-    db_session: Session,
-) -> str | None:
-    if provider_name is None and model_name is None:
-        return None
-    if not provider_name or not model_name:
-        return "Provider name and model name are required"
-
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
-    if not provider:
-        return f"Provider {provider_name} not found"
-    model_config = next(
-        (mc for mc in provider.model_configurations if mc.name == model_name), None
-    )
-    if not model_config:
-        return f"Model {model_name} not found in provider {provider_name}"
-
-    return None
+    if not db_session.get(ModelConfiguration, model_configuration_id):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"model_configuration id={model_configuration_id} not found",
+        )
 
 
 def _sync_default_contextual_model(db_session: Session) -> None:
@@ -327,12 +303,12 @@ def _sync_default_contextual_model(db_session: Session) -> None:
         update_default_contextual_model(
             db_session=db_session,
             enable_contextual_rag=primary.enable_contextual_rag,
-            contextual_rag_llm_provider=primary.contextual_rag_llm_provider,
-            contextual_rag_llm_name=primary.contextual_rag_llm_name,
+            model_configuration_id=primary.contextual_rag_model_configuration_id,
         )
     except ValueError as e:
         logger.error(
-            f"Error syncing default contextual model, defaulting to no contextual model: {e}"
+            "Error syncing default contextual model, defaulting to no contextual model: %s",
+            e,
         )
         update_no_default_contextual_rag_provider(
             db_session=db_session,

@@ -54,8 +54,8 @@ def format_element_text(element_text: str, link_href: str | None) -> str:
 
 def parse_html_with_trafilatura(html_content: str) -> str:
     """Parse HTML content using trafilatura."""
-    import trafilatura  # type: ignore
-    from trafilatura.settings import use_config  # type: ignore
+    import trafilatura
+    from trafilatura.settings import use_config
 
     config = use_config()
     config.set("DEFAULT", "include_links", "True")
@@ -212,7 +212,7 @@ def web_html_cleanup(
             if not page_text:
                 raise ValueError("Empty content returned by trafilatura.")
         except Exception as e:
-            logger.info(f"Trafilatura parsing failed: {e}. Falling back on bs4.")
+            logger.info("Trafilatura parsing failed: %s. Falling back on bs4.", e)
             page_text = format_document_soup(soup)
     else:
         page_text = format_document_soup(soup)

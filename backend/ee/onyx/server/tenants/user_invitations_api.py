@@ -10,9 +10,9 @@ from ee.onyx.server.tenants.user_mapping import approve_user_invite
 from ee.onyx.server.tenants.user_mapping import deny_user_invite
 from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
 from onyx.auth.invited_users import get_pending_users
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
+from onyx.db.enums import Permission
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -24,20 +24,20 @@ router = APIRouter(prefix="/tenants")
 @router.post("/users/invite/request")
 async def request_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(
-            f"Failed to invite self to tenant {invite_request.tenant_id}: {e}"
+            "Failed to invite self to tenant %s: %s", invite_request.tenant_id, e
         )
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/users/pending")
 def list_pending_users(
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[PendingUserSnapshot]:
     pending_emails = get_pending_users()
     return [PendingUserSnapshot(email=email) for email in pending_emails]
@@ -46,7 +46,7 @@ def list_pending_users(
 @router.post("/users/invite/approve")
 async def approve_user(
     approve_user_request: ApproveUserRequest,
-    _: User = Depends(current_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
     tenant_id = get_current_tenant_id()
     approve_user_invite(approve_user_request.email, tenant_id)
@@ -55,7 +55,7 @@ async def approve_user(
 @router.post("/users/invite/accept")
 async def accept_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """
     Accept an invitation to join a tenant.
@@ -63,14 +63,14 @@ async def accept_invite(
     try:
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
-        logger.exception(f"Failed to accept invite: {str(e)}")
+        logger.exception("Failed to accept invite: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to accept invitation")
 
 
 @router.post("/users/invite/deny")
 async def deny_invite(
     invite_request: RequestInviteRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> None:
     """
     Deny an invitation to join a tenant.
@@ -78,5 +78,5 @@ async def deny_invite(
     try:
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
-        logger.exception(f"Failed to deny invite: {str(e)}")
+        logger.exception("Failed to deny invite: %s", str(e))
         raise HTTPException(status_code=500, detail="Failed to deny invitation")

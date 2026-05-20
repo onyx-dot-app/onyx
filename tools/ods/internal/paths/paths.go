@@ -47,6 +47,43 @@ func DataDir() string {
 	return filepath.Join(base, "onyx-dev")
 }
 
+// ConfigDir returns the per-user config directory for onyx-dev tools.
+// On Linux/macOS: ~/.config/onyx-dev/ (respects XDG_CONFIG_HOME)
+// On Windows:    %APPDATA%/onyx-dev/
+func ConfigDir() string {
+	var base string
+	if runtime.GOOS == "windows" {
+		base = os.Getenv("APPDATA")
+		if base == "" {
+			base = os.Getenv("USERPROFILE")
+			if base == "" {
+				log.Fatalf("Cannot determine config directory: APPDATA and USERPROFILE are not set")
+			}
+			base = filepath.Join(base, "AppData", "Roaming")
+		}
+	} else {
+		base = os.Getenv("XDG_CONFIG_HOME")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil || home == "" {
+				log.Fatalf("Cannot determine config directory: XDG_CONFIG_HOME not set and home directory unknown: %v", err)
+			}
+			base = filepath.Join(home, ".config")
+		}
+	}
+	return filepath.Join(base, "onyx-dev")
+}
+
+// ConfigFilePath returns the path to the ods config file.
+func ConfigFilePath() string {
+	return filepath.Join(ConfigDir(), "config.json")
+}
+
+// EnsureConfigDir creates the config directory if it doesn't exist.
+func EnsureConfigDir() error {
+	return os.MkdirAll(ConfigDir(), 0755)
+}
+
 // SnapshotsDir returns the directory for database snapshots.
 func SnapshotsDir() string {
 	return filepath.Join(DataDir(), "snapshots")

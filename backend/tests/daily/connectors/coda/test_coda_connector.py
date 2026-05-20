@@ -152,14 +152,14 @@ class TestLoadFromState:
         batch_sizes = []
         for batch in gen:
             batch_sizes.append(len(batch))
-            assert (
-                len(batch) <= batch_size
-            ), f"Batch size {len(batch)} exceeds configured {batch_size}"
+            assert len(batch) <= batch_size, (
+                f"Batch size {len(batch)} exceeds configured {batch_size}"
+            )
 
         for i, size in enumerate(batch_sizes[:-1]):
-            assert (
-                size == batch_size
-            ), f"Non-final batch {i} has size {size}, expected {batch_size}"
+            assert size == batch_size, (
+                f"Non-final batch {i} has size {size}, expected {batch_size}"
+            )
 
         # Last batch may be smaller or equal
         if batch_sizes:
@@ -194,34 +194,34 @@ class TestLoadFromState:
                 assert isinstance(doc, Document)
 
                 assert doc.id is not None, "Document ID should not be None"
-                assert doc.id.startswith(
-                    "coda-"
-                ), "Document ID should start with 'coda-'"
-                assert (
-                    doc.source == DocumentSource.CODA
-                ), "Document source should be CODA"
-                assert (
-                    doc.semantic_identifier is not None
-                ), "Semantic identifier should not be None"
-                assert (
-                    doc.doc_updated_at is not None
-                ), "doc_updated_at should not be None"
+                assert doc.id.startswith("coda-"), (
+                    "Document ID should start with 'coda-'"
+                )
+                assert doc.source == DocumentSource.CODA, (
+                    "Document source should be CODA"
+                )
+                assert doc.semantic_identifier is not None, (
+                    "Semantic identifier should not be None"
+                )
+                assert doc.doc_updated_at is not None, (
+                    "doc_updated_at should not be None"
+                )
 
-                assert (
-                    len(doc.sections) > 0
-                ), "Document should have at least one section"
+                assert len(doc.sections) > 0, (
+                    "Document should have at least one section"
+                )
                 for section in doc.sections:
                     assert section.text is not None, "Section text should not be None"
                     assert len(section.text) > 0, "Section text should not be empty"
                     assert section.link is not None, "Section link should not be None"
-                    assert section.link.startswith(
-                        "https://"
-                    ), "Section link should be a valid URL"
+                    assert section.link.startswith("https://"), (
+                        "Section link should be a valid URL"
+                    )
 
                 assert "doc_id" in doc.metadata, "Metadata should contain doc_id"
-                assert (
-                    "browser_link" in doc.metadata
-                ), "Metadata should contain browser_link"
+                assert "browser_link" in doc.metadata, (
+                    "Metadata should contain browser_link"
+                )
 
     def test_document_types(
         self, connector: CodaConnector, reference_data: dict[str, Any]
@@ -246,12 +246,12 @@ class TestLoadFromState:
             assert len(table_docs) > 0, "Should have found table documents"
 
         # Verify counts match
-        assert (
-            len(page_docs) == reference_data["total_pages"]
-        ), f"Expected {reference_data['total_pages']} page documents, got {len(page_docs)}"
-        assert (
-            len(table_docs) == reference_data["total_tables"]
-        ), f"Expected {reference_data['total_tables']} table documents, got {len(table_docs)}"
+        assert len(page_docs) == reference_data["total_pages"], (
+            f"Expected {reference_data['total_pages']} page documents, got {len(page_docs)}"
+        )
+        assert len(table_docs) == reference_data["total_tables"], (
+            f"Expected {reference_data['total_tables']} table documents, got {len(table_docs)}"
+        )
 
     def test_no_duplicate_documents(
         self,
@@ -264,9 +264,9 @@ class TestLoadFromState:
             document_ids.append(doc.id)
 
         unique_ids = set(document_ids)
-        assert len(document_ids) == len(
-            unique_ids
-        ), f"Found {len(document_ids) - len(unique_ids)} duplicate documents"
+        assert len(document_ids) == len(unique_ids), (
+            f"Found {len(document_ids) - len(unique_ids)} duplicate documents"
+        )
 
     def test_all_docs_processed(
         self, connector: CodaConnector, reference_data: dict[str, Any]
@@ -286,9 +286,9 @@ class TestLoadFromState:
             or len(reference_data["tables_by_doc"].get(doc_id, [])) > 0
         }
 
-        assert (
-            processed_doc_ids == expected_doc_ids_with_content
-        ), f"Not all docs with content were processed. Expected {expected_doc_ids_with_content}, got {processed_doc_ids}"
+        assert processed_doc_ids == expected_doc_ids_with_content, (
+            f"Not all docs with content were processed. Expected {expected_doc_ids_with_content}, got {processed_doc_ids}"
+        )
 
     def test_document_content_not_empty(
         self,
@@ -298,9 +298,9 @@ class TestLoadFromState:
         """Test that all documents have meaningful content."""
         for doc in connector_doc_generator(connector):
             assert doc.semantic_identifier, "Semantic identifier should not be empty"
-            assert (
-                len(doc.semantic_identifier) > 0
-            ), "Semantic identifier should have content"
+            assert len(doc.semantic_identifier) > 0, (
+                "Semantic identifier should have content"
+            )
 
             total_text_length = sum(len(section.text or "") for section in doc.sections)
             assert total_text_length > 0, f"Document {doc.id} has no content"
@@ -345,9 +345,9 @@ class TestLoadFromState:
                 len(s.text or "") for s in docs_with_content[0].sections
             )
 
-            assert (
-                with_content_length >= no_content_length
-            ), "Content-indexed page should have at least as much text as non-indexed"
+            assert with_content_length >= no_content_length, (
+                "Content-indexed page should have at least as much text as non-indexed"
+            )
 
 
 class TestPollSource:
@@ -378,9 +378,9 @@ class TestPollSource:
                 continue
             assert doc.doc_updated_at is not None, "doc_updated_at should not be None"
             doc_timestamp = doc.doc_updated_at.timestamp()
-            assert (
-                start_time < doc_timestamp <= current_time
-            ), f"Document {doc.id} updated at {doc_timestamp} is outside range [{start_time}, {current_time}]"
+            assert start_time < doc_timestamp <= current_time, (
+                f"Document {doc.id} updated at {doc_timestamp} is outside range [{start_time}, {current_time}]"
+            )
 
     def test_poll_source_no_updates_in_range(self, connector: CodaConnector) -> None:
         """Test polling with a time range that has no updates."""
@@ -406,9 +406,9 @@ class TestPollSource:
         gen = connector.poll_source(start_time, current_time)
 
         for batch in gen:
-            assert (
-                len(batch) <= batch_size
-            ), f"Batch size {len(batch)} exceeds configured {batch_size}"
+            assert len(batch) <= batch_size, (
+                f"Batch size {len(batch)} exceeds configured {batch_size}"
+            )
 
 
 class TestWorkspaceScoping:
@@ -430,9 +430,9 @@ class TestWorkspaceScoping:
             scoped_docs.extend(batch)
 
         # Scoped should be <= all docs
-        assert len(scoped_docs) <= len(
-            all_docs
-        ), "Workspace-scoped connector should return same or fewer documents"
+        assert len(scoped_docs) <= len(all_docs), (
+            "Workspace-scoped connector should return same or fewer documents"
+        )
 
         workspace_id = workspace_scoped_connector.workspace_id
         for doc in scoped_docs:
@@ -441,9 +441,9 @@ class TestWorkspaceScoping:
             doc_id = doc.metadata.get("doc_id")
             assert isinstance(doc_id, str), "doc_id should be a string"
             coda_doc = workspace_scoped_connector._get_doc(doc_id)
-            assert (
-                coda_doc.workspace_id == workspace_id
-            ), f"Document {doc_id} has workspace {coda_doc.workspace_id}, expected {workspace_id}"
+            assert coda_doc.workspace_id == workspace_id, (
+                f"Document {doc_id} has workspace {coda_doc.workspace_id}, expected {workspace_id}"
+            )
 
 
 class TestErrorHandling:
@@ -459,9 +459,9 @@ class TestErrorHandling:
         for batch in gen:
             documents.extend(batch)
 
-        assert (
-            len(documents) > 0
-        ), "Should yield documents even if some content is inaccessible"
+        assert len(documents) > 0, (
+            "Should yield documents even if some content is inaccessible"
+        )
 
     def test_handles_empty_tables_gracefully(self, connector: CodaConnector) -> None:
         """Test that connector handles tables with no rows."""
@@ -469,9 +469,9 @@ class TestErrorHandling:
             if "coda-table-" in doc.id:
                 assert len(doc.sections) > 0, "Empty table should still have a section"
                 if doc.metadata.get("row_count") == "0":
-                    assert (
-                        len(doc.sections) == 1
-                    ), "Empty table should have exactly one section"
+                    assert len(doc.sections) == 1, (
+                        "Empty table should have exactly one section"
+                    )
 
 
 if __name__ == "__main__":

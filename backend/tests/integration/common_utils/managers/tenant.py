@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 import jwt
 import requests
@@ -14,8 +15,8 @@ from tests.integration.common_utils.test_models import DATestUser
 def generate_auth_token() -> str:
     payload = {
         "iss": "control_plane",
-        "exp": datetime.utcnow() + timedelta(minutes=5),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(tz=timezone.utc) + timedelta(minutes=5),
+        "iat": datetime.now(tz=timezone.utc),
         "scope": "tenant:create",
     }
     token = jwt.encode(payload, "", algorithm="HS256")

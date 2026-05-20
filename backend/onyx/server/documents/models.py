@@ -19,12 +19,17 @@ from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import ProcessingMode
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
+from onyx.db.index_attempt_metrics_models import STAGE_SCOPE
+from onyx.db.index_attempt_metrics_models import StageScope
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.db.models import IndexAttempt
+from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
@@ -210,15 +215,80 @@ class IndexAttemptSnapshot(BaseModel):
         )
 
 
+class IndexAttemptStageMetricSnapshot(BaseModel):
+    """Per-stage timing aggregate for a single ``IndexAttempt``.
+
+    ``avg_duration_ms`` and ``std_dev_duration_ms`` are derived at
+    serialization time from the stored ``total_duration_ms`` and
+    ``m2_duration_ms`` (Welford / Chan accumulator). ``std_dev_duration_ms``
+    is undefined for ``event_count <= 1`` and is reported as ``None`` in
+    that case so the frontend can render "avg" without "± std dev".
+    """
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    stage: IndexAttemptStage
+    scope: StageScope
+    event_count: int
+    total_duration_ms: int
+    avg_duration_ms: float | None
+    std_dev_duration_ms: float | None
+    min_duration_ms: int | None
+    max_duration_ms: int | None
+    time_first_event: datetime | None
+    time_last_event: datetime | None
+
+    @classmethod
+    def from_db_model(
+        cls, metric: IndexAttemptStageMetric
+    ) -> "IndexAttemptStageMetricSnapshot":
+        avg = (
+            metric.total_duration_ms / metric.event_count
+            if metric.event_count > 0
+            else None
+        )
+        std_dev = (
+            max(0.0, metric.m2_duration_ms / (metric.event_count - 1)) ** 0.5
+            if metric.event_count > 1
+            else None
+        )
+        return IndexAttemptStageMetricSnapshot(
+            stage=metric.stage,
+            scope=STAGE_SCOPE[metric.stage],
+            event_count=metric.event_count,
+            total_duration_ms=metric.total_duration_ms,
+            avg_duration_ms=avg,
+            std_dev_duration_ms=std_dev,
+            min_duration_ms=metric.min_duration_ms,
+            max_duration_ms=metric.max_duration_ms,
+            time_first_event=metric.time_first_event,
+            time_last_event=metric.time_last_event,
+        )
+
+
+class IndexAttemptStageMetricsResponse(BaseModel):
+    """Response payload for the per-attempt stage-metrics endpoint.
+
+    ``stages`` is returned in the canonical pipeline order (the declaration
+    order of ``IndexAttemptStage``); the frontend renders that order
+    verbatim for the default "Pipeline order" sort and re-sorts client-side
+    for the "Time taken" sort.
+    """
+
+    index_attempt_id: int
+    stages: list[IndexAttemptStageMetricSnapshot]
+
+
 # These are the types currently supported by the pagination hook
 # More api endpoints can be refactored and be added here for use with the pagination hook
 PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
-class PermissionSyncAttemptSnapshot(BaseModel):
+class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_docs_synced: int
     docs_with_permission_errors: int
     time_created: str
@@ -226,13 +296,14 @@ class PermissionSyncAttemptSnapshot(BaseModel):
     time_finished: str | None
 
     @classmethod
-    def from_permission_sync_attempt_db_model(
+    def from_doc_permission_sync_attempt_db_model(
         cls, attempt: DocPermissionSyncAttempt
-    ) -> "PermissionSyncAttemptSnapshot":
-        return PermissionSyncAttemptSnapshot(
+    ) -> "DocPermissionSyncAttemptSnapshot":
+        return DocPermissionSyncAttemptSnapshot(
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_docs_synced=attempt.total_docs_synced or 0,
             docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
             time_created=attempt.time_created.isoformat(),
@@ -245,7 +316,58 @@ class PermissionSyncAttemptSnapshot(BaseModel):
         )
 
 
+class ExternalGroupSyncAttemptSnapshot(BaseModel):
+    id: int
+    status: PermissionSyncStatus
+    error_message: str | None
+    full_exception_trace: str | None
+    total_users_processed: int
+    total_groups_processed: int
+    total_group_memberships_synced: int
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_external_group_sync_attempt_db_model(
+        cls, attempt: ExternalGroupPermissionSyncAttempt
+    ) -> "ExternalGroupSyncAttemptSnapshot":
+        return ExternalGroupSyncAttemptSnapshot(
+            id=attempt.id,
+            status=attempt.status,
+            error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
+            total_users_processed=attempt.total_users_processed or 0,
+            total_groups_processed=attempt.total_groups_processed or 0,
+            total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            time_created=attempt.time_created.isoformat(),
+            time_started=(
+                attempt.time_started.isoformat() if attempt.time_started else None
+            ),
+            time_finished=(
+                attempt.time_finished.isoformat() if attempt.time_finished else None
+            ),
+        )
+
+
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
+
+
+class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
+    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+
+    ``applicable`` is False when the cc-pair's source does not run the kind
+    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
+    has neither doc sync nor group sync). The frontend uses this to render an
+    explanatory message instead of an empty-state — the two are distinct
+    states: ``applicable=True, items=[], total_items=0`` legitimately means
+    "no attempts yet" and must not be confused with "this kind of sync isn't
+    applicable for this source".
+    """
+
+    applicable: bool
     items: list[PaginatedType]
     total_items: int
 
@@ -281,6 +403,10 @@ class CCPairFullInfo(BaseModel):
     permission_syncing: bool
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
+
+    # True if this connector's class implements `Resolver.reindex`. The FE
+    # uses this to route Resolve-All to targeted reindex vs full reindex.
+    supports_targeted_reindex: bool
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -335,6 +461,7 @@ class CCPairFullInfo(BaseModel):
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
+        supports_targeted_reindex: bool = False,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -392,6 +519,7 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_targeted_reindex=supports_targeted_reindex,
         )
 
 

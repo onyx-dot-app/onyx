@@ -18,7 +18,6 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
-
 # This is a placeholder - you'll need to create this zip file with actual test files
 TEST_FILES_BASE = "tests/integration/tests/indexing/file_connector/test_files"
 TEST_META_ZIP_PATH = f"{TEST_FILES_BASE}/with_meta.zip"
@@ -113,7 +112,7 @@ def test_zip_metadata_handling(
         filename = doc.semantic_id
         if filename in expected_metadata:
             expected = expected_metadata[filename]
-            assert (
-                doc.semantic_id == expected["display_name"]
-            ), f"Display name mismatch for {filename}"
+            assert doc.semantic_id == expected["display_name"], (
+                f"Display name mismatch for {filename}"
+            )
             assert doc.link == expected["link"], f"Link mismatch for {filename}"

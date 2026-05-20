@@ -22,10 +22,6 @@ module.exports = {
         spacing: "margin, padding",
       },
       keyframes: {
-        shimmer: {
-          "0%": { backgroundPosition: "100% 0" },
-          "100%": { backgroundPosition: "-100% 0" },
-        },
         "subtle-pulse": {
           "0%, 100%": { opacity: 0.9 },
           "50%": { opacity: 0.5 },
@@ -52,7 +48,6 @@ module.exports = {
         },
       },
       animation: {
-        shimmer: "shimmer 1.8s ease-out infinite",
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
@@ -71,10 +66,6 @@ module.exports = {
         "2xl": "1420px",
         "3xl": "1700px",
         "4xl": "2000px",
-        mobile: { max: "724px" },
-        tall: { raw: "(min-height: 800px)" },
-        short: { raw: "(max-height: 799px)" },
-        "very-short": { raw: "(max-height: 600px)" },
       },
       fontFamily: {
         sans: ["Hanken Grotesk", "sans-serif"],
@@ -362,14 +353,9 @@ module.exports = {
         /^(fill-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/,
     },
   ],
-  // Note: @tailwindcss/container-queries plugin is not needed here.
-  // Container queries (@container, cqw units) are native in Tailwind v4+.
-  // After upgrading to Tailwind 4, this comment can be removed.
   plugins: [
     require("@tailwindcss/typography"),
     require("@headlessui/tailwindcss"),
-    require("tailwindcss-animate"),
-    require("@tailwindcss/container-queries"),
     plugin(({ addVariant }) => {
       addVariant("focus-within-nonactive", "&:focus-within:not(:active)");
     }),

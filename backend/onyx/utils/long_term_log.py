@@ -21,7 +21,9 @@ class LongTermLogger:
     def __init__(
         self,
         metadata: dict[str, str] | None = None,
-        log_file_path: str = "/tmp/long_term_log",
+        # TODO(security): this class is unused (see NOTE above). Either delete
+        # it or change the default to a non-world-writable location.
+        log_file_path: str = "/tmp/long_term_log",  # noqa: S108
         max_files_per_category: int = 1000,
     ):
         self.metadata = metadata
@@ -45,7 +47,7 @@ class LongTermLogger:
             # Delete oldest files that exceed the limit
             for file in files[self.max_files_per_category :]:
                 if not file.is_file():
-                    logger.debug(f"File already deleted: {file}")
+                    logger.debug("File already deleted: %s", file)
                     continue
                 try:
                     file.unlink()

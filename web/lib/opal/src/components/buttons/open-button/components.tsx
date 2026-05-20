@@ -6,13 +6,11 @@ import {
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
+  IconFunctionComponent,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
+import { Text, Tooltip, type TooltipSide } from "@opal/components";
 import type { InteractiveContainerRoundingVariant } from "@opal/core";
-import type { TooltipSide } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
@@ -72,7 +70,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    roundingVariant?: InteractiveContainerRoundingVariant;
+    rounding?: InteractiveContainerRoundingVariant;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -91,7 +89,7 @@ function OpenButton({
   justifyContent,
   tooltip,
   tooltipSide = "top",
-  roundingVariant: roundingVariantOverride,
+  rounding: roundingOverride,
   interaction,
   variant = "select-heavy",
   disabled,
@@ -125,11 +123,10 @@ function OpenButton({
     >
       <Interactive.Container
         type="button"
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={
-          roundingVariantOverride ??
-          (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
+        size={size}
+        width={width}
+        rounding={
+          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
         }
       >
         <div
@@ -172,21 +169,10 @@ function OpenButton({
   const resolvedTooltip =
     tooltip ?? (foldable && disabled && children ? children : undefined);
 
-  if (!resolvedTooltip) return button;
-
   return (
-    <TooltipPrimitive.Root>
-      <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={tooltipSide}
-          sideOffset={4}
-        >
-          <Text>{resolvedTooltip}</Text>
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
-    </TooltipPrimitive.Root>
+    <Tooltip tooltip={resolvedTooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
   );
 }
 

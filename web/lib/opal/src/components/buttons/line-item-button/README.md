@@ -8,13 +8,13 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
-  └─ Interactive.Container   <- type, width, roundingVariant
-       └─ ContentAction      <- withInteractive, paddingVariant="lg"
+  └─ Interactive.Container   <- type, width, rounding
+       └─ ContentAction      <- withInteractive, padding="lg"
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
 
-`paddingVariant` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
+`padding` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
 
 ## Props
 
@@ -35,7 +35,7 @@ Interactive.Stateful         <- selectVariant, state, interaction, onClick, href
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `roundingVariant` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
+| `rounding` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
 | `width` | `WidthVariant` | `"full"` | Container width |
 | `type` | `"submit" \| "button" \| "reset"` | `"button"` | HTML button type |
 | `tooltip` | `string` | — | Tooltip text shown on hover |
@@ -63,7 +63,7 @@ import { LineItemButton } from "@opal/components";
 <LineItemButton
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
-  roundingVariant="sm"
+  rounding="sm"
   onClick={handleClick}
   title="gpt-4o"
   sizePreset="main-ui"

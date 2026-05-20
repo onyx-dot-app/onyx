@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { IconProps } from "@opal/types";
+import type { IconProps, RichStr } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
@@ -9,8 +9,8 @@ import { useModalClose } from "../contexts/ModalContext";
 
 export interface ConfirmationModalProps {
   icon: React.FunctionComponent<IconProps>;
-  title: string;
-  description?: string;
+  title: string | RichStr;
+  description?: string | RichStr;
   children?: React.ReactNode;
 
   submit: React.ReactNode;

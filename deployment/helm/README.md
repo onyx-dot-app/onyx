@@ -1,9 +1,107 @@
+# Recent chart changes (0.5.0)
+
+If you are upgrading from an earlier 0.4.x release, note:
+
+* **Redis** — the chart now bundles the `redis-operator` subchart alongside the
+  `redis` subchart. The operator installs the CRD that the Redis CR binds to,
+  so `helm install` works on a clean cluster without a separate CRD step.
+* **PostgreSQL** — a CloudNativePG `Cluster` CR is now rendered from
+  `templates/postgres-cluster.yaml`, so `helm install` provisions postgres
+  out of the box. The Cluster is named `<release>-pg` (service:
+  `<release>-pg-rw`). Set `postgresql.enabled: false` and override
+  `configMap.POSTGRES_HOST` if you use an external database (RDS, etc.).
+* **REDIS_HOST** — the configmap no longer appends `-master` to the redis
+  service name. If you previously overrode `REDIS_HOST` or had clients that
+  hard-coded the `-master` suffix, update them to point at the
+  redis-operator standalone service.
+* **CNPG CRDs** — copied into `crds/cnpg-crds.yaml` so Helm pre-installs
+  them before templates. The subchart's own CRD template is disabled
+  (`postgresql.crds.create: false`). Run `scripts/check-cnpg-crds.sh` after
+  bumping the CNPG subchart version to verify the copy is in sync.
+* **Pre-delete hook** — a cleanup Job (`templates/pre-delete-cleanup.yaml`)
+  deletes operator-managed CRs before `helm uninstall` tears down the
+  operators, ensuring finalizers are processed and namespace cleanup
+  completes promptly.
+
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
 * cd charts/onyx
 * helm dependency update .
 
+# Prerequisites
+
+## Redis operator (automatic with bundled Redis)
+
+When `redis.enabled: true` (the chart default), the chart bundles and automatically
+installs the `redis-operator` subchart alongside the `redis` subchart. The operator
+provides the CRD that the Redis CR binds to, so `helm install` works on a clean
+cluster without manual preparation.
+
+**No separate pre-install step is needed** — the chart handles the redis-operator
+CRD and controller automatically as part of `helm install onyx onyx/onyx`.
+
+If you don't want the bundled Redis (recommended for production environments using
+managed Redis like AWS ElastiCache), see [Using an external Redis](#using-an-external-redis)
+below and set `redis.enabled: false` to skip the operator entirely.
+
+## Using an external Redis
+
+To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip
+the bundled Redis + operator entirely:
+
+```yaml
+redis:
+  enabled: false
+
+configMap:
+  # Override the chart-computed REDIS_HOST. Use the cluster/primary endpoint
+  # from your managed Redis. Avoid underscores — they are invalid in K8s DNS
+  # labels and look identical to a hung service.
+  REDIS_HOST: "<elasticache-primary-endpoint>"
+  REDIS_PORT: "6379"
+  REDIS_SSL: "true"   # set to "true" if in-transit encryption is enabled
+
+auth:
+  redis:
+    enabled: true
+    # Pre-create a Secret in the release namespace holding the Redis password
+    # under the key `redis_password`.
+    existingSecret: "elasticache-auth-secret"
+    secretKeys:
+      REDIS_PASSWORD: redis_password
+```
+
+# Values that come from docker-compose (do not copy them)
+
+The Onyx docker-compose stack uses service-name hostnames like `api_server`,
+`inference_model_server`, and `cache`. Those names contain underscores, which
+are **invalid in Kubernetes DNS labels** — DNS lookups for them will fail and
+the symptom is often a blank login page or `TypeError: fetch failed` in web
+pod logs.
+
+The chart computes correct K8s service hostnames for you. If you are
+adapting an `.env` file from docker-compose, **remove** these keys from your
+Helm `configMap:` and let the chart fill them in:
+
+| Key | Don't set to (docker-compose) | Chart-computed default |
+| --- | --- | --- |
+| `REDIS_HOST` | `cache` | `redis.redisStandalone.name | default <release>` |
+| `INTERNAL_URL` | `http://api_server:8080` | `http://<release>-api-service:8080` |
+| `API_SERVER_HOST` | `api_server` | computed |
+| `MODEL_SERVER_HOST` | `inference_model_server` | `<release>-inference-model-service` |
+| `INDEXING_MODEL_SERVER_HOST` | `indexing_model_server` | `<release>-indexing-model-service` |
+
+Other docker-compose-style values you should set deliberately:
+
+* `DOMAIN` should be your public hostname (e.g. `onyx.example.com`), not
+  `localhost`. It affects cookies and CORS.
+* `WEB_DOMAIN` should be the full origin (e.g. `https://onyx.example.com`).
+  Watch for typos like `hhttps://...`; they silently break email links and
+  OAuth redirects.
+
 # Local testing
+
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
 ## One time setup
 * brew install kind

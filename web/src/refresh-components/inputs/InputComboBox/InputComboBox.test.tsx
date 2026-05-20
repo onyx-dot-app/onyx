@@ -239,7 +239,7 @@ describe("InputComboBox", () => {
       expect(screen.getByText("No options found")).toBeInTheDocument();
     });
 
-    test("shows separator between matched and unmatched options when enabled", async () => {
+    test("shows divider between matched and unmatched options when enabled", async () => {
       const user = setupUser();
       render(
         <InputComboBox

@@ -129,11 +129,35 @@ class TestWorkerHealthCollector:
         up = families[1]
         assert up.name == "onyx_celery_worker_up"
         assert len(up.samples) == 3
-        # Labels use short names (before @)
-        labels = {s.labels["worker"] for s in up.samples}
-        assert labels == {"primary", "docfetching", "monitoring"}
+        label_pairs = {
+            (s.labels["worker_type"], s.labels["hostname"]) for s in up.samples
+        }
+        assert label_pairs == {
+            ("primary", "host1"),
+            ("docfetching", "host1"),
+            ("monitoring", "host1"),
+        }
         for sample in up.samples:
             assert sample.value == 1
+
+    def test_replicas_of_same_worker_type_are_distinct(self) -> None:
+        """Regression: ``docprocessing@pod-1`` and ``docprocessing@pod-2`` must
+        produce separate samples, not collapse into one duplicate-timestamp
+        series.
+        """
+        monitor = WorkerHeartbeatMonitor(MagicMock())
+        monitor._on_heartbeat({"hostname": "docprocessing@pod-1"})
+        monitor._on_heartbeat({"hostname": "docprocessing@pod-2"})
+        monitor._on_heartbeat({"hostname": "docprocessing@pod-3"})
+
+        collector = WorkerHealthCollector(cache_ttl=0)
+        collector.set_monitor(monitor)
+
+        up = collector.collect()[1]
+        assert len(up.samples) == 3
+        hostnames = {s.labels["hostname"] for s in up.samples}
+        assert hostnames == {"pod-1", "pod-2", "pod-3"}
+        assert all(s.labels["worker_type"] == "docprocessing" for s in up.samples)
 
     def test_reports_dead_worker(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())
@@ -151,9 +175,9 @@ class TestWorkerHealthCollector:
         assert active.samples[0].value == 1
 
         up = families[1]
-        samples_by_name = {s.labels["worker"]: s.value for s in up.samples}
-        assert samples_by_name["primary"] == 1
-        assert samples_by_name["monitoring"] == 0
+        samples_by_type = {s.labels["worker_type"]: s.value for s in up.samples}
+        assert samples_by_type["primary"] == 1
+        assert samples_by_type["monitoring"] == 0
 
     def test_empty_monitor_returns_zero(self) -> None:
         monitor = WorkerHeartbeatMonitor(MagicMock())

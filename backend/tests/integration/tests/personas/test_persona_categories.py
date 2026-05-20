@@ -3,9 +3,7 @@ from uuid import uuid4
 import pytest
 from requests.exceptions import HTTPError
 
-from tests.integration.common_utils.managers.persona import (
-    PersonaLabelManager,
-)
+from tests.integration.common_utils.managers.persona import PersonaLabelManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
@@ -52,9 +50,9 @@ def test_persona_label_management(reset: None) -> None:  # noqa: ARG001
         label=persona_label,
         user_performing_action=regular_user,
     )
-    assert (
-        result is False
-    ), "Regular user should not be able to delete the persona label"
+    assert result is False, (
+        "Regular user should not be able to delete the persona label"
+    )
 
     assert PersonaLabelManager.verify(
         label=persona_label,

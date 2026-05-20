@@ -1,20 +1,23 @@
 "use client";
 
 import { useMemo } from "react";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
+import { getModelIcon, getProvider } from "@/lib/languageModels";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
 
 interface LLMOption {
   name: string;
   value: string;
-  icon: ReturnType<typeof getProviderIcon>;
+  icon: ReturnType<typeof getModelIcon>;
   modelName: string;
+  providerId: number;
   providerName: string;
   provider: string;
-  providerDisplayName: string;
   supportsImageInput: boolean;
   vendor: string | null;
 }
@@ -64,7 +67,7 @@ export default function LLMSelector({
           return;
         }
 
-        const key = `${provider.provider}:${modelConfiguration.name}`;
+        const key = `${provider.id}:${modelConfiguration.name}`;
         if (seenKeys.has(key)) {
           return; // Skip exact duplicate
         }
@@ -78,19 +81,22 @@ export default function LLMSelector({
           return;
         }
 
+        // For nameless providers, fall back to the provider ID so the
+        // structured value is always unique and non-empty.
+        const providerLabel =
+          provider.name ?? getProvider(provider.provider).productName;
         const option: LLMOption = {
           name: displayName,
           value: structureValue(
-            provider.name,
+            provider.name ?? String(provider.id),
             provider.provider,
             modelConfiguration.name
           ),
-          icon: getProviderIcon(provider.provider, modelConfiguration.name),
+          icon: getModelIcon(provider.provider, modelConfiguration.name),
           modelName: modelConfiguration.name,
-          providerName: provider.name,
+          providerId: provider.id,
+          providerName: providerLabel,
           provider: provider.provider,
-          providerDisplayName:
-            provider.provider_display_name || provider.provider,
           supportsImageInput,
           vendor: modelConfiguration.vendor || null,
         };
@@ -108,33 +114,34 @@ export default function LLMSelector({
     requiresImageGeneration,
   ]);
 
-  // Group options by provider using backend-provided display names
+  // Group options by configured provider instance so multiple instances of the
+  // same provider type (e.g., two Anthropic API keys) appear as separate groups
+  // labeled with their user-given names.
   const groupedOptions = useMemo(() => {
     const groups = new Map<
-      string,
+      number,
       { displayName: string; options: LLMOption[] }
     >();
 
     llmOptions.forEach((option) => {
-      const provider = option.provider.toLowerCase();
-      if (!groups.has(provider)) {
-        groups.set(provider, {
-          displayName: option.providerDisplayName,
+      if (!groups.has(option.providerId)) {
+        groups.set(option.providerId, {
+          displayName: option.providerName,
           options: [],
         });
       }
-      groups.get(provider)!.options.push(option);
+      groups.get(option.providerId)!.options.push(option);
     });
 
     // Sort groups alphabetically by display name
-    const sortedProviders = Array.from(groups.keys()).sort((a, b) =>
+    const sortedProviderIds = Array.from(groups.keys()).sort((a, b) =>
       groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
     );
 
-    return sortedProviders.map((provider) => {
-      const group = groups.get(provider)!;
+    return sortedProviderIds.map((providerId) => {
+      const group = groups.get(providerId)!;
       return {
-        provider,
+        providerId,
         displayName: group.displayName,
         options: group.options,
       };
@@ -179,7 +186,7 @@ export default function LLMSelector({
         )}
         {showGrouped
           ? groupedOptions.map((group) => (
-              <InputSelect.Group key={group.provider}>
+              <InputSelect.Group key={group.providerId}>
                 <InputSelect.Label>{group.displayName}</InputSelect.Label>
                 {group.options.map((option) => (
                   <InputSelect.Item

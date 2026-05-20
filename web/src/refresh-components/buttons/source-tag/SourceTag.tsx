@@ -8,9 +8,10 @@ import {
   useRef,
   useLayoutEffect,
 } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
+import { Tooltip as OpalTooltip } from "@opal/components";
 import {
   Tooltip,
   TooltipContent,
@@ -35,7 +36,7 @@ const sizeClasses = {
     container: "rounded-08 p-1 gap-1",
   },
   button: {
-    container: "rounded-08 h-[2.25rem] min-w-[2.25rem] p-2 gap-1",
+    container: "rounded-08 h-9 min-w-9 p-2 gap-1",
   },
 } as const;
 
@@ -242,31 +243,21 @@ const QueryText = ({
   }
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span ref={textRef} className="max-w-[10rem] truncate block">
-            <Text
-              as="span"
-              {...textStyleProps}
-              className="transition-colors duration-150"
-            >
-              {displayName}
-            </Text>
-          </span>
-        </TooltipTrigger>
-        {isTruncated && (
-          <TooltipContent
-            side="top"
-            className="max-w-[400px] break-words whitespace-normal"
-          >
-            <Text as="p" textLight05>
-              {tooltipText ?? displayName}
-            </Text>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+    <OpalTooltip
+      tooltip={isTruncated ? (tooltipText ?? displayName) : undefined}
+      side="top"
+      delayDuration={300}
+    >
+      <span ref={textRef} className="max-w-40 truncate block">
+        <Text
+          as="span"
+          {...textStyleProps}
+          className="transition-colors duration-150"
+        >
+          {displayName}
+        </Text>
+      </span>
+    </OpalTooltip>
   );
 };
 
@@ -489,7 +480,7 @@ const SourceTagInner = ({
           <Text
             {...textStyleProps}
             className={cn(
-              "max-w-[10rem] truncate transition-colors duration-150",
+              "max-w-40 truncate transition-colors duration-150",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"
@@ -525,7 +516,7 @@ const SourceTagInner = ({
             text02={!isOpen}
             inverted={isOpen}
             className={cn(
-              "max-w-[10rem] truncate transition-colors duration-150",
+              "max-w-40 truncate transition-colors duration-150",
               !showDetailsCard &&
                 !isQuery &&
                 "group-hover:text-text-inverted-05"

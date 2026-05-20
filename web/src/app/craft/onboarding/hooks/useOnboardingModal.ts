@@ -2,8 +2,8 @@
 
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useUser } from "@/providers/UserProvider";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
-import { LLMProviderName } from "@/interfaces/llm";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { LLMProviderName } from "@/lib/languageModels/types";
 import {
   OnboardingModalMode,
   OnboardingModalController,
@@ -16,9 +16,11 @@ import {
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
+import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
+
 // Check if all 3 build mode providers are configured (anthropic, openai, openrouter)
 function checkAllProvidersConfigured(
-  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
+  llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
   if (!llmProviders || llmProviders.length === 0) {
     return false;
@@ -33,7 +35,7 @@ function checkAllProvidersConfigured(
 
 // Check if at least one provider is configured
 function checkHasAnyProvider(
-  llmProviders: import("@/interfaces/llm").LLMProviderDescriptor[] | undefined
+  llmProviders: LLMProviderDescriptor[] | undefined
 ): boolean {
   return !!(llmProviders && llmProviders.length > 0);
 }
@@ -142,8 +144,8 @@ export function useOnboardingModal(): OnboardingModalController {
   }, [refetchLlmProviders]);
 
   // Actions
-  const openPersonaEditor = useCallback(() => {
-    setMode({ type: "edit-persona" });
+  const openUserInfoEditor = useCallback(() => {
+    setMode({ type: "edit-user-info" });
   }, []);
 
   const openLlmSetup = useCallback((provider?: string) => {
@@ -159,7 +161,7 @@ export function useOnboardingModal(): OnboardingModalController {
   return {
     mode,
     isOpen,
-    openPersonaEditor,
+    openUserInfoEditor,
     openLlmSetup,
     close,
     llmProviders,

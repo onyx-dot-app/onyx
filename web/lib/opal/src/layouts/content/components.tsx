@@ -1,8 +1,9 @@
+"use client";
+
 import "@opal/layouts/content/styles.css";
 import {
   ContentSm,
   type ContentSmOrientation,
-  type ContentSmProminence,
 } from "@opal/layouts/content/ContentSm";
 import {
   ContentXl,
@@ -16,8 +17,8 @@ import {
   ContentMd,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps } from "@opal/components/tag/components";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { TagProps } from "@opal/components";
+import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
 
@@ -52,15 +53,27 @@ interface ContentBaseProps {
 
   /**
    * Width preset controlling the component's horizontal size.
-   * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
    * - `"auto"` — Shrink-wraps to content width
    * - `"fit"` — Shrink-wraps to content width
    * - `"full"` — Stretches to fill the parent's width
    *
-   * @default "fit"
+   * @default "full"
    */
-  widthVariant?: ExtremaSizeVariants;
+  width?: ExtremaSizeVariants;
+
+  /**
+   * Color mode for the icon + title pair.
+   *
+   * - `"default"` — `text-04` for both icon and title
+   * - `"muted"` — `text-03` for both
+   * - `"danger"` — `status-error-05` for both
+   * - `"interactive"` — inherits from the parent `.interactive` element's
+   *   `--interactive-foreground` / `--interactive-foreground-icon` variables
+   *
+   * @default "default"
+   */
+  color?: ColorTypes;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -108,8 +121,6 @@ type SmContentProps = Omit<
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
-  /** Title prominence. Default: `"default"`. */
-  prominence?: ContentSmProminence;
 };
 
 type ContentProps =
@@ -126,7 +137,8 @@ function Content(props: ContentProps) {
   const {
     sizePreset = "headline",
     variant = "heading",
-    widthVariant = "full",
+    width = "full",
+    color = "default",
     ref,
     ...rest
   } = props;
@@ -186,7 +198,11 @@ function Content(props: ContentProps) {
       `Content: no layout matched for sizePreset="${sizePreset}" variant="${variant}"`
     );
 
-  return <div className={widthVariants[widthVariant]}>{layout}</div>;
+  return (
+    <div className={widthVariants[width]} data-content-color={color}>
+      {layout}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

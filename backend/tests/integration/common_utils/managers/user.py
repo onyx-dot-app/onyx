@@ -219,7 +219,7 @@ class UserManager:
         elif target_status is False:
             url_substring = "deactivate"
         response = requests.patch(
-            url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",
+            url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",  # ty: ignore[possibly-unresolved-reference]
             json={"user_email": user_to_set.email},
             headers=user_performing_action.headers,
         )

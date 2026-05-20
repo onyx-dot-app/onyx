@@ -23,7 +23,6 @@ from onyx.db.models import User__UserGroup
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 # The credentials for these sources are not real so
@@ -98,11 +97,10 @@ def _add_user_filters(
             user_groups = user_groups.where(
                 User__UserGroup.is_curator == True  # noqa: E712
             )
-        where_clause &= (
-            ~exists()
-            .where(Credential__UserGroup.credential_id == Credential.id)
-            .where(~Credential__UserGroup.user_group_id.in_(user_groups))
-            .correlate(Credential)
+        where_clause &= ~exists().where(
+            Credential__UserGroup.credential_id == Credential.id
+        ).where(~Credential__UserGroup.user_group_id.in_(user_groups)).correlate(
+            Credential
         )
     else:
         where_clause |= Credential.curator_public == True  # noqa: E712
@@ -305,7 +303,7 @@ def alter_credential(
         if credential.credential_json
         else {}
     )
-    credential.credential_json = {  # type: ignore[assignment]
+    credential.credential_json = {  # ty: ignore[invalid-assignment]
         **existing_json,
         **credential_json,
     }
@@ -327,7 +325,9 @@ def update_credential(
     if credential is None:
         return None
 
-    credential.credential_json = credential_data.credential_json  # type: ignore[assignment]
+    credential.credential_json = (  # ty: ignore[invalid-assignment]
+        credential_data.credential_json
+    )
     credential.user_id = user.id if user is not None else None
 
     db_session.commit()
@@ -346,7 +346,7 @@ def update_credential_json(
     if credential is None:
         return None
 
-    credential.credential_json = credential_json  # type: ignore[assignment]
+    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -359,7 +359,7 @@ def backend_update_credential_json(
     db_session: Session,
 ) -> None:
     """This should not be used in any flows involving the frontend or users"""
-    credential.credential_json = credential_json  # type: ignore[assignment]
+    credential.credential_json = credential_json  # ty: ignore[invalid-assignment]
     db_session.commit()
 
 
@@ -385,7 +385,7 @@ def _delete_credential_internal(
     if associated_connectors or associated_doc_cc_pairs:
         if force:
             logger.warning(
-                f"Force deleting credential {credential_id} and its associated records"
+                "Force deleting credential %s and its associated records", credential_id
             )
 
             # Delete DocumentByConnectorCredentialPair records first
@@ -405,9 +405,9 @@ def _delete_credential_internal(
             )
 
     if force:
-        logger.warning(f"Force deleting credential {credential_id}")
+        logger.warning("Force deleting credential %s", credential_id)
     else:
-        logger.notice(f"Deleting credential {credential_id}")
+        logger.notice("Deleting credential %s", credential_id)
 
     _cleanup_credential__user_group_relationships__no_commit(db_session, credential_id)
     db_session.delete(credential)

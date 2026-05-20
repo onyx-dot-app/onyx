@@ -9,6 +9,8 @@ from uuid import uuid4
 from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
+from ee.onyx.db.license import seat_lock_id_for_tenant
+from ee.onyx.server.scim.api import _check_seat_availability
 from ee.onyx.server.scim.api import _scim_name_to_str
 from ee.onyx.server.scim.api import create_user
 from ee.onyx.server.scim.api import delete_user
@@ -741,3 +743,36 @@ class TestEmailCasePreservation:
         resource = parse_scim_user(result)
         assert resource.userName == "Alice@Example.COM"
         assert resource.emails[0].value == "Alice@Example.COM"
+
+
+class TestSeatLock:
+    """Tests for the advisory lock in _check_seat_availability."""
+
+    @patch("ee.onyx.server.scim.api.get_current_tenant_id", return_value="tenant_abc")
+    @patch("ee.onyx.server.scim.api.check_seat_availability")
+    @patch("ee.onyx.server.scim.api.acquire_seat_lock")
+    def test_acquires_advisory_lock_before_checking(
+        self,
+        mock_acquire: MagicMock,
+        mock_check: MagicMock,
+        _mock_tenant: MagicMock,
+        mock_dal: MagicMock,
+    ) -> None:
+        """The advisory lock must be acquired before the seat check runs."""
+        call_order: list[str] = []
+
+        mock_acquire.side_effect = lambda *_a, **_kw: call_order.append("lock")
+        mock_result = MagicMock()
+        mock_result.available = True
+        mock_check.side_effect = lambda *_a, **_kw: (
+            call_order.append("check") or mock_result
+        )
+
+        _check_seat_availability(mock_dal)
+
+        assert call_order == ["lock", "check"]
+
+    def test_seat_lock_id_is_stable_and_tenant_scoped(self) -> None:
+        """Lock id must be deterministic and differ across tenants."""
+        assert seat_lock_id_for_tenant("t1") == seat_lock_id_for_tenant("t1")
+        assert seat_lock_id_for_tenant("t1") != seat_lock_id_for_tenant("t2")

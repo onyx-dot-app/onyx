@@ -5,19 +5,19 @@
 export interface BuildLlmSelection {
   providerName: string; // e.g., "build-mode-anthropic" (LLMProviderDescriptor.name)
   provider: string; // e.g., "anthropic"
-  modelName: string; // e.g., "claude-opus-4-6"
+  modelName: string; // e.g., "claude-opus-4-7"
 }
 
 // Priority order for smart default LLM selection
 const LLM_SELECTION_PRIORITY = [
-  { provider: "anthropic", modelName: "claude-opus-4-6" },
+  { provider: "anthropic", modelName: "claude-opus-4-7" },
   { provider: "openai", modelName: "gpt-5.2" },
   { provider: "openrouter", modelName: "minimax/minimax-m2.1" },
 ] as const;
 
 // Minimal provider interface for selection logic
 interface MinimalLlmProvider {
-  name: string;
+  name: string | null;
   provider: string;
   model_configurations: { name: string; is_visible: boolean }[];
 }
@@ -36,7 +36,7 @@ export function getDefaultLlmSelection(
     const matchingProvider = llmProviders.find((p) => p.provider === provider);
     if (matchingProvider) {
       return {
-        providerName: matchingProvider.name,
+        providerName: matchingProvider.name ?? "",
         provider: matchingProvider.provider,
         modelName,
       };
@@ -50,7 +50,7 @@ export function getDefaultLlmSelection(
       (m) => m.is_visible
     );
     return {
-      providerName: firstProvider.name,
+      providerName: firstProvider.name ?? "",
       provider: firstProvider.provider,
       modelName: firstModel?.name ?? "",
     };
@@ -63,10 +63,11 @@ export function getDefaultLlmSelection(
 export const RECOMMENDED_BUILD_MODELS = {
   preferred: {
     provider: "anthropic",
-    modelName: "claude-opus-4-6",
-    displayName: "Claude Opus 4.6",
+    modelName: "claude-opus-4-7",
+    displayName: "Claude Opus 4.7",
   },
   alternatives: [
+    { provider: "anthropic", modelName: "claude-opus-4-6" },
     { provider: "anthropic", modelName: "claude-sonnet-4-6" },
     { provider: "openai", modelName: "gpt-5.2" },
     { provider: "openai", modelName: "gpt-5.1-codex" },
@@ -148,7 +149,8 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
     providerName: "anthropic",
     recommended: true,
     models: [
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
@@ -185,15 +187,9 @@ export const BUILD_MODE_PROVIDERS: BuildModeProvider[] = [
 ];
 
 // =============================================================================
-// User Info/Persona Constants
+// User Info Constants
 // =============================================================================
 
-export interface PersonaInfo {
-  name: string;
-  email: string;
-}
-
-// Work area enum - derived from PERSONA_MAPPING keys
 export enum WorkArea {
   ENGINEERING = "engineering",
   PRODUCT = "product",
@@ -203,77 +199,10 @@ export enum WorkArea {
   OTHER = "other",
 }
 
-// Level enum - derived from PERSONA_MAPPING structure
 export enum Level {
   IC = "ic",
   MANAGER = "manager",
 }
-
-// Persona mapping: work_area -> level -> PersonaInfo
-// Matches backend/onyx/server/features/build/sandbox/util/persona_mapping.py
-// This is the source of truth for work areas and levels
-export const PERSONA_MAPPING: Record<WorkArea, Record<Level, PersonaInfo>> = {
-  [WorkArea.ENGINEERING]: {
-    [Level.IC]: {
-      name: "Jiwon Kang",
-      email: "jiwon_kang@netherite-extraction.onyx.app",
-    },
-    [Level.MANAGER]: {
-      name: "Javier Morales",
-      email: "javier_morales@netherite-extraction.onyx.app",
-    },
-  },
-  [WorkArea.SALES]: {
-    [Level.IC]: {
-      name: "Megan Foster",
-      email: "megan_foster@netherite-extraction.onyx.app",
-    },
-    [Level.MANAGER]: {
-      name: "Valeria Cruz",
-      email: "valeria_cruz@netherite-extraction.onyx.app",
-    },
-  },
-  [WorkArea.PRODUCT]: {
-    [Level.IC]: {
-      name: "Michael Anderson",
-      email: "michael_anderson@netherite-extraction.onyx.app",
-    },
-    [Level.MANAGER]: {
-      name: "David Liu",
-      email: "david_liu@netherite-extraction.onyx.app",
-    },
-  },
-  [WorkArea.MARKETING]: {
-    [Level.IC]: {
-      name: "Rahul Patel",
-      email: "rahul_patel@netherite-extraction.onyx.app",
-    },
-    [Level.MANAGER]: {
-      name: "Olivia Reed",
-      email: "olivia_reed@netherite-extraction.onyx.app",
-    },
-  },
-  [WorkArea.EXECUTIVE]: {
-    [Level.IC]: {
-      name: "Sarah Mitchell",
-      email: "sarah_mitchell@netherite-extraction.onyx.app",
-    },
-    [Level.MANAGER]: {
-      name: "Sarah Mitchell",
-      email: "sarah_mitchell@netherite-extraction.onyx.app",
-    },
-  },
-  [WorkArea.OTHER]: {
-    [Level.MANAGER]: {
-      name: "Ralf Schroeder",
-      email: "ralf_schroeder@netherite-extraction.onyx.app",
-    },
-    [Level.IC]: {
-      name: "John Carpenter",
-      email: "john_carpenter@netherite-extraction.onyx.app",
-    },
-  },
-};
 
 // Helper to capitalize first letter
 const capitalize = (str: string): string => {
@@ -301,43 +230,6 @@ export const WORK_AREAS_REQUIRING_LEVEL: WorkArea[] = [
   WorkArea.MARKETING,
   WorkArea.OTHER,
 ];
-
-// Helper function to get persona info
-export function getPersonaInfo(
-  workArea: WorkArea,
-  level: Level
-): PersonaInfo | undefined {
-  return PERSONA_MAPPING[workArea]?.[level];
-}
-
-// Company name for demo personas
-export const DEMO_COMPANY_NAME = "Netherite Extraction Inc.";
-
-// Helper function to get position text from work area and level
-// Executive: "Executive" (no level), Other: "employee", Everything else: show level if available
-export function getPositionText(
-  workArea: WorkArea,
-  level: Level | undefined
-): string {
-  const workAreaLabel =
-    WORK_AREA_OPTIONS.find((opt) => opt.value === workArea)?.label || workArea;
-
-  if (workArea === WorkArea.OTHER) {
-    return "Employee";
-  }
-
-  if (workArea === WorkArea.EXECUTIVE) {
-    return "Executive";
-  }
-
-  if (level) {
-    const levelLabel =
-      LEVEL_OPTIONS.find((opt) => opt.value === level)?.label || level;
-    return `${workAreaLabel} ${levelLabel}`;
-  }
-
-  return workAreaLabel;
-}
 
 export const BUILD_USER_PERSONA_COOKIE_NAME = "build_user_persona";
 

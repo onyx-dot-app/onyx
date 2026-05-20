@@ -18,22 +18,18 @@ depends_on: None = None
 def upgrade() -> None:
     # Some documents may lose their tags but this is the only way as the enum
     # mapping may have changed since tag switched to string (it will be reindexed anyway)
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM document__tag
         WHERE tag_id IN (
             SELECT id FROM tag
             WHERE source ~ '^[0-9]+$'
         )
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM tag
         WHERE source ~ '^[0-9]+$'
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

@@ -150,7 +150,7 @@ class ChatLoadTester:
                     parent_message_id = metrics.total_tokens  # Simplified for example
 
             except Exception as e:
-                logger.error(f"Error in chat session: {e}")
+                logger.error("Error in chat session: %s", e)
 
     async def run_load_test(self) -> None:
         """Run multiple concurrent chat sessions"""
@@ -164,10 +164,10 @@ class ChatLoadTester:
     def print_results(self, total_time: float) -> None:
         """Print load test results and metrics"""
         logger.info("\n=== Load Test Results ===")
-        logger.info(f"Total Time: {total_time:.2f} seconds")
-        logger.info(f"Concurrent Sessions: {self.num_concurrent}")
-        logger.info(f"Messages per Session: {self.messages_per_session}")
-        logger.info(f"Total Messages: {len(self.metrics)}")
+        logger.info("Total Time: %s seconds", format(total_time, ".2f"))
+        logger.info("Concurrent Sessions: %s", self.num_concurrent)
+        logger.info("Messages per Session: %s", self.messages_per_session)
+        logger.info("Total Messages: %s", len(self.metrics))
 
         if self.metrics:
             avg_response_time = statistics.mean(m.total_time for m in self.metrics)
@@ -179,10 +179,17 @@ class ChatLoadTester:
                 m.tokens_per_second for m in self.metrics
             )
 
-            logger.info(f"\nAverage Response Time: {avg_response_time:.2f} seconds")
-            logger.info(f"Average Time to Documents: {avg_first_doc:.2f} seconds")
-            logger.info(f"Average Time to First Answer: {avg_first_answer:.2f} seconds")
-            logger.info(f"Average Tokens/Second: {avg_tokens_per_sec:.2f}")
+            logger.info(
+                "\nAverage Response Time: %s seconds", format(avg_response_time, ".2f")
+            )
+            logger.info(
+                "Average Time to Documents: %s seconds", format(avg_first_doc, ".2f")
+            )
+            logger.info(
+                "Average Time to First Answer: %s seconds",
+                format(avg_first_answer, ".2f"),
+            )
+            logger.info("Average Tokens/Second: %s", format(avg_tokens_per_sec, ".2f"))
 
 
 def main() -> None:

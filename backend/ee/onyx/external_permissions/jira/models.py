@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-
 Holder = dict[str, Any]
 
 

@@ -6,26 +6,23 @@ import os
 os.environ["MULTI_TENANT"] = "True"
 
 if True:  # noqa: E402
-    import csv
     import argparse
+    import csv
+    import heapq
 
     from pydantic import BaseModel
     from sqlalchemy import func
 
-    from onyx.db.engine.sql_engine import (
-        SYNC_DB_API,
-        USE_IAM_AUTH,
-        build_connection_string,
-    )
-    from onyx.db.engine.tenant_utils import get_all_tenant_ids
+    from onyx.db.engine.sql_engine import build_connection_string
     from onyx.db.engine.sql_engine import get_session_with_tenant
     from onyx.db.engine.sql_engine import SqlEngine
+    from onyx.db.engine.sql_engine import SYNC_DB_API
+    from onyx.db.engine.sql_engine import USE_IAM_AUTH
+    from onyx.db.engine.tenant_utils import get_all_tenant_ids
     from onyx.db.models import Document
     from onyx.db.models import User
     from onyx.utils.logger import setup_logger
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-    import heapq
 
     logger = setup_logger()
 
@@ -49,7 +46,7 @@ class SQLAlchemyDebugging:
         tenant_ids = get_all_tenant_ids()
         num_tenant_ids = len(tenant_ids)
 
-        logger.info(f"Found {num_tenant_ids} tenant id's.")
+        logger.info("Found %s tenant id's.", num_tenant_ids)
 
         num_processed = 0
         for tenant_id in tenant_ids:
@@ -84,9 +81,14 @@ class SQLAlchemyDebugging:
                     total_chunks = total_chunks or 0
 
                     logger.info(
-                        f"{num_processed} of {num_tenant_ids}: Tenant '{tenant_id}': "
-                        f"first_email={first_email} user_count={user_count} "
-                        f"docs={total_documents} chunks={total_chunks}"
+                        "%s of %s: Tenant '%s': first_email=%s user_count=%s docs=%s chunks=%s",
+                        num_processed,
+                        num_tenant_ids,
+                        tenant_id,
+                        first_email,
+                        user_count,
+                        total_documents,
+                        total_chunks,
                     )
 
                 tenants_to_total_chunks[tenant_id] = TenantMetadata(
@@ -96,7 +98,7 @@ class SQLAlchemyDebugging:
                     num_chunks=total_chunks,
                 )
             except Exception as e:
-                logger.error(f"Error processing tenant '{tenant_id}': {e}")
+                logger.error("Error processing tenant '%s': %s", tenant_id, e)
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -123,14 +125,14 @@ class SQLAlchemyDebugging:
                         metadata.num_chunks,
                     ]
                 )
-            logger.info(f"Successfully wrote statistics to {filename}")
+            logger.info("Successfully wrote statistics to %s", filename)
 
         # output top k by chunks
         top_k_tenants = heapq.nlargest(
             k, tenants_to_total_chunks.items(), key=lambda x: x[1].num_docs
         )
 
-        logger.info(f"Top {k} tenants by total chunks: {top_k_tenants}")
+        logger.info("Top %s tenants by total chunks: %s", k, top_k_tenants)
 
 
 def main() -> None:
@@ -153,7 +155,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    logger.info(f"{args}")
+    logger.info("%s", args)
 
     connection_string = build_connection_string(
         db_api=SYNC_DB_API,

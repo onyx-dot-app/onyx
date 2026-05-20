@@ -1,4 +1,5 @@
-import email
+import email.header
+import email.utils
 from datetime import datetime
 from email.message import Message
 from enum import Enum

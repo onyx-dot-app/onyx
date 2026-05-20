@@ -199,7 +199,10 @@ if __name__ == "__main__":
     print(f"Scopes Supported: {scopes_supported}")
 
     # Apply middleware at the parent app so it wraps mounted sub-apps too
-    app.add_middleware(WWWAuthenticateMiddleware, protected_prefixes=["/mcp", "/sse"])
+    app.add_middleware(
+        WWWAuthenticateMiddleware,  # ty: ignore[invalid-argument-type]
+        protected_prefixes=["/mcp", "/sse"],
+    )
 
     # 3) Mount MCP apps
     # Streamable HTTP transport (recommended for modern MCP clients)

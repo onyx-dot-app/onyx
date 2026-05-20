@@ -2,16 +2,17 @@ from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
+from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import get_query_embedding
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import find_tags
@@ -39,7 +40,7 @@ def admin_search(
     tenant_id = get_current_tenant_id()
 
     query = question.query
-    logger.notice(f"Received admin search query: {query}")
+    logger.notice("Received admin search query: %s", query)
     user_acl_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(
@@ -57,9 +58,13 @@ def admin_search(
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)
     else:
-        query_embedding = get_query_embedding(query, db_session)
-        matching_chunks = document_index.admin_retrieval(
-            query=query, query_embedding=query_embedding, filters=final_filters
+        matching_chunks = document_index.keyword_retrieval(
+            query=query,
+            filters=final_filters,
+            num_to_retrieve=NUM_RETURNED_HITS,
+            # Admin search should expose hidden documents so admins can inspect
+            # / unhide them.
+            include_hidden=True,
         )
 
     documents = SearchDoc.from_chunks_or_sections(matching_chunks)
@@ -81,7 +86,7 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(current_user),
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:

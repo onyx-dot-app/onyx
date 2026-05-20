@@ -1,5 +1,4 @@
 import type { HTMLAttributes } from "react";
-
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
@@ -46,10 +45,9 @@ type TextColor =
   | "text-dark-03"
   | "text-dark-05";
 
-interface TextProps
-  extends WithoutStyles<
-    Omit<HTMLAttributes<HTMLElement>, "color" | "children">
-  > {
+interface TextProps extends WithoutStyles<
+  Omit<HTMLAttributes<HTMLElement>, "color" | "children">
+> {
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 

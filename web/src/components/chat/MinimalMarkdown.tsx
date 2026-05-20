@@ -11,7 +11,8 @@ import rehypeHighlight from "rehype-highlight";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { cn, transformLinkUri } from "@/lib/utils";
+import { transformLinkUri } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
 
@@ -56,14 +57,14 @@ export default function MinimalMarkdown({
 
     return {
       ...defaults,
-      ...(components ?? {}),
+      ...components,
     } satisfies Components;
   }, [content, components, showHeader]);
 
   return (
     <ReactMarkdown
       className={cn(
-        "prose dark:prose-invert max-w-full text-sm break-words",
+        "prose dark:prose-invert max-w-full text-sm wrap-break-word",
         className
       )}
       components={markdownComponents}

@@ -1,3 +1,4 @@
+import time
 from collections.abc import Generator
 from collections.abc import Iterator
 from collections.abc import Sequence
@@ -14,9 +15,7 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import ConnectorCheckpoint
@@ -30,8 +29,9 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.metrics.pruning_metrics import inc_pruning_rate_limit_error
+from onyx.server.metrics.pruning_metrics import observe_pruning_enumeration_duration
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -120,7 +120,7 @@ def _extract_from_batch(
             if failed_id:
                 ids[failed_id] = None
             logger.warning(
-                f"Failed to retrieve document {failed_id}: {item.failure_message}"
+                "Failed to retrieve document %s: %s", failed_id, item.failure_message
             )
         else:
             ids[item.id] = item.parent_hierarchy_raw_node_id
@@ -130,6 +130,7 @@ def _extract_from_batch(
 def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
     callback: IndexingHeartbeatInterface | None = None,
+    connector_type: str = "unknown",
 ) -> SlimConnectorExtractionResult:
     """
     Extract document IDs and hierarchy nodes from a runnable connector.
@@ -179,21 +180,38 @@ def extract_ids_from_runnable_connector(
     )
 
     # process raw batches to extract both IDs and hierarchy nodes
-    for doc_list in raw_batch_generator:
-        if callback and callback.should_stop():
-            raise RuntimeError(
-                "extract_ids_from_runnable_connector: Stop signal detected"
-            )
+    enumeration_start = time.monotonic()
+    try:
+        for doc_list in raw_batch_generator:
+            if callback and callback.should_stop():
+                raise RuntimeError(
+                    "extract_ids_from_runnable_connector: Stop signal detected"
+                )
 
-        batch_result = _extract_from_batch(doc_list)
-        batch_ids = batch_result.raw_id_to_parent
-        batch_nodes = batch_result.hierarchy_nodes
-        doc_batch_processing_func(batch_ids)
-        all_raw_id_to_parent.update(batch_ids)
-        all_hierarchy_nodes.extend(batch_nodes)
+            batch_result = _extract_from_batch(doc_list)
+            batch_ids = batch_result.raw_id_to_parent
+            batch_nodes = batch_result.hierarchy_nodes
+            doc_batch_processing_func(batch_ids)
+            all_raw_id_to_parent.update(batch_ids)
+            all_hierarchy_nodes.extend(batch_nodes)
 
-        if callback:
-            callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+            if callback:
+                callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
+    except Exception as e:
+        # Best-effort rate limit detection via string matching.
+        # Connectors surface rate limits inconsistently — some raise HTTP 429,
+        # some use SDK-specific exceptions (e.g. google.api_core.exceptions.ResourceExhausted)
+        # that may or may not include "rate limit" or "429" in the message.
+        # TODO(Bo): replace with a standard ConnectorRateLimitError exception that all
+        # connectors raise when rate limited, making this check precise.
+        error_str = str(e)
+        if "rate limit" in error_str.lower() or "429" in error_str:
+            inc_pruning_rate_limit_error(connector_type)
+        raise
+    finally:
+        observe_pruning_enumeration_duration(
+            time.monotonic() - enumeration_start, connector_type
+        )
 
     return SlimConnectorExtractionResult(
         raw_id_to_parent=all_raw_id_to_parent,
@@ -262,4 +280,4 @@ def make_probe_path(probe: str, hostname: str) -> Path:
         raise ValueError(f"name cannot be empty! {name=}")
 
     safe_name = "".join(c for c in name if c.isalnum()).rstrip()
-    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")
+    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")  # noqa: S108 — k8s probe file, name sanitized above

@@ -6,6 +6,8 @@ from typing import Optional
 import braintrust
 from braintrust import NOOP_SPAN
 
+from onyx.llm.cost import calculate_llm_cost_cents
+
 from .framework.processor_interface import TracingProcessor
 from .framework.span_data import AgentSpanData
 from .framework.span_data import FunctionSpanData
@@ -13,7 +15,6 @@ from .framework.span_data import GenerationSpanData
 from .framework.span_data import SpanData
 from .framework.spans import Span
 from .framework.traces import Trace
-from onyx.llm.cost import calculate_llm_cost_cents
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:

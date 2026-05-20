@@ -6,6 +6,7 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import llm_response_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING_REMINDER
 from onyx.prompts.chat_prompts import CHAT_NAMING_SYSTEM_PROMPT
+from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
@@ -37,7 +38,9 @@ def generate_chat_session_name(
 
     # Call LLM with Braintrust tracing
     with llm_generation_span(
-        llm=llm, flow="chat_session_naming", input_messages=llm_facing_history
+        llm=llm,
+        flow=LLMFlow.CHAT_SESSION_NAMING,
+        input_messages=llm_facing_history,
     ) as span_generation:
         response = llm.invoke(llm_facing_history, reasoning_effort=ReasoningEffort.OFF)
         record_llm_response(span_generation, response)

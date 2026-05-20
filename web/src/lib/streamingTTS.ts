@@ -53,18 +53,17 @@ export class HTTPStreamingTTSPlayer {
     // Create abort controller for this request
     this.abortController = new AbortController();
 
-    // Build URL with query params
-    const params = new URLSearchParams();
-    params.set("text", text);
-    if (voice) params.set("voice", voice);
-    params.set("speed", speed.toString());
-
-    const url = `${this.getAPIUrl()}?${params}`;
+    const url = this.getAPIUrl();
+    const body = JSON.stringify({
+      text,
+      ...(voice && { voice }),
+      speed,
+    });
 
     // Check if MediaSource is supported
     if (!window.MediaSource || !MediaSource.isTypeSupported("audio/mpeg")) {
       // Fallback to simple buffered playback
-      return this.fallbackSpeak(url);
+      return this.fallbackSpeak(url, body);
     }
 
     // Create MediaSource and audio element
@@ -129,15 +128,21 @@ export class HTTPStreamingTTSPlayer {
     try {
       const response = await fetch(url, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
         signal: this.abortController.signal,
-        credentials: "include", // Include cookies for authentication
+        credentials: "include",
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `TTS request failed: ${response.status} - ${errorText}`
-        );
+        let message = `TTS request failed (${response.status})`;
+        try {
+          const errorJson = await response.json();
+          if (errorJson.detail) message = errorJson.detail;
+        } catch {
+          // response wasn't JSON — use status text
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
@@ -242,16 +247,24 @@ export class HTTPStreamingTTSPlayer {
    * Fallback for browsers that don't support MediaSource Extensions.
    * Buffers all audio before playing.
    */
-  private async fallbackSpeak(url: string): Promise<void> {
+  private async fallbackSpeak(url: string, body: string): Promise<void> {
     const response = await fetch(url, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
       signal: this.abortController?.signal,
-      credentials: "include", // Include cookies for authentication
+      credentials: "include",
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`TTS request failed: ${response.status} - ${errorText}`);
+      let message = `TTS request failed (${response.status})`;
+      try {
+        const errorJson = await response.json();
+        if (errorJson.detail) message = errorJson.detail;
+      } catch {
+        // response wasn't JSON — use status text
+      }
+      throw new Error(message);
     }
 
     const audioData = await response.arrayBuffer();

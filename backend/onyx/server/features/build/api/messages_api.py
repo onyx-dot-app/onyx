@@ -9,10 +9,11 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.features.build.api.models import MessageListResponse
 from onyx.server.features.build.api.models import MessageRequest
@@ -30,7 +31,7 @@ router = APIRouter()
 
 
 def check_build_rate_limits(
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     """
@@ -53,7 +54,7 @@ def check_build_rate_limits(
 @router.get("/sessions/{session_id}/messages", tags=PUBLIC_API_TAGS)
 def list_messages(
     session_id: UUID,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MessageListResponse:
     """Get all messages for a build session."""
@@ -73,7 +74,7 @@ def list_messages(
 def send_message(
     session_id: UUID,
     request: MessageRequest,
-    user: User = Depends(current_user),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     _rate_limit_check: None = Depends(check_build_rate_limits),
 ) -> StreamingResponse:
     """
@@ -98,17 +99,34 @@ def send_message(
         # after the endpoint returns due to dependency cleanup)
         user_id = user.id
         message_content = request.content
+        events_yielded = 0
 
-        with get_session_with_current_tenant() as db_session:
-            # Update sandbox heartbeat - this is the only place we track activity
-            # for determining when a sandbox should be put to sleep
-            sandbox = get_sandbox_by_user_id(db_session, user.id)
-            if sandbox and sandbox.status.is_active():
-                update_sandbox_heartbeat(db_session, sandbox.id)
+        try:
+            with get_session_with_current_tenant() as db_session:
+                # Update sandbox heartbeat - this is the only place we track activity
+                # for determining when a sandbox should be put to sleep
+                sandbox = get_sandbox_by_user_id(db_session, user.id)
+                if sandbox and sandbox.status.is_active():
+                    update_sandbox_heartbeat(db_session, sandbox.id)
 
-            session_manager = SessionManager(db_session)
-            yield from session_manager.send_message(
-                session_id, user_id, message_content
+                session_manager = SessionManager(db_session)
+                for chunk in session_manager.send_message(
+                    session_id, user_id, message_content
+                ):
+                    events_yielded += 1
+                    yield chunk
+        except GeneratorExit:
+            logger.warning(
+                "Stream disconnected for session %s after %d events "
+                "(client likely closed connection)",
+                session_id,
+                events_yielded,
+            )
+        except Exception:
+            logger.exception(
+                "Stream error for session %s after %d events",
+                session_id,
+                events_yielded,
             )
 
     # Stream the CLI agent's response

@@ -83,7 +83,9 @@ class OnyxDBCredentialsProvider(
                         f"No credential found: credential={self._credential_id}"
                     )
 
-                credential.credential_json = credential_json  # type: ignore[assignment]
+                credential.credential_json = (  # ty: ignore[invalid-assignment]
+                    credential_json
+                )
                 db_session.commit()
             except Exception:
                 db_session.rollback()

@@ -1,6 +1,7 @@
 """Database operations for Build Mode sessions."""
 
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
@@ -31,7 +33,7 @@ def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
-    demo_data_enabled: bool = True,
+    origin: SessionOrigin = SessionOrigin.INTERACTIVE,
 ) -> BuildSession:
     """Create a new build session for the given user.
 
@@ -42,19 +44,24 @@ def create_build_session__no_commit(
         user_id: The user ID
         db_session: Database session
         name: Optional session name
-        demo_data_enabled: Whether this session uses demo data (default True)
+        origin: How the session was started. Defaults to INTERACTIVE
+            (user-driven via the Craft UI); the scheduled-tasks executor
+            passes SCHEDULED so the row is filtered out of the sidebar.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
-        demo_data_enabled=demo_data_enabled,
+        origin=origin,
     )
     db_session.add(session)
     db_session.flush()
 
     logger.info(
-        f"Created build session {session.id} for user {user_id} (demo_data={demo_data_enabled})"
+        "Created build session %s for user %s (origin=%s)",
+        session.id,
+        user_id,
+        origin.value,
     )
     return session
 
@@ -80,9 +87,13 @@ def get_user_build_sessions(
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
-    """Get all build sessions for a user that have at least one message.
+    """Get a user's interactive build sessions that have at least one message.
 
-    Excludes empty (pre-provisioned) sessions from the listing.
+    Sessions created by non-interactive callers (e.g. the scheduled-tasks
+    executor) are intentionally excluded from this listing so they don't
+    leak into the Craft sidebar. The covering composite index
+    ``ix_build_session_user_origin_created`` is built for this exact query
+    shape: ``(user_id, origin, created_at DESC)``.
     """
     # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
@@ -91,6 +102,7 @@ def get_user_build_sessions(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             has_messages,  # Only sessions with messages
         )
         .order_by(desc(BuildSession.created_at))
@@ -102,30 +114,21 @@ def get_user_build_sessions(
 def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
-    demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        demo_data_enabled: Match sessions with this demo_data setting.
-                          If None, matches any session regardless of setting.
     """
-    # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
-    query = db_session.query(BuildSession).filter(
-        BuildSession.user_id == user_id,
-        ~has_messages,  # Sessions with no messages only
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            ~has_messages,
+        )
+        .first()
     )
-
-    if demo_data_enabled is not None:
-        query = query.filter(BuildSession.demo_data_enabled == demo_data_enabled)
-
-    return query.first()
 
 
 def update_session_activity(
@@ -139,7 +142,7 @@ def update_session_activity(
         .one_or_none()
     )
     if session:
-        session.last_activity_at = datetime.utcnow()
+        session.last_activity_at = datetime.now(tz=timezone.utc)
         db_session.commit()
 
 
@@ -157,7 +160,7 @@ def update_session_status(
     if session:
         session.status = status
         db_session.commit()
-        logger.info(f"Updated build session {session_id} status to {status}")
+        logger.info("Updated build session %s status to %s", session_id, status)
 
 
 def set_build_session_sharing_scope(
@@ -176,7 +179,7 @@ def set_build_session_sharing_scope(
         return None
     session.sharing_scope = sharing_scope
     db_session.commit()
-    logger.info(f"Set build session {session_id} sharing_scope={sharing_scope}")
+    logger.info("Set build session %s sharing_scope=%s", session_id, sharing_scope)
     return session
 
 
@@ -196,7 +199,7 @@ def delete_build_session__no_commit(
 
     db_session.delete(session)
     db_session.flush()
-    logger.info(f"Deleted build session {session_id}")
+    logger.info("Deleted build session %s", session_id)
     return True
 
 
@@ -217,9 +220,9 @@ def update_sandbox_status(
         sandbox.status = status
         if container_id is not None:
             sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.utcnow()
+        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
-        logger.info(f"Updated sandbox {sandbox_id} status to {status}")
+        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -229,7 +232,7 @@ def update_sandbox_heartbeat(
     """Update the heartbeat timestamp for a sandbox."""
     sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
     if sandbox:
-        sandbox.last_heartbeat = datetime.utcnow()
+        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
         db_session.commit()
 
 
@@ -252,7 +255,7 @@ def create_artifact(
     db_session.commit()
     db_session.refresh(artifact)
 
-    logger.info(f"Created artifact {artifact.id} for session {session_id}")
+    logger.info("Created artifact %s for session %s", artifact.id, session_id)
     return artifact
 
 
@@ -284,9 +287,9 @@ def update_artifact(
             artifact.path = path
         if name is not None:
             artifact.name = name
-        artifact.updated_at = datetime.utcnow()
+        artifact.updated_at = datetime.now(tz=timezone.utc)
         db_session.commit()
-        logger.info(f"Updated artifact {artifact_id}")
+        logger.info("Updated artifact %s", artifact_id)
 
 
 # Message operations
@@ -319,8 +322,12 @@ def create_message(
     db_session.refresh(message)
 
     logger.info(
-        f"Created {message_type.value} message {message.id} for session {session_id} "
-        f"turn={turn_index} type={message_metadata.get('type')}"
+        "Created %s message %s for session %s turn=%s type=%s",
+        message_type.value,
+        message.id,
+        session_id,
+        turn_index,
+        message_metadata.get("type"),
     )
     return message
 
@@ -353,7 +360,7 @@ def update_message(
     db_session.refresh(message)
 
     logger.info(
-        f"Updated message {message_id} metadata type={message_metadata.get('type')}"
+        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
     )
     return message
 
@@ -402,7 +409,9 @@ def upsert_agent_plan(
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(
-            f"Updated agent_plan_update message {existing_plan.id} for session {session_id}"
+            "Updated agent_plan_update message %s for session %s",
+            existing_plan.id,
+            session_id,
         )
         return existing_plan
 
@@ -437,16 +446,16 @@ def _is_port_available(port: int) -> bool:
     """
     import socket
 
-    logger.debug(f"Checking if port {port} is available")
+    logger.debug("Checking if port %s is available", port)
 
     # Check IPv4 wildcard (0.0.0.0) - this will detect any IPv4 listener
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("0.0.0.0", port))
-            logger.debug(f"Port {port} IPv4 wildcard bind successful")
+            sock.bind(("0.0.0.0", port))  # noqa: S104 — port availability probe; binds wildcard to detect any listener
+            logger.debug("Port %s IPv4 wildcard bind successful", port)
     except OSError as e:
-        logger.debug(f"Port {port} IPv4 wildcard not available: {e}")
+        logger.debug("Port %s IPv4 wildcard not available: %s", port, e)
         return False
 
     # Check IPv6 wildcard (::) - this will detect any IPv6 listener
@@ -456,12 +465,12 @@ def _is_port_available(port: int) -> bool:
             # IPV6_V6ONLY must be False to allow dual-stack behavior
             sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
             sock.bind(("::", port))
-            logger.debug(f"Port {port} IPv6 wildcard bind successful")
+            logger.debug("Port %s IPv6 wildcard bind successful", port)
     except OSError as e:
-        logger.debug(f"Port {port} IPv6 wildcard not available: {e}")
+        logger.debug("Port %s IPv6 wildcard not available: %s", port, e)
         return False
 
-    logger.debug(f"Port {port} is available")
+    logger.debug("Port %s is available", port)
     return True
 
 
@@ -522,7 +531,7 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
         .update({BuildSession.status: BuildSessionStatus.IDLE})
     )
     db_session.flush()
-    logger.info(f"Marked {result} sessions as IDLE for user {user_id}")
+    logger.info("Marked %s sessions as IDLE for user %s", result, user_id)
     return result
 
 
@@ -547,7 +556,7 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
         .update({BuildSession.nextjs_port: None})
     )
     db_session.flush()
-    logger.info(f"Cleared {result} nextjs_port allocations for user {user_id}")
+    logger.info("Cleared %s nextjs_port allocations for user %s", result, user_id)
     return result
 
 

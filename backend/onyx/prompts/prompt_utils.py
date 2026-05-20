@@ -16,7 +16,6 @@ from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -158,7 +157,7 @@ def get_company_context() -> str | None:
             )
         return prompt_str
     except Exception as e:
-        logger.error(f"Error handling company awareness: {e}")
+        logger.error("Error handling company awareness: %s", e)
         return None
 
 
@@ -166,7 +165,6 @@ def get_company_context() -> str | None:
 # If not on the list, uses the original but slightly cleaned up, see below
 CONNECTOR_NAME_MAP = {
     "web": "Website",
-    "requesttracker": "Request Tracker",
     "github": "GitHub",
     "file": "File Upload",
 }
@@ -227,7 +225,9 @@ def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
 
     if last_ind >= len(lst):
         logger.error(
-            f"Last message alone is too large! max_prompt_tokens: {max_prompt_tokens}, message_token_counts: {lst}"
+            "Last message alone is too large! max_prompt_tokens: %s, message_token_counts: %s",
+            max_prompt_tokens,
+            lst,
         )
         raise ValueError("Last message alone is too large!")
 

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import React from "react";
 import Text from "../texts/Text";
 import {
@@ -50,8 +50,7 @@ const FieldMessageRoot: React.FC<FieldMessageRootProps> = ({
   );
 };
 
-interface FieldMessageContentProps
-  extends React.HTMLAttributes<HTMLParagraphElement> {
+interface FieldMessageContentProps extends React.HTMLAttributes<HTMLParagraphElement> {
   children: React.ReactNode;
 }
 

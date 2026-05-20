@@ -14,8 +14,11 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.context.search.models import SearchDoc
+from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
@@ -25,7 +28,9 @@ from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
+from onyx.db.models import User
 from onyx.db.models import UserFile
+from onyx.db.persona import user_can_access_persona
 from onyx.db.projects import check_project_ownership
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -42,11 +47,11 @@ from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.tools.models import ChatFile
 from onyx.tools.models import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
-
 
 logger = setup_logger()
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
@@ -108,34 +113,47 @@ def build_file_context(
 
 def create_chat_session_from_request(
     chat_session_request: ChatSessionCreationRequest,
-    user_id: UUID | None,
+    user: User,
     db_session: Session,
 ) -> ChatSession:
     """Create a chat session from a ChatSessionCreationRequest.
 
-    Includes project ownership validation when project_id is provided.
+    Includes project ownership and persona access validation.
 
     Args:
         chat_session_request: The request containing persona_id, description, and project_id
-        user_id: The ID of the user creating the session (can be None for anonymous)
+        user: The user creating the session. Anonymous users are represented as a
+            User with is_anonymous=True (never None); the access-check helpers
+            handle that case. A real User is required so the persona access check
+            always runs — do not introduce a None-tolerant caller.
         db_session: The database session
 
     Returns:
         The newly created ChatSession
 
     Raises:
-        ValueError: If user lacks access to the specified project
+        ValueError: If user lacks access to the specified project or persona
         Exception: If the persona is invalid
     """
     project_id = chat_session_request.project_id
     if project_id:
-        if not check_project_ownership(project_id, user_id, db_session):
+        if not check_project_ownership(project_id, user.id, db_session):
             raise ValueError("User does not have access to project")
+
+    persona_id = chat_session_request.persona_id
+    if persona_id != DEFAULT_PERSONA_ID:
+        if not user_can_access_persona(
+            db_session=db_session,
+            persona_id=persona_id,
+            user=user,
+            get_editable=False,
+        ):
+            raise ValueError("User does not have access to persona")
 
     return create_chat_session(
         db_session=db_session,
         description=chat_session_request.description or "",
-        user_id=user_id,
+        user_id=user.id,
         persona_id=chat_session_request.persona_id,
         project_id=chat_session_request.project_id,
     )
@@ -145,6 +163,7 @@ def create_chat_history_chain(
     chat_session_id: UUID,
     db_session: Session,
     prefetch_top_two_level_tool_calls: bool = True,
+    prefetch_message_details: bool = False,
     # Optional id at which we finish processing
     stop_at_message_id: int | None = None,
 ) -> list[ChatMessage]:
@@ -157,6 +176,7 @@ def create_chat_history_chain(
         db_session=db_session,
         skip_permission_check=True,
         prefetch_top_two_level_tool_calls=prefetch_top_two_level_tool_calls,
+        prefetch_message_details=prefetch_message_details,
     )
 
     if not all_chat_messages:
@@ -364,7 +384,7 @@ def _get_or_extract_plaintext(
         plaintext_io = file_store.read_file(plaintext_key, mode="b")
         return plaintext_io.read().decode("utf-8")
     except Exception:
-        logger.exception(f"Error when reading file, id={file_id}")
+        logger.info("Cache miss for file with id=%s", file_id)
 
     # Cache miss — extract and store.
     content_text = extract_fn()
@@ -406,7 +426,9 @@ def load_chat_file(
             content_text = _get_or_extract_plaintext(cache_key, _extract)
         except Exception as e:
             logger.warning(
-                f"Failed to retrieve content for file {file_descriptor['id']}: {str(e)}"
+                "Failed to retrieve content for file %s: %s",
+                file_descriptor["id"],
+                str(e),
             )
 
     # Get token count from UserFile if available
@@ -422,7 +444,7 @@ def load_chat_file(
                 token_count = user_file.token_count
         except (ValueError, TypeError) as e:
             logger.warning(
-                f"Failed to get token count for file {file_descriptor['id']}: {e}"
+                "Failed to get token count for file %s: %s", file_descriptor["id"], e
             )
 
     return ChatLoadedFile(
@@ -859,3 +881,55 @@ def create_tool_call_failure_messages(
         messages.append(failure_response_msg)
 
     return messages
+
+
+def build_python_chat_files_from_search_docs(
+    search_docs: list[SearchDoc],
+) -> list[ChatFile]:
+    """Turn each eligible search hit into a ready-to-upload `ChatFile`.
+    The associated file needs to have been uploaded to the file store
+    by a Connector.
+    """
+    if not search_docs:
+        return []
+
+    file_store = get_default_file_store()
+
+    chat_files: list[ChatFile] = []
+    seen_file_ids: set[str] = set()
+    for doc in search_docs:
+        if not doc.file_id or doc.file_id in seen_file_ids:
+            continue
+        seen_file_ids.add(doc.file_id)
+
+        try:
+            record = file_store.read_file_record(doc.file_id)
+        except Exception as e:
+            logger.warning(
+                "file_id=%r not found in file store (%s); skipping.", doc.file_id, e
+            )
+            continue
+
+        if record.file_origin not in (
+            FileOrigin.CONNECTOR,
+            FileOrigin.CONNECTOR_FILE_UPLOAD,
+        ):
+            logger.warning(
+                "file_id=%r has origin=%r, not eligible for code-interpreter staging; skipping.",
+                doc.file_id,
+                record.file_origin,
+            )
+            continue
+
+        try:
+            content = file_store.read_file(doc.file_id, mode="b").read()
+        except Exception as e:
+            logger.warning(
+                "Failed to read bytes for file_id=%r: %s; skipping.", doc.file_id, e
+            )
+            continue
+
+        filename = sandbox_filename_for_document(doc.semantic_identifier, doc.file_id)
+        chat_files.append(ChatFile(filename=filename, content=content))
+
+    return chat_files

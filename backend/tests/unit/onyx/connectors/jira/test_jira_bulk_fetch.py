@@ -6,6 +6,7 @@ import requests
 from jira import JIRA
 from jira.resources import Issue
 
+from onyx.connectors.jira.connector import _JIRA_BULK_FETCH_LIMIT
 from onyx.connectors.jira.connector import bulk_fetch_issues
 
 
@@ -145,3 +146,29 @@ def test_bulk_fetch_recursive_splitting_raises_on_bad_issue() -> None:
 
     with pytest.raises(requests.exceptions.JSONDecodeError):
         bulk_fetch_issues(client, ["1", "2", bad_id, "3", "4", "5"])
+
+
+def test_bulk_fetch_respects_api_batch_limit() -> None:
+    """Requests to the bulkfetch endpoint never exceed _JIRA_BULK_FETCH_LIMIT IDs."""
+    client = _mock_jira_client()
+    total_issues = _JIRA_BULK_FETCH_LIMIT * 3 + 7
+    all_ids = [str(i) for i in range(total_issues)]
+
+    batch_sizes: list[int] = []
+
+    def _post_side_effect(url: str, json: dict[str, Any]) -> MagicMock:  # noqa: ARG001
+        ids = json["issueIdsOrKeys"]
+        batch_sizes.append(len(ids))
+        resp = MagicMock()
+        resp.json.return_value = {"issues": [_make_raw_issue(i) for i in ids]}
+        return resp
+
+    client._session.post.side_effect = _post_side_effect
+
+    result = bulk_fetch_issues(client, all_ids)
+
+    assert len(result) == total_issues
+    # keeping this hardcoded because it's the documented limit
+    # https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/
+    assert all(size <= 100 for size in batch_sizes)
+    assert len(batch_sizes) == 4

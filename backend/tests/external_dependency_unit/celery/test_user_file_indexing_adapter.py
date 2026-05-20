@@ -157,6 +157,7 @@ class TestAdapterWritesBothMetadataFields:
             context=context,
             tenant_id=TEST_TENANT_ID,
             chunks=[chunk],
+            db_session=db_session,
         )
         aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
@@ -192,6 +193,7 @@ class TestAdapterWritesBothMetadataFields:
             context=context,
             tenant_id=TEST_TENANT_ID,
             chunks=[chunk],
+            db_session=db_session,
         )
         aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
@@ -229,6 +231,7 @@ class TestAdapterWritesBothMetadataFields:
             context=context,
             tenant_id=TEST_TENANT_ID,
             chunks=[chunk],
+            db_session=db_session,
         )
         aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
@@ -260,6 +263,7 @@ class TestAdapterWritesBothMetadataFields:
             context=context,
             tenant_id=TEST_TENANT_ID,
             chunks=[chunk],
+            db_session=db_session,
         )
         aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 
@@ -298,6 +302,7 @@ class TestAdapterWritesBothMetadataFields:
             context=context,
             tenant_id=TEST_TENANT_ID,
             chunks=[chunk],
+            db_session=db_session,
         )
         aware_chunk = enricher.enrich_chunk(chunk, 1.0)
 

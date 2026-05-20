@@ -26,7 +26,6 @@ from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 

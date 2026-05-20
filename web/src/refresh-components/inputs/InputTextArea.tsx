@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn, mergeRefs } from "@/lib/utils";
+import { mergeRefs } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import {
   innerClasses,
   textClasses,
@@ -47,8 +48,10 @@ import {
  * <InputTextArea variant="internal" value={value} onChange={handleChange} />
  * ```
  */
-export interface InputTextAreaProps
-  extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled"> {
+export interface InputTextAreaProps extends Omit<
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "disabled"
+> {
   variant?: Variants;
   autoResize?: boolean;
   maxRows?: number;
@@ -124,7 +127,7 @@ const InputTextArea = React.forwardRef<HTMLTextAreaElement, InputTextAreaProps>(
           disabled={disabled}
           readOnly={isReadOnly}
           className={cn(
-            "w-full min-w-0 flex-1 min-h-[3rem] bg-transparent focus:outline-none p-0.5",
+            "w-full min-w-0 flex-1 min-h-12 bg-transparent focus:outline-hidden p-0.5",
             resizeClass,
             innerClasses[variant],
             textClasses[variant]

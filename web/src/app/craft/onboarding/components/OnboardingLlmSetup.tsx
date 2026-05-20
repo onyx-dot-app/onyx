@@ -1,11 +1,14 @@
 "use client";
 
 import { SvgCheckCircle } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import { LLMProviderName, LLMProviderDescriptor } from "@/interfaces/llm";
+import { Tooltip } from "@opal/components";
+import {
+  LLMProviderName,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
 
 // Provider configurations
 export type ProviderKey = "anthropic" | "openai" | "openrouter";
@@ -34,7 +37,8 @@ export const PROVIDERS: ProviderConfig[] = [
     providerName: LLMProviderName.ANTHROPIC,
     recommended: true,
     models: [
-      { name: "claude-opus-4-6", label: "Claude Opus 4.6", recommended: true },
+      { name: "claude-opus-4-7", label: "Claude Opus 4.7", recommended: true },
+      { name: "claude-opus-4-6", label: "Claude Opus 4.6" },
       { name: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
     ],
     apiKeyPlaceholder: "sk-ant-...",
@@ -115,7 +119,7 @@ function SelectableButton({
   );
 
   if (tooltip) {
-    return <SimpleTooltip tooltip={tooltip}>{button}</SimpleTooltip>;
+    return <Tooltip tooltip={tooltip}>{button}</Tooltip>;
   }
 
   return button;
@@ -299,11 +303,11 @@ export default function OnboardingLlmSetup({
               onChange={(e) => handleApiKeyChange(e.target.value)}
               placeholder={currentProviderConfig.apiKeyPlaceholder}
               disabled={connectionStatus === "testing"}
-              className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-none"
+              className="w-full px-3 py-2 rounded-08 input-normal text-text-04 placeholder:text-text-02 focus:outline-hidden"
             />
           </Disabled>
           {/* Message area */}
-          <div className="min-h-[2rem] flex justify-center pt-4">
+          <div className="min-h-8 flex justify-center pt-4">
             {connectionStatus === "error" && (
               <Text secondaryBody className="text-red-500">
                 {errorMessage}

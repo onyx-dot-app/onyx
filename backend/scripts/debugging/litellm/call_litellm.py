@@ -200,7 +200,11 @@ def _pretty_print_event(event: Any) -> str:
                 if isinstance(item, dict):
                     lines.append(f"{prefix}  [{i}]:")
                     for k, v in item.items():
-                        _format_value(k, v, indent + 2)
+                        _format_value(
+                            k,  # ty: ignore[invalid-argument-type]
+                            v,
+                            indent + 2,
+                        )
                 else:
                     lines.append(f"{prefix}  [{i}]: {item}")
         else:

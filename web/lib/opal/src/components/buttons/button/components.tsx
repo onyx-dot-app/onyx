@@ -1,14 +1,11 @@
-import "@opal/components/tooltip.css";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
   RichStr,
 } from "@opal/types";
-import { Text } from "@opal/components";
-import type { TooltipSide } from "@opal/components";
+import { Text, type TooltipSide, Tooltip } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 
 // ---------------------------------------------------------------------------
@@ -98,9 +95,9 @@ function Button({
       <Interactive.Container
         type={type}
         border={interactiveProps.prominence === "secondary"}
-        heightVariant={size}
-        widthVariant={width}
-        roundingVariant={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        size={size}
+        width={width}
+        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
       >
         <div className="flex flex-row items-center gap-1">
           {iconWrapper(Icon, size, !!children)}
@@ -118,24 +115,11 @@ function Button({
     </Interactive.Stateless>
   );
 
-  if (tooltip) {
-    return (
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{button}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            className="opal-tooltip"
-            side={tooltipSide}
-            sideOffset={4}
-          >
-            {tooltip}
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    );
-  }
-
-  return button;
+  return (
+    <Tooltip tooltip={tooltip} side={tooltipSide}>
+      {button}
+    </Tooltip>
+  );
 }
 
 export { Button, type ButtonProps };

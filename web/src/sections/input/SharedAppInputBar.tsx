@@ -2,7 +2,7 @@
 
 import Text from "@/refresh-components/texts/Text";
 import { Button, OpenButton, SelectButton } from "@opal/components";
-import { OpenAISVG } from "@/components/icons/icons";
+import { SvgOpenai } from "@opal/logos";
 import {
   SvgPlusCircle,
   SvgArrowUp,
@@ -33,7 +33,7 @@ export default function SharedAppInputBar() {
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton disabled icon={OpenAISVG}>
+            <OpenButton disabled icon={SvgOpenai}>
               GPT-4o
             </OpenButton>
             <Button disabled icon={SvgArrowUp} />
@@ -42,7 +42,7 @@ export default function SharedAppInputBar() {
       </div>
 
       {/* Fade overlay */}
-      <div className="absolute inset-0 rounded-16 backdrop-blur-sm bg-background-neutral-00/50" />
+      <div className="absolute inset-0 rounded-16 backdrop-blur-xs bg-background-neutral-00/50" />
 
       {/* CTA button */}
       <div className="absolute inset-0 flex items-center justify-center">

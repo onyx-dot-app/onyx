@@ -1,15 +1,18 @@
 """Tests for generic Celery task lifecycle Prometheus metrics."""
 
+import time
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.background.celery.apps.app_base import on_before_task_publish
 from onyx.server.metrics.celery_task_metrics import _task_start_times
 from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
 from onyx.server.metrics.celery_task_metrics import on_celery_task_prerun
 from onyx.server.metrics.celery_task_metrics import TASK_COMPLETED
 from onyx.server.metrics.celery_task_metrics import TASK_DURATION
+from onyx.server.metrics.celery_task_metrics import TASK_QUEUE_WAIT
 from onyx.server.metrics.celery_task_metrics import TASK_STARTED
 from onyx.server.metrics.celery_task_metrics import TASKS_ACTIVE
 
@@ -22,11 +25,18 @@ def reset_metrics() -> Iterator[None]:
     _task_start_times.clear()
 
 
-def _make_task(name: str = "test_task", queue: str = "test_queue") -> MagicMock:
+def _make_task(
+    name: str = "test_task",
+    queue: str = "test_queue",
+    enqueued_at: float | None = None,
+) -> MagicMock:
     task = MagicMock()
     task.name = name
     task.request = MagicMock()
     task.request.delivery_info = {"routing_key": queue}
+    task.request.headers = (
+        {"enqueued_at": enqueued_at} if enqueued_at is not None else {}
+    )
     return task
 
 
@@ -71,6 +81,35 @@ class TestCeleryTaskPrerun:
         task.request.delivery_info = None
         on_celery_task_prerun("task-1", task)
         assert "task-1" in _task_start_times
+
+    def test_observes_queue_wait_when_enqueued_at_present(self) -> None:
+        enqueued_at = time.time() - 30  # simulates 30s wait
+        task = _make_task(enqueued_at=enqueued_at)
+
+        before = TASK_QUEUE_WAIT.labels(
+            task_name="test_task", queue="test_queue"
+        )._sum.get()
+
+        on_celery_task_prerun("task-1", task)
+
+        after = TASK_QUEUE_WAIT.labels(
+            task_name="test_task", queue="test_queue"
+        )._sum.get()
+        assert after >= before + 30
+
+    def test_skips_queue_wait_when_enqueued_at_missing(self) -> None:
+        task = _make_task()  # no enqueued_at in headers
+
+        before = TASK_QUEUE_WAIT.labels(
+            task_name="test_task", queue="test_queue"
+        )._sum.get()
+
+        on_celery_task_prerun("task-2", task)
+
+        after = TASK_QUEUE_WAIT.labels(
+            task_name="test_task", queue="test_queue"
+        )._sum.get()
+        assert after == before
 
 
 class TestCeleryTaskPostrun:
@@ -151,3 +190,15 @@ class TestCeleryTaskPostrun:
         task = _make_task()
         on_celery_task_postrun("task-1", task, "SUCCESS")
         # Should not raise
+
+
+class TestBeforeTaskPublish:
+    def test_stamps_enqueued_at_into_headers(self) -> None:
+        before = time.time()
+        headers: dict = {}
+        on_before_task_publish(headers=headers)
+        assert "enqueued_at" in headers
+        assert headers["enqueued_at"] >= before
+
+    def test_noop_when_headers_is_none(self) -> None:
+        on_before_task_publish(headers=None)  # should not raise

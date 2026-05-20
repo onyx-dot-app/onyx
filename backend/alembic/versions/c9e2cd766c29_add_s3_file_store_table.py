@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import cast, Any
+from typing import cast
 
 from botocore.exceptions import ClientError
 
@@ -255,7 +255,7 @@ def _migrate_files_to_external_storage() -> None:
             continue
 
         lobj_id = cast(int, file_record.lobj_oid)
-        file_metadata = cast(Any, file_record.file_metadata)
+        file_metadata = file_record.file_metadata
 
         # Read file content from PostgreSQL
         try:

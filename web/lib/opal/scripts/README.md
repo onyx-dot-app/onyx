@@ -14,21 +14,23 @@ All scripts in this directory should be run from the **opal package root** (`web
 web/lib/opal/
 ├── scripts/                          # SVG conversion tooling (this directory)
 │   ├── convert-svg.sh                # Converts SVGs into React components
-│   └── icon-template.js              # Shared SVGR template (used for both icons and illustrations)
+│   └── icon-template.js              # Shared SVGR template (used for icons, logos, and illustrations)
 ├── src/
 │   ├── icons/                        # Small, single-colour icons (stroke = currentColor)
+│   ├── logos/                        # Brand/vendor logos (original colours preserved)
 │   └── illustrations/                # Larger, multi-colour illustrations (colours preserved)
 └── package.json
 ```
 
-## Icons vs Illustrations
+## Icons vs Logos vs Illustrations
 
-| | Icons | Illustrations |
-|---|---|---|
-| **Import path** | `@opal/icons` | `@opal/illustrations` |
-| **Location** | `src/icons/` | `src/illustrations/` |
-| **Colour** | Overridable via `currentColor` | Fixed — original SVG colours preserved |
-| **Script flag** | (none) | `--illustration` |
+| | Icons | Logos | Illustrations |
+|---|---|---|---|
+| **Import path** | `@opal/icons` | `@opal/logos` | `@opal/illustrations` |
+| **Location** | `src/icons/` | `src/logos/` | `src/illustrations/` |
+| **Colour** | Overridable via `currentColor` | Fixed — original brand colours preserved | Fixed — original SVG colours preserved |
+| **Script flag** | (none) | `--logo` | `--illustration` |
+| **Use case** | UI elements, actions, navigation | Provider logos, platform logos, brand marks | Empty states, error pages, placeholders |
 
 ## Files in This Directory
 
@@ -49,12 +51,19 @@ Converts an SVG into a React component. Behaviour depends on the mode:
 - Adds `width={size}`, `height={size}`, and `stroke="currentColor"`
 - Result is colour-overridable via CSS `color` property
 
+**Logo mode** (`--logo`):
+- Strips only `width` and `height` attributes (all colours preserved)
+- Adds `width={size}` and `height={size}`
+- Does **not** add `stroke="currentColor"` — logos keep their original brand colours
+
 **Illustration mode** (`--illustration`):
 - Strips only `width` and `height` attributes (all colours preserved)
 - Adds `width={size}` and `height={size}`
 - Does **not** add `stroke="currentColor"` — illustrations keep their original colours
 
-Both modes automatically delete the source SVG file after successful conversion.
+Both `--logo` and `--illustration` produce the same output — the distinction is purely organizational (different directories, different barrel exports).
+
+All modes automatically delete the source SVG file after successful conversion.
 
 ## Adding New SVGs
 
@@ -68,6 +77,18 @@ Both modes automatically delete the source SVG file after successful conversion.
 Then add the export to `src/icons/index.ts`:
 ```ts
 export { default as SvgMyIcon } from "@opal/icons/my-icon";
+```
+
+### Logos
+
+```sh
+# From web/lib/opal/
+./scripts/convert-svg.sh --logo src/logos/my-logo.svg
+```
+
+Then add the export to `src/logos/index.ts`:
+```ts
+export { default as SvgMyLogo } from "@opal/logos/my-logo";
 ```
 
 ### Illustrations
@@ -91,7 +112,7 @@ If you prefer to run the SVGR command directly:
 bunx @svgr/cli <file>.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["stroke","stroke-opacity","width","height"]}}]}' --template scripts/icon-template.js > <file>.tsx
 ```
 
-**For illustrations** (preserves colours):
+**For logos and illustrations** (preserves colours):
 ```sh
 bunx @svgr/cli <file>.svg --typescript --svgo-config '{"plugins":[{"name":"removeAttrs","params":{"attrs":["width","height"]}}]}' --template scripts/icon-template.js > <file>.tsx
 ```

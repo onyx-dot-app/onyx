@@ -32,7 +32,6 @@ from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-
 TITLE_FIELD_NAME = "title"
 TITLE_VECTOR_FIELD_NAME = "title_vector"
 CONTENT_FIELD_NAME = "content"
@@ -106,9 +105,11 @@ def get_opensearch_doc_chunk_id(
         )
     except DocumentIDTooLongError:
         # If the document ID is too long, use a hash instead.
-        # We use blake2b because it is faster and equally secure as SHA256, and
+        # We use blake2b because it is faster and equally secure as SHA-256, and
         # accepts digest_size which controls the number of bytes returned in the
-        # hash.
+        # hash. Edit: Actually modern CPUs have good hardware acceleration
+        # specifically for SHA-256 so really blake2b is not expected to be
+        # faster in some production settings.
         # digest_size is the size of the returned hash in bytes. Since we're
         # decoding the hash bytes as a hex string, the digest_size should be
         # half the max target size of the hash string.
@@ -120,9 +121,7 @@ def get_opensearch_doc_chunk_id(
             document_id.encode("utf-8"), digest_size=digest_size
         ).hexdigest()
 
-    opensearch_doc_chunk_id: str = (
-        f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
-    )
+    opensearch_doc_chunk_id: str = f"{opensearch_doc_chunk_id_tenant_prefix}{sanitized_document_id}{opensearch_doc_chunk_id_suffix}"
 
     # Do one more validation to ensure we haven't exceeded the max length.
     opensearch_doc_chunk_id = filter_and_validate_document_id(opensearch_doc_chunk_id)

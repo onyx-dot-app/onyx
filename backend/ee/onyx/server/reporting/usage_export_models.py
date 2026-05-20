@@ -19,6 +19,11 @@ class ChatMessageSkeleton(BaseModel):
     assistant_name: str | None
     user_email: str | None
     number_of_tokens: int
+    # Display name of the LLM that generated the assistant reply this row
+    # represents. Multi-model branches produce one row per assistant child of
+    # the same user message. None when there is no assistant reply yet
+    # (orphan / errored / still streaming) or the model was never recorded.
+    llm_model: str | None
 
 
 class UserSkeleton(BaseModel):

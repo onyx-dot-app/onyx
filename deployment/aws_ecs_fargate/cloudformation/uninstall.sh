@@ -52,11 +52,9 @@ delete_stack() {
 		--region "$AWS_REGION"
 	
 	echo "Waiting for stack $stack_name to be deleted..."
-	aws cloudformation wait stack-delete-complete \
+	if aws cloudformation wait stack-delete-complete \
 		--stack-name "$stack_name" \
-		--region "$AWS_REGION"
-
-	if [ $? -eq 0 ]; then
+		--region "$AWS_REGION"; then
 		echo "Stack $stack_name deleted successfully."
 		sleep 10
 	else

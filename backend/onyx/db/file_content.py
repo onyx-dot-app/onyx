@@ -46,7 +46,7 @@ def upsert_file_content(
     db_session.execute(stmt)
 
     # Return the merged ORM instance so callers can inspect the result
-    return db_session.get(FileContent, file_id)  # type: ignore[return-value]
+    return db_session.get(FileContent, file_id)  # ty: ignore[invalid-return-type]
 
 
 def transfer_file_content_file_id(

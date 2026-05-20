@@ -135,6 +135,38 @@ class TestSyncModelConfigurations:
                     models=[SyncModelEntry(name="model", display_name="Model")],
                 )
 
+    def test_inserts_reasoning_flow_when_supports_reasoning(self) -> None:
+        """Test that a REASONING flow row is created when supports_reasoning=True."""
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = []
+
+        mock_session = MagicMock()
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+        ):
+            models = [
+                SyncModelEntry(
+                    name="deepseek-r1",
+                    display_name="DeepSeek R1",
+                    max_input_tokens=65536,
+                    supports_image_input=True,
+                    supports_reasoning=True,
+                ),
+            ]
+
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_name=LlmProviderNames.OPENAI,
+                models=models,
+            )
+
+            assert result == 1
+            # 1 model insert + 3 flow inserts (CHAT + VISION + REASONING)
+            assert mock_session.execute.call_count == 4
+            mock_session.commit.assert_called_once()
+
     def test_handles_missing_optional_fields(self) -> None:
         """Test that optional fields default correctly."""
         mock_provider = MagicMock()

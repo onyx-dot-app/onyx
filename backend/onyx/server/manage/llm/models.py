@@ -18,14 +18,18 @@ from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
 
-
 if TYPE_CHECKING:
-    from onyx.db.models import (
-        LLMProvider as LLMProviderModel,
-        ModelConfiguration as ModelConfigurationModel,
-    )
+    from onyx.db.models import LLMProvider as LLMProviderModel
+    from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 T = TypeVar("T", "LLMProviderDescriptor", "LLMProviderView", "VisionProviderResponse")
+
+
+class CustomProviderOption(BaseModel):
+    """A provider slug + human-friendly label for the custom-provider picker."""
+
+    value: str
+    label: str
 
 
 class TestLLMRequest(BaseModel):
@@ -57,7 +61,7 @@ class LLMProviderDescriptor(BaseModel):
     non-admin users. Used when giving a list of available LLMs."""
 
     id: int
-    name: str
+    name: str | None
     provider: str
     provider_display_name: str  # Human-friendly name like "Claude (Anthropic)"
     model_configurations: list["ModelConfigurationView"]
@@ -79,13 +83,15 @@ class LLMProviderDescriptor(BaseModel):
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations, provider
+                llm_provider_model.model_configurations,
+                provider,
+                use_stored_display_name=llm_provider_model.custom_config is not None,
             ),
         )
 
 
 class LLMProvider(BaseModel):
-    name: str
+    name: str | None = None
     provider: str
     api_key: str | None = None
     api_base: str | None = None
@@ -156,7 +162,9 @@ class LLMProviderView(LLMProvider):
             personas=personas,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations, provider
+                llm_provider_model.model_configurations,
+                provider,
+                use_stored_display_name=llm_provider_model.custom_config is not None,
             ),
         )
 
@@ -166,7 +174,9 @@ class ModelConfigurationUpsertRequest(BaseModel):
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool | None = None
+    supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
+    custom_display_name: str | None = None  # Admin-specified override
 
     @classmethod
     def from_model(
@@ -177,17 +187,24 @@ class ModelConfigurationUpsertRequest(BaseModel):
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
             supports_image_input=model_configuration_model.supports_image_input,
+            supports_reasoning=(
+                LLMModelFlowType.REASONING
+                in model_configuration_model.llm_model_flow_types
+            ),
             display_name=model_configuration_model.display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
         )
 
 
 class ModelConfigurationView(BaseModel):
+    id: int | None = None
     name: str
     is_visible: bool
     max_input_tokens: int | None = None
     supports_image_input: bool
     supports_reasoning: bool = False
     display_name: str | None = None
+    custom_display_name: str | None = None
     provider_display_name: str | None = None
     vendor: str | None = None
     version: str | None = None
@@ -198,19 +215,20 @@ class ModelConfigurationView(BaseModel):
         cls,
         model_configuration_model: "ModelConfigurationModel",
         provider_name: str,
+        use_stored_display_name: bool = False,
     ) -> "ModelConfigurationView":
-        # For dynamic providers (OpenRouter, Bedrock, Ollama), use the display_name
-        # stored in DB from the source API. Skip LiteLLM parsing entirely.
+        # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
+        # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (
-            provider_name in DYNAMIC_LLM_PROVIDERS
-            and model_configuration_model.display_name
-        ):
+            provider_name in DYNAMIC_LLM_PROVIDERS or use_stored_display_name
+        ) and model_configuration_model.display_name:
             # Extract vendor from model name for grouping (e.g., "Anthropic", "OpenAI")
             vendor = extract_vendor_from_model_name(
                 model_configuration_model.name, provider_name
             )
 
             return cls(
+                id=model_configuration_model.id,
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
@@ -218,12 +236,19 @@ class ModelConfigurationView(BaseModel):
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
                 ),
-                # Infer reasoning support from model name/display name
-                supports_reasoning=is_reasoning_model(
-                    model_configuration_model.name,
-                    model_configuration_model.display_name or "",
+                # Prefer the stored REASONING flow; fall back to a substring
+                # heuristic on model name/display name for legacy rows that
+                # were saved before the flow existed.
+                supports_reasoning=(
+                    LLMModelFlowType.REASONING
+                    in model_configuration_model.llm_model_flow_types
+                    or is_reasoning_model(
+                        model_configuration_model.name,
+                        model_configuration_model.display_name or "",
+                    )
                 ),
                 display_name=model_configuration_model.display_name,
+                custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
                 vendor=vendor,
                 version=None,
@@ -248,6 +273,7 @@ class ModelConfigurationView(BaseModel):
         )
 
         return cls(
+            id=model_configuration_model.id,
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=(
@@ -265,11 +291,18 @@ class ModelConfigurationView(BaseModel):
                     model_configuration_model.name, provider_name
                 )
             ),
-            supports_reasoning=model_is_reasoning_model(
-                model_configuration_model.name, provider_name
+            # Prefer the stored REASONING flow; fall back to LiteLLM-based
+            # detection for legacy rows that were saved before the flow existed.
+            supports_reasoning=(
+                LLMModelFlowType.REASONING
+                in model_configuration_model.llm_model_flow_types
+                or model_is_reasoning_model(
+                    model_configuration_model.name, provider_name
+                )
             ),
             # Populate display fields from parsed model name
             display_name=display_name,
+            custom_display_name=model_configuration_model.custom_display_name,
             provider_display_name=parsed.provider_display_name,
             vendor=parsed.vendor,
             version=parsed.version,
@@ -284,7 +317,7 @@ class VisionProviderResponse(LLMProviderView):
 
 
 class LLMCost(BaseModel):
-    provider: str
+    provider_name: str
     model_name: str
     cost: float
 
@@ -429,6 +462,7 @@ class SyncModelEntry(BaseModel):
     display_name: str
     max_input_tokens: int | None = None
     supports_image_input: bool = False
+    supports_reasoning: bool = False
 
 
 class LitellmModelsRequest(BaseModel):
@@ -438,17 +472,79 @@ class LitellmModelsRequest(BaseModel):
 
 
 class LitellmModelDetails(BaseModel):
-    """Response model for Litellm proxy /api/v1/models endpoint"""
+    """Response model for LiteLLM proxy /v1/model/info endpoint."""
 
-    id: str  # Model ID (e.g. "gpt-4o")
-    object: str  # "model"
-    created: int  # Unix timestamp in seconds
-    owned_by: str  # Provider name (e.g. "openai")
+    model_name: str
+    litellm_params: dict[str, Any] | None = None
+    model_info: dict[str, Any] | None = None
+
+    def get_custom_llm_provider(self) -> str:
+        """Returns the LiteLLM provider for this model.
+
+        Preference order:
+        1. litellm_params.custom_llm_provider (explicit override)
+        2. model_info.litellm_provider (reported by LiteLLM, e.g. "auto_router")
+        3. "" (empty string fallback)
+        """
+        if self.litellm_params:
+            provider = self.litellm_params.get("custom_llm_provider", "")
+            if provider:
+                return provider
+
+        if self.model_info:
+            provider = self.model_info.get("litellm_provider", "")
+            if provider:
+                return provider
+
+        return ""
+
+    def get_litellm_params_model(self) -> str:
+        """Returns .litellm_params.model if available, otherwise falls back to
+        model_name."""
+        if self.litellm_params:
+            litellm_params_model = self.litellm_params.get("model")
+            if litellm_params_model:
+                return litellm_params_model
+
+        return self.model_name
+
+    def get_max_input_tokens(self) -> int | None:
+        if not self.model_info:
+            return None
+
+        # Prefer max_input_tokens, fall back to max_tokens.
+        for key in ("max_input_tokens", "max_tokens"):
+            value = self.model_info.get(key)
+
+            # bool is a subclass of int — exclude explicitly.
+            if isinstance(value, bool):
+                continue
+
+            if isinstance(value, int) and value > 0:
+                return value
+
+        return None
+
+    def supports_image_input(self) -> bool:
+        return self._supports_feature("supports_vision")
+
+    def supports_reasoning(self) -> bool:
+        return self._supports_feature("supports_reasoning")
+
+    def _supports_feature(self, feature_name: str) -> bool:
+        if not self.model_info:
+            return False
+
+        return bool(self.model_info.get(feature_name, False))
 
 
 class LitellmFinalModelResponse(BaseModel):
     provider_name: str  # Provider name (e.g. "openai")
-    model_name: str  # Model ID (e.g. "gpt-4o")
+    model_name: str  # Public Model Name
+    litellm_params_model: str  # LiteLLM Model Name
+    max_input_tokens: int | None = None
+    supports_image_input: bool = False
+    supports_reasoning: bool = False
 
 
 # Bifrost dynamic models fetch
@@ -461,6 +557,21 @@ class BifrostModelsRequest(BaseModel):
 class BifrostFinalModelResponse(BaseModel):
     name: str  # Model ID in provider/model format (e.g. "anthropic/claude-sonnet-4-6")
     display_name: str  # Human-readable name from Bifrost API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# OpenAI Compatible dynamic models fetch
+class OpenAICompatibleModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider
+
+
+class OpenAICompatibleFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "meta-llama/Llama-3-8B-Instruct")
+    display_name: str  # Human-readable name from API
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool

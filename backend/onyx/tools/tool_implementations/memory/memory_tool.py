@@ -27,7 +27,6 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -137,7 +136,7 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        logger.info(f"New memory to be added: {memory_text}")
+        logger.info("New memory to be added: %s", memory_text)
 
         operation: Literal["add", "update"] = (
             "update" if index_to_replace is not None else "add"

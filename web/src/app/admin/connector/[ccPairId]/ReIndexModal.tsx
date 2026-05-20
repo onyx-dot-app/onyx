@@ -1,12 +1,11 @@
 "use client";
 
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
 import { SvgRefreshCw } from "@opal/icons";
 // Hook to handle re-indexing functionality
 export function useReIndexModal(
@@ -119,7 +118,7 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
             Run Update
           </Button>
 
-          <Separator />
+          <Divider />
 
           <Text as="p">
             This will cause a complete re-indexing of all documents from the

@@ -1,13 +1,11 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "compounds": [
     {
-      // Dummy entry used to label the group
       "name": "--- Compound ---",
-      "configurations": ["--- Individual ---"],
+      "configurations": [
+        "--- Individual ---"
+      ],
       "presentation": {
         "group": "1"
       }
@@ -26,6 +24,7 @@
         "Celery docfetching",
         "Celery docprocessing",
         "Celery user_file_processing",
+        "Celery scheduled_tasks",
         "Celery beat"
       ],
       "presentation": {
@@ -34,7 +33,29 @@
     },
     {
       "name": "Web / Model / API",
-      "configurations": ["Web Server", "Model Server", "API Server"],
+      "configurations": [
+        "Web Server",
+        "Model Server",
+        "API Server"
+      ],
+      "presentation": {
+        "group": "1"
+      }
+    },
+    {
+      "name": "Run All Onyx Services (k8s)",
+      "configurations": [
+        "Web Server",
+        "API Server (k8s)",
+        "Celery primary (k8s)",
+        "Celery light (k8s)",
+        "Celery heavy (k8s)",
+        "Celery docfetching (k8s)",
+        "Celery docprocessing (k8s)",
+        "Celery user_file_processing (k8s)",
+        "Celery scheduled_tasks (k8s)",
+        "Celery beat (k8s)"
+      ],
       "presentation": {
         "group": "1"
       }
@@ -45,12 +66,30 @@
         "Celery primary",
         "Celery light",
         "Celery heavy",
-        "Celery kg_processing",
         "Celery monitoring",
         "Celery user_file_processing",
+        "Celery scheduled_tasks",
         "Celery docfetching",
         "Celery docprocessing",
         "Celery beat"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
+    },
+    {
+      "name": "Celery (k8s)",
+      "configurations": [
+        "Celery primary (k8s)",
+        "Celery light (k8s)",
+        "Celery heavy (k8s)",
+        "Celery monitoring (k8s)",
+        "Celery user_file_processing (k8s)",
+        "Celery scheduled_tasks (k8s)",
+        "Celery docfetching (k8s)",
+        "Celery docprocessing (k8s)",
+        "Celery beat (k8s)"
       ],
       "presentation": {
         "group": "1"
@@ -60,7 +99,6 @@
   ],
   "configurations": [
     {
-      // Dummy entry used to label the group
       "name": "--- Individual ---",
       "type": "node",
       "request": "launch",
@@ -76,7 +114,10 @@
       "cwd": "${workspaceRoot}/web",
       "runtimeExecutable": "npm",
       "envFile": "${workspaceFolder}/.vscode/.env.web",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "presentation": {
         "group": "2"
       },
@@ -95,7 +136,12 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["model_server.main:app", "--reload", "--port", "9000"],
+      "args": [
+        "model_server.main:app",
+        "--reload",
+        "--port",
+        "9000"
+      ],
       "presentation": {
         "group": "2"
       },
@@ -113,11 +159,42 @@
         "LOG_LEVEL": "DEBUG",
         "PYTHONUNBUFFERED": "1"
       },
-      "args": ["onyx.main:app", "--reload", "--port", "8080"],
+      "args": [
+        "onyx.main:app",
+        "--reload",
+        "--port",
+        "8080"
+      ],
       "presentation": {
         "group": "2"
       },
       "consoleTitle": "API Server Console",
+      "justMyCode": false
+    },
+    {
+      "name": "API Server (k8s)",
+      "consoleName": "API Server (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "onyx.main:app",
+        "--reload",
+        "--port",
+        "8080"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "consoleTitle": "API Server (k8s) Console",
       "justMyCode": false
     },
     {
@@ -188,7 +265,8 @@
       "name": "Celery primary",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -209,7 +287,8 @@
         "celery"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery primary Console"
     },
@@ -217,7 +296,8 @@
       "name": "Celery light",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -235,10 +315,11 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,index_attempt_cleanup,opensearch_migration"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery light Console"
     },
@@ -246,7 +327,8 @@
       "name": "Celery heavy",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -264,48 +346,21 @@
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation"
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery heavy Console",
       "justMyCode": false
     },
     {
-      "name": "Celery kg_processing",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "celery",
-      "cwd": "${workspaceFolder}/backend",
-      "envFile": "${workspaceFolder}/.vscode/.env",
-      "env": {
-        "LOG_LEVEL": "INFO",
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "."
-      },
-      "args": [
-        "-A",
-        "onyx.background.celery.versioned_apps.kg_processing",
-        "worker",
-        "--pool=threads",
-        "--concurrency=2",
-        "--prefetch-multiplier=1",
-        "--loglevel=INFO",
-        "--hostname=kg_processing@%n",
-        "-Q",
-        "kg_processing"
-      ],
-      "presentation": {
-        "group": "2"
-      },
-      "consoleTitle": "Celery kg_processing Console"
-    },
-    {
       "name": "Celery monitoring",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -326,7 +381,8 @@
         "monitoring"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery monitoring Console"
     },
@@ -334,7 +390,8 @@
       "name": "Celery user_file_processing",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -355,16 +412,50 @@
         "user_file_processing,user_file_project_sync,user_file_delete"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery user_file_processing Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery scheduled_tasks",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.scheduled_tasks",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=scheduled_tasks@%n",
+        "-Q",
+        "scheduled_tasks"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery scheduled_tasks Console",
       "justMyCode": false
     },
     {
       "name": "Celery docfetching",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -384,7 +475,8 @@
         "connector_doc_fetching"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery docfetching Console",
       "justMyCode": false
@@ -393,7 +485,8 @@
       "name": "Celery docprocessing",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -414,7 +507,8 @@
         "docprocessing"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery docprocessing Console",
       "justMyCode": false
@@ -423,7 +517,8 @@
       "name": "Celery beat",
       "type": "debugpy",
       "request": "launch",
-      "module": "celery",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
@@ -438,9 +533,305 @@
         "--loglevel=INFO"
       ],
       "presentation": {
-        "group": "2"
+        "group": "2",
+        "hidden": true
       },
       "consoleTitle": "Celery beat Console"
+    },
+    {
+      "name": "Celery primary (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.primary",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=primary@%n",
+        "-Q",
+        "celery"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery primary (k8s) Console"
+    },
+    {
+      "name": "Celery light (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.light",
+        "worker",
+        "--pool=threads",
+        "--concurrency=64",
+        "--prefetch-multiplier=8",
+        "--loglevel=INFO",
+        "--hostname=light@%n",
+        "-Q",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery light (k8s) Console"
+    },
+    {
+      "name": "Celery heavy (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.heavy",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=heavy@%n",
+        "-Q",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery heavy (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery monitoring (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.monitoring",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=monitoring@%n",
+        "-Q",
+        "monitoring"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery monitoring (k8s) Console"
+    },
+    {
+      "name": "Celery user_file_processing (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.user_file_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=user_file_processing@%n",
+        "-Q",
+        "user_file_processing,user_file_project_sync,user_file_delete"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery user_file_processing (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery scheduled_tasks (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "INFO",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.scheduled_tasks",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=scheduled_tasks@%n",
+        "-Q",
+        "scheduled_tasks"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery scheduled_tasks (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery docfetching (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.docfetching",
+        "worker",
+        "--pool=threads",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docfetching@%n",
+        "-Q",
+        "connector_doc_fetching"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery docfetching (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery docprocessing (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "ENABLE_MULTIPASS_INDEXING": "false",
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.docprocessing",
+        "worker",
+        "--pool=threads",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docprocessing@%n",
+        "-Q",
+        "docprocessing"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery docprocessing (k8s) Console",
+      "justMyCode": false
+    },
+    {
+      "name": "Celery beat (k8s)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
+      "subProcess": true,
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.vscode/.env.k8s",
+      "preLaunchTask": "k8s: telepresence intercept api_server",
+      "env": {
+        "LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": ".",
+        "SANDBOX_BACKEND": "kubernetes"
+      },
+      "args": [
+        "-A",
+        "onyx.background.celery.versioned_apps.beat",
+        "beat",
+        "--loglevel=INFO"
+      ],
+      "presentation": {
+        "group": "2",
+        "hidden": true
+      },
+      "consoleTitle": "Celery beat (k8s) Console"
     },
     {
       "name": "Pytest",
@@ -457,8 +848,6 @@
       },
       "args": [
         "-v"
-        // Specify a specific module/test to run or provide nothing to run all tests
-        // "tests/unit/onyx/llm/answering/test_prune_and_merge.py"
       ],
       "presentation": {
         "group": "2"
@@ -466,13 +855,28 @@
       "consoleTitle": "Pytest Console"
     },
     {
-      // Dummy entry used to label the group
       "name": "--- Tasks ---",
       "type": "node",
       "request": "launch",
       "presentation": {
         "group": "3",
         "order": 0
+      }
+    },
+    {
+      "name": "Start Monitoring Stack (Prometheus + Grafana)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": [
+        "compose",
+        "up",
+        "-d"
+      ],
+      "cwd": "${workspaceFolder}/profiling",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "3"
       }
     },
     {
@@ -506,12 +910,12 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "."
       },
-      "args": ["--verbose"],
+      "args": [
+        "--verbose"
+      ],
       "consoleTitle": "Eval CLI Console"
     },
     {
-      // Celery jobs launched through a single background script (legacy)
-      // Recommend using the "Celery (all)" compound launch instead.
       "name": "Background Jobs",
       "consoleName": "Background Jobs",
       "type": "debugpy",
@@ -531,8 +935,7 @@
       "request": "launch",
       "runtimeExecutable": "uv",
       "runtimeArgs": [
-        "sync",
-        "--all-extras"
+        "sync"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -558,7 +961,6 @@
       "consoleTitle": "Build Sandbox Templates"
     },
     {
-      // Dummy entry used to label the group
       "name": "--- Database ---",
       "type": "node",
       "request": "launch",
@@ -672,7 +1074,6 @@
       }
     },
     {
-      // script to generate the openapi schema
       "name": "Onyx OpenAPI Schema Generator",
       "type": "debugpy",
       "request": "launch",
@@ -683,10 +1084,13 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "backend"
       },
-      "args": ["--filename", "backend/generated/openapi.json", "--generate-python-client"]
+      "args": [
+        "--filename",
+        "backend/generated/openapi.json",
+        "--generate-python-client"
+      ]
     },
     {
-      // script to debug multi tenant db issues
       "name": "Onyx DB Manager (Top Chunks)",
       "type": "debugpy",
       "request": "launch",

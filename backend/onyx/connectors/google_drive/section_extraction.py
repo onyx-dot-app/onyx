@@ -85,7 +85,9 @@ def get_document_sections(
 ) -> list[TextSection]:
     """Extracts sections from a Google Doc, including their headings and content"""
     # Fetch the document structure
-    http_request = docs_service.documents().get(documentId=doc_id)
+    http_request = docs_service.documents().get(  # ty: ignore[unresolved-attribute]
+        documentId=doc_id
+    )
 
     # Google has poor support for tabs in the docs api, see
     # https://cloud.google.com/python/docs/reference/cloudtasks/

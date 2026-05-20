@@ -9,6 +9,9 @@ metadata:
     {{- end }}
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ .Values.nginx.timeouts.read }}"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.nginx.timeouts.send }}"
+    nginx.ingress.kubernetes.io/proxy-body-size: "5G"
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
 spec:
   {{- if .Values.ingress.className }}

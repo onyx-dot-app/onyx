@@ -2,9 +2,9 @@
 
 import React from "react";
 import { useField } from "formik";
-import { cn } from "@/lib/utils";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { cn } from "@opal/utils";
+import { Tooltip } from "@opal/components";
+import { Checkbox } from "@opal/components";
 
 interface CheckboxFieldProps {
   name: string;
@@ -85,9 +85,9 @@ export const CheckboxField: React.FC<CheckboxFieldProps> = ({
   );
 
   return (
-    <SimpleTooltip tooltip={tooltip} side="top" sideOffset={25}>
+    <Tooltip tooltip={tooltip} side="top" sideOffset={25}>
       {checkboxContent}
-    </SimpleTooltip>
+    </Tooltip>
   );
 };
 

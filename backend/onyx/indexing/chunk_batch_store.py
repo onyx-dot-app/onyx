@@ -52,7 +52,7 @@ class ChunkBatchStore:
     def _load(self, batch_file: Path) -> list[IndexChunk]:
         """Deserialize a batch of embedded chunks from a file."""
         with open(batch_file, "rb") as f:
-            return pickle.load(f)
+            return pickle.load(f)  # noqa: S301 — reads back files this process itself wrote in save()
 
     def _batch_files(self) -> list[Path]:
         """Return batch files sorted by numeric index."""

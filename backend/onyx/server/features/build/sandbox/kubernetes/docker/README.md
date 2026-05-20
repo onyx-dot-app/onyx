@@ -7,12 +7,10 @@ This directory contains the Dockerfile and resources for building the Onyx Craft
 ```
 docker/
 ├── Dockerfile              # Main container image definition
-├── demo_data.zip           # Demo data (extracted to /workspace/demo_data)
-├── skills/                 # Agent skills (image-generation, pptx, etc.)
+├── skills/                 # Built-in skill sources (pushed at session setup, not baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
 ├── initial-requirements.txt # Python packages pre-installed in sandbox
-├── generate_agents_md.py   # Script to generate AGENTS.md for sessions
 └── README.md               # This file
 ```
 
@@ -58,7 +56,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 1. **Build and push** the new image (see above)
 
-2. **Update the ConfigMap** in `cloud-deployment-yamls/danswer/configmap/env-configmap.yaml`:
+2. **Update the ConfigMap** in in the internal repo
    ```yaml
    SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.x"
    ```
@@ -81,11 +79,13 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ## What's Baked Into the Image
 
 - **Base**: `node:20-slim` (Debian-based)
-- **Demo data**: `/workspace/demo_data/` - sample files for demo sessions
-- **Skills**: `/workspace/skills/` - agent skills (image-generation, pptx, etc.)
-- **Templates**: `/workspace/templates/outputs/` - Next.js web app scaffold
+- **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
+- **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
+- **AWS CLI**: For S3 snapshot operations
+
+Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 
 ## Runtime Directory Structure
 
@@ -93,15 +93,12 @@ When a session is created, the following structure is set up in the pod:
 
 ```
 /workspace/
-├── demo_data/              # Baked into image
-├── files/                  # Mounted volume, synced from S3
-├── skills/                 # Baked into image (agent skills)
+├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/
         ├── .opencode/
-        │   └── skills/     # Symlink to /workspace/skills
-        ├── files/          # Symlink to /workspace/demo_data or /workspace/files
+        │   └── skills      # Symlink → /workspace/managed/skills
         ├── outputs/        # Copied from templates, contains web app
         ├── attachments/    # User-uploaded files
         ├── org_info/       # Demo persona info (if demo mode)

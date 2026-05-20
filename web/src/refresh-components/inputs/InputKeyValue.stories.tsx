@@ -89,18 +89,6 @@ export const KeyWideLayout: Story = {
   },
 };
 
-export const Disabled: Story = {
-  render: () => (
-    <KeyValueInput
-      keyTitle="Key"
-      valueTitle="Value"
-      items={[{ key: "LOCKED", value: "cannot-edit" }]}
-      onChange={() => {}}
-      disabled
-    />
-  ),
-};
-
 export const EmptyLineMode: Story = {
   render: function EmptyStory() {
     const [items, setItems] = React.useState<KeyValue[]>([]);

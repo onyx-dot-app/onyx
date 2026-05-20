@@ -8,7 +8,7 @@ from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
+from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import MultipassConfig
 from shared_configs.configs import MULTI_TENANT

@@ -1,0 +1,26 @@
+apiVersion: 1
+
+providers:
+  - name: 'onyx-dashboards'
+    orgId: 1
+    folder: 'Onyx'
+    type: file
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/onyx
+      foldersFromFilesStructure: false
+
+  # Dashboards shipped via the Helm chart. The helm chart directory is the
+  # source of truth; this provider just surfaces those same JSONs in local
+  # Grafana so we can iterate on them here. UI updates are disabled because they
+  # would be silently lost — edit the files on disk instead.
+  - name: 'onyx-dashboards-helm'
+    orgId: 1
+    folder: 'Onyx'
+    type: file
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards/helm
+      foldersFromFilesStructure: false

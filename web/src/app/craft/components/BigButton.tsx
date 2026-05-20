@@ -1,11 +1,10 @@
 "use client";
 
 import { forwardRef, type ButtonHTMLAttributes } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 
-export interface BigButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface BigButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   // Subvariants
   primary?: boolean;
   secondary?: boolean;
@@ -74,13 +73,13 @@ const BigButton = forwardRef<HTMLButtonElement, BigButtonProps>(
 
     // Check if className contains text color override
     const hasTextWhiteOverride =
-      className?.includes("!text-white") || className?.includes("text-white");
+      className?.includes("text-white!") || className?.includes("text-white");
     const hasTextBlackOverride =
-      className?.includes("!text-black") || className?.includes("text-black");
+      className?.includes("text-black!") || className?.includes("text-black");
 
     const getTextOverride = () => {
-      if (hasTextWhiteOverride) return "!text-white";
-      if (hasTextBlackOverride) return "!text-black";
+      if (hasTextWhiteOverride) return "text-white!";
+      if (hasTextBlackOverride) return "text-black!";
       return getTextStyle();
     };
 

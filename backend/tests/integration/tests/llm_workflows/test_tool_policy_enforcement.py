@@ -9,14 +9,13 @@ from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
 
-
 _DUMMY_OPENAI_API_KEY = "sk-mock-tool-policy-tests"
 
 
 def _assert_integration_mode_enabled() -> None:
-    assert (
-        app_configs.INTEGRATION_TESTS_MODE is True
-    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+    assert app_configs.INTEGRATION_TESTS_MODE is True, (
+        "Integration tests require INTEGRATION_TESTS_MODE=true."
+    )
 
 
 def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:

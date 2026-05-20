@@ -1,20 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import {
-  SvgCheck,
-  SvgSlack,
-  SvgUser,
-  SvgUserManage,
-  SvgUsers,
-} from "@opal/icons";
+import { SvgCheck, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { FilterButton } from "@opal/components";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { ShadowDiv } from "@opal/components";
 import {
   UserRole,
   UserStatus,
@@ -191,6 +186,7 @@ export default function UserFilters({
                 <LineItem
                   key={role}
                   icon={isSelected ? SvgCheck : roleIcon}
+                  strokeIcon={isSelected || role !== UserRole.SLACK_USER}
                   selected={isSelected}
                   emphasized={isSelected}
                   onClick={() => toggleRole(role)}

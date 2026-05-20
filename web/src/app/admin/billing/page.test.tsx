@@ -69,30 +69,33 @@ jest.mock("./LicenseActivationCard", () => ({
   default: () => <div data-testid="license-activation-card" />,
 }));
 
-jest.mock("@/refresh-components/messages/Message", () => ({
-  __esModule: true,
-  default: ({
-    text,
-    description,
-    onClose,
-  }: {
-    text: string;
-    description?: string;
-    onClose?: () => void;
-  }) => (
-    <div data-testid="activating-banner">
-      <span data-testid="activating-banner-text">{text}</span>
-      {description && (
-        <span data-testid="activating-banner-description">{description}</span>
-      )}
-      {onClose && (
-        <button data-testid="activating-banner-close" onClick={onClose}>
-          Close
-        </button>
-      )}
-    </div>
-  ),
-}));
+jest.mock("@opal/components", () => {
+  const actual = jest.requireActual("@opal/components");
+  return {
+    ...actual,
+    MessageCard: ({
+      title,
+      description,
+      onClose,
+    }: {
+      title: string;
+      description?: string;
+      onClose?: () => void;
+    }) => (
+      <div data-testid="activating-banner">
+        <span data-testid="activating-banner-text">{title}</span>
+        {description && (
+          <span data-testid="activating-banner-description">{description}</span>
+        )}
+        {onClose && (
+          <button data-testid="activating-banner-close" onClick={onClose}>
+            Close
+          </button>
+        )}
+      </div>
+    ),
+  };
+});
 
 jest.mock("@/lib/billing", () => ({
   useBillingInformation: jest.fn(),

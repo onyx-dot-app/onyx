@@ -20,7 +20,7 @@ if DISABLE_MODEL_SERVER:
     INDEXING_MODEL_SERVER_HOST = "disabled"
 else:
     MODEL_SERVER_HOST = os.environ.get("MODEL_SERVER_HOST") or "localhost"
-    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"
+    MODEL_SERVER_ALLOWED_HOST = os.environ.get("MODEL_SERVER_HOST") or "0.0.0.0"  # noqa: S104 — model server allowed-host default; intentional for containerized deployment
     INDEXING_MODEL_SERVER_HOST = (
         os.environ.get("INDEXING_MODEL_SERVER_HOST") or MODEL_SERVER_HOST
     )
@@ -99,6 +99,14 @@ STRICT_CHUNK_TOKEN_LIMIT = (
 # Set up Sentry integration (for error logging)
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
+# Celery task spans dominate ingestion volume (~94%), so default celery
+# tracing to 0. Web/API traces stay at a small non-zero rate so http.server
+# traces remain available. Both are env-tunable without a code change.
+SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.01"))
+SENTRY_CELERY_TRACES_SAMPLE_RATE = float(
+    os.environ.get("SENTRY_CELERY_TRACES_SAMPLE_RATE", "0.0")
+)
+
 
 # Fields which should only be set on new search setting
 PRESERVED_SEARCH_FIELDS = [
@@ -161,8 +169,9 @@ DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
 
 
 async def async_return_default_schema(
-    *args: Any, **kwargs: Any  # noqa: ARG001
-) -> str:  # noqa: ARG001
+    *args: Any,  # noqa: ARG001
+    **kwargs: Any,  # noqa: ARG001
+) -> str:
     return POSTGRES_DEFAULT_SCHEMA
 
 

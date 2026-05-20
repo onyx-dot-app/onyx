@@ -10,7 +10,6 @@ import sqlalchemy as sa
 import datetime
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
 revision = "9aadf32dfeb4"
 down_revision = "3781a5eb12cb"
@@ -52,7 +51,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at",
             sa.DateTime(),
-            default=datetime.datetime.utcnow,
+            default=lambda: datetime.datetime.now(datetime.timezone.utc),
         ),
         sa.Column(
             "cc_pair_id",

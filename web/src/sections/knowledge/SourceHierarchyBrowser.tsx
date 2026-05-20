@@ -9,13 +9,12 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button } from "@opal/components";
+import { Button, Divider as OpalDivider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import Separator from "@/refresh-components/Separator";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import Divider from "@/refresh-components/Divider";
@@ -44,7 +43,7 @@ import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
-import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
+import { AgentAttachedDocument } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
 import Spacer from "@/refresh-components/Spacer";
 
@@ -138,7 +137,7 @@ export interface SourceHierarchyBrowserProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }
@@ -826,13 +825,13 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 
-      <Separator noPadding />
+      <OpalDivider paddingParallel="fit" paddingPerpendicular="fit" />
 
       {/* Scrollable table body */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="overflow-y-auto max-h-[20rem]"
+        className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
           <GeneralLayouts.Section height="auto" padding={1}>

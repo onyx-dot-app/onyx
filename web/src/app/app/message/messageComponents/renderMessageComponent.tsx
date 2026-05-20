@@ -20,6 +20,8 @@ import {
 import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
+import { CodingAgentRenderer } from "./timeline/renderers/code/CodingAgentRenderer";
+import { isCodingAgentPackets } from "./timeline/packetHelpers";
 import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "./renderers/CustomToolRenderer";
 import { FileReaderToolRenderer } from "./timeline/renderers/filereader/FileReaderToolRenderer";
@@ -128,6 +130,9 @@ export function findRenderer(
   }
   if (groupedPackets.packets.some((packet) => isResearchAgentPacket(packet))) {
     return ResearchAgentRenderer;
+  }
+  if (isCodingAgentPackets(groupedPackets.packets)) {
+    return CodingAgentRenderer;
   }
 
   // Standard tool checks
