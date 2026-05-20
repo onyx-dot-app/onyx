@@ -18,8 +18,11 @@ import {
   SvgGoogle,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
-import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
-import type { LLMProviderView } from "@/interfaces/llm";
+import {
+  LLMProviderFormProps,
+  LLMProviderName,
+} from "@/lib/languageModels/types";
+import type { LLMProviderView } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";

@@ -57,12 +57,14 @@
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js"
     },
+    "./root.css": "./dist/root.css",
+    "./colors.css": "./dist/colors.css",
     "./styles.css": "./dist/styles.css",
     "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {
     "build": "tsup && node scripts/bundle-css.mjs",
-    "prepublishOnly": "npm run build"
+    "prepare": "npm run build"
   },
   "dependencies": {
     "clsx": "^2.0.0",

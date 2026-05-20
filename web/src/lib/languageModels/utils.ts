@@ -1,9 +1,9 @@
 import { MinimalAgent } from "@/lib/agents/types";
-import {
+import type {
   DefaultModel,
   LLMProviderDescriptor,
   ModelConfiguration,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(

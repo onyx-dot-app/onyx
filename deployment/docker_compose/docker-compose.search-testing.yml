@@ -12,7 +12,7 @@ services:
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
-      - index
+      - opensearch
       - cache
       - minio
     restart: unless-stopped
@@ -23,7 +23,8 @@ services:
     environment:
       - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
-      - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - REDIS_HOST=cache
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
@@ -52,7 +53,7 @@ services:
     command: /app/scripts/supervisord_entrypoint.sh
     depends_on:
       - relational_db
-      - index
+      - opensearch
       - cache
     restart: unless-stopped
     env_file:
@@ -60,7 +61,8 @@ services:
     environment:
       - AUTH_TYPE=basic
       - POSTGRES_HOST=relational_db
-      - VESPA_HOST=index
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
       - REDIS_HOST=cache
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
@@ -172,17 +174,23 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
 
-  # This container name cannot have an underscore in it due to Vespa expectations of the URL
-  index:
-    image: vespaengine/vespa:8.609.39
+  opensearch:
+    image: opensearchproject/opensearch:3.6.0
     restart: unless-stopped
     environment:
-      - VESPA_SKIP_UPGRADE_CHECK=true
-    ports:
-      - "19071:19071"
-      - "8081:8081"
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
     volumes:
-      - vespa_volume:/opt/vespa/var
+      - opensearch-data:/usr/share/opensearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
     logging:
       driver: json-file
       options:
@@ -254,11 +262,6 @@ volumes:
       type: none
       o: bind
       device: ${DANSWER_POSTGRES_DATA_DIR:-./postgres_data}
-  vespa_volume:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${DANSWER_VESPA_DATA_DIR:-./vespa_data}
   log_store: # for logs that we don't want to lose on container restarts
   minio_data:
+  opensearch-data:

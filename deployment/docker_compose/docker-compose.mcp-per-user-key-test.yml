@@ -18,3 +18,15 @@ services:
       - "${MCP_PER_USER_KEY_TEST_PORT:-8007}:${MCP_PER_USER_KEY_TEST_PORT:-8007}"
     volumes:
       - ../..:/workspace:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['MCP_PER_USER_KEY_TEST_PORT']}/healthz\")",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

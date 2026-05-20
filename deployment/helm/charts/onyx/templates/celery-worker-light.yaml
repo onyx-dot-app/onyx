@@ -65,7 +65,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.light",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_light.logLevel | quote }},
+              {{- with .Values.celery_worker_light.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=light@%n",
               "-Q",
               "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
@@ -79,6 +81,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with .Values.celery_worker_light.extraEnv }}

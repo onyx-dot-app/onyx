@@ -1,7 +1,10 @@
 "use client";
 
 import { useSWRConfig } from "swr";
-import { LLMProviderFormProps, LLMProviderName } from "@/interfaces/llm";
+import {
+  LLMProviderFormProps,
+  LLMProviderName,
+} from "@/lib/languageModels/types";
 import {
   useInitialValues,
   buildValidationSchema,

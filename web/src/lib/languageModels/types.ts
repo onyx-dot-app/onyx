@@ -1,5 +1,21 @@
 import type { OnboardingActions } from "@/interfaces/onboarding";
 
+export interface ModelConfiguration {
+  id?: number;
+  name: string;
+  is_visible: boolean;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+  display_name?: string;
+  /** Admin-set override that takes precedence over display_name everywhere in the UI. */
+  custom_display_name?: string;
+  provider_display_name?: string;
+  vendor?: string;
+  version?: string;
+  region?: string;
+}
+
 export enum LLMProviderName {
   OPENAI = "openai",
   ANTHROPIC = "anthropic",
@@ -14,20 +30,6 @@ export enum LLMProviderName {
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
   CUSTOM = "custom",
-}
-
-export interface ModelConfiguration {
-  id?: number;
-  name: string;
-  is_visible: boolean;
-  max_input_tokens: number | null;
-  supports_image_input: boolean;
-  supports_reasoning: boolean;
-  display_name?: string;
-  provider_display_name?: string;
-  vendor?: string;
-  version?: string;
-  region?: string;
 }
 
 export interface SimpleKnownModel {
@@ -129,7 +131,6 @@ export interface LLMProviderFormProps {
   onboardingActions?: OnboardingActions;
 }
 
-// Param types for model fetching functions - use snake_case to match API structure
 export interface BedrockFetchParams {
   aws_region_name: string;
   aws_access_key_id?: string;

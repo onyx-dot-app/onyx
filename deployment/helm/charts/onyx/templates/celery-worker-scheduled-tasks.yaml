@@ -65,7 +65,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.scheduled_tasks",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_scheduled_tasks.logLevel | quote }},
+              {{- with .Values.celery_worker_scheduled_tasks.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=scheduled_tasks@%n",
               "-Q",
               "scheduled_tasks",
@@ -79,6 +81,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}

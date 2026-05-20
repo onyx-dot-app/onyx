@@ -20,6 +20,8 @@ class TestValidateTenantId:
             "tenant_i-0d8d7eaa21f5f2fae",
             "tenant_i-0123456789abcdef0",
             "tenant_i-abc",
+            # Staff dev tenant
+            "tenant_dev",
         ],
     )
     def test_valid_tenant_ids(self, tenant_id: str) -> None:

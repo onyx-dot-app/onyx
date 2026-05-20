@@ -81,9 +81,7 @@ from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    SSEKeepalive,
-)
+from onyx.server.features.build.sandbox.base import SSEKeepalive
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig

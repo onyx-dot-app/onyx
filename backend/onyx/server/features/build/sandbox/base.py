@@ -20,6 +20,7 @@ from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -42,6 +43,20 @@ logger = setup_logger()
 # Using Any here to avoid circular imports - the actual type checking
 # happens in the implementation modules
 ACPEvent = Any
+
+
+@dataclass
+class SSEKeepalive:
+    """Marker event yielded by sandbox-manager ACP clients when no real ACP
+    events have arrived for ``SSE_KEEPALIVE_INTERVAL`` seconds.
+
+    Defined here (rather than in any one backend's exec client) so every
+    backend yields the same class and ``isinstance`` checks in the
+    session-manager SSE pipeline work uniformly. Otherwise a Docker-emitted
+    keepalive would be a different class than a K8s-emitted keepalive and
+    one would fall through the manager's isinstance chain as "unrecognized"
+    and be silently dropped.
+    """
 
 
 class SandboxManager(ABC):
@@ -261,6 +276,24 @@ class SandboxManager(ABC):
 
         Returns:
             True if the session workspace exists, False otherwise
+        """
+        ...
+
+    @abstractmethod
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List session workspace IDs under a sandbox's sessions/ directory.
+
+        Used by idle cleanup to discover which sessions need snapshotting before
+        the sandbox is terminated. Implementations should filter out non-UUID
+        directory names.
+
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            List of session UUIDs found under sessions/. Returns an empty list
+            if the sandbox is not running, has no sessions, or the backend does
+            not support cleanup (e.g. local).
         """
         ...
 
@@ -642,6 +675,13 @@ def get_sandbox_manager() -> SandboxManager:
 
                     _sandbox_manager_instance = KubernetesSandboxManager()
                     logger.info("Using KubernetesSandboxManager for sandbox operations")
+                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
+                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+                        DockerSandboxManager,
+                    )
+
+                    _sandbox_manager_instance = DockerSandboxManager()
+                    logger.info("Using DockerSandboxManager for sandbox operations")
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
 
