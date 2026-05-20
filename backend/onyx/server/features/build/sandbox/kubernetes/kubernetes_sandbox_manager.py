@@ -70,6 +70,7 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.sandbox.acp.base import ACPEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotCreateRequest,
@@ -79,9 +80,6 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 )
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotRestoreRequest,
-)
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
 )
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,

@@ -24,12 +24,7 @@ from docker import DockerClient
 from docker.errors import APIError
 from docker.errors import NotFound
 
-from onyx.server.features.build.sandbox.acp.base import ACP_PROTOCOL_VERSION
-from onyx.server.features.build.sandbox.acp.base import ACPClientState
-from onyx.server.features.build.sandbox.acp.base import ACPEvent as ACPEvent
 from onyx.server.features.build.sandbox.acp.base import ACPExecClientBase
-from onyx.server.features.build.sandbox.acp.base import ACPSession
-from onyx.server.features.build.sandbox.base import SSEKeepalive as SSEKeepalive
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     _FRAME_HEADER_BYTES,
 )
@@ -52,18 +47,6 @@ DEFAULT_CLIENT_INFO = {
     "title": "Onyx Sandbox Agent Client (Docker Exec)",
     "version": "1.0.0",
 }
-
-
-# Re-exported for back-compat with external imports.
-__all__ = [
-    "ACP_PROTOCOL_VERSION",
-    "ACPClientState",
-    "ACPEvent",
-    "ACPSession",
-    "DEFAULT_CLIENT_INFO",
-    "DockerACPExecClient",
-    "SSEKeepalive",
-]
 
 
 class DockerACPExecClient(ACPExecClientBase):

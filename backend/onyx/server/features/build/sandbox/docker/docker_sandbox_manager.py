@@ -80,8 +80,8 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
+from onyx.server.features.build.sandbox.acp.base import ACPEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.docker.internal.acp_exec_client import ACPEvent
 from onyx.server.features.build.sandbox.docker.internal.acp_exec_client import (
     DockerACPExecClient,
 )
