@@ -1,32 +1,13 @@
 #!/usr/bin/env python3
-"""Light Slack Web API wrapper for the Onyx Craft sandbox.
+"""Slack Web API wrapper for the Onyx Craft sandbox.
 
-Auth is NOT handled here. Requests to https://slack.com/api/* are
-authenticated by the Onyx egress proxy (it injects the Bearer token).
-
-Common read endpoints are exposed as subcommands that auto-paginate
-(cursor) and prune empty fields to keep responses small. `post` is the
-only write. `call` is a raw escape hatch for any other Slack method.
-
-    python slack_api.py channels [--limit N]
-    python slack_api.py history <channel> [--limit N]
-    python slack_api.py replies <channel> <ts> [--limit N]
-    python slack_api.py users [--limit N]
-    python slack_api.py user <user_id>
-    python slack_api.py search <query> [--count N]
-    python slack_api.py post <channel> <text>
-    python slack_api.py call <method> [json_args]
-
-Output is always JSON on stdout. Slack signals failure with
-{"ok": false, "error": "..."} (still HTTP 200) — those are passed
-through verbatim and exit non-zero.
+Common Slack operations exposed as subcommands. Output is JSON on stdout.
+Slack signals failure with {"ok": false, "error": "..."} (still HTTP 200).
 """
 
 import argparse
 import json
-import os
 import re
-import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -36,32 +17,6 @@ _BASE = "https://slack.com/api/"
 _METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9._]*$")
 _PAGE_SIZE = 200
 _DEFAULT_LIMIT = 200
-
-
-def _make_opener() -> urllib.request.OpenerDirector:
-    """DEMO egress hook: if ONYX_DEMO_EGRESS_PROXY is set, route this
-    wrapper's requests through the demo interceptor and trust its CA.
-    Unset → default behavior. Scoped to this process only; opencode
-    ignores these (non-standard) vars, so its own egress is untouched.
-    The production interceptor makes this unnecessary."""
-    proxy = os.environ.get("ONYX_DEMO_EGRESS_PROXY")
-    if not proxy:
-        return urllib.request.build_opener()
-    ca = os.environ.get("ONYX_DEMO_EGRESS_CA") or ""
-    ca = os.path.expanduser(os.path.expandvars(ca))
-    if ca and not os.path.isfile(ca):
-        raise SystemExit(
-            f"ONYX_DEMO_EGRESS_CA does not resolve to a file: {ca!r} "
-            "(set it to an absolute, already-expanded path)"
-        )
-    ctx = ssl.create_default_context(cafile=ca or None)
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
-        urllib.request.HTTPSHandler(context=ctx),
-    )
-
-
-_OPENER = _make_opener()
 
 
 def _prune(value: Any) -> Any:
@@ -76,7 +31,7 @@ def _prune(value: Any) -> Any:
 
 
 def _call(method: str, body: dict[str, Any]) -> dict[str, Any]:
-    """POST to a Slack method; return the parsed JSON object. Raises on
+    """POST to a Slack method; return the parsed JSON. Raises on
     transport failure (handled by the caller)."""
     req = urllib.request.Request(
         _BASE + method,
@@ -84,7 +39,7 @@ def _call(method: str, body: dict[str, Any]) -> dict[str, Any]:
         method="POST",
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
-    with _OPENER.open(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -165,10 +120,12 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             "channels",
             a.limit,
         )
+
     if a.cmd == "history":
         return _paginate(
             "conversations.history", {"channel": a.channel}, "messages", a.limit
         )
+
     if a.cmd == "replies":
         return _paginate(
             "conversations.replies",
@@ -176,15 +133,20 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             "messages",
             a.limit,
         )
+
     if a.cmd == "users":
         return _paginate("users.list", {}, "members", a.limit)
+
     if a.cmd == "user":
         return _call("users.info", {"user": a.user_id})
+
     if a.cmd == "search":
         return _call("search.messages", {"query": a.query, "count": a.count})
+
     if a.cmd == "post":
         return _call("chat.postMessage", {"channel": a.channel, "text": a.text})
-    # call
+
+    # `call` raw escape hatch
     if not _METHOD_RE.match(a.method):
         return {"ok": False, "error": "invalid_method_name"}
     args: dict[str, Any] = {}

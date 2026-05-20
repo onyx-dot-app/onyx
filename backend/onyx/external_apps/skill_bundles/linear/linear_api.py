@@ -1,34 +1,14 @@
 #!/usr/bin/env python3
-"""Light Linear (GraphQL) wrapper for the Onyx Craft sandbox.
+"""Linear (GraphQL) wrapper for the Onyx Craft sandbox.
 
-Auth is NOT handled here. Requests to https://api.linear.app/graphql
-are authenticated by the Onyx egress proxy (it injects the token).
-
-Common operations are exposed as subcommands that auto-paginate
-(GraphQL connections) and prune empty fields to keep responses small.
-`create-issue` / `comment` are the only writes. `call` is a raw
-GraphQL escape hatch. All user input is passed as GraphQL *variables*
-(never string-formatted into the query), so there is no injection risk.
-
-    python linear_api.py me
-    python linear_api.py teams [--limit N]
-    python linear_api.py issues [--team KEY] [--assignee me] [--state NAME] [--limit N]
-    python linear_api.py issue <id|IDENT-123>
-    python linear_api.py search <query> [--limit N]
-    python linear_api.py projects [--limit N]
-    python linear_api.py create-issue <team_id> <title> [--description D] [--assignee USER_ID]
-    python linear_api.py comment <issue_id> <body>
-    python linear_api.py call '<graphql>' ['<json_variables>']
-
-Output is JSON on stdout. Success is {"ok": true, ...}; a GraphQL
-error returns {"ok": false, "errors": [...]} and exits non-zero.
+Common operations exposed as subcommands. User input is passed as
+GraphQL *variables* (never string-formatted into the query), so there
+is no injection risk. Output is JSON on stdout.
 """
 
 import argparse
 import json
-import os
 import re
-import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -37,32 +17,6 @@ from typing import Any
 _ENDPOINT = "https://api.linear.app/graphql"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
-
-
-def _make_opener() -> urllib.request.OpenerDirector:
-    """DEMO egress hook: if ONYX_DEMO_EGRESS_PROXY is set, route this
-    wrapper's requests through the demo interceptor and trust its CA.
-    Unset → default behavior. Scoped to this process only; opencode
-    ignores these (non-standard) vars, so its own egress is untouched.
-    The production interceptor makes this unnecessary."""
-    proxy = os.environ.get("ONYX_DEMO_EGRESS_PROXY")
-    if not proxy:
-        return urllib.request.build_opener()
-    ca = os.environ.get("ONYX_DEMO_EGRESS_CA") or ""
-    ca = os.path.expanduser(os.path.expandvars(ca))
-    if ca and not os.path.isfile(ca):
-        raise SystemExit(
-            f"ONYX_DEMO_EGRESS_CA does not resolve to a file: {ca!r} "
-            "(set it to an absolute, already-expanded path)"
-        )
-    ctx = ssl.create_default_context(cafile=ca or None)
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
-        urllib.request.HTTPSHandler(context=ctx),
-    )
-
-
-_OPENER = _make_opener()
 _IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d+$")
 
 _ISSUE_FIELDS = """
@@ -86,7 +40,7 @@ def _prune(value: Any) -> Any:
 
 
 def _gql(query: str, variables: dict[str, Any]) -> dict[str, Any]:
-    """POST a GraphQL request; return the parsed JSON object. Raises on
+    """POST a GraphQL request; return the parsed JSON. Raises on
     transport failure (handled by the caller)."""
     req = urllib.request.Request(
         _ENDPOINT,
@@ -94,7 +48,7 @@ def _gql(query: str, variables: dict[str, Any]) -> dict[str, Any]:
         method="POST",
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
-    with _OPENER.open(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -134,6 +88,19 @@ def _paginate(
     return {"ok": True, conn_key: nodes, "count": len(nodes), "truncated": False}
 
 
+def _issue_filter(a: argparse.Namespace) -> dict[str, Any]:
+    f: dict[str, Any] = {}
+    if getattr(a, "team", None):
+        f["team"] = {"key": {"eq": a.team}}
+    if getattr(a, "assignee", None) == "me":
+        f["assignee"] = {"isMe": {"eq": True}}
+    elif getattr(a, "assignee", None):
+        f["assignee"] = {"id": {"eq": a.assignee}}
+    if getattr(a, "state", None):
+        f["state"] = {"name": {"eq": a.state}}
+    return f
+
+
 def _emit(result: dict[str, Any], raw: bool) -> int:
     print(json.dumps(result if raw else _prune(result)))
     return 0 if result.get("ok") else 1
@@ -148,6 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--limit", type=int, default=_DEFAULT_LIMIT)
 
     sub.add_parser("me", help="the connected user (viewer)")
+
     with_limit(sub.add_parser("teams", help="list teams"))
 
     sp = sub.add_parser("issues", help="list issues (filtered)")
@@ -179,19 +147,6 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("query")
     sp.add_argument("variables", nargs="?")
     return p
-
-
-def _issue_filter(a: argparse.Namespace) -> dict[str, Any]:
-    f: dict[str, Any] = {}
-    if a.team:
-        f["team"] = {"key": {"eq": a.team}}
-    if a.assignee == "me":
-        f["assignee"] = {"isMe": {"eq": True}}
-    elif a.assignee:
-        f["assignee"] = {"id": {"eq": a.assignee}}
-    if a.state:
-        f["state"] = {"name": {"eq": a.state}}
-    return f
 
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
@@ -266,7 +221,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             "commentCreate",
         )
 
-    # call
+    # `call` raw escape hatch
     variables: dict[str, Any] = {}
     if a.variables:
         parsed = json.loads(a.variables)

@@ -1,45 +1,61 @@
 ---
 name: slack
-description: Read, search, and post Slack messages on the connected user's behalf via a light Slack Web API wrapper.
+description: Read, search, and post Slack messages on the connected user's behalf via the Slack Web API.
 ---
 
 # Slack
 
-The current user has connected their Slack account. Call Slack as that user
-with the bundled helper. **You do not handle authentication** — requests to
-`https://slack.com/api/*` are authenticated automatically by the Onyx egress
-proxy. Never ask for or set a token.
+Call the Slack Web API as the connected user via the bundled helper.
 
 ## Usage
 
     python _external_apps/<this-dir>/slack_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. `post` is the only write.
+Use `--raw` to skip empty-field pruning; `python slack_api.py <command> -h`
+shows its flags.
 
-    # List channels the user is in
-    python slack_api.py channels
+### List channels
 
-    # Recent messages in a channel (by channel ID)
-    python slack_api.py history C0123456789 --limit 50
+```
+python slack_api.py channels [--limit N]
+```
 
-    # Replies in a thread
-    python slack_api.py replies C0123456789 1700000000.000100
+### Read channel messages
 
-    # Workspace users / one user
-    python slack_api.py users
-    python slack_api.py user U0123456789
+```
+python slack_api.py history C0123456789 [--limit N]
+```
 
-    # Search messages
-    python slack_api.py search "deploy failed" --count 30
+### Read thread replies
 
-    # Post a message
-    python slack_api.py post C0123456789 "Hello from Onyx"
+```
+python slack_api.py replies C0123456789 1700000000.000100
+```
 
-    # Any other Slack method (raw escape hatch)
-    python slack_api.py call chat.update '{"channel": "C0", "ts": "1.2", "text": "edited"}'
+### List workspace users
 
-Use `--raw` on any command to skip empty-field pruning. `python slack_api.py
-<command> -h` shows its flags.
+```
+python slack_api.py users [--limit N]
+```
+
+### Look up one user
+
+```
+python slack_api.py user U0123456789
+```
+
+### Search messages
+
+```
+python slack_api.py search "deploy failed" [--count N]
+```
+
+### Post a message (write)
+
+```
+python slack_api.py post C0123456789 "Hello from Onyx"
+```
 
 ## Output
 
@@ -53,7 +69,5 @@ Failures pass Slack's response through verbatim: `{"ok": false, "error":
 
 - Channels/users are referenced by ID (e.g. `C…`, `U…`); resolve names via
   `channels` / `users` first.
-- Scopes were chosen by the admin. You cannot widen them; on `missing_scope`
+- Scopes were chosen by the admin. You cannot widen them; on `missing_scope`,
   tell the user which scope is needed.
-- Never print or ask for the access token; you do not have it and do not need
-  it.

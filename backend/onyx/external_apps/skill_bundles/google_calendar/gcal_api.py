@@ -1,30 +1,11 @@
 #!/usr/bin/env python3
-"""Light Google Calendar wrapper for the Onyx Craft sandbox.
+"""Google Calendar wrapper for the Onyx Craft sandbox.
 
-Auth is NOT handled here. Requests to https://www.googleapis.com/calendar/*
-are authenticated by the Onyx egress proxy (it injects the token).
-
-Common operations are exposed as subcommands that auto-paginate
-(pageToken) and prune empty fields to keep responses small.
-`create-event` / `delete-event` are the only writes. `call` is a raw
-REST escape hatch for any other Calendar endpoint.
-
-    python gcal_api.py calendars [--limit N]
-    python gcal_api.py events <calendar_id> [--from ISO] [--to ISO] [--q TEXT] [--limit N]
-    python gcal_api.py event <calendar_id> <event_id>
-    python gcal_api.py create-event <calendar_id> <summary> <start_iso> <end_iso> [--description D] [--attendees a,b]
-    python gcal_api.py delete-event <calendar_id> <event_id>
-    python gcal_api.py freebusy <from_iso> <to_iso> <calendar_id> [<calendar_id> ...]
-    python gcal_api.py call <GET|POST|PUT|PATCH|DELETE> <path> [json_body]
-
-Output is JSON on stdout. Success is {"ok": true, ...}; transport
-errors print to stderr and exit non-zero.
+Common operations exposed as subcommands. Output is JSON on stdout.
 """
 
 import argparse
 import json
-import os
-import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -35,32 +16,6 @@ _BASE = "https://www.googleapis.com/calendar/v3/"
 _PAGE_SIZE = 250
 _DEFAULT_LIMIT = 250
 _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
-
-
-def _make_opener() -> urllib.request.OpenerDirector:
-    """DEMO egress hook: if ONYX_DEMO_EGRESS_PROXY is set, route this
-    wrapper's requests through the demo interceptor and trust its CA.
-    Unset → default behavior. Scoped to this process only; opencode
-    ignores these (non-standard) vars, so its own egress is untouched.
-    The production interceptor makes this unnecessary."""
-    proxy = os.environ.get("ONYX_DEMO_EGRESS_PROXY")
-    if not proxy:
-        return urllib.request.build_opener()
-    ca = os.environ.get("ONYX_DEMO_EGRESS_CA") or ""
-    ca = os.path.expanduser(os.path.expandvars(ca))
-    if ca and not os.path.isfile(ca):
-        raise SystemExit(
-            f"ONYX_DEMO_EGRESS_CA does not resolve to a file: {ca!r} "
-            "(set it to an absolute, already-expanded path)"
-        )
-    ctx = ssl.create_default_context(cafile=ca or None)
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
-        urllib.request.HTTPSHandler(context=ctx),
-    )
-
-
-_OPENER = _make_opener()
 
 
 def _prune(value: Any) -> Any:
@@ -94,7 +49,7 @@ def _req(
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json; charset=utf-8"} if data else {}
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    with _OPENER.open(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         raw = resp.read().decode("utf-8")
     return json.loads(raw) if raw.strip() else {}
 
@@ -230,7 +185,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         )
         return {"ok": True, "calendars": resp.get("calendars")}
 
-    # call
+    # `call` raw escape hatch
     body = None
     if a.json_body:
         body = json.loads(a.json_body)
