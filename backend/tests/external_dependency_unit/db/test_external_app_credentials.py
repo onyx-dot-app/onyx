@@ -12,6 +12,7 @@ committed and persist (they use unique emails to avoid collisions),
 which is fine — the function under test only reads `user_id`.
 """
 
+import uuid
 from collections.abc import Generator
 from typing import Any
 from uuid import UUID
@@ -66,8 +67,11 @@ def _create_app(
 ) -> ExternalApp:
     return create_external_app__no_commit(
         db_session,
+        slug=f"test-{uuid.uuid4().hex[:12]}",
         name=name,
         description="test",
+        bundle_file_id="",
+        bundle_sha256="",
         app_type=app_type,
         upstream_url_patterns=(
             upstream_url_patterns
@@ -277,6 +281,38 @@ def test_returns_none_when_template_placeholder_has_no_source(
             "key1": "VALUE_1",
             "key2": "this_value_is_unused_at_resolution",
         },
+    )
+
+    result = get_external_app_credentials(
+        rollback_session, user.id, _DEFAULT_MATCHING_URL
+    )
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [
+        "Bearer {",  # ValueError: unmatched brace
+        "Bearer {token!q}",  # ValueError: unknown conversion
+        "Bearer {0}",  # IndexError: positional ref against a mapping
+        "Bearer {token.missing_attr}",  # AttributeError: attr access
+    ],
+    ids=["unmatched_brace", "unknown_conversion", "positional_ref", "attr_access"],
+)
+def test_returns_none_when_template_string_is_malformed(
+    rollback_session: Session,
+    bad_value: str,
+) -> None:
+    """`str.format_map` raises more than just KeyError — malformed
+    templates can produce ValueError / IndexError / AttributeError /
+    TypeError. All of these must fail closed; otherwise a typo in an
+    admin-saved template crashes the egress proxy resolution path."""
+    user = create_test_user(rollback_session, f"ea_bad_{abs(hash(bad_value))}")
+    _create_app(
+        rollback_session,
+        auth_template={"Authorization": bad_value},
+        organization_credentials={"token": "ORG_TOKEN"},
     )
 
     result = get_external_app_credentials(
