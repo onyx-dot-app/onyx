@@ -1684,6 +1684,7 @@ def _docprocessing_task(
                 index_attempt.connector_credential_pair.connector.source.value
             )
             search_settings_id: int = index_attempt.search_settings.id
+            from_beginning: bool = index_attempt.from_beginning
 
         # Session is now closed; no connection held during embedding.
 
@@ -1723,6 +1724,7 @@ def _docprocessing_task(
             document_batch=documents,
             request_id=index_attempt_metadata.request_id,
             adapter=adapter,
+            from_beginning=from_beginning,
         )
 
         # Track chunk indexing usage for cloud usage limits
