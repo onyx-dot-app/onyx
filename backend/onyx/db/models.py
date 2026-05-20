@@ -5894,6 +5894,7 @@ class ExternalApp(Base):
         nullable=False,
     )
 
+    skill: Mapped["Skill"] = relationship("Skill")
     user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
         "ExternalAppUserCredential",
         back_populates="external_app",
