@@ -19,13 +19,46 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Sandboxes run as directories on the local filesystem
    - No automatic cleanup or snapshots
    - Suitable for development and testing
+   - No isolation: the agent process shares the api_server's user / network / filesystem
 
 2. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`)
-   - Sandboxes run as Kubernetes pods
-   - Automatic snapshots to S3
+   - Sandboxes run as Kubernetes pods, one per user
+   - api_server talks to the Kubernetes API for pod lifecycle and `kubectl exec`
+   - Automatic snapshots to S3 via a sidecar container with IRSA credentials
    - Auto-cleanup of idle sandboxes
-   - Production-ready with resource isolation
+   - Production-ready with resource isolation, security context, and NetworkPolicies
+   - Used by Onyx's Helm chart / cloud deployment
    - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
+
+3. **Docker Mode** (`SANDBOX_BACKEND=docker`)
+   - Sandboxes run as Docker containers on the same host as the rest of the compose stack, one per user
+   - api_server mounts `/var/run/docker.sock` and talks to the Docker Engine API for container lifecycle and `docker exec`
+   - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
+   - Auto-cleanup of idle sandboxes (background worker uses the same Docker socket)
+   - For self-hosted `docker compose` deployments enabled by `install.sh --include-craft`
+   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `minio` / model servers are not reachable by compose DNS
+
+#### Kubernetes → Docker mapping
+
+The Docker backend is intentionally the closest single-VM analogue of the Kubernetes backend:
+
+| Kubernetes                            | Docker compose                                              |
+| ------------------------------------- | ----------------------------------------------------------- |
+| Sandbox pod (`sandbox-<id>`)          | Sandbox container (`sandbox-<id8>`)                         |
+| Pod `emptyDir` workspace volume       | Named volume mounted at `/workspace/sessions`               |
+| `kubectl exec` for setup/file ops/ACP | `docker exec` over the Docker Engine API                    |
+| Sidecar container for snapshots/IRSA  | api_server tar-streams via `docker exec` → `FileStore`      |
+| `Service` + DNS for Next.js preview   | Container IP on `onyx_craft_sandbox` bridge, proxied        |
+| `NetworkPolicy` for egress isolation  | Dedicated bridge network + host `DOCKER-USER` iptables rule |
+| Per-pod resource requests/limits      | `SANDBOX_DOCKER_CPU_LIMIT` / `SANDBOX_DOCKER_MEMORY_LIMIT`  |
+
+#### Docker mode trust boundary
+
+`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`).
+
+`SANDBOX_API_SERVER_URL` must be the **public** HTTPS URL that the agent reaches Onyx through (same way any onyx-cli client would). Compose hostnames like `http://api_server:8080` do not resolve from inside the sandbox bridge.
+
+On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. `install.sh --include-craft` installs a host-level `DOCKER-USER` iptables rule to drop sandbox→IMDS traffic when it has sudo/iptables access, and prints the manual command otherwise. There is no application-level fallback — fix this at the host firewall.
 
 ### Directory Structure
 
@@ -148,7 +181,8 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 - **`base.py`** - Abstract base class defining the sandbox interface
 - **`local/manager.py`** - Filesystem-based sandbox manager for local development
-- **`kubernetes/manager.py`** - Kubernetes-based sandbox manager for production
+- **`kubernetes/kubernetes_sandbox_manager.py`** - Kubernetes-based sandbox manager for Helm/cloud
+- **`docker/docker_sandbox_manager.py`** - Docker Engine-based sandbox manager for docker-compose
 
 ### Managers (Shared)
 
@@ -176,7 +210,7 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ```bash
 # Sandbox backend mode
-SANDBOX_BACKEND=local|kubernetes           # Default: local
+SANDBOX_BACKEND=local|kubernetes|docker    # Default: local
 
 # Template paths (local mode)
 OUTPUTS_TEMPLATE_PATH=/templates/outputs   # Default: /templates/outputs
@@ -203,6 +237,35 @@ SANDBOX_S3_BUCKET=onyx-sandbox-files      # Default: onyx-sandbox-files
 
 # Service account
 SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for snapshots
+```
+
+### Docker Settings
+
+```bash
+# Container image (defaults to a pinned tag in docker-compose.yml)
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.44
+
+# Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
+# compose hostnames like http://api_server:8080 will not resolve from inside the
+# sandbox bridge).
+SANDBOX_API_SERVER_URL=https://onyx.your-org.example
+
+# Host path of the Docker socket mounted into api_server/background
+SANDBOX_DOCKER_SOCKET=/var/run/docker.sock      # Default: /var/run/docker.sock
+
+# Dedicated bridge network. Pre-created by install.sh --include-craft (or run
+# `docker network create onyx_craft_sandbox` manually). Sandboxes join *only*
+# this network — compose services are not reachable by DNS from inside.
+SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox       # Default: onyx_craft_sandbox
+
+# Prefix for per-sandbox named volumes (mounted at /workspace/sessions).
+SANDBOX_DOCKER_VOLUME_PREFIX=onyx-sandbox       # Default: onyx-sandbox
+
+# Per-container resource limits. Defaults match K8s pod *requests* (1 CPU / 2Gi)
+# rather than limits, since single-VM compose deployments rarely have headroom
+# to over-commit every sandbox.
+SANDBOX_DOCKER_MEMORY_LIMIT=2g                  # Default: 2g
+SANDBOX_DOCKER_CPU_LIMIT=1.0                    # Default: 1.0
 ```
 
 ### Lifecycle Settings
@@ -250,6 +313,17 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 ```
 
 ## Troubleshooting
+
+### Sandbox Stuck in PROVISIONING (Docker)
+
+**Symptoms**: Sandbox status never changes from `PROVISIONING` in `docker compose` deployments
+
+**Solutions**:
+
+- Confirm `api_server` actually has the Docker socket: `docker compose exec api_server ls -l /var/run/docker.sock`
+- Confirm the dedicated bridge exists: `docker network inspect onyx_craft_sandbox` (created by `install.sh --include-craft`, or run `docker network create onyx_craft_sandbox` manually)
+- Check sandbox logs: `docker logs sandbox-<id8>`
+- Confirm `SANDBOX_API_SERVER_URL` is a publicly resolvable HTTPS URL (the agent cannot reach `http://api_server:8080` from inside the sandbox bridge)
 
 ### Sandbox Stuck in PROVISIONING (Kubernetes)
 
@@ -310,6 +384,9 @@ ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web $HOME/.ony
 - **Init containers** have S3 access for file sync, but main sandbox container does NOT
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
+- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
+- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
+- **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
 
 ### Credentials Management
 
