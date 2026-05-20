@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import Select
@@ -29,6 +30,9 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import SandboxStatus
+from onyx.db.external_app import is_user_authenticated_for_app
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -97,9 +101,18 @@ def _exclude_unavailable_built_ins(
 
 
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
+    """Skills the user sees in the skills endpoint.
+
+    External-app-backed skills are excluded unconditionally — they're
+    surfaced (and mutated) via the external-apps API only. Use
+    ``list_skills_for_sandbox_injection`` to get the wider set the
+    sandbox actually receives (which includes authenticated external
+    apps).
+    """
     stmt = (
         select(Skill)
         .where(Skill.enabled.is_(True))
+        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
         .order_by(Skill.name)
     )
@@ -111,10 +124,14 @@ def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
 def fetch_skill_for_user(
     skill_id: UUID, user: User, db_session: Session
 ) -> Skill | None:
+    """Skill the user can read via the skills endpoint. Returns ``None``
+    for external-app-backed rows even when the id matches — the skills
+    endpoint must not be a mutation seam for external apps."""
     stmt = (
         select(Skill)
         .where(Skill.id == skill_id)
         .where(Skill.enabled.is_(True))
+        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
     )
     stmt = _add_user_visibility_filter(stmt, user)
@@ -125,15 +142,37 @@ def fetch_skill_for_user(
 def fetch_skill_for_user_by_slug(
     slug: str, user: User, db_session: Session
 ) -> Skill | None:
+    """Slug variant of ``fetch_skill_for_user``. Same exclusion: never
+    returns external-app-backed skills."""
     stmt = (
         select(Skill)
         .where(Skill.slug == slug)
         .where(Skill.enabled.is_(True))
+        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
     )
     stmt = _add_user_visibility_filter(stmt, user)
     stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return db_session.scalars(stmt).one_or_none()
+
+
+def list_skills_for_sandbox_injection(
+    user: User, db_session: Session
+) -> Sequence[Skill]:
+    """Skills delivered into *user*'s sandbox: every regular skill they
+    can see, plus the external-app-backed skills they've authenticated
+    for. Used by the sandbox skill-push path, NOT by the skills
+    endpoint (which excludes external apps entirely)."""
+    blocked = _skill_ids_blocked_by_external_app_auth(user, db_session)
+    stmt = (
+        select(Skill)
+        .where(Skill.enabled.is_(True))
+        .where(Skill.id.notin_(blocked))
+        .options(selectinload(Skill.author))
+        .order_by(Skill.name)
+    )
+    stmt = _add_user_visibility_filter(stmt, user)
+    return list(db_session.scalars(stmt))
 
 
 def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:

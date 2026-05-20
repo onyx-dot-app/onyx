@@ -9,9 +9,25 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
-from onyx.db.skill import create_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+
+def is_user_authenticated_for_app(
+    app: ExternalApp,
+    user_cred: ExternalAppUserCredential | None,
+) -> bool:
+    """True iff the user has supplied every credential key the app's
+    ``auth_template`` references that the org has not pre-filled. An
+    app with no user-required keys (everything covered by
+    ``organization_credentials``) is considered authenticated for every
+    user, no credential row needed."""
+    required = [k for k in app.auth_template if k not in app.organization_credentials]
+    if not required:
+        return True
+    if user_cred is None:
+        return False
+    return all(k in user_cred.user_credentials for k in required)
 
 
 def get_external_app_by_id(
@@ -73,6 +89,11 @@ def create_external_app__no_commit(
 
     `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision.
     """
+    # Deferred import: `db.skill` imports `is_user_authenticated_for_app`
+    # from this module to filter listings, so the dependency only flows
+    # one way at module-load time.
+    from onyx.db.skill import create_skill
+
     skill = create_skill(
         slug=slug,
         name=name,

@@ -15,6 +15,7 @@ Conventions:
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
@@ -25,10 +26,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
