@@ -7,25 +7,26 @@ Depends on Phase 1.
 
 Two halves shipped together:
 
-1. **Approval Service** — backend module that records approvals, evaluates
+1. **Approval Service.** Backend module that records approvals, evaluates
    them (org-default policy in this phase; full policy management in
-   Phase 4), and exposes a decision API.
-2. **Gate wiring** — proxy stops being pass-through. When a request matches
-   a gated action, the proxy calls the service, blocks until the decision
-   lands (or 180s timeout), and forwards / rejects accordingly.
+   Phase 4), and exposes a decision API. Owns the `BuildMessage` writes
+   for both the request card and its resolution.
+2. **Gate wiring.** The proxy stops being pass-through. On a gated
+   action, the proxy calls the service in-process, blocks until the
+   decision lands or the wait window elapses, and forwards or rejects.
 
 At the end of Phase 2, gated external-app requests work end-to-end. Users
 decide via the notification deep link (Phase 3 lands the inline chat
-surface).
+surface against the rows Phase 2 already writes).
 
 ## Module layout
 
-Backend:
+Backend service + API:
 
 ```
 backend/onyx/server/features/build/approvals/
-├── api.py                 # FastAPI router; user-facing decision + audit
-├── service.py             # create / respond / await_decision
+├── api.py                 # FastAPI router (user-facing decision + audit)
+├── service.py             # create / respond / await_decision / record_silent_decision
 └── exceptions.py          # OnyxError subclasses if needed
 ```
 
@@ -38,184 +39,275 @@ backend/onyx/db/enums.py               # ApprovalStatus (additions)
 backend/alembic/versions/XXXX_create_approval_request.py
 ```
 
-Proxy:
+Proxy (the proxy image bundles the backend module tree; no HTTP between
+proxy and api-server, all in-process Python imports):
 
 ```
-backend/onyx/sandbox_proxy/cache.py             # Redis BLPOP/RPUSH wrapper
+backend/onyx/sandbox_proxy/cache.py             # blocking-wakeup wrapper around CacheBackend
 backend/onyx/sandbox_proxy/addons/gate.py       # the gating addon
-backend/onyx/sandbox_proxy/parsers/             # consume registry from External Apps
+backend/onyx/sandbox_proxy/parsers/             # per-provider body inspection → action kind
 ```
 
-Constants / notifications:
+Constants / notifications / background:
 
 ```
-backend/onyx/configs/constants.py      # NotificationType.APPROVAL_REQUESTED
+backend/onyx/configs/constants.py                          # NotificationType.APPROVAL_REQUESTED
+backend/onyx/background/celery/tasks/approvals/sweeper.py  # expire stale rows
 ```
 
-Sandbox image:
+Sandbox image (verify only):
 
 ```
-backend/onyx/server/features/build/sandbox/kubernetes/docker/
-  # verify + raise bash-tool default timeout
-  # update agent system prompt
+backend/onyx/server/features/build/sandbox/...   # verify bash-tool timeout; update agent prompt
 ```
 
 ## Tasks
 
 ### T2.1 — Data model + migration
 
-`ApprovalRequest` ORM in `db/models.py`:
+`ApprovalRequest` (in `db/models.py`) columns: `id (UUID, PK)`,
+`session_id (FK build_session, indexed)`,
+`requesting_user_id (FK user)`,
+`kind (str)`, `summary (str)`, `payload (JSONB)`,
+`status (ApprovalStatus, default PENDING)`,
+`created_at (timezone-aware, server_default=func.now())`,
+`decided_at (timezone-aware, nullable)`,
+`decided_by (FK user, nullable)`.
+Index: `(session_id, status)` for the pending-list query, and
+`(status, created_at)` for the sweeper.
 
-```python
-class ApprovalRequest(Base):
-    __tablename__ = "approval_request"
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("build_session.id"), index=True, nullable=False
-    )
-    requesting_user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id"), nullable=False
-    )
-    kind: Mapped[str] = mapped_column(String, nullable=False)
-    summary: Mapped[str] = mapped_column(String, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    status: Mapped[ApprovalStatus] = mapped_column(
-        Enum(ApprovalStatus), nullable=False,
-        default=ApprovalStatus.pending,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
-    )
-    decided_at: Mapped[datetime | None]
-    decided_by: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"))
-```
-
-`ApprovalStatus` in `db/enums.py`:
+`ApprovalStatus` in `db/enums.py` follows the `ScheduledTaskRunStatus`
+convention (UPPERCASE values):
 
 ```python
 class ApprovalStatus(str, PyEnum):
-    pending = "pending"
-    approved = "approved"
-    rejected = "rejected"
-    expired = "expired"  # timed out without user action
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
 
     def is_terminal(self) -> bool:
-        return self != ApprovalStatus.pending
+        return self != ApprovalStatus.PENDING
 ```
 
 Manual Alembic migration; mirror `scheduled_task` migration patterns.
-Index on `(session_id, status)` for the pending-list query.
 
 ### T2.2 — DB query module
 
-`backend/onyx/db/approval.py`:
+`backend/onyx/db/approval.py`, all writes `__no_commit` (mirroring
+`scheduled_task.py` and `external_app.py`):
 
 ```python
-def insert_approval(db: Session, *, session_id, requesting_user_id,
-                    kind, summary, payload) -> ApprovalRequest: ...
+def insert_approval__no_commit(db, *, session_id, requesting_user_id,
+                               kind, summary, payload,
+                               status=ApprovalStatus.PENDING,
+                               decided_by=None) -> ApprovalRequest: ...
 
-def get_approval(db: Session, approval_id: UUID) -> ApprovalRequest: ...
+def get_approval(db, approval_id) -> ApprovalRequest | None: ...
 
-def mark_approval_status(db: Session, approval_id: UUID,
-                         status: ApprovalStatus,
-                         decided_by: UUID | None) -> None: ...
+def transition_to_terminal_if_pending__no_commit(
+    db, *, approval_id, new_status, decided_by
+) -> ApprovalRequest | None:
+    """Conditional UPDATE ... WHERE status='PENDING' RETURNING *.
+    Returns None if no row was updated (already terminal or missing)."""
 
-def list_pending_approvals(db: Session, session_id: UUID) -> list[ApprovalRequest]: ...
+def list_pending_approvals(db, session_id) -> list[ApprovalRequest]: ...
+
+def list_approvals(db, session_id, *, status=None,
+                   from_dt=None, to_dt=None) -> list[ApprovalRequest]: ...
+
+def list_stale_pending_approvals(db, older_than) -> list[ApprovalRequest]: ...
 ```
-
-Follow `__no_commit` conventions used by `scheduled_task.py`.
 
 ### T2.3 — Service module
 
-`backend/onyx/server/features/build/approvals/service.py`:
+`backend/onyx/server/features/build/approvals/service.py`.
 
-```python
-def create(db: Session, *, session_id: UUID, kind: str, summary: str,
-           payload: dict) -> UUID:
-    """Persist the approval row, write a BuildMessage card (Phase 3
-    consumer), dispatch notification. Returns approval_id."""
+`create(db, *, session_id, requesting_user_id, kind, summary, payload) -> UUID`
 
-def respond(db: Session, *, approval_id: UUID,
-            decision: Literal["approve", "reject"],
-            user_id: UUID) -> None:
-    """Mark the row terminal, write the resolution BuildMessage,
-    rpush wakeup. Raises OnyxError(CONFLICT) if already decided.
-    Raises OnyxError(NOT_FOUND) if missing."""
+In one DB transaction:
 
-async def await_decision(approval_id: UUID,
-                         timeout_seconds: int = 180) -> ApprovalStatus:
-    """Block on Redis blpop. Returns terminal ApprovalStatus.
-    On timeout: marks row expired and returns expired."""
+1. Insert the `ApprovalRequest` row (`status=PENDING`).
+2. Look up the current `max(turn_index)` for the session's `BuildMessage`
+   rows — the approval card lives in the agent's current turn — and
+   insert a `BuildMessage` (`type=MessageType.ASSISTANT`, `turn_index=<that
+   max>`, `message_metadata={"type": "approval_request", "approval_id":
+   ..., "kind": ..., "summary": ..., "payload": ..., "status": "pending"}`).
+3. Commit, then best-effort dispatch the `APPROVAL_REQUESTED`
+   notification (failure must not roll back the row). Document the
+   best-effort posture; Phase 3 adds a polling fallback for active
+   sessions so a dropped notification doesn't strand the user.
+
+`respond(db, *, approval_id, decision, user_id) -> None`
+
+Race-safe single-shot terminal write:
+
+```sql
+UPDATE approval_request
+SET status = :new_status, decided_at = now(), decided_by = :user
+WHERE id = :id AND status = 'PENDING'
+RETURNING session_id, kind;
 ```
 
-Key details:
-- `await_decision` re-reads the row on entry to handle the race where
-  the decision lands before the blpop starts.
-- On timeout, write `expired` to the row and rpush so anyone else
-  waiting (shouldn't happen in v0) gets notified.
-- All cache I/O via the existing `CacheBackend` interface
-  (`backend/onyx/cache/interface.py`).
+If zero rows affected, raise `OnyxError(CONFLICT)`. Otherwise, in the
+same transaction, insert the resolution `BuildMessage`
+(`message_metadata={"type": "approval_resolved", "approval_id": ...,
+"decision": ..., "decided_by": ...}` at the current max `turn_index`).
+After commit, `rpush` the wakeup signal.
+
+`await_decision(approval_id, timeout_seconds) -> ApprovalStatus`
+
+Block on `WakeupChannel.wait`. Re-read the row on entry to handle the
+race where the decision lands before BLPOP starts. On wakeup, re-read
+the row and return its status. The sweeper task (T2.6) owns expiration
+writes, so this function never writes — it only reads.
+
+`record_silent_decision(db, *, session_id, requesting_user_id, kind,
+summary, payload, decision)` — for Phase 4's policy evaluator. Inserts
+an `ApprovalRequest` row with terminal status (`APPROVED` or `REJECTED`)
+and the matching resolution `BuildMessage` in one transaction. No
+notification, no wakeup. This keeps a single audit table backing one
+query for every decision type (silent allow, deny, interactive,
+expired).
+
+All cache I/O via the existing `CacheBackend` interface
+(`backend/onyx/cache/interface.py`).
 
 ### T2.4 — User-facing API
 
 `backend/onyx/server/features/build/approvals/api.py`:
 
 ```python
-router = APIRouter(prefix="/approvals", dependencies=[Depends(require_basic_access)])
+router = APIRouter(
+    prefix="/approvals",
+    dependencies=[Depends(require_permission(Permission.BASIC_ACCESS))],
+)
 
 @router.get("/sessions/{session_id}/pending")
-def list_pending(session_id: UUID, db: Session) -> list[ApprovalView]: ...
+def list_pending(session_id, db, user) -> list[ApprovalView]: ...
+
+@router.get("/sessions/{session_id}")
+def list_session_approvals(
+    session_id,
+    status: ApprovalStatus | None = None,
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
+    db, user,
+) -> list[ApprovalView]:
+    """Audit query — functional requirement #5 in the parent."""
 
 @router.post("/{approval_id}/decision")
-def submit_decision(approval_id: UUID, body: DecisionBody,
-                    user: User, db: Session) -> None:
-    # Validate: user must own the session this approval is on.
-    # Call service.respond.
+def submit_decision(approval_id, body: DecisionBody, user, db) -> None:
+    # validate user owns the session, then service.respond(...)
     ...
 ```
 
-Register on the build aggregator (`backend/onyx/server/features/build/api/api.py`).
+Register on `backend/onyx/server/features/build/api/api.py`. No
+`response_model`. Raise `OnyxError` only.
 
-Conventions:
-- No `response_model`.
-- Raise `OnyxError` only.
+### T2.5 — Proxy: wakeup wrapper
 
-### T2.5 — Proxy: Redis wakeup wrapper
-
-`sandbox_proxy/cache.py`:
+`sandbox_proxy/cache.py` wraps the existing `CacheBackend`:
 
 ```python
 class WakeupChannel:
-    def __init__(self, cache_backend):
+    def __init__(self, cache_backend, ttl_seconds: int = 30):
         self._cache = cache_backend
+        self._ttl = ttl_seconds
 
-    async def wait(self, approval_id: UUID,
-                   timeout_seconds: int) -> str | None:
+    async def wait(self, approval_id, timeout_seconds: int) -> str | None:
         key = f"approval:wake:{approval_id}"
-        return await asyncio.to_thread(
-            self._cache.blpop, key, timeout=timeout_seconds
+        result = await asyncio.to_thread(
+            self._cache.blpop, [key], timeout_seconds
         )
+        if result is None:
+            return None
+        _key_bytes, value_bytes = result
+        return value_bytes.decode()
 
-    def signal(self, approval_id: UUID, decision: str):
+    def signal(self, approval_id, decision: str) -> None:
         key = f"approval:wake:{approval_id}"
-        self._cache.rpush(key, decision, expire_seconds=30)
+        self._cache.rpush(key, decision)
+        self._cache.expire(key, self._ttl)
 ```
 
-Both the proxy and `service.respond()` use the same `CacheBackend`
-implementation, same key naming.
+Both the proxy and `service.respond` use the same `CacheBackend`
+implementation and same key naming.
 
-### T2.6 — Gate addon
+### T2.6 — Sweeper task
 
-`sandbox_proxy/addons/gate.py`:
+mitmproxy's `CancelledError` on TCP close is not reliable enough to be
+the sole expiration path. A Celery periodic task in
+`backend/onyx/background/celery/tasks/approvals/sweeper.py` owns
+expiration:
+
+```sql
+-- runs every ~30s
+UPDATE approval_request
+SET status = 'EXPIRED', decided_at = now()
+WHERE status = 'PENDING' AND created_at < now() - interval '5 minutes'
+RETURNING id, session_id;
+```
+
+For each expired row, insert an `approval_resolved` `BuildMessage`
+(`decision: "expired"`). All in one task call, batched per row. Schedule
+via the existing beat schedule pattern; supply `expires=` on enqueue.
+
+This is the safety net for the sandbox-disconnect path: even if the
+proxy coroutine vanishes silently, the row reaches a terminal state.
+
+### T2.7 — Action-kind matching
+
+Two layers:
+
+1. **App-level (External Apps).** `_find_enabled_app_for_url(url)` from
+   `dane/ea-craft-5` tells us "this URL belongs to Slack." Sole source
+   of truth for URL → app.
+2. **Action-kind (this project).** Per-provider modules in
+   `sandbox_proxy/parsers/` inspect the request body of URLs already
+   matched to a provider and emit an action kind plus a summary +
+   payload for the card. The action-kind registry is owned here, not in
+   External Apps.
+
+```python
+# sandbox_proxy/parsers/base.py
+class ActionMatch:
+    kind: str          # e.g. "slack.send_message"
+    summary: str
+    payload: dict
+
+class Parser(Protocol):
+    def match(self, request) -> ActionMatch | None: ...
+
+# sandbox_proxy/parsers/slack.py
+class SlackParser:
+    def match(self, request) -> ActionMatch | None:
+        # request body inspection: chat.postMessage → slack.send_message
+        ...
+```
+
+The gate addon composes: External Apps app lookup, then dispatch to the
+matching parser, then `service.create`.
+
+**Interface contract for the External Apps dependency.** If
+`dane/ea-craft-5` is unmerged at implementation time, define the
+`AppMatcher` Protocol that the proxy expects and ship a temporary
+implementation that hardcodes Slack `chat.postMessage`. Both
+implementations (temporary and real) live in the proxy and conform to
+the same Protocol so the swap is mechanical.
+
+### T2.8 — Gate addon
 
 ```python
 class GateAddon:
-    def __init__(self, identity, registry, db_factory, wakeup,
-                 timeout_seconds: int = 180):
+    def __init__(self, identity, app_matcher, parsers, db_factory,
+                 wakeup, timeout_seconds: int = 180,
+                 enabled: bool = True):
         ...
 
     async def request(self, flow):
+        if not self._enabled:
+            return
         ctx = self._identity.resolve(flow.client_conn.peername[0])
         if ctx is None:
             flow.response = http.Response.make(
@@ -224,113 +316,123 @@ class GateAddon:
             )
             return
 
-        match = self._registry.match(flow.request)
+        app = self._app_matcher.find(flow.request.url)
+        if app is None:
+            return
+        parser = self._parsers.get(app.app_type)
+        if parser is None:
+            return
+        match = parser.match(flow.request)
         if match is None:
-            return  # pass-through (Phase 1 LoggingAddon still logs)
-
-        summary, payload = match.parse(flow.request)
+            return
 
         with self._db() as db:
             approval_id = service.create(
                 db,
                 session_id=ctx.session_id,
+                requesting_user_id=ctx.user_id,
                 kind=match.kind,
-                summary=summary,
-                payload=payload,
+                summary=match.summary,
+                payload=match.payload,
             )
 
         try:
             decision = await self._wakeup.wait(approval_id, self._timeout)
         except asyncio.CancelledError:
-            # Sandbox closed first; mark the row terminal
+            # Best-effort terminal mark; sweeper is the real safety net.
             with self._db() as db:
-                service.mark_terminal_if_pending(db, approval_id,
-                                                 ApprovalStatus.expired)
+                approval.transition_to_terminal_if_pending__no_commit(
+                    db, approval_id=approval_id,
+                    new_status=ApprovalStatus.EXPIRED, decided_by=None,
+                )
+                db.commit()
             raise
 
         if decision == "approve":
-            return  # forward to upstream
-        elif decision == "reject":
+            return
+        if decision == "reject":
             flow.response = http.Response.make(
                 403, b'{"error":"user_rejected"}',
                 {"content-type": "application/json"},
             )
-        else:  # timed out → expired
-            flow.response = http.Response.make(
-                403, b'{"error":"not_authorized"}',
-                {"content-type": "application/json"},
-            )
+            return
+        flow.response = http.Response.make(
+            403, b'{"error":"not_authorized"}',
+            {"content-type": "application/json"},
+        )
 ```
 
-### T2.7 — Action registry consumption
+The `enabled` flag is a separate feature flag from Phase 1's proxy
+pass-through flag. We need the ability to disable gating while keeping
+the proxy itself (and Phase 1's logging, CA distribution, etc.) live.
 
-Consume `upstream_url_patterns` from External Apps (branch `dane/ea-craft-5`):
+**SDK-bypass detection.** Log mitmproxy TLS handshake failures as a
+structured event with `source_ip` and `destination_host`. Agent code
+that tries to bypass our CA (custom truststore, `verify=False`) shows
+up here; this is the canary, paired with the default-deny NetworkPolicy
+that already fails such requests closed.
 
-```python
-# sandbox_proxy/parsers/registry.py
-class ActionMatch:
-    kind: str
-    parse: Callable[[Request], tuple[str, dict]]
+### T2.9 — Notification type
 
-class Registry:
-    def __init__(self, sources: list[ProviderActions]): ...
-    def match(self, request) -> ActionMatch | None: ...
-```
+Add `APPROVAL_REQUESTED` to `NotificationType` in
+`backend/onyx/configs/constants.py`. Dispatch from `service.create`
+mirrors `scheduled_tasks/executor.py:394-403`.
 
-The `ProviderActions` interface comes from External Apps. If the merge
-slips, ship a temporary minimal registry hardcoding Slack
-`chat.postMessage` and migrate to the real registry on merge — flag this
-dependency in standup.
+### T2.10 — Bash-tool timeout (verify-and-document)
 
-### T2.8 — Notification type
+The `backend/onyx/server/features/build/sandbox/opencode/` directory
+ships empty in this repo: opencode is consumed as a binary/image we
+don't control. If our deployment owns opencode config, raise the bash
+tool default timeout to ≥240s and update the agent system prompt to
+mention the approval window. If opencode is an external binary,
+document the limitation and rely on the agent-prompt nudge alone (the
+agent can still set explicit per-call timeouts on `curl`-style
+requests).
 
-`backend/onyx/configs/constants.py`:
+### T2.11 — Observability
 
-```python
-class NotificationType(str, PyEnum):
-    ...
-    APPROVAL_REQUESTED = "approval_requested"
-```
+The service emits, via the existing metrics machinery:
 
-In `service.create()`, dispatch via the existing notification machinery
-(mirror `scheduled_tasks/executor.py:394-403`). Best-effort; do not block
-the create on notification failure.
-
-### T2.9 — Bash-tool default + agent prompt
-
-- Find opencode's bash tool timeout default. Raise to ≥240s.
-- Update the agent's system prompt to mention the approval window:
-
-  > Network requests to gated external services (Slack, Linear, Google
-  > Calendar) may take up to ~3 minutes to complete because they require
-  > user approval. When using the bash tool for such calls, set a generous
-  > explicit timeout (≥240s).
-
-Where exactly the system prompt lives needs verification during the
-phase. Likely opencode config files in
-`backend/onyx/server/features/build/sandbox/kubernetes/docker/`.
+- counters: `approvals_created`, `approvals_approved`,
+  `approvals_rejected`, `approvals_expired`, `approvals_silent_allowed`,
+  `approvals_denied`.
+- histogram: `approval_decision_latency_seconds` (created → terminal).
+- counter: `approval_notification_dispatch_failures`.
+- histogram: `approval_wakeup_blpop_wait_seconds` (proxy side).
 
 ## Testing
 
 - **External-dependency-unit** (real Postgres + Redis):
-  - `service.create` → `service.await_decision` blocks → `service.respond`
-    unblocks with correct decision.
-  - Reject path; expire path (small timeout for test).
-  - Double-respond raises `OnyxError(CONFLICT)`.
-  - Sandbox-disconnect-mid-wait: simulate cancellation; assert row is
-    `expired`.
+  - `create` → `await_decision` blocks → `respond` unblocks with correct
+    decision, and both `BuildMessage` rows land in the same transactions.
+  - Reject path.
+  - Sweeper expires stale `PENDING` rows and writes the resolved
+    `BuildMessage`.
+  - Concurrent `respond` calls: exactly one succeeds, the other gets
+    `OnyxError(CONFLICT)`. Verifies the race-safe conditional UPDATE.
+  - `record_silent_decision` writes both rows in one transaction.
+  - Sandbox-disconnect-mid-wait: simulate `CancelledError` and assert
+    the row reaches `EXPIRED` (via the addon path or the sweeper).
 - **Integration** (full stack):
-  - Stand up proxy + service + DB; trigger a gated request from a stand-in
-    sandbox; "user" client POSTs decision; assert outcome end-to-end.
+  - Stand up proxy + service + DB; trigger a gated request from a
+    stand-in sandbox; "user" client POSTs decision; assert outcome
+    end-to-end.
+  - **Cron-driven session test** (functional requirement #2 in the
+    parent): a scheduled task prompts an existing session, that session
+    triggers a gated request, the same approval flow runs. Verify the
+    `APPROVAL_REQUESTED` notification surfaces and the audit query
+    returns the row.
 - **Smoke**: real Slack send through real proxy in staging, with manual
   approve / reject.
 
 ## Dependencies
 
 - Phase 1 complete.
-- External Apps' `upstream_url_patterns` registry (or fallback to
-  temporary hardcoded matchers).
-- Existing `CacheBackend` Redis backend in production.
+- External Apps' app-level matcher (`_find_enabled_app_for_url`) from
+  `dane/ea-craft-5`, or the temporary Protocol-conformant fallback.
+- **Redis-backed `CacheBackend`.** The Postgres `CacheBackend` does not
+  implement blocking BLPOP meaningfully; deployed environments must run
+  the Redis backend.
 
 ## Open during phase
 
@@ -338,17 +440,26 @@ phase. Likely opencode config files in
   agent's tool-result handling for any preference.
 - Body shape for the 403 — propose `{"error": "user_rejected" |
   "not_authorized"}` and lock before merge.
-- Whether `service.create` should also write the BuildMessage row in the
-  same transaction (Phase 3 needs it). Recommend yes; Phase 3 consumes
-  it without re-writing.
 
 ## Definition of done
 
-- All four service functions covered by tests.
-- `POST /build/approvals/{id}/decision` works end-to-end.
-- A gated request through the proxy: creates an approval row, blocks,
-  unblocks on user POST, returns 403 on reject, returns `expired` after
-  180s of inaction.
-- Sandbox disconnect mid-wait correctly marks row `expired`.
-- `APPROVAL_REQUESTED` notification fires and surfaces to the user.
-- Bash-tool default verified / raised; system prompt updated.
+- All four service functions (`create`, `respond`, `await_decision`,
+  `record_silent_decision`) covered by tests.
+- `POST /build/approvals/{id}/decision` and the audit `GET` work
+  end-to-end.
+- A gated request through the proxy: creates an approval row + the
+  request `BuildMessage`, blocks, unblocks on user POST, writes the
+  resolved `BuildMessage`, returns 403 on reject, returns
+  `not_authorized` after the wait window.
+- Concurrent POSTs to the decision endpoint resolve race-safely: one
+  wins, the other gets CONFLICT.
+- The audit table holds every decision type — silent allow, deny,
+  interactive approve/reject, expired — and the audit query returns
+  them.
+- Sweeper task verified: a `PENDING` row past the threshold reaches
+  `EXPIRED` and produces the resolved `BuildMessage`.
+- `APPROVAL_REQUESTED` notification dispatch verified end-to-end.
+- Cron-driven session integration test green.
+- Observability metrics emitted and visible in the existing pipeline.
+- Bash-tool default verified / raised; system prompt updated (or
+  limitation documented, per T2.10).
