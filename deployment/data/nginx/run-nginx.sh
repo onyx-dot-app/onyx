@@ -35,9 +35,5 @@ else
   echo "# Empty file - MCP server is disabled" > /etc/nginx/conf.d/mcp.conf.inc
 fi
 
-# API server readiness is now enforced by Compose:
-# the nginx service depends_on api_server with condition: service_healthy,
-# so by the time this script runs the upstream is already serving.
-
 # Start nginx and reload every 6 hours
 while :; do sleep 6h & wait; nginx -s reload; done & nginx -g "daemon off;"
