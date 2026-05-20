@@ -292,6 +292,9 @@ def _graph_error_code(response: requests.Response | None) -> str:
     try:
         return response.json().get("error", {}).get("code") or "<no code>"
     except Exception:
+        logger.debug(
+            "Failed to parse Graph error code from response body", exc_info=True
+        )
         return "<no code>"
 
 
