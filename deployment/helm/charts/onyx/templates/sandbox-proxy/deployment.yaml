@@ -1,4 +1,4 @@
-{{- if and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") .Values.sandboxProxy.enabled }}
+{{- if eq (include "onyx.sandboxProxyEnabled" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,6 +20,11 @@ spec:
       app.kubernetes.io/component: sandbox-proxy
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.sandboxProxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "onyx.labels" . | nindent 8 }}
         app.kubernetes.io/component: sandbox-proxy
@@ -32,8 +37,8 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.sandboxProxy.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1001
-        fsGroup: 1001
+        runAsUser: {{ .Values.sandboxProxy.runAsUser }}
+        fsGroup: {{ .Values.sandboxProxy.fsGroup }}
         seccompProfile:
           type: RuntimeDefault
       {{- if or .Values.sandboxProxy.affinity (gt (int .Values.sandboxProxy.replicaCount) 1) }}
@@ -101,7 +106,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: true
-            runAsUser: 1001
+            runAsUser: {{ .Values.sandboxProxy.runAsUser }}
             seccompProfile:
               type: RuntimeDefault
             capabilities:

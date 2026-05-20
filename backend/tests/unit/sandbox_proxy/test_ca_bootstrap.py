@@ -1,8 +1,13 @@
+import datetime as dt
 import threading
 from pathlib import Path
 
 import pytest
 from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import CAStore
@@ -44,10 +49,92 @@ def test_cold_store_generates_and_persists(tmp_path: Path) -> None:
     assert b"BEGIN CERTIFICATE" in contents
     assert b"BEGIN PRIVATE KEY" in contents
     assert materialized.pem_path.stat().st_mode & 0o777 == 0o600
+    # Parent dir must be 0o700 — the CA private key sits inside it.
+    assert materialized.pem_path.parent.stat().st_mode & 0o777 == 0o700
 
     parsed = x509.load_pem_x509_certificate(materialized.cert_pem)
     bc = parsed.extensions.get_extension_for_class(x509.BasicConstraints)
     assert bc.value.ca is True
+
+
+def _build_cert(
+    *,
+    not_valid_before: dt.datetime,
+    not_valid_after: dt.datetime,
+) -> tuple[bytes, bytes]:
+    """Helper that builds a (cert_pem, key_pem) with explicit validity
+    so we can exercise the expiry / not-yet-valid checks."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test CA")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(not_valid_before)
+        .not_valid_after(not_valid_after)
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .sign(private_key, hashes.SHA256())
+    )
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return cert_pem, key_pem
+
+
+def test_load_rejects_expired_cert(tmp_path: Path) -> None:
+    now = dt.datetime.now(dt.timezone.utc)
+    cert_pem, key_pem = _build_cert(
+        not_valid_before=now - dt.timedelta(days=400),
+        not_valid_after=now - dt.timedelta(days=1),
+    )
+    store = _InMemoryStore()
+    store._data = (cert_pem, key_pem)
+
+    with pytest.raises(RuntimeError, match="has expired"):
+        _bootstrap(store, tmp_path / "ca.pem").ensure_ca()
+
+
+def test_load_rejects_not_yet_valid_cert(tmp_path: Path) -> None:
+    now = dt.datetime.now(dt.timezone.utc)
+    # 1 hour in the future is well outside the 5-minute skew tolerance.
+    cert_pem, key_pem = _build_cert(
+        not_valid_before=now + dt.timedelta(hours=1),
+        not_valid_after=now + dt.timedelta(days=365),
+    )
+    store = _InMemoryStore()
+    store._data = (cert_pem, key_pem)
+
+    with pytest.raises(RuntimeError, match="not yet valid"):
+        _bootstrap(store, tmp_path / "ca.pem").ensure_ca()
+
+
+def test_load_rejects_malformed_pem(tmp_path: Path) -> None:
+    store = _InMemoryStore()
+    store._data = (b"this is not a PEM cert", b"this is not a PEM key")
+
+    with pytest.raises(RuntimeError, match="not valid PEM"):
+        _bootstrap(store, tmp_path / "ca.pem").ensure_ca()
+
+
+def test_load_accepts_cert_within_skew_tolerance(tmp_path: Path) -> None:
+    # Cert generated 2 minutes in the future is inside the 5-minute
+    # skew window and should be accepted (matches the production
+    # generator which backdates by 5 minutes).
+    now = dt.datetime.now(dt.timezone.utc)
+    cert_pem, key_pem = _build_cert(
+        not_valid_before=now + dt.timedelta(minutes=2),
+        not_valid_after=now + dt.timedelta(days=365),
+    )
+    store = _InMemoryStore()
+    store._data = (cert_pem, key_pem)
+
+    materialized = _bootstrap(store, tmp_path / "ca.pem").ensure_ca()
+    assert materialized.cert_pem == cert_pem
 
 
 def test_warm_store_loads_without_regenerating(tmp_path: Path) -> None:
