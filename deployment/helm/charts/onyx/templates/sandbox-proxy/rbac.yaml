@@ -1,0 +1,76 @@
+{{- if and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") .Values.sandboxProxy.enabled }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+---
+# CA Secret access, scoped to the single named Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["{{ .Values.sandboxProxy.caSecretName }}"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "onyx.fullname" . }}-sandbox-proxy
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy-ca
+  apiGroup: rbac.authorization.k8s.io
+---
+# Pod watch (informer) + CA ConfigMap write, both scoped to the
+# sandbox namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["{{ .Values.sandboxProxy.caConfigMapName }}"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "onyx.fullname" . }}-sandbox-proxy
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

@@ -149,6 +149,30 @@ SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
 SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
 
 # ============================================================================
+# Sandbox Egress Proxy Configuration
+# Consumed by both the api-server (building sandbox pod specs) and the
+# proxy itself (on boot).
+# ============================================================================
+
+# Empty SANDBOX_PROXY_HOST disables proxy wiring for tests/dev (the
+# initContainer is skipped and HTTPS_PROXY isn't set on the sandbox).
+SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
+SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
+
+SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
+SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
+
+# Namespace the proxy runs in. The CA Secret lives here; the CA
+# ConfigMap is projected into SANDBOX_NAMESPACE so sandboxes can mount
+# it (K8s does not allow cross-namespace ConfigMap mounts).
+SANDBOX_PROXY_NAMESPACE = os.environ.get("SANDBOX_PROXY_NAMESPACE", "onyx")
+
+SANDBOX_PROXY_CA_SECRET = os.environ.get("SANDBOX_PROXY_CA_SECRET", "sandbox-proxy-ca")
+SANDBOX_PROXY_CA_CONFIGMAP = os.environ.get(
+    "SANDBOX_PROXY_CA_CONFIGMAP", "sandbox-proxy-ca-bundle"
+)
+
+# ============================================================================
 # Docker Sandbox Configuration
 # Only used when SANDBOX_BACKEND = "docker" (self-hosted docker-compose)
 # ============================================================================

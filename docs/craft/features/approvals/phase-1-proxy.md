@@ -44,16 +44,29 @@ sandbox_proxy/
 ├── identity.py            # src-IP → session resolution + SandboxIPLookup Protocol
 ├── identity_k8s.py        # K8sInformerLookup (this phase); Phase 5 adds identity_docker.py
 ├── cache.py               # placeholder; Phase 2 wires Redis BLPOP/RPUSH here
-├── config.py              # env-driven config (listen port, namespace, etc.)
 ├── addons/
 │   └── passthrough.py         # pass-through addon that logs identified flows
-├── scripts/
-│   └── firewall-init.sh       # shared sandbox bootstrap; runs as initContainer
-│                              # command in K8s, as entrypoint wrapper in docker
-│                              # (Phase 5). Mode selected via env.
 ├── Dockerfile
 └── requirements.txt
 ```
+
+Config constants live in `backend/onyx/server/features/build/configs.py`
+under the `SANDBOX_PROXY_*` namespace, alongside the rest of the
+sandbox config — the api-server (constructing sandbox pod specs) and
+the proxy itself both read from the same source of truth.
+
+The shared sandbox bootstrap script lives in the sandbox image dir:
+
+```
+backend/onyx/server/features/build/sandbox/kubernetes/docker/
+└── firewall-init.sh       # runs as the K8s initContainer command
+                            # in this phase; Phase 5 reuses it as the
+                            # docker-compose entrypoint wrapper. Mode
+                            # is selected via SANDBOX_PROXY_BOOTSTRAP_MODE.
+```
+
+It's colocated with the sandbox Dockerfile so it's auto-pulled into
+the build context — no CI staging step required.
 
 K8s resources under `deployment/helm/charts/onyx/templates/sandbox-proxy/`:
 `deployment.yaml`, `rbac.yaml`, `ca-secret.yaml`, `ca-configmap.yaml`.
