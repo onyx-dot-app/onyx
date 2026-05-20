@@ -868,33 +868,27 @@ if [ -f "$ENV_FILE" ]; then
     echo ""
 
     if [ "$REPLY" = "update" ]; then
-        print_info "Update selected. Which tag would you like to deploy?"
-        echo ""
-        echo "• Press Enter for edge (recommended)"
-        echo "• Type a specific tag (e.g., v0.1.0)"
-        echo ""
         if [ "$INCLUDE_CRAFT" = true ]; then
-            prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
-            VERSION="$REPLY"
+            # --include-craft requires the craft-tagged backend image (Node.js
+            # + opencode CLI are only built into that image), so the tag is
+            # forced rather than prompted for.
+            VERSION="craft-latest"
+            print_info "Update selected. Using craft-latest (required by --include-craft)."
         else
+            print_info "Update selected. Which tag would you like to deploy?"
+            echo ""
+            echo "• Press Enter for edge (recommended)"
+            echo "• Type a specific tag (e.g., v0.1.0)"
+            echo ""
             prompt_or_default "Enter tag [default: edge]: " "edge"
             VERSION="$REPLY"
-        fi
-        echo ""
+            echo ""
 
-        if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
-            print_info "Selected: craft-latest (Craft enabled)"
-        elif [ "$VERSION" = "edge" ]; then
-            print_info "Selected: edge (latest nightly)"
-        else
-            print_info "Selected: $VERSION"
-        fi
-
-        # Reject craft image tags when running in lite mode
-        if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
-            print_error "Cannot use a craft image tag (${VERSION}) with --lite."
-            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-            exit 1
+            if [ "$VERSION" = "edge" ]; then
+                print_info "Selected: edge (latest nightly)"
+            else
+                print_info "Selected: $VERSION"
+            fi
         fi
 
         # Update .env file with new version
@@ -907,22 +901,8 @@ if [ -f "$ENV_FILE" ]; then
             echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
         fi
         print_success "Updated IMAGE_TAG to $VERSION in .env file"
-
-        # If using craft image, also enable ENABLE_CRAFT
-        if [[ "$VERSION" == craft-* ]]; then
-            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-            print_success "ENABLE_CRAFT set to true"
-        fi
         print_success "Configuration updated for upgrade"
     else
-        # Reject restarting a craft deployment in lite mode
-        EXISTING_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-        if [[ "$LITE_MODE" = true ]] && [[ "${EXISTING_TAG:-}" == craft-* ]]; then
-            print_error "Cannot restart a craft deployment (${EXISTING_TAG}) with --lite."
-            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-            exit 1
-        fi
-
         print_info "Keeping existing configuration..."
         print_success "Will restart with current settings"
     fi
@@ -937,30 +917,26 @@ else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
 
-    # Ask for version
-    print_info "Which tag would you like to deploy?"
-    echo ""
+    # Ask for version (skipped when --include-craft forces the craft-tagged
+    # backend image, which is the only image that ships Node.js + opencode CLI).
     if [ "$INCLUDE_CRAFT" = true ]; then
-        echo "• Press Enter for craft-latest (recommended for Craft)"
-        echo "• Type a specific tag (e.g., craft-v1.0.0)"
-        echo ""
-        prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
-        VERSION="$REPLY"
+        VERSION="craft-latest"
+        print_info "Using craft-latest (required by --include-craft)."
     else
+        print_info "Which tag would you like to deploy?"
+        echo ""
         echo "• Press Enter for edge (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
         prompt_or_default "Enter tag [default: edge]: " "edge"
         VERSION="$REPLY"
-    fi
-    echo ""
+        echo ""
 
-    if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
-        print_info "Selected: craft-latest (Craft enabled)"
-    elif [ "$VERSION" = "edge" ]; then
-        print_info "Selected: edge (latest nightly)"
-    else
-        print_info "Selected: $VERSION"
+        if [ "$VERSION" = "edge" ]; then
+            print_info "Selected: edge (latest nightly)"
+        else
+            print_info "Selected: $VERSION"
+        fi
     fi
 
     # Ask for authentication schema
@@ -992,13 +968,6 @@ else
     # Use basic auth by default
     AUTH_SCHEMA="basic"
 
-    # Reject craft image tags when running in lite mode (must check before writing .env)
-    if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
-        print_error "Cannot use a craft image tag (${VERSION}) with --lite."
-        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-        exit 1
-    fi
-
     # Create .env file from template
     print_info "Creating .env file with your selections..."
     cp "$ENV_TEMPLATE" "$ENV_FILE"
@@ -1029,9 +998,9 @@ else
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
 
-    # Configure Craft based on flag or if using a craft-* image tag
-    # By default, env.template has Craft commented out (disabled)
-    if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
+    # Configure Craft based on --include-craft.
+    # By default, env.template has Craft commented out (disabled).
+    if [ "$INCLUDE_CRAFT" = true ]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
         # Ensure SANDBOX_BACKEND=docker is written explicitly (docker-compose
@@ -1147,16 +1116,12 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using a floating tag (edge, latest, craft-*) that should force pull
-# Read IMAGE_TAG from .env file and remove any quotes or whitespace
+# Determine if we're using a floating tag (edge, latest) that should force pull.
+# Read IMAGE_TAG from .env file and remove any quotes or whitespace.
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
     USE_LATEST=true
-    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
-        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
-    else
-        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
-    fi
+    print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
 else
     USE_LATEST=false
 fi

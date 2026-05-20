@@ -59,17 +59,14 @@ curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/d
 
 This will:
 
-- Set `ENABLE_CRAFT=true` in the `.env` file
-- Set `IMAGE_TAG=craft-latest` to use Craft-enabled images
-- Run template setup on container startup
+- Set `ENABLE_CRAFT=true` and `SANDBOX_BACKEND=docker` in the `.env` file
+- Pin `IMAGE_TAG` to the Craft-enabled backend image (Node.js + opencode CLI baked in)
+- Download and layer in the `docker-compose.craft.yml` overlay so api_server / background can talk to the Docker socket
+- Create the dedicated `onyx_craft_sandbox` bridge network used to isolate sandbox containers
 
 ### Existing Deployments
 
-Enable Craft on an existing deployment:
-
-```bash
-ENABLE_CRAFT=true IMAGE_TAG=craft-latest docker compose up -d
-```
+Re-run the installer with `--include-craft` on top of an existing deployment — it patches the `.env`, pulls down the craft overlay, and recreates the relevant containers. Setting `ENABLE_CRAFT=true` by hand without re-running the installer leaves the Docker socket unmounted and sandboxes will fail to provision.
 
 ## How It Works
 
