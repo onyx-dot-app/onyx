@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
@@ -360,7 +361,8 @@ class OllamaModelDetails(BaseModel):
         """Check if this model supports image input"""
         return "vision" in self.capabilities
 
-    def _parse_parameters(self) -> dict[str, str]:
+    @cached_property
+    def _parsed_parameters(self) -> dict[str, str]:
         parsed: dict[str, str] = {}
         for line in (self.parameters or "").splitlines():
             tokens = line.split(maxsplit=1)
@@ -370,7 +372,7 @@ class OllamaModelDetails(BaseModel):
 
     @property
     def num_ctx(self) -> int | None:
-        raw = self._parse_parameters().get("num_ctx")
+        raw = self._parsed_parameters.get("num_ctx")
         if raw is None:
             return None
         try:
