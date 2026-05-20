@@ -1205,8 +1205,9 @@ def get_ollama_available_models(
             architecture = ollama_model_details.model_info.get(
                 "general.architecture", ""
             )
-            context_limit = ollama_model_details.num_ctx or ollama_model_details.model_info.get(
-                architecture + ".context_length"
+            context_limit = (
+                ollama_model_details.num_ctx
+                or ollama_model_details.model_info.get(architecture + ".context_length")
             )
             supports_image_input = ollama_model_details.supports_image_input()
         except ValidationError as e:
