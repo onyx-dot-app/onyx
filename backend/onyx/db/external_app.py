@@ -349,7 +349,9 @@ def _resolve_credentials(
 def _find_enabled_app_for_url(db_session: Session, url: str) -> ExternalApp | None:
     stmt = (
         select(ExternalApp)
-        .where(ExternalApp.enabled.is_(True))
+        .join(Skill, Skill.id == ExternalApp.skill_id)
+        .where(Skill.enabled.is_(True))
+        .options(selectinload(ExternalApp.skill))
         .order_by(ExternalApp.id)
     )
     for app in db_session.scalars(stmt).all():
@@ -392,7 +394,7 @@ def refresh_credentials(
         logger.warning(
             "refresh_credentials called for app '%s' which is not a "
             "built-in OAuth provider",
-            matched_app.name,
+            matched_app.skill.name,
         )
         return None
 
@@ -418,9 +420,8 @@ def refresh_credentials(
     client_secret = matched_app.organization_credentials.get("client_secret")
     if not client_id or not client_secret:
         logger.warning(
-            "Cannot refresh %s tokens: org_credentials missing "
-            "client_id/client_secret",
-            matched_app.name,
+            "Cannot refresh %s tokens: org_credentials missing client_id/client_secret",
+            matched_app.skill.name,
         )
         return None
 

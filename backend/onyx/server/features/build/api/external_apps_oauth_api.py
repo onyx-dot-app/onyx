@@ -53,7 +53,7 @@ def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
     if not client_id or not client_secret:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"{app.name} is missing client_id or client_secret — "
+            f"{app.skill.name} is missing client_id or client_secret — "
             "ask an admin to fill them in on the Manage Apps page.",
         )
     return client_id, client_secret
@@ -94,7 +94,7 @@ def start_external_app_oauth(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
         )
-    if not app.enabled:
+    if not app.skill.enabled:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "This app is currently disabled by an admin.",
@@ -187,13 +187,13 @@ def handle_external_app_oauth_callback(
     except requests.RequestException as exc:
         logger.warning(
             "%s OAuth token exchange network error for app %d: %s",
-            app.name,
+            app.skill.name,
             app.id,
             exc,
         )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"Could not reach {app.name} to complete OAuth.",
+            f"Could not reach {app.skill.name} to complete OAuth.",
         )
 
     try:
@@ -201,12 +201,12 @@ def handle_external_app_oauth_callback(
     except ValueError:
         logger.warning(
             "%s OAuth token response was not JSON (status=%d)",
-            app.name,
+            app.skill.name,
             response.status_code,
         )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} returned a non-JSON response during OAuth.",
+            f"{app.skill.name} returned a non-JSON response during OAuth.",
             status_code_override=response.status_code,
         )
 
@@ -214,14 +214,14 @@ def handle_external_app_oauth_callback(
     if error:
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
-            app.name,
+            app.skill.name,
             user.id,
             app.id,
             error,
         )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"{app.name} OAuth failed: {error}",
+            f"{app.skill.name} OAuth failed: {error}",
         )
 
     stored_credentials = provider.extract_credentials(response_data)
