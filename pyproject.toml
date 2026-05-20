@@ -58,6 +58,7 @@ backend = [
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
+    "docker==7.1.0",
     "httpcore==1.0.9",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
@@ -115,6 +116,7 @@ backend = [
     "RapidFuzz==3.14.5",
     "tiktoken==0.7.0",
     "timeago==1.0.16",
+    "types-docker==7.1.0.20260518",
     "types-openpyxl==3.0.4.7",
     "unstructured==0.18.27",
     "unstructured-client==0.42.6",

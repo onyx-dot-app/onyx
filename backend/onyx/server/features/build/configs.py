@@ -116,6 +116,32 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 
 # ============================================================================
+# Docker Sandbox Configuration
+# Only used when SANDBOX_BACKEND = "docker" (self-hosted docker-compose)
+# ============================================================================
+
+# Docker socket path on the api_server host. Mounted into the api_server
+# container; api_server uses this to drive sandbox container lifecycle.
+SANDBOX_DOCKER_SOCKET = os.environ.get("SANDBOX_DOCKER_SOCKET", "/var/run/docker.sock")
+
+# Bridge network for sandbox containers. Sandbox containers join only this
+# network and never compose's default network, isolating them from
+# api_server, postgres, redis, etc.
+SANDBOX_DOCKER_NETWORK = os.environ.get("SANDBOX_DOCKER_NETWORK", "onyx_craft_sandbox")
+
+# Prefix for the per-sandbox named volumes that hold ``/workspace/sessions``.
+SANDBOX_DOCKER_VOLUME_PREFIX = os.environ.get(
+    "SANDBOX_DOCKER_VOLUME_PREFIX", "onyx-craft-sandbox-"
+)
+
+# Container resource limits. Memory accepts docker-style suffixes (``2g``).
+# Defaults match the Kubernetes sandbox pod's *requests* (1 CPU / 2Gi),
+# not its limits (2 CPU / 10Gi). Single-VM docker-compose deployments rarely
+# have the headroom to over-commit each sandbox to 10Gi.
+SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g")
+SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
+
+# ============================================================================
 # SSE Streaming Configuration
 # ============================================================================
 

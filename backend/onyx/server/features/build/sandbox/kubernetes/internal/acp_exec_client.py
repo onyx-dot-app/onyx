@@ -50,6 +50,7 @@ from pydantic import ValidationError
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.sandbox.base import SSEKeepalive as SSEKeepalive
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -65,18 +66,10 @@ DEFAULT_CLIENT_INFO = {
 }
 
 
-@dataclass
-class SSEKeepalive:
-    """Marker event to signal that an SSE keepalive should be sent.
-
-    This is yielded when no ACP events have been received for SSE_KEEPALIVE_INTERVAL
-    seconds, allowing the SSE stream to send a comment to keep the connection alive.
-
-    Note: This is an internal event type - it's consumed by session/manager.py and
-    converted to an SSE comment before leaving that layer. It should not be exposed
-    to external consumers.
-    """
-
+# ``SSEKeepalive`` is imported from ``sandbox.base`` so every backend yields
+# the same class; isinstance checks in ``session/manager.py`` need to match
+# across K8s and Docker. Local re-export kept for back-compat with external
+# imports of the K8s symbol.
 
 # Union type for all possible events from send_message
 ACPEvent = (

@@ -106,15 +106,23 @@ fi
 INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 
 LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
+CRAFT_COMPOSE_FILE="docker-compose.craft.yml"
 
 # Build the -f flags for docker compose.
-# Pass "true" as $1 to auto-detect a previously-downloaded lite overlay
-# (used by shutdown/delete-data so users don't need to remember --lite).
+# Pass "true" as $1 to auto-detect previously-downloaded overlays (used by
+# shutdown/delete-data so users don't need to remember --lite/--include-craft).
 compose_file_args() {
     local auto_detect="${1:-false}"
     local args="-f docker-compose.yml"
     if [[ "$LITE_MODE" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; }; then
         args="$args -f ${LITE_COMPOSE_FILE}"
+    fi
+    # Craft Docker sandbox backend is opt-in (--include-craft) so the host
+    # Docker socket isn't bind-mounted on default deployments. Layer the
+    # craft overlay on top when explicitly enabled, or auto-detect a
+    # previously-downloaded overlay on shutdown/delete-data.
+    if [[ "$INCLUDE_CRAFT" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; }; then
+        args="$args -f ${CRAFT_COMPOSE_FILE}"
     fi
     echo "$args"
 }
@@ -796,6 +804,18 @@ elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
     print_info "Removed previous lite overlay (switching to standard mode)"
 fi
 
+# Handle craft overlay file based on selected mode. Keeps the Docker socket
+# bind-mount out of the default file so non-Craft deployments never inherit
+# it; only `--include-craft` (or an existing overlay from a prior install)
+# adds it back.
+if [[ "$INCLUDE_CRAFT" = true ]]; then
+    ensure_file "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" \
+        "${GITHUB_RAW_URL}/${CRAFT_COMPOSE_FILE}" "${CRAFT_COMPOSE_FILE}" || exit 1
+elif [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; then
+    rm -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}"
+    print_info "Removed previous craft overlay (Craft disabled this run)"
+fi
+
 ensure_file "${INSTALL_ROOT}/deployment/env.template" \
     "${GITHUB_RAW_URL}/env.template" "env.template" || exit 1
 
@@ -1020,7 +1040,38 @@ else
     if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
+        # Ensure SANDBOX_BACKEND=docker is written explicitly (docker-compose
+        # defaults to it already, but a literal entry in .env makes the
+        # selection visible/auditable to operators).
+        if grep -q "^#* *SANDBOX_BACKEND=" "$ENV_FILE"; then
+            sed -i.bak 's/^#* *SANDBOX_BACKEND=.*/SANDBOX_BACKEND=docker/' "$ENV_FILE"
+        else
+            echo "SANDBOX_BACKEND=docker" >> "$ENV_FILE"
+        fi
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=docker)"
+
+        # Pre-create the dedicated sandbox bridge. docker-compose references
+        # it as external=true so it must exist before `compose up`.
+        SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+        if ! docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+            if docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+                print_success "Created sandbox bridge network: $SANDBOX_NET"
+            else
+                print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+                echo "    docker network create $SANDBOX_NET"
+            fi
+        fi
+
+        # Trust boundary warning. api_server + background mount the host
+        # Docker socket so they can drive sandbox containers. Anything that
+        # can talk to that socket is effectively root on the host.
+        echo ""
+        print_warning "Craft + docker backend: api_server and background mount"
+        print_warning "/var/run/docker.sock. Compromise of either container ="
+        print_warning "root on the host. Only enable on hosts you fully control."
+        print_warning "On EC2, require IMDSv2 (HttpTokens=required) so sandboxes"
+        print_warning "cannot pull IAM credentials from the instance metadata service."
+        echo ""
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
     fi
@@ -1128,6 +1179,10 @@ if [[ "$USE_LATEST" = false ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
         if [[ "$LITE_MODE" = true ]]; then
             download_file "${PINNED_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
                 "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" 2>/dev/null || true
+        fi
+        if [[ "$INCLUDE_CRAFT" = true ]]; then
+            download_file "${PINNED_BASE}/docker_compose/${CRAFT_COMPOSE_FILE}" \
+                "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" 2>/dev/null || true
         fi
         print_success "Config files updated to match ${CURRENT_IMAGE_TAG}"
     else
