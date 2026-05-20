@@ -165,20 +165,24 @@ Stand up the proxy as infrastructure, in pass-through mode (no gating yet).
 This is the foundation everything else builds on. Concretely:
 
 - The proxy itself, built on mitmproxy in a new `sandbox_proxy/` package.
-- **Default-deny egress NetworkPolicy** on the sandbox namespace, with the
-proxy as the only permitted destination. Requires NetworkPolicy
-enforcement at the CNI layer; our EKS deployment has VPC CNI native
-enforcement enabled, which is sufficient. Document the requirement in
-the helm chart README for self-hosted operators.
+- **In-pod iptables egress lockdown** installed by a privileged
+  initContainer at pod startup: default-deny `OUTPUT`, allow only TCP to
+  the proxy, drop DNS and IPv6. The initContainer self-verifies the
+  lockdown before exiting; if rules aren't actually in effect, init
+  fails and the pod doesn't start (fail-closed by construction). The
+  alternative — a K8s NetworkPolicy at the CNI layer — was rejected
+  because it fails *open* if the cluster's CNI ever stops enforcing,
+  and didn't cover DNS or IPv6 in any case. Requires PSS Baseline (PSS
+  Restricted forbids `CAP_NET_ADMIN`).
 - **CA distribution to heterogeneous trust stores.** Proxy auto-generates
-its CA at bootstrap and publishes the public cert via a ConfigMap. The
-sandbox pod mounts it; an initContainer runs `update-ca-certificates` for
-the system trust store. Node (`NODE_EXTRA_CA_CERTS`), Python `requests`
-(`REQUESTS_CA_BUNDLE`), AWS SDK (`AWS_CA_BUNDLE`), and Go
-(`SSL_CERT_FILE`) each consult their own trust mechanism; pod env must
-fan these out. Any SDK we haven't explicitly configured will fall through
-to its bundled CAs, reject the proxy's leaf cert, and fail closed against
-the NetworkPolicy.
+  its CA at bootstrap and publishes the public cert via a ConfigMap. The
+  same initContainer above runs `update-ca-certificates` to install the
+  cert into the system trust store. Node (`NODE_EXTRA_CA_CERTS`), Python
+  `requests` (`REQUESTS_CA_BUNDLE`), AWS SDK (`AWS_CA_BUNDLE`), and Go
+  (`SSL_CERT_FILE`) each consult their own trust mechanism; pod env must
+  fan these out. Any SDK we haven't explicitly configured will fall
+  through to its bundled CAs, reject the proxy's leaf cert, and fail
+  closed at the iptables lockdown.
 - **Identity resolution** via TCP source IP. Source IP is auto-attached by
 the kernel and un-spoofable by the agent. The proxy resolves
 `source_ip → pod → sandbox → session` against the K8s API, backed by a  
@@ -246,8 +250,11 @@ Deliverable: requirements met in full.
 
 ## Risks
 
-- **Single proxy replica is a SPOF.** Acceptable for MVP volume. Restarts
-orphan in-flight approvals.
+- **Two-replica proxy is not full HA.** v0 ships `replicas: 2` so a
+rolling deploy or single-replica crash doesn't take down all egress —
+the survivor keeps accepting new connections. But in-flight flows on a
+crashed replica still drop without resumption; the user re-prompts.
+True HA (cross-replica flow handoff) is a future workstream.
 - **Structured-error guarantee depends on SDK socket timeouts.** The proxy
 returns `403 not_authorized` cleanly when its 180s wait fires first. For
 SDKs (or agent code) that set socket timeouts shorter than 180s, the
@@ -266,8 +273,8 @@ timeout to ≥240s so the proxy wait dominates, and instruct the agent in
 its system prompt to set a generous explicit timeout on gated calls.
 - **Trust-store fragmentation.** Each non-system-trust-store SDK in the
 sandbox needs explicit env-var configuration to honor the proxy CA.
-Untested SDKs fail closed at the NetworkPolicy. Onboarding a new gated
-SDK requires per-SDK verification.
+Untested SDKs fail closed at the in-pod iptables lockdown. Onboarding a
+new gated SDK requires per-SDK verification.
 - **Policy complexity creep.** Two-layer policy (developer-defined actions
   - admin per-action settings) is the right v0 model. Resist tier additions
   ("team-level," "project-level") without a clear product driver, and gate
@@ -284,9 +291,10 @@ admin's bounds. Schema in v0 is built to accept this without rework.
 bash-bypass loophole.
 - **Opencode-native tool gating** via ACP `request_permission` for
 destructive bash and file operations.
-- **Resumability** of orphaned approvals — required when MVP traffic
-outgrows single-replica posture.
-- **HA proxy deployment**, IP-lookup caching, Redis pool sizing — scaling
-work tracked separately.
+- **Resumability** of orphaned approvals — picking up an in-flight
+approval whose proxy replica died. Requires cross-replica state for
+the flow.
+- **Higher-replica proxy + IP-lookup caching + Redis pool sizing** —
+further scaling work tracked separately.
 - **Local-sandbox support** if/when local Craft needs gating.
 

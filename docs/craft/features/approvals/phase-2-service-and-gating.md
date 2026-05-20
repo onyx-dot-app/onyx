@@ -301,13 +301,10 @@ the same Protocol so the swap is mechanical.
 ```python
 class GateAddon:
     def __init__(self, identity, app_matcher, parsers, db_factory,
-                 wakeup, timeout_seconds: int = 180,
-                 enabled: bool = True):
+                 wakeup, timeout_seconds: int = 180):
         ...
 
     async def request(self, flow):
-        if not self._enabled:
-            return
         ctx = self._identity.resolve(flow.client_conn.peername[0])
         if ctx is None:
             flow.response = http.Response.make(
@@ -362,15 +359,11 @@ class GateAddon:
         )
 ```
 
-The `enabled` flag is a separate feature flag from Phase 1's proxy
-pass-through flag. We need the ability to disable gating while keeping
-the proxy itself (and Phase 1's logging, CA distribution, etc.) live.
-
 **SDK-bypass detection.** Log mitmproxy TLS handshake failures as a
 structured event with `source_ip` and `destination_host`. Agent code
 that tries to bypass our CA (custom truststore, `verify=False`) shows
-up here; this is the canary, paired with the default-deny NetworkPolicy
-that already fails such requests closed.
+up here; this is the canary, paired with the in-pod iptables lockdown
+(Phase 1) that already fails such requests closed.
 
 ### T2.9 — Notification type
 
@@ -389,16 +382,16 @@ document the limitation and rely on the agent-prompt nudge alone (the
 agent can still set explicit per-call timeouts on `curl`-style
 requests).
 
-### T2.11 — Observability
+### T2.11 — Observability (deferred)
 
-The service emits, via the existing metrics machinery:
-
-- counters: `approvals_created`, `approvals_approved`,
-  `approvals_rejected`, `approvals_expired`, `approvals_silent_allowed`,
-  `approvals_denied`.
-- histogram: `approval_decision_latency_seconds` (created → terminal).
-- counter: `approval_notification_dispatch_failures`.
-- histogram: `approval_wakeup_blpop_wait_seconds` (proxy side).
+Metrics are deferred for the initial dev-only implementation, matching
+Phase 1. The hooks (where counters/histograms would be incremented in
+the service and the addon) should be left as comments or no-op calls so
+the wiring is in place when we want to add a real metrics surface.
+Likely candidates when we get there: `approvals_created` / `approved`
+/ `rejected` / `expired` / `silent_allowed` / `denied` counters,
+`approval_decision_latency_seconds` histogram, and a `blpop_wait`
+histogram on the proxy side.
 
 ## Testing
 
@@ -460,6 +453,7 @@ The service emits, via the existing metrics machinery:
   `EXPIRED` and produces the resolved `BuildMessage`.
 - `APPROVAL_REQUESTED` notification dispatch verified end-to-end.
 - Cron-driven session integration test green.
-- Observability metrics emitted and visible in the existing pipeline.
+- Metrics hooks present (no-op or commented) so a real metrics surface
+  can be added without code-shape changes later.
 - Bash-tool default verified / raised; system prompt updated (or
   limitation documented, per T2.10).

@@ -6,8 +6,8 @@ Reference: [approvals-plan.md](./approvals-plan.md) for architecture rationale.
 
 Stand up `sandbox_proxy` as cluster infrastructure in **pass-through mode**:
 
-- All sandbox HTTPS traffic routes through it (default-deny egress
-  NetworkPolicy plus `HTTPS_PROXY` env in sandbox pods).
+- All sandbox HTTPS traffic routes through it (in-pod iptables egress
+  lockdown plus `HTTPS_PROXY` env in sandbox pods).
 - HTTPS is MITM'd using an auto-generated CA distributed via ConfigMap.
 - The proxy resolves source IP to session via the K8s API with an
   informer-backed cache, then via DB lookup for the active `BuildSession`.
@@ -26,27 +26,34 @@ sandbox_proxy/
 ├── server.py              # mitmproxy entrypoint, addon chain
 ├── ca.py                  # CA bootstrap + persist
 ├── identity.py            # pod-IP → session resolution + K8s informer
-├── cache.py               # (placeholder; Phase 2 wires Redis)
-├── config.py              # env + ConfigMap-driven feature flags
-├── metrics.py             # Prometheus counters / histograms
+├── cache.py               # placeholder; Phase 2 wires Redis BLPOP/RPUSH here
+├── config.py              # env-driven config (listen port, namespace, etc.)
 ├── addons/
-│   └── logging.py         # pass-through addon that logs identified flows
+│   └── passthrough.py         # pass-through addon that logs identified flows
 ├── Dockerfile
 └── requirements.txt
 ```
 
 K8s resources under `deployment/helm/charts/onyx/templates/sandbox-proxy/`:
-`deployment.yaml`, `rbac.yaml`, `ca-secret.yaml`, `ca-configmap.yaml`,
-`network-policy-sandbox-egress.yaml`.
+`deployment.yaml`, `rbac.yaml`, `ca-secret.yaml`, `ca-configmap.yaml`.
 
 Sandbox pod modifications (existing helm chart):
 
-- New initContainer that mounts the CA ConfigMap, copies the cert, runs
-  `update-ca-certificates`. Init runs as root and writes to a shared
-  `emptyDir` because the main sandbox container is non-root.
+- **One consolidated initContainer** (`sandbox-init`) that does all the
+  pre-startup security setup: CA trust-store population, in-pod iptables
+  egress lockdown, writing the proxy IP into `/etc/hosts`, and a
+  self-verification step that fails the init if the lockdown isn't
+  actually in effect. **Uses the existing sandbox image** with a
+  different command (no second image to maintain); `iptables` gets
+  installed into that image. Init container runs as root with
+  `CAP_NET_ADMIN`; main container is unchanged (UID 1000, no caps).
 - New env vars on the main sandbox container: `HTTPS_PROXY`, `HTTP_PROXY`,
   plus a documented set of SDK-specific CA env vars for libraries that
   ignore the system trust store.
+- The existing `sandbox_daemon` sidecar is **unchanged** — stays
+  unprivileged. Init work doesn't belong there: it's one-shot, needs
+  sequenced ordering before the main container starts, and would force
+  the daemon to hold `CAP_NET_ADMIN` for its entire lifetime.
 
 ## Tasks
 
@@ -77,34 +84,67 @@ class CABootstrap:
 Invariants:
 
 - The Secret is the source of truth. The ConfigMap is derived from it.
-- On startup: load if the Secret exists, otherwise generate and persist both.
+- On startup: load if the Secret exists, otherwise generate and persist
+  both. Persist uses a conditional create (`resourceVersion=""`) so two
+  replicas racing on a cold cluster don't double-write — the loser of
+  the race reads back the winner's CA. Idempotent.
 - ConfigMap lives in the **sandbox** namespace so sandbox pods can mount it
   without cross-namespace ConfigMap mounting.
 - RBAC: proxy SA gets `get,create` on its own Secret; `get,create,update` on
   the sandbox-namespace ConfigMap.
 - Key params: 5-year RSA-4096 (or ECDSA P-256) via `cryptography`.
 
-### T1.3 — Sandbox pod CA integration
+### T1.3 — Sandbox bootstrap initContainer
 
-Patch the sandbox pod template:
+A single `sandbox-init` initContainer using the **existing sandbox image**
+(no separate image to maintain — we install `iptables` into that image),
+running as root with `CAP_NET_ADMIN`, does four things sequentially before
+the main sandbox container starts:
 
-- Add an `install-sandbox-ca` initContainer using `debian:stable-slim`
-  (ships `update-ca-certificates`). It mounts the CA ConfigMap read-only,
-  copies into `/usr/local/share/ca-certificates/sandbox-proxy.crt`, runs
-  `update-ca-certificates`, and writes the resulting bundle into a shared
-  `emptyDir` volume. The initContainer runs as root; the main container
-  reads the bundle as non-root from the shared volume.
-- Add `HTTPS_PROXY` / `HTTP_PROXY` on the main container pointing at
-  `http://sandbox-proxy.<proxy-ns>.svc.cluster.local:8080`.
+1. **CA trust-store population.** Mount the CA ConfigMap read-only, copy
+   the cert into `/usr/local/share/ca-certificates/sandbox-proxy.crt`, run
+   `update-ca-certificates`, write the resulting bundle into a shared
+   `emptyDir` volume mounted into the main container.
+2. **In-pod egress lockdown via iptables.** Default-deny `OUTPUT`; allow
+   loopback, conntrack-established, and TCP to the sandbox-proxy IP + port
+   only. Drop all DNS (the proxy resolves external hostnames; the sandbox
+   doesn't need DNS — see step 3). Drop all IPv6 egress via `ip6tables`.
+   Pattern adapted from agent-vault's init-firewall script.
+3. **Pre-resolve the proxy.** Write `<proxy_ip> sandbox-proxy` to
+   `/etc/hosts` (proxy IP injected via the pod spec at provisioning time).
+   The main container's `HTTPS_PROXY` then resolves to the right IP
+   without needing DNS.
+4. **Self-verify the lockdown.** Attempt one egress that should be
+   blocked (e.g., `curl --max-time 2 https://1.1.1.1`). If it succeeds,
+   exit non-zero — the rules aren't actually in effect and the pod must
+   not start. If it fails as expected, exit 0. This catches the
+   "iptables rules silently didn't install" case at the only moment we
+   can act on it (the pod won't start; an operator gets a clear init
+   failure).
+
+Then on the main container:
+
+- `HTTPS_PROXY` / `HTTP_PROXY` point at `http://sandbox-proxy:<port>`
+  (resolved via `/etc/hosts`).
 - Fan out CA env vars to cover SDKs that bypass the system trust store:
   `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`,
   `AWS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`. All point at the
   shared bundle file.
 
-**JVM out of scope.** Java SDKs use their own truststore (`cacerts`, PKCS12)
-and require a separate `keytool -importcert` step. Out of v0 scope; document
-so any JVM-based gated app fails closed at the NetworkPolicy with a clear
-diagnostic rather than silently misbehaving.
+**JVM out of scope.** Java SDKs use their own truststore (`cacerts`,
+PKCS12) and require a separate `keytool -importcert` step. Out of v0
+scope; documented so any JVM-based gated app fails closed at the iptables
+lockdown with a clear diagnostic rather than silently misbehaving.
+
+**Why only in-pod iptables, not also a NetworkPolicy?** iptables-in-pod
+has strong fail-closed semantics — if the init container's setup fails,
+the pod doesn't start. A K8s NetworkPolicy as a second layer would fail
+*open* if the cluster's CNI ever stops enforcing (a silent failure
+mode). The single-layer in-pod approach is the stronger of the two and
+closes DNS + IPv6 that NetworkPolicy didn't cover anyway. The
+self-verification in step 4 catches the deploy-time mistake (someone
+changes the init script and removes the lockdown) that NetworkPolicy
+would otherwise backstop.
 
 ### T1.4 — Identity resolver
 
@@ -161,20 +201,12 @@ The informer:
 - Evicts cache entries on `DELETED` or on `MODIFIED` with an IP change.
 - Background thread; reconnects with exponential backoff on K8s API blips.
 
-### T1.5 — NetworkPolicy
+### T1.5 — Pass-through addon
 
-`network-policy-sandbox-egress.yaml` selects sandbox pods by their existing
-component label and is `policyTypes: [Egress]` only. Two egress rules:
-DNS (UDP/TCP 53 to `kube-dns`), and TCP 8080 to pods labeled
-`app: sandbox-proxy` in the proxy namespace. Everything else is denied by
-default.
-
-### T1.6 — Pass-through addon
-
-`sandbox_proxy/addons/logging.py`:
+`sandbox_proxy/addons/passthrough.py`:
 
 ```python
-class LoggingAddon:
+class PassthroughAddon:
     def __init__(self, identity: IdentityResolver, metrics: Metrics): ...
 
     async def request(self, flow):
@@ -193,83 +225,50 @@ class LoggingAddon:
             self._metrics.identified_passthrough.inc()
 ```
 
-### T1.7 — Operational
+### T1.6 — Operational
 
-**Feature flag / kill switch.** `SANDBOX_PROXY_MODE` env var with values
-`passthrough` (default in Phase 1) and `enforce` (Phase 2). Sourced from a
-ConfigMap mounted into the pod so it can be flipped without a rebuild;
-reload on SIGHUP if the operator restart cost is unacceptable. The flag is
-independent of the gate addon's wiring — `passthrough` means LoggingAddon
-only, even if the gate addon module is present. This is the "turn it off
-in prod" lever.
+**Two replicas.** The Deployment runs `replicas: 2`. The proxy is
+stateless across the wire (per-flow state lives in the accepting
+replica's memory; durable state lives in the DB and Redis), so replicas
+operate independently and the K8s Service load-balances new connections
+across them. CA bootstrap is idempotent (T1.2). No cross-replica
+coordination is required.
 
 **Graceful drain.** On SIGTERM the proxy stops accepting new connections,
 keeps existing flows running until `terminationGracePeriodSeconds` (set
-generously, ~200s — comfortably above the Phase 2 180s wait) expires, then
-exits. The readiness probe flips to not-ready on SIGTERM so the Service
-stops sending it traffic. On hard crash (OOM, process kill), all in-flight
-flows drop with TCP RST to the sandbox and there is no resumption — single
-replica, no state persistence. Acceptable for v0.
-
-**Metrics** (Prometheus, exposed on a non-proxy port alongside `/healthz`):
-
-- Request rate, labeled by status (`passthrough` / `gated` / `blocked`).
-- Identity-resolution cache hit / miss counter.
-- K8s informer reconnect counter.
-- CA load failure alert counter (should stay at zero post-bootstrap).
-- TLS handshake failure counter, labeled by destination host. This is the
-  SDK-bypass canary — a spike means some SDK is hitting upstream with a
-  trust store that doesn't include our CA.
-- Request-path latency histogram.
+generously, ~200s — comfortably above the Phase 2 180s wait) expires,
+then exits. The readiness probe flips to not-ready on SIGTERM so the
+Service stops sending it traffic; new connections route to the surviving
+replica during rolling deploys. On hard crash (OOM, process kill), all
+in-flight flows on the crashed replica drop with TCP RST to the
+sandbox; new connections still succeed via the survivor. Cross-replica
+flow resumption is not supported (out of scope for v0).
 
 **Health endpoint** `GET /healthz`: returns 200 once the informer has
 synced and the CA is loaded.
 
-### T1.8 — Rollout staging
-
-The risk this addresses is "NetworkPolicy misconfig breaks egress for the
-entire sandbox fleet." Roll out in three stages, each verified before the
-next:
-
-1. **Proxy + CA + sandbox env vars, no NetworkPolicy.** Proxy is deployed,
-   sandboxes have `HTTPS_PROXY` set, traffic flows through the proxy. With
-   no NetworkPolicy, a misconfigured proxy still lets traffic out directly
-   so sandboxes keep working. Verify logs show identified flows.
-2. **NetworkPolicy with per-namespace opt-in label.** Apply the policy only
-   to namespaces tagged `sandbox-proxy-egress: enforced`. Tag one staging
-   sandbox namespace, verify, watch metrics.
-3. **Expand to all sandbox namespaces.** Tag remaining namespaces. The
-   feature flag from T1.7 remains available as a kill switch.
-
-### T1.9 — Self-hosted documentation
-
-- Update the helm chart README: NetworkPolicy egress enforcement requires
-  a CNI that enforces egress policies (Cilium, Calico, or AWS VPC CNI with
-  `enableNetworkPolicy: true`). Plain kindnet / flannel will not enforce
-  and the proxy chokepoint becomes advisory.
-- One-paragraph runbook stubs for "sandbox-proxy is down" (flip
-  `SANDBOX_PROXY_MODE=passthrough`, or remove the NetworkPolicy label from
-  affected namespaces) and "approvals not working" (check informer
-  reconnect counter, CA load metric, identity-cache hit rate).
+**Metrics — deferred.** v0 ships with no Prometheus surface. Add the
+metrics module and wire counters when we move toward a production
+environment with observability.
 
 ## Testing
 
 - **Unit**: `CABootstrap.ensure_ca()` idempotency; `IdentityResolver` cache
   hit / miss / eviction on simulated pod events; sandbox → active-session
   resolution including the "no active session" branch.
-- **Integration cluster** (staging):
+- **Integration cluster** (dev):
   - From inside a sandbox, `curl -v https://example.com` succeeds and the
     chain shows the proxy CA.
   - From inside a sandbox, `curl -v https://example.com --noproxy '*'`
-    fails (NetworkPolicy blocks).
+    fails (in-pod iptables denies).
   - Delete and recreate the sandbox pod; verify the cache evicts and the
     new pod IP resolves correctly.
-  - Flip the kill switch to `passthrough` mid-traffic; verify gate path is
-    inert (no behavioral change in Phase 1, but the wiring should hold).
 
 ## Dependencies
 
-- CNI enforces egress NetworkPolicies (EKS VPC CNI confirmed).
+- Deployment target allows PSS Baseline (`CAP_NET_ADMIN` on the
+  initContainer; main container stays restricted). PSS Restricted is
+  incompatible.
 - K8s ServiceAccount and RBAC for the proxy.
 - DB read access from the proxy pod (Sandbox, BuildSession, User tables);
   same Postgres credential pattern as api-server.
@@ -287,15 +286,13 @@ next:
   with leaf cert signed by our CA, and the proxy logs the flow with a
   resolved `SessionContext`.
 - `curl https://example.com --noproxy '*'` from inside a sandbox fails
-  (NetworkPolicy denies).
+  (in-pod iptables denies).
+- Init container self-verification catches a deliberately broken
+  iptables setup: deploy a sandbox whose init script skips the lockdown,
+  verify the pod fails to start with a clear init-container error.
+- `nslookup example.com` from inside a sandbox fails — DNS is closed.
+- IPv6 egress (`curl -6 ...`) from inside a sandbox fails.
 - Recreating a sandbox pod evicts the cache entry and the new IP resolves
   on next request.
 - Common SDKs accept the proxy CA: Python `requests`, Node `fetch`, `curl`,
   `git clone https://...`.
-- Kill switch verified: setting `SANDBOX_PROXY_MODE=passthrough` is a no-op
-  in Phase 1 but the flag wiring is exercised end-to-end.
-- Prometheus scrape returns the metrics listed in T1.7; each counter
-  increments under a corresponding test action.
-- Rollout staging verified: deployed to one opt-in staging sandbox
-  namespace, observed for at least one business day, before any broader
-  rollout.
