@@ -1053,38 +1053,25 @@ else
 
         # EC2 IMDS: the Docker daemon's bridge networks route to 169.254.169.254
         # by default, which can hand out IAM role credentials to a sandboxed
-        # workload. We can't fix this from app code alone — host-level
-        # DOCKER-USER iptables rules are the right place. Offer to install
-        # the rule on EC2; otherwise require an explicit opt-out.
+        # workload. Best-effort: drop bridge traffic to IMDS in the
+        # DOCKER-USER chain. If we can't (no sudo, no iptables), log a clear
+        # warning so operators can install the rule manually.
         if curl -sf -m 1 http://169.254.169.254/latest/meta-data/instance-id >/dev/null 2>&1; then
-            print_info "EC2 detected. Sandbox containers can currently reach the"
-            print_info "Instance Metadata Service at 169.254.169.254, which would"
-            print_info "leak IAM role credentials to any code running in a sandbox."
-            echo ""
-            if [ "${CRAFT_ALLOW_UNBLOCKED_IMDS:-false}" = "true" ]; then
-                print_warning "CRAFT_ALLOW_UNBLOCKED_IMDS=true set — skipping IMDS block."
-                print_warning "You are accepting that sandbox workloads can read IAM credentials."
-            else
-                # Best-effort: drop bridge traffic to IMDS in the DOCKER-USER chain.
-                if sudo -n iptables -L DOCKER-USER >/dev/null 2>&1; then
-                    if sudo iptables -C DOCKER-USER -d 169.254.169.254 -j DROP >/dev/null 2>&1; then
-                        print_success "DOCKER-USER IMDS block already installed."
-                    else
-                        if sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP; then
-                            print_success "Installed DOCKER-USER iptables rule to block sandbox→IMDS."
-                            print_info "Persist this rule across reboots — see iptables-persistent or your OS docs."
-                        else
-                            print_error "Failed to install DOCKER-USER IMDS block."
-                            print_error "Set CRAFT_ALLOW_UNBLOCKED_IMDS=true to acknowledge the risk and continue."
-                            exit 1
-                        fi
-                    fi
+            print_info "EC2 detected. Attempting to block sandbox→IMDS traffic at the host firewall."
+            if sudo -n iptables -L DOCKER-USER >/dev/null 2>&1; then
+                if sudo iptables -C DOCKER-USER -d 169.254.169.254 -j DROP >/dev/null 2>&1; then
+                    print_success "DOCKER-USER IMDS block already installed."
+                elif sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP; then
+                    print_success "Installed DOCKER-USER iptables rule to block sandbox→IMDS."
+                    print_info "Persist across reboots via iptables-persistent or your OS's equivalent."
                 else
-                    print_error "Cannot reach iptables non-interactively. Install the rule manually:"
+                    print_warning "Failed to install DOCKER-USER IMDS block — install manually:"
                     echo "    sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP"
-                    print_error "Or set CRAFT_ALLOW_UNBLOCKED_IMDS=true to skip this check."
-                    exit 1
                 fi
+            else
+                print_warning "Cannot reach iptables non-interactively. Install the rule manually:"
+                echo "    sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP"
+                print_warning "Without this, sandbox workloads can read IAM credentials from IMDS."
             fi
         fi
     else
