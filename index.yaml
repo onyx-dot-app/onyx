@@ -20,6 +20,67 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
+    created: "2026-05-20T21:43:50.907440277Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.3.3
+    description: A Helm chart for Kubernetes
+    digest: b65ca0f4bafff6482b3b7830ce9204ca955c77c0fc745bbd08304eef8c7aaa1a
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.5.5.tgz
+    version: 0.5.5
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: Optional External Secrets Operator support. Set
+            externalSecret.enabled=true to render an ExternalSecret CR that
+            materializes one shared Secret from an upstream secret manager (AWS
+            Secrets Manager, GCP Secret Manager, Vault, ...). Point each
+            auth.*.existingSecret at externalSecret.secretName, and use
+            extraEnvFromSecret to project loose env-var secrets via envFrom. Off
+            by default; rendered output is unchanged when disabled.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
     created: "2026-05-20T21:19:52.150309968Z"
     dependencies:
     - alias: postgresql
@@ -3621,4 +3682,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-05-20T21:19:52.122018315Z"
+generated: "2026-05-20T21:43:50.880039331Z"
