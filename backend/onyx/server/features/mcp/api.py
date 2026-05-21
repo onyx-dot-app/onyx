@@ -912,89 +912,55 @@ async def _connect_oauth_without_tokens(
     publish_task = asyncio.create_task(
         _start_proactive_user_oauth(oauth_auth, probe_url, user_id)
     )
-
-    async def _unauthenticated_probe() -> InitializeResult:
-        try:
-            return await initialize_mcp_client(
-                probe_url,
-                connection_headers=connection_headers,
-                transport=transport,
-                auth=None,
-            )
-        except Exception:
-            logger.info(
-                "Unauthenticated OAuth probe failed for server %s (expected for "
-                "401-only or handshake-only MCP servers)",
-                mcp_server_name,
-                exc_info=True,
-            )
-            raise
-
-    probe_task = asyncio.create_task(_unauthenticated_probe())
     auth_task = asyncio.create_task(
         _await_oauth_auth_url_for_connect(user_id, publish_task)
     )
 
-    def _cancel_background_task(task: asyncio.Task[object]) -> None:
-        if task.done():
-            return
-        task.cancel()
+    done, _pending = await asyncio.wait(
+        [auth_task, publish_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
 
-    try:
-        done, _pending = await asyncio.wait(
-            [auth_task, publish_task],
-            return_when=asyncio.FIRST_COMPLETED,
+    if publish_task in done and publish_task.exception() is not None:
+        auth_task.cancel()
+        try:
+            await auth_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        publish_exc = publish_task.exception()
+        assert publish_exc is not None
+        logger.warning(
+            "Proactive OAuth failed for server %s, falling back to SDK 401 flow: %s",
+            mcp_server_name,
+            publish_exc,
         )
-
-        if publish_task in done and publish_task.exception() is not None:
-            auth_task.cancel()
-            try:
-                await auth_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            _cancel_background_task(probe_task)
-            publish_exc = publish_task.exception()
-            assert publish_exc is not None
-            logger.warning(
-                "Proactive OAuth failed for server %s, falling back to SDK 401 flow: %s",
-                mcp_server_name,
-                publish_exc,
+        try:
+            return await _await_sdk_oauth_auth_url(
+                probe_url=probe_url,
+                connection_headers=connection_headers,
+                transport=transport,
+                oauth_auth=oauth_auth,
+                user_id=user_id,
             )
-            try:
-                return await _await_sdk_oauth_auth_url(
-                    probe_url=probe_url,
-                    connection_headers=connection_headers,
-                    transport=transport,
-                    oauth_auth=oauth_auth,
-                    user_id=user_id,
-                )
-            except HTTPException:
-                raise
-            except Exception as sdk_exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Failed to start OAuth authorization: {publish_exc}. "
-                        f"SDK fallback also failed: {sdk_exc}"
-                    ),
-                ) from sdk_exc
+        except HTTPException:
+            raise
+        except Exception as sdk_exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Failed to start OAuth authorization: {publish_exc}. "
+                    f"SDK fallback also failed: {sdk_exc}"
+                ),
+            ) from sdk_exc
 
-        if auth_task in done:
-            oauth_url = auth_task.result()
-            _cancel_background_task(probe_task)
-            await _await_publish_task_after_auth_url(publish_task)
-            return oauth_url
-
-        oauth_url = await auth_task
-        _cancel_background_task(probe_task)
+    if auth_task in done:
+        oauth_url = auth_task.result()
         await _await_publish_task_after_auth_url(publish_task)
         return oauth_url
-    finally:
-        if probe_task.done():
-            try:
-                probe_task.result()
-            except Exception:
-                pass
+
+    oauth_url = await auth_task
+    await _await_publish_task_after_auth_url(publish_task)
+    return oauth_url
 
 
 def _build_headers_from_template(

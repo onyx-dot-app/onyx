@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl
@@ -284,13 +285,13 @@ async def test_connect_oauth_returns_idp_url_when_initialize_finishes_first(
 
 
 @pytest.mark.asyncio
-async def test_connect_oauth_probes_without_sdk_auth_when_no_tokens(
+async def test_connect_oauth_without_tokens_skips_initialize_mcp_client_on_proactive_success(
     monkeypatch: pytest.MonkeyPatch,
     mcp_server: MagicMock,
     user: User,
     connection_config: MagicMock,
 ) -> None:
-    """Avoid starting SDK ``callback_handler`` during proactive OAuth connect."""
+    """Proactive connect must not call ``initialize_mcp_client`` (SDK 401 path)."""
     fake_redis = _FakeRedis(auth_url=_AUTH_URL)
 
     async def _publish_auth_url(*_args: object, **_kwargs: object) -> None:
@@ -317,8 +318,7 @@ async def test_connect_oauth_probes_without_sdk_auth_when_no_tokens(
 
     await mcp_api._connect_oauth(request, MagicMock(), is_admin=False, user=user)
 
-    assert initialize_mock.await_args is not None
-    assert initialize_mock.await_args.kwargs.get("auth") is None
+    initialize_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -391,26 +391,19 @@ async def test_await_sdk_oauth_auth_url_leaves_init_task_running_on_success(
 
 
 @pytest.mark.asyncio
-async def test_connect_oauth_sdk_fallback_when_probe_finishes_before_proactive_fails(
+async def test_connect_oauth_sdk_fallback_when_proactive_fails(
     monkeypatch: pytest.MonkeyPatch,
     mcp_server: MagicMock,
     user: User,
     connection_config: MagicMock,
 ) -> None:
-    """Proactive failure must trigger SDK fallback even if unauthenticated probe finished first."""
+    """Proactive failure must trigger SDK fallback."""
     fake_redis = _FakeRedis(auth_url=None)
     sdk_fallback = AsyncMock(return_value=_AUTH_URL)
 
     async def _slow_failing_proactive(*_args: object, **_kwargs: object) -> None:
         await asyncio.sleep(0.05)
         raise OAuthFlowError("discovery failed")
-
-    async def _failing_unauthenticated_probe(
-        *_args: object, **kwargs: object
-    ) -> MagicMock:
-        if kwargs.get("auth") is None:
-            raise ValueError("unauthenticated probe failed")
-        return MagicMock()
 
     monkeypatch.setattr(mcp_api, "get_mcp_server_by_id", lambda *_a, **_k: mcp_server)
     monkeypatch.setattr(
@@ -425,7 +418,6 @@ async def test_connect_oauth_sdk_fallback_when_probe_finishes_before_proactive_f
     monkeypatch.setattr(mcp_api, "update_connection_config", lambda *_a, **_k: None)
     monkeypatch.setattr(mcp_api, "get_redis_client", lambda: fake_redis)
     monkeypatch.setattr(mcp_api, "_start_proactive_user_oauth", _slow_failing_proactive)
-    monkeypatch.setattr(mcp_api, "initialize_mcp_client", _failing_unauthenticated_probe)
     monkeypatch.setattr(mcp_api, "_await_sdk_oauth_auth_url", sdk_fallback)
     monkeypatch.setattr(
         mcp_api,
@@ -804,15 +796,11 @@ async def test_connect_oauth_without_tokens_awaits_publisher_after_auth_url(
     ) -> str:
         return _AUTH_URL
 
-    async def _noop_probe(*_args: object, **_kwargs: object) -> MagicMock:
-        return MagicMock()
-
     monkeypatch.setattr(asyncio, "create_task", _tracking_create_task)
     monkeypatch.setattr(mcp_api, "_start_proactive_user_oauth", _slow_publish)
     monkeypatch.setattr(
         mcp_api, "_await_oauth_auth_url_for_connect", _immediate_auth_url
     )
-    monkeypatch.setattr(mcp_api, "initialize_mcp_client", _noop_probe)
     monkeypatch.setattr(mcp_api, "make_oauth_provider", lambda *_a, **_k: MagicMock())
 
     oauth_url = await mcp_api._connect_oauth_without_tokens(
@@ -828,3 +816,20 @@ async def test_connect_oauth_without_tokens_awaits_publisher_after_auth_url(
     publish_task = created_tasks[0]
     assert not publish_task.cancelled()
     assert publish_task.done()
+
+
+_MCP_SDK_OAUTH_PROVIDER_INTERNALS = (
+    "_initialize",
+    "_exchange_token_authorization_code",
+    "_handle_token_response",
+)
+
+
+def test_mcp_sdk_oauth_provider_exposes_proactive_callback_internals() -> None:
+    """Fail on MCP SDK upgrades that rename private methods used by proactive OAuth."""
+    for method_name in _MCP_SDK_OAUTH_PROVIDER_INTERNALS:
+        assert hasattr(OAuthClientProvider, method_name), (
+            f"OAuthClientProvider.{method_name} missing; "
+            "proactive OAuth callback may need updating for this mcp version"
+        )
+        assert callable(getattr(OAuthClientProvider, method_name))
