@@ -756,7 +756,7 @@ if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
     # flock+sentinel: serialize concurrent session setups; .ready guards
     # against a partial cp from a previous interrupted run.
     (
-        flock -x 200
+        flock -x 9
         if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
             echo "Bootstrapping bun cache on workspace volume..."
             rm -rf {BUN_CACHE_DIR}
@@ -764,7 +764,7 @@ if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
                 || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
             touch {BUN_CACHE_DIR}/.ready
         fi
-    ) 200>{BUN_CACHE_DIR}.lock
+    ) 9>{BUN_CACHE_DIR}.lock
     cd {session_path}/outputs/web && \
         BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
         bun install --frozen-lockfile --backend=hardlink
@@ -999,14 +999,14 @@ set -e
 web_dir={session_path}/outputs/web
 if [ -f "$web_dir/bun.lock" ]; then
     (
-        flock -x 200
+        flock -x 9
         if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
             rm -rf {BUN_CACHE_DIR}
             cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
                 || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
             touch {BUN_CACHE_DIR}/.ready
         fi
-    ) 200>{BUN_CACHE_DIR}.lock
+    ) 9>{BUN_CACHE_DIR}.lock
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
         bun install --frozen-lockfile --backend=hardlink
