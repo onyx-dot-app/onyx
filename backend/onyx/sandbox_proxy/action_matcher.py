@@ -1,10 +1,10 @@
 """Classify an intercepted HTTPS request into a gated action.
 
-The gate addon depends only on ``ActionMatcher``; the v0
-implementation here covers Slack's ``chat.postMessage``. A broader
+The gate addon depends only on `ActionMatcher`; the v0
+implementation here covers Slack's `chat.postMessage`. A broader
 matcher registry will replace it later.
 
-``None`` return and matcher exceptions are both treated as "not
+`None` return and matcher exceptions are both treated as "not
 gated" by the gate addon — the real security boundary is the proxy's
 iptables egress lockdown, not this heuristic.
 """
@@ -33,11 +33,11 @@ class ActionMatcher(Protocol):
 
 
 class SlackPostMessageMatcher:
-    """Matches Slack Web API ``chat.postMessage`` requests.
+    """Matches Slack Web API `chat.postMessage` requests.
 
-    Accepts ``application/json`` and ``application/x-www-form-urlencoded``
+    Accepts `application/json` and `application/x-www-form-urlencoded`
     bodies (the two encodings the official SDKs use). Host match is
-    suffix-based so subdomains (e.g. ``foo.slack.com``) and trailing
+    suffix-based so subdomains (e.g. `foo.slack.com`) and trailing
     dots are caught.
     """
 

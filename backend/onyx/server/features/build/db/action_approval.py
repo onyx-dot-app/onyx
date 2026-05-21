@@ -1,9 +1,9 @@
 """Database operations for the action_approval table.
 
 A row records one agent-initiated gated action and its eventual
-terminal decision (APPROVED / REJECTED / EXPIRED). ``decision IS NULL``
+terminal decision (APPROVED / REJECTED / EXPIRED). `decision IS NULL`
 is the pending / in-flight state. The conditional UPDATE in
-``try_record_decision`` is the only race arbiter.
+`try_record_decision` is the only race arbiter.
 """
 
 from datetime import datetime
@@ -47,9 +47,9 @@ def try_record_decision(
     approval_id: UUID,
     decision: ApprovalDecision,
 ) -> ActionApproval | None:
-    """Conditional UPDATE: succeeds only while ``decision IS NULL``.
+    """Conditional UPDATE: succeeds only while `decision IS NULL`.
 
-    Returns the updated row, or ``None`` if a decision was already
+    Returns the updated row, or `None` if a decision was already
     recorded (caller decides between idempotent retry and CONFLICT).
     """
     stmt = (
@@ -76,7 +76,7 @@ def get_action_approval_for_user(
 ) -> ActionApproval | None:
     """Return the row only if the caller owns the parent build_session.
 
-    Returns ``None`` for both missing-row and wrong-owner — callers map
+    Returns `None` for both missing-row and wrong-owner — callers map
     to NOT_FOUND so existence isn't leaked to non-owners.
     """
     stmt = (
@@ -96,7 +96,7 @@ def list_session_action_approvals(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> list[ActionApproval]:
-    """Audit query for a session. ``decision=None`` includes pending rows."""
+    """Audit query for a session. `decision=None` includes pending rows."""
     stmt = select(ActionApproval).where(ActionApproval.session_id == session_id)
     if decision is not None:
         stmt = stmt.where(ActionApproval.decision == decision)
@@ -116,7 +116,7 @@ def list_session_pending_action_approvals(
 ) -> list[ActionApproval]:
     """Return undecided rows for the session, optionally cutting off by age.
 
-    ``created_after`` lets callers exclude rows older than the proxy's
+    `created_after` lets callers exclude rows older than the proxy's
     wait window (likely orphaned by a crashed proxy that can't write
     EXPIRED itself).
     """

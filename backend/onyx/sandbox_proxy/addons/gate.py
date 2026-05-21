@@ -2,19 +2,19 @@
 
 A gated request flows through the addon as:
 
-1. ``_resolve_and_match`` looks up the sandbox identity and classifies
+1. `_resolve_and_match` looks up the sandbox identity and classifies
    the action.
-2. ``_persist_approval_row`` commits the ``action_approval`` row and
+2. `_persist_approval_row` commits the `action_approval` row and
    pushes onto the session's announce list so the api-server's
    chat-stream merger surfaces the card on the open SSE.
-3. ``_await_decision`` parks on ``approval:wake:{id}`` until the
+3. `_await_decision` parks on `approval:wake:{id}` until the
    decision API signals, the wait window elapses, or the sandbox
    socket closes. On timeout / cancel it claims EXPIRED.
-4. ``_write_response_for_decision`` either forwards (APPROVED) or
+4. `_write_response_for_decision` either forwards (APPROVED) or
    rejects with a 403 (REJECTED / EXPIRED).
 
 Fail-open vs fail-closed: identity, body-size cap, and unidentified
-sandbox checks are fail-closed. ``ActionMatcher`` exceptions and
+sandbox checks are fail-closed. `ActionMatcher` exceptions and
 "not my action type" fall open.
 """
 
@@ -69,12 +69,11 @@ class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
     Cross-tenant in-memory state — UUIDs and tenant slugs, no user
-    data. Exists so the SIGTERM drain can fan out per-tenant in
-    parallel (``asyncio.gather`` + ``asyncio.to_thread``) without one
-    slow tenant starving another's drain budget.
+    data. The SIGTERM drain walks this per-tenant so one cache backend
+    can be reused across each tenant's parked approvals.
 
     Mutated only from the event loop; the drain reads via
-    ``snapshot()`` to iterate safely while the source mutates.
+    `snapshot()` to iterate safely while the source mutates.
     """
 
     def __init__(self) -> None:
@@ -112,12 +111,12 @@ class GateAddon:
         self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
-        # Invariant: ``_persist_approval_row`` is the only writer;
-        # ``_await_decision``'s finally is the only remover.
+        # Invariant: `_persist_approval_row` is the only writer;
+        # `_await_decision`'s finally is the only remover.
         self._parked = ParkedApprovals()
-        # Each running ``request()`` coroutine registers itself here so
-        # the drain can ``asyncio.wait`` on real completion instead of
-        # sleeping. Self-cleaning via ``add_done_callback``.
+        # Each running `request()` coroutine registers itself here so
+        # the drain can `asyncio.wait` on real completion instead of
+        # sleeping. Self-cleaning via `add_done_callback`.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
@@ -165,11 +164,11 @@ class GateAddon:
     ) -> tuple[SessionContext, ActionMatch] | None:
         """Identity + body-size + matcher dispatch.
 
-        Returns ``(ctx, match)`` to proceed. Two ``None`` shapes:
+        Returns `(ctx, match)` to proceed. Two `None` shapes:
 
-        * fail-closed — sets ``flow.response`` to a 403 before
+        * fail-closed — sets `flow.response` to a 403 before
           returning (unidentified sandbox, oversize body).
-        * fail-open — returns ``None`` without touching the response
+        * fail-open — returns `None` without touching the response
           (matcher crash, non-matching request); mitmproxy then
           forwards the request unchanged.
         """
@@ -228,9 +227,9 @@ class GateAddon:
     def _persist_approval_row(self, ctx: SessionContext, match: ActionMatch) -> UUID:
         """Commit the row, register it for the drain, announce to the chat.
 
-        The announce is best-effort and runs after ``db.commit()``. A
+        The announce is best-effort and runs after `db.commit()`. A
         missed announce degrades to "FE surfaces the card on the next
-        ``/live`` refetch (reconnect / remount)" — the row is already
+        `/live` refetch (reconnect / remount)" — the row is already
         in Postgres, so we don't fail the request over it.
         """
         with self._db_session_factory(ctx.tenant_id) as db:
@@ -287,9 +286,9 @@ class GateAddon:
     ) -> ApprovalDecision:
         """Park on the wake channel; claim EXPIRED on timeout / cancel.
 
-        Returns the recorded ``ApprovalDecision``. The parked-approvals
-        entry is set in ``_persist_approval_row``; this method owns its
-        removal in the ``finally`` block.
+        Returns the recorded `ApprovalDecision`. The parked-approvals
+        entry is set in `_persist_approval_row`; this method owns its
+        removal in the `finally` block.
         """
         cache = self._cache_factory(ctx.tenant_id)
         try:
@@ -422,8 +421,8 @@ class GateAddon:
            the wake channel so the parked BLPOP returns immediately.
            Runs synchronously in the event loop; at the documented
            scale (few hundred approvals max) this completes well
-           inside ``_DRAIN_TIMEOUT_S``.
-        2. ``asyncio.wait`` on every tracked ``request()`` task so the
+           inside `_DRAIN_TIMEOUT_S`.
+        2. `asyncio.wait` on every tracked `request()` task so the
            hook coroutines pick up their wakes and return to mitmproxy
            before the outer caller tears down connections.
         """
@@ -477,7 +476,7 @@ class GateAddon:
     ) -> None:
         """Best-effort APPROVAL_REQUESTED notification dispatch.
 
-        Body is ``{approval_id, session_id, action_type}`` — no PII.
+        Body is `{approval_id, session_id, action_type}` — no PII.
         The full payload lives on the action_approval row; the popover
         fetches it when the chat loads. Failures are swallowed by the
         caller.
@@ -518,7 +517,7 @@ class GateAddon:
 def _http_403(code: str) -> http.Response:
     """Build a 403 response visible to the sandbox.
 
-    The body is intentionally minimal — ``code`` is a stable string
+    The body is intentionally minimal — `code` is a stable string
     the SDK / curl wrapper can match on. Locked enum:
 
       unidentified_sandbox | body_too_large | user_rejected

@@ -1,9 +1,9 @@
 """Approval read + decision endpoints.
 
 Concurrent writes are arbitrated by the conditional UPDATE in
-``server/features/build/db/action_approval.try_record_decision`` —
+`server/features/build/db/action_approval.try_record_decision` —
 that's the single race-safe primitive. After a successful write the
-API pushes the decision onto the ``approval:wake:{id}`` channel so
+API pushes the decision onto the `approval:wake:{id}` channel so
 the parked proxy unblocks immediately; a missed wake just falls back
 to the proxy's wait timeout.
 """
@@ -49,7 +49,7 @@ router = APIRouter(prefix="/approvals")
 
 
 class DecisionBody(BaseModel):
-    """Body of ``POST /approvals/{approval_id}/decision``.
+    """Body of `POST /approvals/{approval_id}/decision`.
 
     EXPIRED is server-only (set by the proxy on timeout) — clients
     may only submit APPROVED or REJECTED.
@@ -60,10 +60,10 @@ class DecisionBody(BaseModel):
 
 
 class ApprovalView(BaseModel):
-    """Serialised ``ActionApproval`` row for API consumers.
+    """Serialised `ActionApproval` row for API consumers.
 
-    Constructed directly from the ORM row via ``model_validate`` —
-    ``is_live`` is computed from ``decision`` + ``created_at`` so
+    Constructed directly from the ORM row via `model_validate` —
+    `is_live` is computed from `decision` + `created_at` so
     callers don't have to thread the cutoff explicitly.
     """
 
@@ -98,7 +98,7 @@ def _existing_decision_response(
     """Map an already-decided row to either an idempotent 200 or a CONFLICT.
 
     Same decision → idempotent return of the view. Different decision →
-    CONFLICT. The caller has already established that ``view.decision``
+    CONFLICT. The caller has already established that `view.decision`
     is non-null.
     """
     if view.decision == requested:
@@ -130,7 +130,7 @@ def list_live_approvals(
 ) -> ApprovalListResponse:
     """Return the session's currently-actionable approvals.
 
-    Actionable = ``decision IS NULL`` AND the row was created within
+    Actionable = `decision IS NULL` AND the row was created within
     the proxy's wait window. Rows older than that window are treated
     as orphaned (the proxy parked on them is gone) and excluded.
     """
@@ -159,7 +159,7 @@ def list_session_approvals(
 ) -> ApprovalListResponse:
     """Audit query for a single session.
 
-    Non-owners get NOT_FOUND (existence not leaked). ``decision=None``
+    Non-owners get NOT_FOUND (existence not leaked). `decision=None`
     returns every row including pending ones.
     """
     if get_build_session(session_id, user.id, db_session) is None:
@@ -201,7 +201,7 @@ def submit_decision(
     )
     if decided is None:
         # Lost the race. Expire the cached row — SQLAlchemy's identity
-        # map would otherwise hand back the pre-UPDATE ``current``.
+        # map would otherwise hand back the pre-UPDATE `current`.
         db_session.expire(current)
         winner = action_approval.get_action_approval(db_session, approval_id)
         if winner is None:

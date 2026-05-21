@@ -1376,8 +1376,8 @@ class SessionManager:
         Two producer threads write onto a shared queue:
 
         * the ACP iterator (forwarded as-is, including SSEKeepalive),
-        * a poller that ``BLPOP``s the session's approval announce list
-          and pushes ``ApprovalRequestedPacket`` instances onto the
+        * a poller that `BLPOP`s the session's approval announce list
+          and pushes `ApprovalRequestedPacket` instances onto the
           queue when the sandbox-proxy signals a new approval.
 
         Announce latency is bounded by the BLPOP timeout (1s).
