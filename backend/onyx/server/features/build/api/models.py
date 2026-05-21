@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
@@ -323,3 +324,72 @@ class PptxPreviewResponse(BaseModel):
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== External App Models =====
+class UpsertExternalAppRequest(BaseModel):
+    """Create or update an external app.
+
+    If `id` is provided, the row with that id is updated; otherwise a
+    new row is inserted (and a backing ``Skill`` row is created in the
+    same transaction). ``upstream_url_patterns`` is a list of regex
+    patterns matched by the egress proxy against outbound request URLs.
+    ``enabled`` (stored on the linked skill) is the kill switch the
+    proxy checks before injecting credentials.
+
+    Skill identity (slug, bundle bytes, sharing scope) is derived
+    server-side from ``app_type``; admins don't supply it.
+    """
+
+    id: int | None = None
+    name: str
+    description: str
+    enabled: bool
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+
+
+class ExternalAppAdminResponse(BaseModel):
+    """Admin-facing view of an external app (includes org credentials)."""
+
+    id: int
+    name: str
+    description: str
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+    enabled: bool
+
+
+class UpsertUserCredentialsRequest(BaseModel):
+    """User-supplied credentials for a specific external app."""
+
+    user_credentials: dict[str, Any]
+
+
+class ExternalAppUserResponse(BaseModel):
+    """User-facing view of an external app.
+
+    `credential_keys` are the parameter names the calling user must supply —
+    derived from the app's `auth_template` minus whatever the organization
+    has already filled in. `credential_values` are the values the user has
+    previously stored for those keys (intersection — stale keys from
+    deleted/migrated templates are filtered out). `authenticated` is true
+    iff `credential_values` covers every key in `credential_keys`.
+
+    Admin-only fields (``organization_credentials``, ``auth_template``,
+    ``upstream_url_patterns``, ``enabled``) are intentionally omitted.
+    ``app_type`` is included — it's the non-sensitive provider
+    discriminator the UI needs to render the app.
+    """
+
+    id: int
+    name: str
+    description: str
+    app_type: ExternalAppType
+    credential_keys: list[str]
+    credential_values: dict[str, Any]
+    authenticated: bool

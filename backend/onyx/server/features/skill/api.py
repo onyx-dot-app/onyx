@@ -19,7 +19,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import create_skill
+from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill_for_admin
 from onyx.db.skill import fetch_skill_for_user
@@ -139,7 +139,7 @@ def create_custom_skill(
     )
 
     try:
-        skill = create_skill(
+        skill = create_skill__no_commit(
             slug=slug,
             name=name,
             description=description,
