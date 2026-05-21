@@ -438,8 +438,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return user
 
     async def verify(self, token: str, request: Optional[Request] = None) -> User:
-        # The injected `self.user_db` session is bound to the default schema
-        # because the verify request has no auth cookie yet. Re-resolve the
+        # Single-tenant: inherit fastapi-users default; the injected
+        # self.user_db is already bound to the correct schema.
+        if not MULTI_TENANT:
+            return await super().verify(token, request)
+
+        # Multi-tenant: the verify request has no auth cookie yet, so the
+        # tenant middleware fell back to the default schema. Re-resolve the
         # tenant from the JWT email and run the update against a tenant-bound
         # session, mirroring oauth_callback / get_by_email.
         try:
