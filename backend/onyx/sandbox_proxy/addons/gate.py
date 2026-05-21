@@ -95,12 +95,11 @@ class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
     Cross-tenant in-memory state — UUIDs and tenant slugs, no user
-    data. Exists so the SIGTERM drain can fan out per-tenant in
-    parallel (``asyncio.gather`` + ``asyncio.to_thread``) without one
-    slow tenant starving another's drain budget.
+    data. The SIGTERM drain walks this per-tenant so one cache backend
+    can be reused across each tenant's parked approvals.
 
     Mutated only from the event loop; the drain reads via
-    ``snapshot()`` to iterate safely while the source mutates.
+    `snapshot()` to iterate safely while the source mutates.
     """
 
     def __init__(self) -> None:
