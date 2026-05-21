@@ -4,7 +4,7 @@ This file provides guidance to AI agents when working on the web application wit
 
 ## Important Notes
 
-- **The development server is already running** at a dynamically allocated port. Do NOT run `npm run dev` yourself.
+- **The development server is already running** at a dynamically allocated port. Do NOT run `bun run dev` yourself.
 - **We do NOT use a `src` directory** - all code lives directly in the root folders (`app/`, `components/`, `lib/`, etc.)
 - If the app needs pre-computation (data processing, API calls, etc.), create a bash or python script called `prepare.sh`/`prepare.py` at the root of this directory
 - **CRITICAL: Create small, modular components** - Do NOT write everything in `page.tsx`. Break your UI into small, reusable components in the `components/` directory. Each component should have a single responsibility and be in its own file.
@@ -40,9 +40,35 @@ python prepare.py
 ## Commands
 
 ```bash
-npm run dev      # Start development server (DO NOT RUN - already running)
-npm run lint     # Run ESLint
+bun run dev      # Start development server (DO NOT RUN - already running)
+bun run lint     # Run ESLint
+bun add <pkg>    # Add a new dependency (updates package.json AND bun.lock)
 ```
+
+## Adding dependencies — read this before installing anything
+
+This session's `node_modules` is hardlinked from a pod-wide bun cache and is
+**not part of session snapshots**. When the session sleeps and later wakes,
+`node_modules` is rebuilt from `bun.lock` via `bun install --frozen-lockfile`.
+For that to work after a wake, `package.json` and `bun.lock` must always
+agree on what's installed.
+
+**Do:**
+- Use `bun add <pkg>` to install a new dependency. It writes the dep to both
+  `package.json` and `bun.lock` in one step.
+- If you hand-edit `package.json` (e.g. to bump a version), run `bun install`
+  immediately afterwards so `bun.lock` re-syncs.
+- After adding a dep, verify it landed in `bun.lock`:
+  `grep '"<pkg>":' bun.lock`. If it's missing, re-run `bun add <pkg>` — the
+  package won't be restored on the next session wake without an entry there.
+
+**Do not:**
+- Never use `bun install <pkg> --no-save` or `bun add <pkg> --no-save`. It puts
+  the package on disk but skips the manifests, so the dep silently disappears
+  on the next session wake.
+- Don't `rm -rf node_modules` and then keep working without reinstalling. The
+  cache will re-materialize it on next `bun install`, but the live process
+  won't see it until you do.
 
 ## Architecture
 

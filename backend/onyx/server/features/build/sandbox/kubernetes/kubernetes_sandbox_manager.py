@@ -71,6 +71,8 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotCreateRequest,
@@ -128,6 +130,7 @@ POD_READY_POLL_INTERVAL_SECONDS = 2
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
@@ -207,28 +210,27 @@ def _build_nextjs_start_script(
     Args:
         session_path: Path to the session directory (should be shell-safe)
         nextjs_port: Port number for the NextJS dev server
-        check_node_modules: If True, check for node_modules and run npm install if missing
+        check_node_modules: If True, check for node_modules and run bun install if missing
 
     Returns:
         Shell script string to start the NextJS server
     """
-    npm_install_check = ""
+    install_check = ""
     if check_node_modules:
-        npm_install_check = """
-# Check if npm dependencies are installed
+        install_check = f"""
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
     return f"""
 set -e
 cd {session_path}/outputs/web
-{npm_install_check}
-# Start npm run dev in background
+{install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -407,8 +409,25 @@ class KubernetesSandboxManager(SandboxManager):
         )
 
         # Sidecar container — runs the push daemon + snapshot API on port 8731.
-        # Receives IRSA credentials for S3 access.
+        # Receives IRSA credentials for S3 access in prod; falls back to
+        # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
+        # local-dev / CI where IRSA isn't available and an S3-compatible
+        # service (e.g. minio) is reachable in-cluster.
         _, push_public_key_b64 = _get_push_key_pair()
+        sidecar_env = [
+            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+        ]
+        for var in (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "AWS_ENDPOINT_URL",
+        ):
+            value = os.environ.get(var)
+            if value:
+                sidecar_env.append(client.V1EnvVar(name=var, value=value))
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
@@ -419,9 +438,7 @@ class KubernetesSandboxManager(SandboxManager):
                     name="push-daemon", container_port=PUSH_DAEMON_PORT
                 ),
             ],
-            env=[
-                client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
-            ],
+            env=sidecar_env,
             volume_mounts=[
                 client.V1VolumeMount(
                     name="workspace", mount_path="/workspace/sessions"
@@ -1181,25 +1198,33 @@ printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile
 printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
 """
 
-        # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
-# Copy outputs template (baked into image at build time)
 echo "Copying outputs template"
 if [ -d /workspace/templates/outputs ]; then
     cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # Install npm dependencies
-    echo "Installing npm dependencies..."
-    cd {session_path}/outputs/web && npm install
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd {session_path}/outputs/web && \\
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at /workspace/templates/outputs"
     mkdir -p {session_path}/outputs/web
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup).
-        # Headless callers (scheduled tasks) pass nextjs_port=None and don't
-        # need a dev server — the agent's tools work without one and the
-        # preview iframe isn't attached.
+        # Headless callers (scheduled tasks) pass nextjs_port=None — the
+        # agent's tools work without a dev server.
         nextjs_start_script = (
             _build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=False

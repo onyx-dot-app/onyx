@@ -81,6 +81,8 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker.internal.acp_exec_client import (
     DockerACPExecClient,
@@ -169,21 +171,22 @@ def _build_nextjs_start_script(
     check_node_modules: bool = False,
 ) -> str:
     """Shell script to spawn Next.js in the background and record its PID."""
-    npm_install_check = ""
+    install_check = ""
     if check_node_modules:
-        npm_install_check = """
+        install_check = f"""
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
+        bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
     return f"""
 set -e
 cd {session_path}/outputs/web
-{npm_install_check}
+{install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -750,7 +753,21 @@ echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
 if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
     cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    cd {session_path}/outputs/web && npm install
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd {session_path}/outputs/web && \
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
     mkdir -p {session_path}/outputs/web
@@ -975,6 +992,30 @@ echo "Session cleanup complete"
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to extract snapshot: {e}") from e
+
+        # Keep in sync with the K8s sandbox_daemon's restore_snapshot.
+        install_script = f"""
+set -e
+web_dir={session_path}/outputs/web
+if [ -f "$web_dir/bun.lock" ]; then
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd "$web_dir"
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
+fi
+"""
+        try:
+            run_in_container(container, ["/bin/sh", "-c", install_script])
+        except ExecError as e:
+            raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
         self._regenerate_session_config(
             container=container,
