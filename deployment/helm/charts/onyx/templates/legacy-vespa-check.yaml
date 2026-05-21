@@ -1,0 +1,36 @@
+{{- /*
+Detect upgrades from chart < 0.5.0, which bundled Vespa as a subchart.
+Chart 0.5.0 dropped that subchart, so a naive `helm upgrade` from 0.4.x
+would delete the `da-vespa` StatefulSet and orphan the Vespa data
+volume. The api-server would then crash-loop trying to deploy its Vespa
+application package against localhost:19071.
+
+Fail fast at install/upgrade time with a clear migration message. The
+check is a `lookup` against the live cluster, so it only fires during
+`helm install`/`helm upgrade` (not during local `helm template`).
+
+If the legacy StatefulSet has already been migrated away and only the
+PV is hanging around, set `legacyVespaCheck.acknowledged=true` to
+override the check.
+
+The hasKey guards below protect `helm upgrade --reuse-values` against a
+release whose previously-stored values predate the `legacyVespaCheck`
+key — direct nested access would nil-deref and silently bypass the
+entire fail-fast path. We treat absent values as the "safe default"
+(enabled, not acknowledged) so the protection is in force by default.
+*/}}
+{{- $cfg := default (dict) .Values.legacyVespaCheck }}
+{{- $checkEnabled := true }}
+{{- if hasKey $cfg "enabled" }}
+{{- $checkEnabled = $cfg.enabled }}
+{{- end }}
+{{- $checkAck := false }}
+{{- if hasKey $cfg "acknowledged" }}
+{{- $checkAck = $cfg.acknowledged }}
+{{- end }}
+{{- if $checkEnabled }}
+{{- $legacyVespa := lookup "apps/v1" "StatefulSet" .Release.Namespace "da-vespa" }}
+{{- if and $legacyVespa (not $checkAck) }}
+{{- fail (printf "\n\nERROR: legacy `da-vespa` StatefulSet detected in namespace %q.\n\nChart 0.5.0 removed the bundled Vespa subchart. Upgrading without first\nmigrating to external/managed Vespa will delete the StatefulSet and you\nwill lose access to the indexed data managed by it. The api-server will\nfail to start (connection refused on localhost:19071) until it can reach\nan external Vespa endpoint.\n\nWhat to do:\n  1. Provision an external Vespa cluster (Vespa Cloud, self-hosted, etc.).\n  2. Update your values to point Onyx at the new endpoint — set\n     VESPA_HOST / VESPA_PORT under the `configMap:` block.\n  3. Delete the legacy `da-vespa` StatefulSet (check the PV reclaim\n     policy first; the data is gone once the PV is reclaimed).\n  4. Re-run `helm upgrade`. Onyx connectors will re-index into the new\n     cluster automatically once the api-server can reach it.\n\nOr set `legacyVespaCheck.acknowledged=true` to bypass this check\nexplicitly (only if the StatefulSet is already gone or is being kept\nintentionally).\n\nSee deployment/helm/MIGRATION.md (chart 0.4.x → 0.5.x section) for details.\n" .Release.Namespace) }}
+{{- end }}
+{{- end }}

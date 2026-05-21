@@ -1189,6 +1189,17 @@ externalSecret:
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
+# -- Safeguards against destructive upgrades from chart 0.4.x. Chart 0.5.0
+# removed the bundled Vespa subchart; the check below fails `helm upgrade`
+# if the legacy `da-vespa` StatefulSet is still in the namespace, so
+# the StatefulSet and its Vespa data volume are not silently deleted.
+# Set `acknowledged: true` once you've migrated to external Vespa, or
+# `enabled: false` to disable the check entirely.
+# See deployment/helm/MIGRATION.md.
+legacyVespaCheck:
+  enabled: true
+  acknowledged: false
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
