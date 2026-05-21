@@ -34,14 +34,13 @@ def store_plaintext(file_id: str, plaintext_content: str) -> bool:
 
     Args:
         file_id: The ID of the file (user_file or artifact_file)
-        plaintext_content: The plaintext content to store
+        plaintext_content: The plaintext content to store (may be the empty
+            string, which is still cached so that files we cannot extract
+            text from don't get re-attempted on every retrieval)
 
     Returns:
         bool: True if storage was successful, False otherwise
     """
-    if not plaintext_content:
-        return False
-
     plaintext_file_name = plaintext_file_name_for_id(file_id)
     try:
         file_store = get_default_file_store()
