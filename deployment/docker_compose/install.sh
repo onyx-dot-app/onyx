@@ -116,23 +116,23 @@ INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
 CRAFT_COMPOSE_FILE="docker-compose.craft.yml"
 
-# Build the -f flags for docker compose.
+# Populate COMPOSE_FILE_ARGS with the -f flags for docker compose.
 # Pass "true" as $1 to auto-detect previously-downloaded overlays (used by
 # shutdown/delete-data so users don't need to remember --lite/--include-craft).
-compose_file_args() {
+COMPOSE_FILE_ARGS=()
+build_compose_file_args() {
     local auto_detect="${1:-false}"
-    local args="-f docker-compose.yml"
+    COMPOSE_FILE_ARGS=(-f docker-compose.yml)
     if [[ "$LITE_MODE" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; }; then
-        args="$args -f ${LITE_COMPOSE_FILE}"
+        COMPOSE_FILE_ARGS+=(-f "${LITE_COMPOSE_FILE}")
     fi
     # Craft Docker sandbox backend is opt-in (--include-craft) so the host
     # Docker socket isn't bind-mounted on default deployments. Layer the
     # craft overlay on top when explicitly enabled, or auto-detect a
     # previously-downloaded overlay on shutdown/delete-data.
     if [[ "$INCLUDE_CRAFT" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; }; then
-        args="$args -f ${CRAFT_COMPOSE_FILE}"
+        COMPOSE_FILE_ARGS+=(-f "${CRAFT_COMPOSE_FILE}")
     fi
-    echo "$args"
 }
 
 # --- Downloader detection (curl with wget fallback) ---
@@ -159,6 +159,35 @@ download_file() {
     else
         wget -q --tries=3 --timeout=20 -O "$output" "$url"
     fi
+}
+
+# Fetches the most recent published release tag from the Onyx GitHub repo.
+# Used to default the installer to a pinned, tested release (instead of the
+# rolling "edge" tag) and to pull compose/nginx files that match it.
+LATEST_RELEASE_TAG=""
+fetch_latest_release_tag() {
+    local api_url="https://api.github.com/repos/onyx-dot-app/onyx/releases/latest"
+    local response=""
+    if [[ "$DOWNLOADER" == "curl" ]]; then
+        response=$(curl -fsSL --retry 2 --retry-delay 1 \
+            --connect-timeout 5 --max-time 10 \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" 2>/dev/null) || return 1
+    else
+        response=$(wget -q --tries=2 --timeout=10 \
+            --header="Accept: application/vnd.github+json" \
+            -O- "$api_url" 2>/dev/null) || return 1
+    fi
+    local tag
+    tag=$(echo "$response" \
+        | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | head -1 \
+        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    if [[ -z "$tag" ]]; then
+        return 1
+    fi
+    LATEST_RELEASE_TAG="$tag"
+    return 0
 }
 
 # --- Docker Compose detection ---
@@ -312,8 +341,8 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) stop)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -365,8 +394,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) down -v)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -392,6 +421,7 @@ fi
 install_docker_linux() {
     local distro_id=""
     if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
         distro_id="$(. /etc/os-release && echo "${ID:-}")"
     fi
 
@@ -422,6 +452,22 @@ if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/nu
     IS_WSL=true
 fi
 
+# Resolve the git ref to pull deployment files from, and the default image tag
+# to suggest at the version prompt. Both default to the most recent GitHub
+# release so users land on a pinned, tested version. If the API is unreachable,
+# fall back to main / edge (the pre-existing defaults).
+RELEASE_REF="main"
+DEFAULT_IMAGE_TAG="edge"
+RELEASE_LOOKUP_FAILED=false
+if [[ "$USE_LOCAL_FILES" = false ]]; then
+    if fetch_latest_release_tag; then
+        RELEASE_REF="$LATEST_RELEASE_TAG"
+        DEFAULT_IMAGE_TAG="$LATEST_RELEASE_TAG"
+    else
+        RELEASE_LOOKUP_FAILED=true
+    fi
+fi
+
 # Dry-run: show plan and exit
 if [[ "$DRY_RUN" = true ]]; then
     print_info "Dry run mode — showing what would happen:"
@@ -430,6 +476,7 @@ if [[ "$DRY_RUN" = true ]]; then
     echo "  • Include Craft: ${INCLUDE_CRAFT}"
     echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
     echo "  • Downloader: ${DOWNLOADER}"
+    echo "  • Default image tag: ${DEFAULT_IMAGE_TAG} (config ref: ${RELEASE_REF})"
     echo ""
     print_success "Dry run complete (no changes made)"
     exit 0
@@ -524,6 +571,10 @@ echo "Welcome to Onyx Installation Script"
 echo "===================================="
 echo ""
 
+if [[ "$RELEASE_LOOKUP_FAILED" = true ]]; then
+    print_warning "Could not determine latest Onyx release — falling back to main / edge"
+fi
+
 # User acknowledgment section
 echo -e "${YELLOW}${BOLD}This script will:${NC}"
 echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
@@ -540,8 +591,9 @@ else
     echo ""
 fi
 
-# GitHub repo base URL - using main branch
-GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
+# GitHub repo base URL — pinned to the resolved release ref (latest release tag
+# if reachable, otherwise main).
+GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/${RELEASE_REF}/deployment/docker_compose"
 
 # Check system requirements
 print_step "Verifying Docker installation"
@@ -639,9 +691,6 @@ fi
 # Check Docker resources
 print_step "Verifying Docker resources"
 
-# Get Docker system info
-DOCKER_INFO=$(docker system info 2>/dev/null)
-
 # Try to get memory allocation (method varies by platform)
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS - Docker Desktop
@@ -733,7 +782,7 @@ mkdir -p "${INSTALL_ROOT}/data/nginx/local"
 print_success "Directory structure created"
 
 # Ensure all required configuration files are present
-NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
+NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/${RELEASE_REF}/deployment/data/nginx"
 
 if [[ "$USE_LOCAL_FILES" = true ]]; then
     print_step "Verifying existing configuration files"
@@ -852,7 +901,8 @@ ENV_FILE="${INSTALL_ROOT}/deployment/.env"
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
+    build_compose_file_args true
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
     if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
         print_error "Onyx services are currently running!"
         echo ""
@@ -885,10 +935,10 @@ if [ -f "$ENV_FILE" ]; then
         else
             print_info "Update selected. Which tag would you like to deploy?"
             echo ""
-            echo "• Press Enter for edge (recommended)"
+            echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
             echo "• Type a specific tag (e.g., v0.1.0)"
             echo ""
-            prompt_or_default "Enter tag [default: edge]: " "edge"
+            prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
             VERSION="$REPLY"
             echo ""
 
@@ -933,10 +983,10 @@ else
     else
         print_info "Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for edge (recommended)"
+        echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        prompt_or_default "Enter tag [default: edge]: " "edge"
+        prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
         VERSION="$REPLY"
         echo ""
 
@@ -974,6 +1024,7 @@ else
 
     # TODO (jessica): Uncomment this once no auth users still have an account
     # Use basic auth by default
+    # shellcheck disable=SC2034  # Referenced by the commented-out auth prompt above.
     AUTH_SCHEMA="basic"
 
     # Create .env file from template
@@ -1065,15 +1116,24 @@ is_port_available() {
     # Try netcat first if available
     if command -v nc &> /dev/null; then
         # Try to connect to the port, if it fails, the port is available
-        ! nc -z localhost "$port" 2>/dev/null
+        if nc -z localhost "$port" 2>/dev/null; then
+            return 1
+        fi
+        return 0
     # Fallback using curl/telnet approach
     elif command -v curl &> /dev/null; then
         # Try to connect with curl, if it fails, the port might be available
-        ! curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1
+        if curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     # Final fallback using lsof if available
     elif command -v lsof &> /dev/null; then
         # Check if any process is listening on the port
-        ! lsof -i ":$port" >/dev/null 2>&1
+        if lsof -i ":$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     else
         # No port checking tools available, assume port is available
         print_warning "No port checking tools available (nc, curl, lsof). Assuming port $port is available."
@@ -1086,7 +1146,7 @@ find_available_port() {
     local start_port=${1:-3000}
     local port=$start_port
 
-    while [ $port -le 65535 ]; do
+    while [ "$port" -le 65535 ]; do
         if is_port_available "$port"; then
             echo "$port"
             return 0
@@ -1127,33 +1187,43 @@ print_success "Using port $AVAILABLE_PORT for nginx"
 # Determine if we're using a floating tag (edge, latest) that should force pull.
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace.
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
+
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
     USE_LATEST=true
-    print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
+    # Floating tags track main, so configs should come from main.
+    CONFIG_REF="main"
+    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
+    else
+        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
+    fi
 else
     USE_LATEST=false
+    # Pinned release tags use their own ref so configs match the images.
+    CONFIG_REF="$CURRENT_IMAGE_TAG"
 fi
 
-# For pinned version tags, re-download config files from that tag so the
-# compose file matches the images being pulled (the initial download used main).
-if [[ "$USE_LATEST" = false ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
-    PINNED_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CURRENT_IMAGE_TAG}/deployment"
-    print_info "Fetching config files matching tag ${CURRENT_IMAGE_TAG}..."
-    if download_file "${PINNED_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
-        download_file "${PINNED_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
-        download_file "${PINNED_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
+# The initial download pulled configs from RELEASE_REF (latest release, or main
+# on fallback). If the chosen image tag wants configs from a different ref,
+# re-fetch them so the compose file matches the images being pulled.
+if [[ "$CONFIG_REF" != "$RELEASE_REF" ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
+    CONFIG_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CONFIG_REF}/deployment"
+    print_info "Fetching config files matching ${CONFIG_REF}..."
+    if download_file "${CONFIG_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
+        download_file "${CONFIG_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
+        download_file "${CONFIG_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
         chmod +x "${INSTALL_ROOT}/data/nginx/run-nginx.sh"
         if [[ "$LITE_MODE" = true ]]; then
-            download_file "${PINNED_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
+            download_file "${CONFIG_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
                 "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" 2>/dev/null || true
         fi
         if [[ "$INCLUDE_CRAFT" = true ]]; then
-            download_file "${PINNED_BASE}/docker_compose/${CRAFT_COMPOSE_FILE}" \
+            download_file "${CONFIG_BASE}/docker_compose/${CRAFT_COMPOSE_FILE}" \
                 "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" 2>/dev/null || true
         fi
-        print_success "Config files updated to match ${CURRENT_IMAGE_TAG}"
+        print_success "Config files updated to match ${CONFIG_REF}"
     else
-        print_warning "Tag ${CURRENT_IMAGE_TAG} not found on GitHub — using main branch configs"
+        print_warning "Ref ${CONFIG_REF} not found on GitHub — keeping configs from ${RELEASE_REF}"
     fi
 fi
 
@@ -1162,8 +1232,12 @@ print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) pull --quiet)
-if [ $? -eq 0 ]; then
+# Pass IMAGE_TAG inline so the value the user picked at the prompt wins over
+# any `export IMAGE_TAG=...` inherited from the caller's shell. Compose's
+# substitution prefers shell env over .env, so without this an exported
+# IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
+build_compose_file_args
+if (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
@@ -1188,18 +1262,18 @@ echo ""
 UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
     print_info "Current container status:"
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps)
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1217,7 +1291,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
@@ -1250,7 +1324,7 @@ echo ""
 if is_interactive && command -v gh &>/dev/null; then
     prompt_yn_or_default "Enjoying Onyx? Star the repo on GitHub? [Y/n] " "Y"
     if [[ ! "$REPLY" =~ ^[Nn] ]]; then
-        if GH_PAGER= gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
+        if GH_PAGER='' gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
             print_success "Thanks for the star!"
         else
             print_info "Star us at: https://github.com/onyx-dot-app/onyx"

@@ -32,7 +32,7 @@ from acp.schema import ToolCallStart
 try:
     from onyx.server.features.build.sandbox.local.agent_client import ACPAgentClient
 except ImportError:
-    from agent_client import ACPAgentClient  # ty: ignore[unresolved-import]
+    from agent_client import ACPAgentClient
 
 
 def test_with_opencode_acp(message: str, working_dir: str | None = None) -> None:

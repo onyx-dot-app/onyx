@@ -69,7 +69,7 @@ fi
 # Named volumes mounted into /workspace (build caches) start root-owned.
 # Chown the mountpoint to match the workspace owner so the dev user can
 # write into them. Non-recursive: contents are created by the dev user
-# (e.g. via `npm ci`) and don't need re-chown on every start.
+# (e.g. via `bun install`) and don't need re-chown on every start.
 for vol in /workspace/web/node_modules /workspace/web/.next; do
     [ -d "$vol" ] || continue
     if ! chown "$WS_UID":"$WS_GID" "$vol" 2>&1; then
