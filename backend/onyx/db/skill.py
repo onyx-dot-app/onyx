@@ -100,6 +100,44 @@ def _exclude_unavailable_built_ins(
     )
 
 
+def _external_app_skill_ids_subquery() -> Select[tuple[UUID]]:
+    """Subquery of every skill id backed by an ``external_app`` row.
+
+    Used with ``Skill.id.notin_(...)`` to keep external-app-backed skills
+    out of the skills endpoint — they're managed through the
+    external-apps API instead.
+    """
+    return select(ExternalApp.skill_id)
+
+
+def _skill_ids_blocked_by_external_app_auth(
+    user: User, db_session: Session
+) -> list[UUID]:
+    """Skill ids to withhold from *user*'s sandbox: external-app-backed
+    skills the user has not authenticated for.
+
+    Each external app is left-joined to this user's credential row; an app
+    the user can't use yet (missing required credential keys) has its skill
+    blocked. Apps that need no per-user credentials, or that the user has
+    already configured, are not blocked.
+    """
+    rows = db_session.execute(
+        select(ExternalApp, ExternalAppUserCredential).join(
+            ExternalAppUserCredential,
+            and_(
+                ExternalAppUserCredential.external_app_id == ExternalApp.id,
+                ExternalAppUserCredential.user_id == user.id,
+            ),
+            isouter=True,
+        )
+    ).all()
+    return [
+        app.skill_id
+        for app, user_cred in rows
+        if not is_user_authenticated_for_app(app, user_cred)
+    ]
+
+
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
     """Skills the user sees in the skills endpoint.
 

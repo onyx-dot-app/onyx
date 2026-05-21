@@ -61,6 +61,7 @@ def _to_user_response(
         id=app.id,
         name=app.skill.name,
         description=app.skill.description,
+        app_type=app.app_type,
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,

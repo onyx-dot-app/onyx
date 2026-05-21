@@ -191,6 +191,46 @@ def reset_built_in_skill_row(
     )
 
 
+def make_external_app(
+    db_session: Session,
+    *,
+    skill: Skill,
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any] | None = None,
+    app_type: ExternalAppType = ExternalAppType.CUSTOM,
+    upstream_url_patterns: list[str] | None = None,
+) -> ExternalApp:
+    """Insert an ``ExternalApp`` row backing ``skill``."""
+    app = ExternalApp(
+        skill_id=skill.id,
+        app_type=app_type,
+        upstream_url_patterns=upstream_url_patterns or [],
+        auth_template=auth_template,
+        organization_credentials=organization_credentials or {},
+    )
+    db_session.add(app)
+    db_session.flush()
+    return app
+
+
+def make_user_credential(
+    db_session: Session,
+    *,
+    app: ExternalApp,
+    user: User,
+    user_credentials: dict[str, Any],
+) -> ExternalAppUserCredential:
+    """Insert an ``ExternalAppUserCredential`` row for ``user`` + ``app``."""
+    cred = ExternalAppUserCredential(
+        external_app_id=app.id,
+        user_id=user.id,
+        user_credentials=user_credentials,
+    )
+    db_session.add(cred)
+    db_session.flush()
+    return cred
+
+
 def grant_skill_to_group(
     db_session: Session, skill: Skill, group: UserGroup
 ) -> Skill__UserGroup:
