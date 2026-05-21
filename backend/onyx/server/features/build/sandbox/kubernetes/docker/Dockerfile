@@ -84,7 +84,12 @@ RUN npm install -g pptxgenjs && \
 
 # Bun replaces npm for sandbox-session installs; see
 # docs/craft/features/bun-node-modules-dedup.md.
-RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash && \
+# Pinned: bun.sh/install defaults to "latest" which would make image builds
+# non-reproducible. Bump intentionally when validating a new bun version
+# against the install + hardlink semantics this PR depends on.
+ARG BUN_VERSION=1.3.14
+RUN curl -fsSL https://bun.sh/install \
+    | BUN_INSTALL=/usr/local bash -s "bun-v${BUN_VERSION}" && \
     /usr/local/bin/bun --version
 
 USER sandbox
