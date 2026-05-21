@@ -109,6 +109,15 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
+        plaintext_bytes = file_io.read()
+        # An empty plaintext entry is a "we tried and there is no text"
+        # sentinel written by `_get_or_extract_plaintext` / `store_plaintext`
+        # for unprocessable files (e.g. .zip).  Treat it as a cache miss
+        # here so downstream tools (code interpreter, file reader) still
+        # receive the original bytes instead of an empty file.
+        if not plaintext_bytes:
+            raise ValueError("plaintext cache entry is empty; falling back to original")
+
         # Metadata-only file types preserve their original type so
         # downstream injection paths can route them correctly.
         if chat_file_type.use_metadata_only():
@@ -126,7 +135,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
 
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
-            content=file_io.read(),
+            content=plaintext_bytes,
             file_type=plaintext_chat_file_type,
             filename=user_file.name,
         )
