@@ -458,29 +458,9 @@ jobs:
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
       - name: Install Python deps and generate OpenAPI client
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv sync --frozen --no-group model_server
-
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace/backend \
-            -e LICENSE_ENFORCEMENT_ENABLED=false \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv run python scripts/onyx_openapi_schema.py --filename openapi.json
-
-          docker run --rm \
-            -v ${{ github.workspace }}/backend:/local \
-            openapitools/openapi-generator-cli:latest generate \
-              -i /local/openapi.json \
-              -g python \
-              -o /local/generated/onyx_openapi_client \
-              --package-name onyx_openapi_client \
-              --skip-validate-spec \
-              --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -629,29 +609,9 @@ jobs:
         id: start_docker_onyx_lite
 
       - name: Install Python deps and generate OpenAPI client
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv sync --frozen --no-group model_server
-
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace/backend \
-            -e LICENSE_ENFORCEMENT_ENABLED=false \
-            ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv run python scripts/onyx_openapi_schema.py --filename openapi.json
-
-          docker run --rm \
-            -v ${{ github.workspace }}/backend:/local \
-            openapitools/openapi-generator-cli:latest generate \
-              -i /local/openapi.json \
-              -g python \
-              -o /local/generated/onyx_openapi_client \
-              --package-name onyx_openapi_client \
-              --skip-validate-spec \
-              --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -761,32 +721,9 @@ jobs:
         id: start_docker_multi_tenant
 
       - name: Install Python deps and generate OpenAPI client
-        env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            uv sync --frozen --no-group model_server
-
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace/backend \
-            -e LICENSE_ENFORCEMENT_ENABLED=false \
-            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            uv run python scripts/onyx_openapi_schema.py --filename openapi.json
-
-          docker run --rm \
-            -v ${{ github.workspace }}/backend:/local \
-            openapitools/openapi-generator-cli:latest generate \
-              -i /local/openapi.json \
-              -g python \
-              -o /local/generated/onyx_openapi_client \
-              --package-name onyx_openapi_client \
-              --skip-validate-spec \
-              --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Multi-Tenant Integration Tests
         env:
