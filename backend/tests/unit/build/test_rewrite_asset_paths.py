@@ -263,34 +263,22 @@ class TestProxyRequestWiring:
 
         monkeypatch.setattr(api.httpx, "Client", FakeClient)
 
-        # Mix of lower- and mixed-case keys to exercise the case-insensitive
-        # filter (real Starlette Headers arrive lowercased, but defense-in-depth
-        # in the comparator should still work if that ever changes).
-        sensitive_headers = {
-            "host": "app.onyx.local",
-            "content-length": "7",
-            "Cookie": "fastapiusersauth=victim-session",
-            "Authorization": "Bearer victim-token",
-            "X-Onyx-Authorization": "Bearer alt-victim-token",
-            "X-Onyx-Tenant-ID": "victim-tenant",
-            "X-Onyx-Request-ID": "abc-123",
-            "X-Onyx-Future-Header": "should-be-stripped-by-prefix",
-            "x-api-key": "victim-api-key",
-            "x-auth-token": "victim-auth-token",
-            "proxy-authorization": "Basic victim-proxy-token",
-            "x-csrf-token": "csrf-token",
-            "x-xsrf-token": "xsrf-token",
-            "x-forwarded-for": "203.0.113.10",
-            "x-forwarded-host": "evil.example.com",
-            "x-forwarded-proto": "https",
-            "x-real-ip": "203.0.113.10",
-            "x-client-ip": "203.0.113.10",
-            "cf-connecting-ip": "203.0.113.10",
-            "true-client-ip": "203.0.113.10",
-            "x-forwarded-user": "victim@example.com",
-            "x-forwarded-email": "victim@example.com",
-            "forwarded": "for=203.0.113.10;proto=https",
+        # Send every deny-list entry as input, so dropping any entry from
+        # EXCLUDED_REQUEST_HEADERS surfaces here as a leak in `forwarded_headers`.
+        sensitive_headers: dict[str, str] = {
+            key: f"SHOULD-NOT-LEAK-{key}" for key in api.EXCLUDED_REQUEST_HEADERS
         }
+        # Cover the `x-onyx-*` prefix matcher in `_is_header_excluded`. These
+        # keys are not in the literal deny-list set; the prefix is what strips
+        # them. Mixed-case here also exercises the case-insensitive comparator.
+        sensitive_headers["X-Onyx-Authorization"] = "Bearer alt-victim-token"
+        sensitive_headers["X-Onyx-Tenant-ID"] = "victim-tenant"
+        sensitive_headers["X-Onyx-Request-ID"] = "abc-123"
+        sensitive_headers["X-Onyx-Future-Header"] = "should-be-stripped-by-prefix"
+        # Promote one literal deny-list key to mixed-case to confirm the
+        # comparator lowercases before matching.
+        sensitive_headers["Cookie"] = sensitive_headers.pop("cookie")
+
         benign_headers = {"accept": "text/plain", "user-agent": "pytest"}
         request = cast(
             Request,
