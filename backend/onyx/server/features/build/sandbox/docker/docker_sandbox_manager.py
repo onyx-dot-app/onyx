@@ -112,14 +112,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -143,26 +135,6 @@ MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
 # which are also module-level and not env-tunable.
 CONTAINER_READY_TIMEOUT_SECONDS = 120
 CONTAINER_READY_POLL_INTERVAL_SECONDS = 1.0
-
-
-def _build_org_info_script(
-    session_path: str, user_work_area: str | None, user_level: str | None
-) -> str:
-    """Shell snippet that writes org_info/ files when a persona is configured."""
-    if not user_work_area:
-        return ""
-    persona = get_persona_info(user_work_area, user_level)
-    if persona is None:
-        return ""
-    agents_md = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-    identity = generate_user_identity_content(persona).replace("'", "'\\''")
-    org_structure = json.dumps(ORGANIZATION_STRUCTURE, indent=2).replace("'", "'\\''")
-    return f"""
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure}' > {session_path}/org_info/organization_structure.json
-"""
 
 
 def _build_nextjs_start_script(
@@ -673,7 +645,6 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         user_name: str | None = None,
         user_role: str | None = None,
-        include_org_info: bool = False,
     ) -> tuple[str, str]:
         """Render shell-escaped (AGENTS.md, opencode.json) for a session.
 
@@ -689,7 +660,6 @@ class DockerSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=include_org_info,
         )
         opencode_json = json.dumps(
             build_opencode_config(
@@ -716,8 +686,6 @@ class DockerSandboxManager(SandboxManager):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         if snapshot_path:
             logger.warning(
@@ -736,12 +704,8 @@ class DockerSandboxManager(SandboxManager):
             skills_section=skills_section,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=bool(user_work_area),
         )
 
-        org_info_setup = _build_org_info_script(
-            session_path, user_work_area, user_level
-        )
         nextjs_start = (
             _build_nextjs_start_script(session_path, nextjs_port)
             if nextjs_port is not None
@@ -775,7 +739,6 @@ fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 printf '%s' '{opencode_json}' > {session_path}/opencode.json
-{org_info_setup}
 {nextjs_start}
 echo "Session workspace setup complete"
 """

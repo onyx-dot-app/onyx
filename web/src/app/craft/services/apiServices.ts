@@ -82,8 +82,6 @@ export async function processSSEStream(
 
 export interface CreateSessionOptions {
   name?: string | null;
-  userWorkArea?: string | null;
-  userLevel?: string | null;
   llmProviderType?: string | null;
   llmModelName?: string | null;
 }
@@ -96,8 +94,6 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: options?.name || null,
-      user_work_area: options?.userWorkArea || null,
-      user_level: options?.userLevel || null,
       llm_provider_type: options?.llmProviderType || null,
       llm_model_name: options?.llmModelName || null,
     }),
