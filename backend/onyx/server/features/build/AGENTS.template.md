@@ -93,6 +93,12 @@ Use `outputs/web` with Next.js 16.1.1, React v19, Tailwind, Recharts, shadcn/ui.
 
 Save to `outputs/markdown/*.md`. Use clear headings and tables.
 
+## External Action Approvals
+
+Some agent-initiated actions (e.g. sending a Slack message, creating a Linear issue) are gated by user approval before they leave the sandbox. The request will pause at the egress proxy until the user clicks Approve or Reject in the chat UI; the proxy's wait window is up to **3 minutes**.
+
+When invoking such an action via `bash` (e.g. `curl https://slack.com/api/chat.postMessage ...`), set an explicit longer timeout — at least 200 seconds — on the HTTP call so the sandbox-side client doesn't give up before the user has time to decide. If the user rejects (or the wait window elapses), the upstream call returns HTTP 403 with a JSON body like `{"error":"user_rejected"}` or `{"error":"not_authorized"}`; surface the failure to the user in your next message and offer an alternative.
+
 ## Questions to Ask
 
 - Did you check all relevant sources that could be useful in addressing the user's question?

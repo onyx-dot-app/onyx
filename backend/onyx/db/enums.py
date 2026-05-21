@@ -286,6 +286,18 @@ class SharingScope(str, PyEnum):
     PUBLIC_ORG = "public_org"
 
 
+class ApprovalDecision(str, PyEnum):
+    """Terminal decision on a gated agent-initiated action.
+
+    `decision IS NULL` on the row represents the pending / in-flight state;
+    no enum value is reserved for it.
+    """
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
