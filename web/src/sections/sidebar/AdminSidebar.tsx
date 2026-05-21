@@ -58,7 +58,6 @@ function buildItems(
   hooksEnabled: boolean
 ): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
-  const enterpriseTier = tierAtLeast(tier, Tier.ENTERPRISE);
   const items: SidebarItemEntry[] = [];
 
   const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
@@ -113,9 +112,6 @@ function buildItems(
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
         error: settings?.settings.needs_reindexing,
       });
-    }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
     }
   }
 

@@ -1,5 +1,6 @@
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { AppearanceThemePage } from "@tests/e2e/admin/theme/AppearanceThemePage";
 
 test.describe("Appearance Theme Settings @exclusive", () => {
   const TEST_VALUES = {
@@ -10,6 +11,8 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     noticeHeader: "Important Notice",
     noticeContent: "Please read and agree to continue",
     consentPrompt: "I agree to the terms",
+    customHelpLinkUrl: "https://help.example.com",
+    customHelpLinkLabel: "Support Portal",
   };
 
   test.beforeEach(async ({ page, eeEnabled }) => {
@@ -66,6 +69,39 @@ test.describe("Appearance Theme Settings @exclusive", () => {
     if (isChecked === "true") {
       await noticeToggle.click();
       await page.waitForTimeout(300);
+    }
+
+    // Clear custom help link URL + label
+    const helpLinkUrlInput = page.locator(
+      '[data-label="custom-help-link-url-input"]'
+    );
+    if (
+      await helpLinkUrlInput.isVisible({ timeout: 1000 }).catch(() => false)
+    ) {
+      await helpLinkUrlInput.clear();
+    }
+    const helpLinkLabelInput = page.locator(
+      '[data-label="custom-help-link-label-input"]'
+    );
+    if (
+      await helpLinkLabelInput.isVisible({ timeout: 1000 }).catch(() => false)
+    ) {
+      await helpLinkLabelInput.clear();
+    }
+
+    // Disable hide-onyx-branding toggle if enabled
+    const hideBrandingToggle = page.locator(
+      '[data-label="hide-onyx-branding-toggle"]'
+    );
+    if (
+      await hideBrandingToggle.isVisible({ timeout: 1000 }).catch(() => false)
+    ) {
+      const hideBrandingState =
+        await hideBrandingToggle.getAttribute("aria-checked");
+      if (hideBrandingState === "true") {
+        await hideBrandingToggle.click();
+        await page.waitForTimeout(300);
+      }
     }
 
     // Save reset
@@ -207,5 +243,96 @@ test.describe("Appearance Theme Settings @exclusive", () => {
 
     // 20. Verify chat footer content
     await expect(page.getByText(TEST_VALUES.chatFooter)).toBeVisible();
+  });
+
+  test("custom help link appears in the profile popover with the configured label", async ({
+    page,
+  }) => {
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLink(
+      TEST_VALUES.customHelpLinkUrl,
+      TEST_VALUES.customHelpLinkLabel
+    );
+
+    const response = await themePage.saveAndWaitForPut();
+    expect(response.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+
+    // Reload so the sidebar reads enterprise settings fresh — avoids any
+    // SWR cache / React render race after `mutate()`.
+    await themePage.reloadAndWaitForForm();
+
+    await themePage.openUserDropdown();
+    await themePage.expectCustomHelpLinkVisible(
+      TEST_VALUES.customHelpLinkLabel,
+      TEST_VALUES.customHelpLinkUrl
+    );
+  });
+
+  test("custom help link uses the URL as the title when the label is empty", async ({
+    page,
+  }) => {
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLink(TEST_VALUES.customHelpLinkUrl);
+
+    const response = await themePage.saveAndWaitForPut();
+    expect(response.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+
+    await themePage.reloadAndWaitForForm();
+
+    await themePage.openUserDropdown();
+    // Falls back to URL itself as the displayed title
+    await themePage.expectCustomHelpLinkContainsText(
+      TEST_VALUES.customHelpLinkUrl,
+      TEST_VALUES.customHelpLinkUrl
+    );
+  });
+
+  test("validation fails when the label is set but the URL is empty", async ({
+    page,
+  }) => {
+    const themePage = new AppearanceThemePage(page);
+    await themePage.fillCustomHelpLinkLabelOnly(
+      TEST_VALUES.customHelpLinkLabel
+    );
+
+    // Should NOT trigger a PUT — assert error message becomes visible
+    await themePage.clickSave();
+    await themePage.expectValidationMessage(
+      "URL is required when a label is set"
+    );
+
+    // Clean up: clear the orphan label before afterEach runs
+    await themePage.clearCustomHelpLinkLabel();
+  });
+
+  test("Hide Onyx Branding toggle removes the 'Powered by Onyx' tagline", async ({
+    page,
+  }) => {
+    const themePage = new AppearanceThemePage(page);
+
+    // The sidebar's "Powered by Onyx" tagline only renders alongside an
+    // application name (the Logo's logo_and_name fall-through path), so
+    // first set a name and save a baseline that we can then assert against.
+    await themePage.setApplicationName(TEST_VALUES.applicationName);
+    const baselineResponse = await themePage.saveAndWaitForPut();
+    expect(baselineResponse.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+    await themePage.reloadAndWaitForForm();
+
+    // Sanity: tagline now visible alongside the application name
+    await themePage.expectPoweredByOnyxVisible();
+
+    await themePage.toggleHideBranding();
+
+    const response = await themePage.saveAndWaitForPut();
+    expect(response.status()).toBe(200);
+    await themePage.expectSaveSuccessToast();
+
+    // Reload to read the persisted setting fresh — the sidebar then re-
+    // renders the Logo without the tagline.
+    await themePage.reloadAndWaitForForm();
+    await themePage.expectPoweredByOnyxAbsent();
   });
 });

@@ -65,7 +65,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.user_file_processing",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_user_file_processing.logLevel | quote }},
+              {{- with .Values.celery_worker_user_file_processing.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=user-file-processing@%n",
               "-Q",
               "user_file_processing,user_file_project_sync,user_file_delete",
@@ -75,6 +77,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with .Values.celery_worker_user_file_processing.extraEnv }}

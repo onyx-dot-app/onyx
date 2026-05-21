@@ -11,11 +11,13 @@ from shared_configs.configs import TENANT_ID_PREFIX
 # Regex pattern for valid tenant IDs:
 # - UUID format: tenant_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 # - AWS instance ID format: tenant_i-xxxxxxxxxxxxxxxxx
+# - Staff dev tenant: tenant_dev
 # Also useful for not accidentally dropping `public` schema.
 TENANT_ID_PATTERN = re.compile(
     rf"^{re.escape(TENANT_ID_PREFIX)}("
     r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
     r"|i-[a-f0-9]+"  # AWS instance ID
+    r"|dev"  # staff dev tenant
     r")$"
 )
 

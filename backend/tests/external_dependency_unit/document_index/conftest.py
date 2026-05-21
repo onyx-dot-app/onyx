@@ -1,15 +1,11 @@
 """Shared fixtures for document_index external dependency tests.
 
-Provides Vespa and OpenSearch index setup, tenant context, and chunk helpers.
+Provides OpenSearch index setup, tenant context, and chunk helpers.
 """
 
-import os
-import time
 import uuid
 from collections.abc import Generator
-from unittest.mock import patch
 
-import httpx
 import pytest
 
 from onyx.access.models import DocumentAccess
@@ -22,9 +18,6 @@ from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeo
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
-from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -128,90 +121,6 @@ def tenant_context() -> Generator[None, None, None]:
 @pytest.fixture(scope="module")
 def test_index_name() -> Generator[str, None, None]:
     yield f"test_index_{uuid.uuid4().hex[:8]}"
-
-
-@pytest.fixture(scope="module")
-def httpx_client() -> Generator[httpx.Client, None, None]:
-    client = get_vespa_http_client()
-    try:
-        yield client
-    finally:
-        client.close()
-
-
-@pytest.fixture(scope="module")
-def vespa_index(
-    httpx_client: httpx.Client,
-    tenant_context: None,  # noqa: ARG001
-    test_index_name: str,
-) -> Generator[VespaDocumentIndex, None, None]:
-    """Create a Vespa index, wait for schema readiness, and yield it."""
-    vespa_idx = VespaDocumentIndex(
-        index_name=test_index_name,
-        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
-        large_chunks_enabled=False,
-        httpx_client=httpx_client,
-    )
-    backend_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..")
-    )
-    with patch("os.getcwd", return_value=backend_dir):
-        vespa_idx.verify_and_create_index_if_necessary(
-            embedding_dim=EMBEDDING_DIM,
-            embedding_precision=EmbeddingPrecision.FLOAT,
-        )
-    if not wait_for_vespa_with_timeout(wait_limit=90):
-        pytest.fail("Vespa is not available.")
-
-    # Wait until the schema is actually ready for writes on content nodes. We
-    # probe by attempting a PUT; 200 means the schema is live, 400 means not
-    # yet. This is only temporary until we entirely move off of Vespa.
-    probe_doc = {
-        "fields": {
-            "document_id": "__probe__",
-            "chunk_id": 0,
-            "blurb": "",
-            "title": "",
-            "skip_title": True,
-            "content": "",
-            "content_summary": "",
-            "source_type": "file",
-            "source_links": "null",
-            "semantic_identifier": "",
-            "section_continuation": False,
-            "large_chunk_reference_ids": [],
-            "metadata": "{}",
-            "metadata_list": [],
-            "metadata_suffix": "",
-            "chunk_context": "",
-            "doc_summary": "",
-            "embeddings": {"full_chunk": [1.0] + [0.0] * (EMBEDDING_DIM - 1)},
-            "access_control_list": {},
-            "document_sets": {},
-            "image_file_name": None,
-            "user_project": [],
-            "personas": [],
-            "boost": 0.0,
-            "aggregated_chunk_boost_factor": 0.0,
-            "primary_owners": [],
-            "secondary_owners": [],
-        }
-    }
-    probe_url = (
-        f"http://localhost:8081/document/v1/default/{test_index_name}/docid/__probe__"
-    )
-    schema_ready = False
-    for _ in range(60):
-        resp = httpx_client.post(probe_url, json=probe_doc)
-        if resp.status_code == 200:
-            schema_ready = True
-            httpx_client.delete(probe_url)
-            break
-        time.sleep(1)
-    if not schema_ready:
-        pytest.fail(f"Vespa schema '{test_index_name}' did not become ready in time.")
-
-    yield vespa_idx
 
 
 @pytest.fixture(scope="module")

@@ -20,25 +20,6 @@ postgresql:
     storage:
       size: 2Gi
 
-vespa:
-  volumeClaimTemplates:
-    - metadata:
-        name: vespa-storage
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 5Gi
-        storageClassName: ""
-  resources:
-    requests:
-      cpu: 500m
-      memory: 2Gi
-    limits:
-      cpu: 2000m
-      memory: 4Gi
-
 opensearch:
   persistence:
     enabled: true

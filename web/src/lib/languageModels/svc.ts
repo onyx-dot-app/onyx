@@ -12,23 +12,23 @@
 
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  OllamaModelResponse,
-  OpenRouterModelResponse,
-  BedrockModelResponse,
-  LMStudioModelResponse,
-  LiteLLMProxyModelResponse,
-  BifrostModelResponse,
-  ModelConfiguration,
   LLMProviderName,
-  BedrockFetchParams,
-  OllamaFetchParams,
-  LMStudioFetchParams,
-  OpenRouterFetchParams,
-  LiteLLMProxyFetchParams,
-  BifrostFetchParams,
-  OpenAICompatibleFetchParams,
-  OpenAICompatibleModelResponse,
-} from "@/interfaces/llm";
+  type ModelConfiguration,
+  type OllamaModelResponse,
+  type OpenRouterModelResponse,
+  type BedrockModelResponse,
+  type LMStudioModelResponse,
+  type LiteLLMProxyModelResponse,
+  type BifrostModelResponse,
+  type BedrockFetchParams,
+  type OllamaFetchParams,
+  type LMStudioFetchParams,
+  type OpenRouterFetchParams,
+  type LiteLLMProxyFetchParams,
+  type BifrostFetchParams,
+  type OpenAICompatibleFetchParams,
+  type OpenAICompatibleModelResponse,
+} from "@/lib/languageModels/types";
 
 /**
  * Test the default LLM provider.

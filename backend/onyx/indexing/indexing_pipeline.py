@@ -4,6 +4,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import NamedTuple
 from typing import Protocol
 
 import sentry_sdk
@@ -33,6 +34,7 @@ from onyx.connectors.models import SectionType
 from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
+from onyx.db.document import update_docs_content_hash__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -101,6 +103,11 @@ MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
 
 
+class _DocsToUpdateResult(NamedTuple):
+    updatable_docs: list[Document]
+    doc_id_to_content_hash: dict[str, str]
+
+
 class _PendingImageSummarization(BaseModel):
     """An image section awaiting LLM summarization."""
 
@@ -115,6 +122,7 @@ class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
     id_to_boost_map: dict[str, int]
     indexable_docs: list[IndexingDocument] = []
+    doc_id_to_content_hash: dict[str, str] = {}
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -309,29 +317,71 @@ def embed_and_stream(
         yield result, store
 
 
-def get_doc_ids_to_update(
-    documents: list[Document], db_docs: list[DBDocument]
-) -> list[Document]:
-    """Figures out which documents actually need to be updated. If a document is already present
-    and the `updated_at` hasn't changed, we shouldn't need to do anything with it.
+def get_docs_to_update(
+    documents: list[Document],
+    db_docs: list[DBDocument],
+    ignore_timestamp_gate: bool = False,
+) -> _DocsToUpdateResult:
+    """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
-    NB: Still need to associate the document in the DB if multiple connectors are
-    indexing the same doc."""
+    Two-gate dedup:
+
+    Gate 1 — timestamp skip (fast path):
+      If the connector supplies doc_updated_at and it hasn't advanced past what we
+      already indexed, skip immediately. No hash computation needed.
+      Skipped when ignore_timestamp_gate=True (e.g. docprocessing, which relies on
+      connectors to pre-filter by recency).
+
+    Gate 2 — content hash skip (fallback):
+      Applied when the timestamp has not advanced (absent or unchanged). Computes
+      DocumentBase.content_hash() and compares it to the stored hash. If equal, skip.
+
+      NOT applied when doc_updated_at is present and has advanced past what is stored —
+      a timestamp advance is authoritative evidence of a change and must not be
+      overridden (e.g. GDrive in-place image replacement: same image_file_id, but image
+      bytes changed; hash would incorrectly say "skip").
+
+    The returned doc_id_to_content_hash map contains hashes for all documents that
+    will be indexed. These are persisted to the DB after successful vector DB writes
+    so the next sync can use gate 2 without recomputing.
+    """
     id_update_time_map = {
         doc.id: doc.doc_updated_at for doc in db_docs if doc.doc_updated_at
     }
+    id_to_db_doc_map = {doc.id: doc for doc in db_docs}
 
     updatable_docs: list[Document] = []
+    doc_id_to_content_hash: dict[str, str] = {}
     for doc in documents:
+        timestamp_advanced = (
+            doc.doc_updated_at is not None
+            and doc.id in id_update_time_map
+            and doc.doc_updated_at > id_update_time_map[doc.id]
+        )
+
+        # Gate 1: timestamp present and not advanced → skip without hashing
         if (
-            doc.id in id_update_time_map
+            not ignore_timestamp_gate
             and doc.doc_updated_at
-            and doc.doc_updated_at <= id_update_time_map[doc.id]
+            and doc.id in id_update_time_map
+            and not timestamp_advanced
         ):
             continue
+
+        # Gate 2: hash-based skip when the timestamp hasn't advanced.
+        # A timestamp advance is authoritative evidence of a change — skip the hash
+        # check so we never suppress a legitimate re-index (see docstring).
+        content_hash = doc.content_hash()
+        if not timestamp_advanced:
+            db_doc = id_to_db_doc_map.get(doc.id)
+            if db_doc and db_doc.content_hash == content_hash:
+                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
+                continue
+
+        doc_id_to_content_hash[doc.id] = content_hash
         updatable_docs.append(doc)
 
-    return updatable_docs
+    return _DocsToUpdateResult(updatable_docs, doc_id_to_content_hash)
 
 
 def index_doc_batch_with_handler(
@@ -344,6 +394,7 @@ def index_doc_batch_with_handler(
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
 ) -> IndexingPipelineResult:
@@ -357,6 +408,7 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
+            from_beginning=from_beginning,
             enable_contextual_rag=enable_contextual_rag,
             llm=llm,
         )
@@ -460,10 +512,10 @@ def index_doc_batch_prepare(
         db_doc.id: db_doc.file_id for db_doc in db_docs if db_doc.file_id is not None
     }
 
-    updatable_docs = (
-        get_doc_ids_to_update(documents=documents, db_docs=db_docs)
-        if not ignore_time_skip
-        else documents
+    updatable_docs, doc_id_to_content_hash = get_docs_to_update(
+        documents=documents,
+        db_docs=db_docs,
+        ignore_timestamp_gate=ignore_time_skip,
     )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
@@ -529,7 +581,9 @@ def index_doc_batch_prepare(
 
     id_to_boost_map = {doc.id: doc.boost for doc in db_docs}
     return DocumentBatchPrepareContext(
-        updatable_docs=updatable_docs, id_to_boost_map=id_to_boost_map
+        updatable_docs=updatable_docs,
+        id_to_boost_map=id_to_boost_map,
+        doc_id_to_content_hash=doc_id_to_content_hash,
     )
 
 
@@ -1098,12 +1152,17 @@ def _maybe_push_documents(
     adapter: IndexingBatchAdapter,
     filtered_documents: list[Document],
     insertion_records: list[DocumentInsertionRecord],
+    from_beginning: bool = False,
 ) -> None:
     """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
+    Does not fire during initial indexing (from_beginning=True).
     """
+    if from_beginning:
+        return
+
     if MULTI_TENANT:
         return
 
@@ -1171,6 +1230,7 @@ def index_doc_batch(
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
     ] = filter_documents,
@@ -1374,6 +1434,23 @@ def index_doc_batch(
                     db_session=db_session,
                 )
 
+            # Persist content hash only for documents confirmed written to the
+            # vector DB. Doing this here (after the write) prevents a failed
+            # index from storing a hash that would permanently skip the document
+            # on the next sync. Hashes were pre-computed in get_docs_to_update.
+            if primary_doc_idx_insertion_records is not None:
+                successfully_indexed_ids = {
+                    r.document_id for r in primary_doc_idx_insertion_records
+                }
+                update_docs_content_hash__no_commit(
+                    ids_to_new_hash={
+                        doc_id: context.doc_id_to_content_hash[doc_id]
+                        for doc_id in successfully_indexed_ids
+                        if doc_id in context.doc_id_to_content_hash
+                    },
+                    db_session=db_session,
+                )
+
     assert primary_doc_idx_insertion_records is not None
     assert primary_doc_idx_vector_db_write_failures is not None
 
@@ -1381,6 +1458,7 @@ def index_doc_batch(
         adapter=adapter,
         filtered_documents=filtered_documents,
         insertion_records=primary_doc_idx_insertion_records,
+        from_beginning=from_beginning,
     )
 
     return IndexingPipelineResult(
@@ -1406,6 +1484,7 @@ def run_indexing_pipeline(
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
+    from_beginning: bool = False,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
     if db_session is not None:
@@ -1458,4 +1537,5 @@ def run_indexing_pipeline(
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,
         ignore_time_skip=ignore_time_skip,
+        from_beginning=from_beginning,
     )

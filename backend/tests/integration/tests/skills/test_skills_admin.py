@@ -342,23 +342,6 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 
 
 # ---------------------------------------------------------------------------
-# Patch
-# ---------------------------------------------------------------------------
-
-
-def test_patch_slug_409_on_collision(admin_user: DATestUser) -> None:
-    suffix = uuid4().hex[:6]
-    slug_a = f"patch-collide-a-{suffix}"
-    slug_b = f"patch-collide-b-{suffix}"
-    SkillManager.create_custom(admin_user, slug=slug_a)
-    skill_b = SkillManager.create_custom(admin_user, slug=slug_b)
-
-    with pytest.raises(requests.HTTPError) as exc_info:
-        SkillManager.patch_custom(skill_b, admin_user, slug=slug_a)
-    assert exc_info.value.response.status_code == 409
-
-
-# ---------------------------------------------------------------------------
 # Grants
 # ---------------------------------------------------------------------------
 

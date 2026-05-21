@@ -155,6 +155,9 @@ class StubSandboxManager(SandboxManager):
         self.create_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
         self.session_workspace_exists_count: int = 0
+        self.list_session_workspaces_count: int = 0
+        self.list_session_workspaces_returns: list[UUID] | None = None
+        self.last_list_session_workspaces_payload: dict[str, Any] | None = None
         self.health_check_count: int = 0
         self.send_message_count: int = 0
         self.list_directory_count: int = 0
@@ -318,6 +321,13 @@ class StubSandboxManager(SandboxManager):
         if self.session_workspace_exists_returns is None:
             raise _not_configured("session_workspace_exists")
         return self.session_workspace_exists_returns
+
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        self.list_session_workspaces_count += 1
+        self.last_list_session_workspaces_payload = {"sandbox_id": sandbox_id}
+        if self.list_session_workspaces_returns is None:
+            raise _not_configured("list_session_workspaces")
+        return list(self.list_session_workspaces_returns)
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         self.health_check_count += 1

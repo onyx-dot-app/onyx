@@ -420,12 +420,13 @@ def test_search_raw(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
-    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
-    # so the API must return exactly one result that contains it.
+    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
+    # seeded by prior tests may still match. Find the seeded doc by content
+    # rather than asserting on result count.
     data = json.loads(result.stdout)
-    assert len(data["results"]) == 1
-    assert phrase in data["results"][0]["content"]
-    assert data["results"][0]["citation_id"] is not None
+    matches = [r for r in data["results"] if phrase in r["content"]]
+    assert len(matches) == 1
+    assert matches[0]["citation_id"] is not None
 
 
 def test_search_truncation(

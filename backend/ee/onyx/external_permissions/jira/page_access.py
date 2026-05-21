@@ -10,6 +10,7 @@ from ee.onyx.external_permissions.jira.models import User
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION
 from onyx.utils.logger import setup_logger
 
 HolderMap = dict[str, list[Holder]]
@@ -35,6 +36,34 @@ SUPPORTED_STATIC_HOLDER_TYPES = {
 
 def _get_role_id(holder: Holder) -> str | None:
     return holder.get("value") or holder.get("parameter")
+
+
+# Jira SDK resources expose fields as attributes, raw dicts, or nested raw payloads
+# depending on Jira version and endpoint.
+def _get_obj_value(obj: object, field: str) -> object | None:
+    if isinstance(obj, dict):
+        return obj.get(field)  # ty: ignore[invalid-argument-type]
+    return getattr(obj, field, None)
+
+
+def _get_raw_value(obj: object, field: str) -> object | None:
+    raw = _get_obj_value(obj, "raw")
+    return _get_obj_value(raw, field)
+
+
+def _get_first_str_value(obj: object, fields: tuple[str, ...]) -> str | None:
+    for field in fields:
+        value = _get_obj_value(obj, field) or _get_raw_value(obj, field)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _is_cloud_client(jira_client: JIRA) -> bool:
+    try:
+        return jira_client._options["rest_api_version"] == JIRA_CLOUD_API_VERSION
+    except Exception:
+        return False
 
 
 def _get_holder_counts(holder_map: HolderMap) -> dict[str, int]:
@@ -127,48 +156,131 @@ def _build_holder_map(permissions: list[dict]) -> dict[str, list[Holder]]:
     return holder_map
 
 
+def _get_user_email_from_holder(
+    jira_project: str,
+    user_holder: Holder,
+) -> str | None:
+    if "user" not in user_holder:
+        logger.warning(
+            "Jira project %s user holder has no expanded user object; holder=%s",
+            jira_project,
+            user_holder,
+        )
+        return None
+
+    raw_user_dict = user_holder["user"]
+
+    try:
+        user_model = User.model_validate(raw_user_dict)
+        return user_model.email_address
+    except ValidationError:
+        email = _get_first_str_value(raw_user_dict, ("emailAddress", "email_address"))
+        if email:
+            logger.info(
+                "Jira project %s user holder used fallback email parsing for expanded "
+                "user with fields=%s",
+                jira_project,
+                sorted(raw_user_dict.keys()) if isinstance(raw_user_dict, dict) else [],
+            )
+            return email
+
+        logger.error(
+            "Jira project %s user holder expanded user failed validation and had no "
+            "fallback email; raw_user_dict=%r",
+            jira_project,
+            raw_user_dict,
+        )
+        return None
+
+
 def _get_user_emails(jira_project: str, user_holders: list[Holder]) -> list[str]:
     emails = []
-    missing_user_object_count = 0
-    validation_error_count = 0
+    missing_email_count = 0
 
     for user_holder in user_holders:
-        if "user" not in user_holder:
-            missing_user_object_count += 1
-            logger.warning(
-                "Jira project %s user holder has no expanded user object; holder=%s",
-                jira_project,
-                user_holder,
-            )
+        email = _get_user_email_from_holder(jira_project, user_holder)
+        if not email:
+            missing_email_count += 1
             continue
-        raw_user_dict = user_holder["user"]
-
-        try:
-            user_model = User.model_validate(raw_user_dict)
-        except ValidationError:
-            validation_error_count += 1
-            logger.error(
-                "Jira project %s user holder expanded user failed validation; "
-                "raw_user_dict=%r",
-                jira_project,
-                raw_user_dict,
-            )
-            continue
-
-        emails.append(user_model.email_address)
+        emails.append(email)
 
     if user_holders and not emails:
         logger.warning(
             "Jira project %s resolved zero emails from direct user holders; "
-            "user_holder_count=%s missing_user_object_count=%s "
-            "validation_error_count=%s",
+            "user_holder_count=%s missing_email_count=%s",
             jira_project,
             len(user_holders),
-            missing_user_object_count,
-            validation_error_count,
+            missing_email_count,
         )
 
     return emails
+
+
+def _get_actor_group_name(actor: object) -> str | None:
+    for actor_group in [
+        _get_obj_value(actor, "actorGroup"),
+        _get_raw_value(actor, "actorGroup"),
+    ]:
+        if actor_group is None:
+            continue
+        group_name = _get_first_str_value(actor_group, ("name", "displayName"))
+        if group_name:
+            return group_name
+
+    return _get_first_str_value(actor, ("parameter", "name", "displayName"))
+
+
+def _get_user_lookup_id(jira_client: JIRA, actor_user: object) -> str | None:
+    if _is_cloud_client(jira_client):
+        return _get_first_str_value(actor_user, ("accountId", "name", "key"))
+    return _get_first_str_value(actor_user, ("name", "key", "accountId"))
+
+
+def _get_actor_user_email(
+    jira_client: JIRA,
+    jira_project: str,
+    role_id: str,
+    actor_user: object,
+) -> str | None:
+    embedded_email = _get_first_str_value(actor_user, ("emailAddress", "email_address"))
+    if embedded_email:
+        return embedded_email
+
+    user_lookup_id = _get_user_lookup_id(jira_client, actor_user)
+    if not user_lookup_id:
+        logger.error(
+            "Jira project %s project role %s actorUser has no usable user identifier; "
+            "actor_user=%s",
+            jira_project,
+            role_id,
+            actor_user,
+        )
+        return None
+
+    user = jira_client.user(id=user_lookup_id)
+    account_type = getattr(user, "accountType", None)
+    if account_type is not None and account_type != "atlassian":
+        logger.info(
+            "Skipping Jira project %s project role %s user %s because it is not an "
+            "atlassian user",
+            jira_project,
+            role_id,
+            user_lookup_id,
+        )
+        return None
+
+    email = getattr(user, "emailAddress", None)
+    if email:
+        return email
+
+    logger.warning(
+        "Jira project %s project role %s user email was not available; "
+        "user_lookup_id=%s",
+        jira_project,
+        role_id,
+        user_lookup_id,
+    )
+    return None
 
 
 def _get_user_emails_and_groups_from_project_roles(
@@ -228,12 +340,13 @@ def _get_user_emails_and_groups_from_project_roles(
             continue
 
         for actor in role.actors:
+            actor_group = _get_obj_value(actor, "actorGroup") or _get_raw_value(
+                actor, "actorGroup"
+            )
             # Handle group actors
-            if hasattr(actor, "actorGroup"):
+            if actor_group is not None:
                 actor_group_seen_count += 1
-                group_name = getattr(actor.actorGroup, "name", None) or getattr(
-                    actor.actorGroup, "displayName", None
-                )
+                group_name = _get_actor_group_name(actor)
                 if group_name:
                     groups.append(group_name)
                 else:
@@ -243,40 +356,24 @@ def _get_user_emails_and_groups_from_project_roles(
                         "name/displayName; actor_group=%s",
                         jira_project,
                         role_id,
-                        actor.actorGroup,
+                        actor_group,
                     )
                 continue
 
+            actor_user = _get_obj_value(actor, "actorUser") or _get_raw_value(
+                actor, "actorUser"
+            )
             # Handle user actors
-            if hasattr(actor, "actorUser"):
+            if actor_user is not None:
                 actor_user_seen_count += 1
-                account_id = getattr(actor.actorUser, "accountId", None)
-                if not account_id:
-                    logger.error(
-                        "Jira project %s project role %s actorUser has no accountId; "
-                        "actor_user=%s",
-                        jira_project,
-                        role_id,
-                        actor.actorUser,
-                    )
-                    continue
-
-                user = jira_client.user(id=account_id)
-                if not hasattr(user, "accountType") or user.accountType != "atlassian":
-                    logger.info(
-                        "Skipping user %s because it is not an atlassian user",
-                        account_id,
-                    )
-                    continue
-
-                if not hasattr(user, "emailAddress"):
-                    msg = f"User's email address was not able to be retrieved;  {actor.actorUser.accountId=}"
-                    if hasattr(user, "displayName"):
-                        msg += f" {actor.displayName=}"
-                    logger.warning(msg)
-                    continue
-
-                emails.append(user.emailAddress)
+                email = _get_actor_user_email(
+                    jira_client=jira_client,
+                    jira_project=jira_project,
+                    role_id=role_id,
+                    actor_user=actor_user,
+                )
+                if email:
+                    emails.append(email)
                 continue
 
             unsupported_actor_count += 1
@@ -421,6 +518,9 @@ def _build_external_access_from_holder_map(
 
     external_user_emails = set(user_emails + project_role_user_emails)
     external_user_group_ids = set(project_role_groups + direct_groups)
+    has_supported_static_holders = any(
+        holder_type in holder_map for holder_type in SUPPORTED_STATIC_HOLDER_TYPES
+    )
 
     if not external_user_group_ids:
         logger.warning(
@@ -441,13 +541,24 @@ def _build_external_access_from_holder_map(
         )
 
     if not external_user_emails and not external_user_group_ids:
-        logger.error(
-            "Jira project %s resolved to empty private ExternalAccess; "
-            "holder_counts=%s unsupported_holder_counts=%s",
-            jira_project,
-            holder_counts,
-            unsupported_holder_counts,
-        )
+        if has_supported_static_holders:
+            logger.error(
+                "Jira project %s resolved to empty private ExternalAccess; "
+                "holder_counts=%s unsupported_holder_counts=%s",
+                jira_project,
+                holder_counts,
+                unsupported_holder_counts,
+            )
+        else:
+            logger.warning(
+                "Jira project %s resolved to empty private ExternalAccess from "
+                "unsupported or dynamic-only %s holders; holder_counts=%s "
+                "unsupported_holder_counts=%s",
+                jira_project,
+                BROWSE_PROJECTS_PERMISSION,
+                holder_counts,
+                unsupported_holder_counts,
+            )
 
     return ExternalAccess(
         external_user_emails=external_user_emails,

@@ -70,6 +70,7 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.sandbox.acp.base import ACPEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotCreateRequest,
@@ -79,9 +80,6 @@ from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models 
 )
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotRestoreRequest,
-)
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
 )
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,
@@ -1182,13 +1180,15 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
-# DO NOT mkdir /workspace/managed/skills here — the push daemon swaps
-# this path via os.rename(symlink, mount), which fails if mount is a
-# real directory. Dangling until the first push lands is fine; nothing
-# reads .opencode/skills during the rest of setup.
+# DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
+# here — the push daemon swaps these paths via os.rename(symlink, mount),
+# which fails if the mount is a real directory. Dangling until the first
+# push lands is fine; nothing reads these during the rest of setup.
 mkdir -p {session_path}/.opencode
 ln -sf /workspace/managed/skills {session_path}/.opencode/skills
 echo "Linked skills to /workspace/managed/skills"
+ln -sf /workspace/managed/user_library {session_path}/user_library
+echo "Linked user_library to /workspace/managed/user_library"
 
 # Write agent instructions
 echo "Writing AGENTS.md"
@@ -1418,6 +1418,51 @@ echo "Session cleanup complete"
                 "Failed to check session workspace exists for %s: %s", session_id, e
             )
             return False
+
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID session directories under /workspace/sessions/ in the pod.
+
+        Used by idle cleanup to discover sessions that need snapshotting.
+        Non-UUID directory names are silently filtered out.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+        except ApiException as e:
+            logger.warning(
+                "Failed to list session directories for sandbox %s: %s",
+                sandbox_id,
+                e,
+            )
+            return []
+
+        result: list[UUID] = []
+        for raw_line in resp.strip().split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                result.append(UUID(line))
+            except ValueError:
+                continue
+        return result
 
     def restore_snapshot(
         self,

@@ -2,9 +2,6 @@ dependencies:
 - name: cloudnative-pg
   repository: https://cloudnative-pg.github.io/charts
   version: 0.26.0
-- name: vespa
-  repository: https://onyx-dot-app.github.io/vespa-helm-charts
-  version: 0.2.25
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts
   version: 3.6.0
@@ -23,5 +20,5 @@ dependencies:
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
   version: 0.3.3
-digest: sha256:0ca791ba5b46eaf69fe28ed7825679787790b3a1a3b78b3a1b8df75e1dea7e14
-generated: "2026-05-14T20:27:02.587154-07:00"
+digest: sha256:86cd0edb99537f835dc3ca7841268d407428eae0b8309bae1eb33056dc07ac23
+generated: "2026-05-19T11:44:45.454116-07:00"
