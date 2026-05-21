@@ -304,6 +304,10 @@ class OnyxConfluence:
             data = response.json()
 
             results = data.get("results", [])
+            # Confluence DC silently caps the page size
+            # at the admin-configured maximum (often 25-500) when the requested
+            # limit exceeds it, while still leaving more spaces to fetch.
+            # we only exit when no results are returned.
             if not results:
                 return
 
@@ -312,8 +316,6 @@ class OnyxConfluence:
             if is_v2:
                 url = data.get("_links", {}).get("next", "")
             else:
-                if len(results) < limit:
-                    return
                 start += len(results)
                 url = self._build_spaces_url(is_v2, base_url, limit, space_keys, start)
 

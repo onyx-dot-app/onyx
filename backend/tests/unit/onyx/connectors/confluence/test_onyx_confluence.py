@@ -1020,6 +1020,70 @@ def test_paginate_url_504_halves_multiple_times(
     assert "limit=5" in mock_get_call_paths[3]
 
 
+def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for #4129: Confluence Server/DC silently caps
+    ``rest/api/space`` page size at the admin-configured maximum when the
+    requested ``limit`` is larger. The pagination loop must NOT terminate
+    just because ``len(results) < requested_limit`` -- doing so causes
+    spaces beyond the cap to be invisible to permission sync, which in
+    turn breaks ``get_all_space_permissions`` and crashes
+    ``generic_doc_sync`` with "No external access found for document ID".
+
+    Here we request limit=5000 but the server returns 3 spaces per page
+    (its real cap), with a real end-of-data signaled only by an empty
+    final page.
+    """
+    requested_limit = 5000
+    server_cap = 3
+    all_keys = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH"]
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        # Honor whatever ``start`` the loop asks for; default 0 on the
+        # initial call (no start param).
+        start_token = "start="
+        start = 0
+        if start_token in path:
+            start = int(path.split(start_token, 1)[1].split("&", 1)[0])
+
+        keys_on_page = all_keys[start : start + server_cap]
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": k} for k in keys_on_page],
+                "size": len(keys_on_page),
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(
+        confluence_server_client.retrieve_confluence_spaces(limit=requested_limit)
+    )
+
+    assert [s["key"] for s in returned] == all_keys
+    # The loop must keep paginating across capped pages until it gets an
+    # empty page from the server. With 8 keys and a 3-per-page server cap,
+    # that's pages at start=0/3/6 returning data, then start=8 returning
+    # empty -> 4 total calls.
+    assert len(mock_get_call_paths) == 4
+    assert all(f"limit={requested_limit}" in p for p in mock_get_call_paths)
+
+
 def test_jsonrpc_websudo_html_response_raises_validation_error(
     confluence_server_client: OnyxConfluence,
 ) -> None:
