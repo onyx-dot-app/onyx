@@ -1,18 +1,21 @@
 name: "Install Python deps and generate OpenAPI client"
-description: "Sets up a host-side Python venv with backend deps and runs `ods openapi all` to produce backend/generated/openapi.json and the Python client."
+description: "Syncs Python deps inside the devcontainer (one venv shared by openapi gen and pytest) and runs `ods openapi all` to produce the schema + Python client into the bind-mounted workspace."
+inputs:
+  devcontainer-image:
+    description: "Fully qualified devcontainer image reference (registry:tag)"
+    required: true
 runs:
   using: "composite"
   steps:
-    - name: Setup Python and Install Dependencies
-      uses: ./.github/actions/setup-python-and-install-dependencies
-      with:
-        requirements: |
-          backend/requirements/default.txt
-          backend/requirements/dev.txt
-
-    - name: Generate OpenAPI schema and Python client
+    - name: Sync deps and generate OpenAPI client in devcontainer
       shell: bash
       env:
-        LICENSE_ENFORCEMENT_ENABLED: "false"
+        DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+        WORKSPACE: ${{ github.workspace }}
       run: |
-        ods openapi all
+        docker run --rm \
+          -v "${WORKSPACE}:/workspace" \
+          -w /workspace \
+          -e LICENSE_ENFORCEMENT_ENABLED=false \
+          "${DEVCONTAINER_IMAGE}" \
+          bash -c 'uv sync --frozen --no-group model_server && uv run --no-sync ods openapi all'
