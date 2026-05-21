@@ -20,7 +20,6 @@ import hashlib
 import io
 import logging
 from collections.abc import Callable
-from collections.abc import Generator
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
@@ -44,14 +43,17 @@ from onyx.db.skill import replace_skill_grants
 from onyx.db.skill import SkillPatch
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.skills import built_in as built_in_module
+from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from onyx.skills.registry import BuiltinSkillRegistry
 from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
+from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
 from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
 from tests.external_dependency_unit.craft._test_helpers import make_group
 from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
@@ -62,19 +64,6 @@ def _skill_file_path(workspace: Path, slug: str, name: str = "SKILL.md") -> Path
 
 def _skills_dir(workspace: Path) -> Path:
     return workspace / "managed" / "skills"
-
-
-# =============================================================================
-# Registry hygiene — keep the process-wide singleton clean between tests.
-# =============================================================================
-
-
-@pytest.fixture(scope="function")
-def fresh_registry() -> Generator[BuiltinSkillRegistry, None, None]:
-    """Yield a fresh, empty BuiltinSkillRegistry singleton for the test."""
-    BuiltinSkillRegistry._reset_for_testing()
-    yield BuiltinSkillRegistry.instance()
-    BuiltinSkillRegistry._reset_for_testing()
 
 
 # =============================================================================
@@ -474,15 +463,20 @@ class TestSkillPush:
     def test_company_search_skill_rendered_per_user(
         self,
         db_session: Session,
-        fresh_registry: BuiltinSkillRegistry,
         running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
         """Each user's company-search SKILL.md reflects only connectors
         they can access. Uses a baseline-diff approach: hydrate BEFORE
         creating PRIVATE cc_pairs (baseline), then again AFTER. The diff
         isolates our cc_pairs from any PUBLIC ones leaked by other tests.
+
+        (Re)creates the company-search built-in row inline so the test is
+        self-contained regardless of migration/other-test state.
         """
         handle = running_sandbox()
+
+        reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
+        db_session.commit()
 
         user_a = make_user(db_session)
         user_b = make_user(db_session)
@@ -491,20 +485,6 @@ class TestSkillPush:
         add_user_to_group(db_session, user_a, group_a)
         add_user_to_group(db_session, user_b, group_b)
         db_session.commit()
-
-        company_search_src = (
-            Path(__file__).resolve().parents[3]
-            / "onyx"
-            / "server"
-            / "features"
-            / "build"
-            / "sandbox"
-            / "kubernetes"
-            / "docker"
-            / "skills"
-            / "company-search"
-        )
-        fresh_registry.register(slug="company-search", source_dir=company_search_src)
 
         _, ws_a = handle.provision_for(user_a)
         _, ws_b = handle.provision_for(user_b)
@@ -557,7 +537,7 @@ class TestSkillPush:
         self,
         db_session: Session,
         tmp_path: Path,
-        fresh_registry: BuiltinSkillRegistry,
+        monkeypatch: pytest.MonkeyPatch,
         running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
         handle = running_sandbox()
@@ -568,7 +548,7 @@ class TestSkillPush:
         source_dir = tmp_path / "builtin_src" / slug
         source_dir.mkdir(parents=True)
 
-        # In: SKILL.md (required by the registry) + a vanilla script.
+        # In: SKILL.md + a vanilla script.
         (source_dir / "SKILL.md").write_text(
             f"---\nname: {slug}\ndescription: exclusion test\n---\n# body\n"
         )
@@ -581,7 +561,15 @@ class TestSkillPush:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
-        fresh_registry.register(slug=slug, source_dir=source_dir)
+        monkeypatch.setitem(
+            built_in_module.BUILT_IN_SKILLS,
+            slug,
+            BuiltInSkillDefinition(
+                built_in_skill_id=slug,
+                source_dir=source_dir,
+            ),
+        )
+        make_built_in_skill_row(db_session, built_in_skill_id=slug)
 
         user = make_user(db_session)
         db_session.commit()

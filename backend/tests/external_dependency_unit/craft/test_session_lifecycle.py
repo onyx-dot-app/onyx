@@ -36,7 +36,6 @@ from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.skills.registry import BuiltinSkillRegistry
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox
@@ -46,13 +45,10 @@ from tests.external_dependency_unit.craft.conftest import (
 )
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
-
-@pytest.fixture(autouse=True)
-def _clean_builtin_registry() -> None:
-    """Built-in skills are process-wide; clear before each test to keep the
-    skills fileset empty so test creation paths don't depend on registry
-    contents."""
-    BuiltinSkillRegistry._reset_for_testing()
+# Built-in skill rows are seeded by ``setup_postgres`` (run once per
+# tenant in ``full_setup``) and persist across tests. The session
+# lifecycle tests below tolerate their presence — assertions match on
+# specifics, not on an empty fileset.
 
 
 # =============================================================================
