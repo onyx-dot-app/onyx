@@ -5,17 +5,19 @@ row, waking SLEEPING / TERMINATED / FAILED, recovering a RUNNING-but-
 unhealthy pod, and polling a PROVISIONING sandbox to completion (or
 timeout).
 
-Uses the real Postgres DB (via the ``db_session`` fixture) AND the real
-sandbox manager configured in the env (LocalSandboxManager by default,
-KubernetesSandboxManager when ``SANDBOX_BACKEND=kubernetes``). Each
-test cleans up its sandbox via ``mgr.terminate()`` so consecutive runs
-stay hermetic. ``_get_llm_config`` is stubbed because the wake state
-machine forwards the config opaquely to ``provision()`` and the test
-DB doesn't seed a default LLM provider.
+Uses the real Postgres DB (via the ``db_session`` fixture) and the real
+``KubernetesSandboxManager`` against a kind cluster. Each test cleans
+up its sandbox via ``mgr.terminate()`` so consecutive runs stay
+hermetic. ``_get_llm_config`` is stubbed because the wake state machine
+forwards the config opaquely to ``provision()`` and the test DB doesn't
+seed a default LLM provider.
+
+Gated to the K8s CI lane (``pr-craft-k8s-tests.yml``) since the local
+sandbox backend was removed in
+``docs/craft/2026-05-21-nuke-local-sandbox-manager.md``.
 """
 
 from collections.abc import Generator
-from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -25,6 +27,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.db.models import User
+from onyx.server.features.build.configs import SANDBOX_BACKEND
+from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
@@ -34,14 +38,10 @@ from onyx.server.features.build.session.manager import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
-
-# Autouse the shared ``local_sandbox_paths`` fixture from conftest so the
-# real ``LocalSandboxManager`` constructed inside ``SessionManager`` finds
-# valid template directories. Without this, ``_validate_templates()`` raises
-# in CI / dev environments where ``/templates/{outputs,venv}`` don't exist.
-@pytest.fixture(autouse=True)
-def _autouse_local_sandbox_paths(local_sandbox_paths: Path) -> None:  # noqa: ARG001
-    return None
+pytestmark = pytest.mark.skipif(
+    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+    reason="ensure_sandbox_running tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
+)
 
 
 def _make_session_manager(db_session: Session) -> SessionManager:
