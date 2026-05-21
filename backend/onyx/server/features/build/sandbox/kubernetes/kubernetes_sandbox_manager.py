@@ -42,6 +42,7 @@ import mimetypes
 import os
 import re
 import shlex
+import socket
 import tarfile
 import threading
 import time
@@ -141,12 +142,21 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 _PROXY_CA_SOURCE_DIR = "/sandbox-ca"
 _PROXY_CA_BUNDLE_VOLUME = "sandbox-ca-bundle"
 _PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
+# Pinned to the proxy IP via pod hostAliases — the iptables lockdown
+# blocks DNS, so the sandbox can't resolve it on its own.
+_PROXY_ALIAS = "sandbox-proxy"
+
+
+def _resolve_proxy_ip() -> str:
+    if not SANDBOX_PROXY_HOST:
+        raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
+    return socket.gethostbyname(SANDBOX_PROXY_HOST)
 
 
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
     if not SANDBOX_PROXY_HOST:
         return []
-    proxy_url = f"http://sandbox-proxy:{SANDBOX_PROXY_PORT}"
+    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
     no_proxy = _compute_no_proxy_list()
     return [
         client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
@@ -566,6 +576,7 @@ class KubernetesSandboxManager(SandboxManager):
         ]
 
         init_containers: list[client.V1Container] = []
+        host_aliases: list[client.V1HostAlias] | None = None
         if SANDBOX_PROXY_HOST:
             init_containers.append(_proxy_init_container())
             volumes.extend(
@@ -583,11 +594,17 @@ class KubernetesSandboxManager(SandboxManager):
                     ),
                 ]
             )
+            # kubelet injects hostAliases into every container's /etc/hosts;
+            # initContainer mutations don't propagate, so we set it here.
+            host_aliases = [
+                client.V1HostAlias(ip=_resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+            ]
 
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
             init_containers=init_containers or None,
             containers=[sandbox_container, sidecar_container],
+            host_aliases=host_aliases,
             share_process_namespace=False,
             volumes=volumes,
             restart_policy="Never",

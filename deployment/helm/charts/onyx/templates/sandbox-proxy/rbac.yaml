@@ -17,10 +17,15 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
 rules:
+  # K8s RBAC can't scope "create" by resourceNames (the name doesn't
+  # exist yet at admission time), so it's split off here.
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames: ["{{ .Values.sandboxProxy.caSecretName }}"]
-    verbs: ["get", "create"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -55,7 +60,10 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     resourceNames: ["{{ .Values.sandboxProxy.caConfigMapName }}"]
-    verbs: ["get", "create", "update"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
