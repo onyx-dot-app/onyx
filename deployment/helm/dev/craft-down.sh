@@ -32,6 +32,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cluster-name)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --cluster-name requires a value" >&2
+        exit 2
+      fi
       PASSTHROUGH+=("$1" "$2")
       shift 2
       ;;

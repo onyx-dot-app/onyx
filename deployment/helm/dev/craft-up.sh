@@ -26,6 +26,7 @@
 set -euo pipefail
 
 CLUSTER_NAME="onyx-dev"
+SKIP_HELM=0
 SKIP_SANDBOX_IMAGE=0
 PASSTHROUGH=()
 
@@ -48,6 +49,10 @@ require() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cluster-name)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --cluster-name requires a value" >&2
+        exit 2
+      fi
       CLUSTER_NAME="$2"
       PASSTHROUGH+=("$1" "$2")
       shift 2
@@ -57,6 +62,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --skip-helm)
+      SKIP_HELM=1
       PASSTHROUGH+=("$1")
       shift
       ;;
@@ -78,7 +84,11 @@ done
 require docker
 require kind
 require kubectl
-require helm
+# helm is only invoked by k8s-up.sh when it actually installs the chart;
+# with --skip-helm the cluster-only workflow shouldn't demand helm on PATH.
+if [[ "$SKIP_HELM" -eq 0 ]]; then
+  require helm
+fi
 
 # ---- 1. cluster bring-up (delegates) ----
 
