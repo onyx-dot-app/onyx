@@ -1,16 +1,23 @@
 """mitmproxy entrypoint for the sandbox egress proxy."""
 
 import asyncio
+import os
 import signal
 import sys
 import threading
+import uuid
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
+from onyx.cache.interface import CacheBackend
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.sandbox_proxy.action_matcher import SlackSendMessageMatcher
+from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.addons.passthrough import PassthroughAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
@@ -26,6 +33,12 @@ from onyx.utils.logger import setup_logger
 _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
 _DB_APP_NAME = "sandbox_proxy"
+
+# How long the SIGTERM drain has to terminalize in-flight approvals
+# before the proxy exits anyway. The K8s terminationGracePeriodSeconds
+# bounds the outer window — this is just a safety against a stuck
+# DB / Redis call hanging the shutdown.
+_DRAIN_TIMEOUT_SECONDS = 10.0
 
 # If the watch isn't reachable in this window on startup, the proxy
 # exits non-zero rather than serve traffic with unbacked identity.
@@ -117,6 +130,20 @@ def _build_lookup() -> K8sInformerLookup:
     return lookup
 
 
+def _build_cache_factory() -> "Callable[[str], CacheBackend]":
+    """Return a tenant_id → CacheBackend factory for the gate addon.
+
+    The API side uses ``get_cache_backend(tenant_id=...)`` so the
+    gate must do the same to share the same Redis key prefix.
+    """
+    from onyx.cache.factory import get_cache_backend
+
+    def _factory(tenant_id: str) -> CacheBackend:
+        return get_cache_backend(tenant_id=tenant_id)
+
+    return _factory
+
+
 def _build_mitm_options() -> Options:
     return Options(
         listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
@@ -136,14 +163,32 @@ def _install_signal_handlers(
     master: DumpMaster,
     readiness: _Readiness,
     lookup: SandboxIPLookup,
+    gate: GateAddon,
 ) -> None:
+    async def _drain_and_shutdown() -> None:
+        try:
+            await asyncio.wait_for(
+                gate.drain_inflight(), timeout=_DRAIN_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "gate drain exceeded %.1fs; exiting anyway",
+                _DRAIN_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.exception("gate drain raised; exiting anyway")
+        finally:
+            master.shutdown()
+
     def _on_signal() -> None:
         if readiness.draining:
             return
         logger.info("SIGTERM received; flipping readiness and draining")
         readiness.draining = True
         lookup.stop()
-        master.shutdown()
+        # Schedule the drain on the event loop; mitmproxy will exit
+        # once master.shutdown() runs from inside _drain_and_shutdown.
+        loop.create_task(_drain_and_shutdown())
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _on_signal)
@@ -175,15 +220,30 @@ def main() -> int:
         healthz_server = _start_healthz_server(readiness, lookup)
 
         identity = IdentityResolver(ip_lookup=lookup)
-        addon = PassthroughAddon(identity=identity)
+        passthrough = PassthroughAddon(identity=identity)
+        proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
+        gate = GateAddon(
+            identity=identity,
+            action_matcher=SlackSendMessageMatcher(),
+            db_session_factory=lambda tenant_id: get_session_with_tenant(
+                tenant_id=tenant_id
+            ),
+            cache_factory=_build_cache_factory(),
+            proxy_instance_id=proxy_instance_id,
+        )
 
         # DumpMaster's constructor binds to the running event loop.
         async def _async_main() -> None:
             options = _build_mitm_options()
             master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
-            master.addons.add(addon)
+            master.addons.add(passthrough)
+            master.addons.add(gate)
             _install_signal_handlers(
-                asyncio.get_running_loop(), master, readiness, lookup
+                asyncio.get_running_loop(),
+                master,
+                readiness,
+                lookup,
+                gate,
             )
             await _run_master(master)
 

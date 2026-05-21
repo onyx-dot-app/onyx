@@ -59,6 +59,7 @@ from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
+from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import ChatSessionSharedStatus
@@ -5480,6 +5481,39 @@ class BuildMessage(Base):
         Index(
             "ix_build_message_session_turn", "session_id", "turn_index", "created_at"
         ),
+    )
+
+
+class ActionApproval(Base):
+    """One agent-initiated gated action and its decision.
+
+    `decision IS NULL` represents the pending / in-flight state (or an
+    orphan attempt left behind by a hard proxy crash). Liveness vs.
+    orphan is distinguished by the `approval:live:{id}` Redis key
+    (see `sandbox_proxy/approval_cache.py`), not by the DB.
+    """
+
+    __tablename__ = "action_approval"
+
+    approval_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 
