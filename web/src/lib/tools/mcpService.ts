@@ -188,6 +188,7 @@ export async function upsertMCPServer(serverData: {
   // overwrite stored values with masked placeholders on resubmit.
   oauth_client_id_changed?: boolean;
   oauth_client_secret_changed?: boolean;
+  oauth_authorization_url_params?: Record<string, string>;
   auth_template?: any;
   admin_credentials?: Record<string, string>;
   existing_server_id?: number;

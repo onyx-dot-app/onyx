@@ -9,12 +9,15 @@ from typing import Any
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from urllib.parse import parse_qs
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import pytest
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.shared.auth import OAuthClientInformationFull
+from mcp.shared.auth import OAuthToken
 from pydantic import AnyUrl
 
 from onyx.db.enums import MCPAuthenticationType
@@ -97,6 +100,13 @@ class _FakeRedis:
         if key.endswith(":pkce_verifier"):
             return self._pkce_verifier
         return self._data.get(key)
+
+    def set(self, key: str, value: str, ex: int | None = None) -> bool:
+        del ex
+        self._data[key] = value.encode()
+        if key.endswith(":pkce_verifier"):
+            self._pkce_verifier = value.encode()
+        return True
 
     def rpush(self, key: str, value: str) -> int:
         self.rpush_calls.append((key, value))
@@ -181,6 +191,264 @@ class TestConnectionHasOAuthTokens:
                 "headers": {},
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_token_storage_preserves_refresh_token_when_refresh_response_omits_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OAuth refresh responses may omit refresh_token; keep the stored one."""
+    config = MagicMock()
+    config.id = 100
+    config_data: dict[str, Any] = {
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "old-access-token",
+            "refresh_token": "keep-refresh-token",
+            "token_type": "Bearer",
+        }
+    }
+    updated_config_data: dict[str, Any] = {}
+
+    class _FakeSession:
+        def __enter__(self) -> MagicMock:
+            return MagicMock()
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def _update_connection_config(
+        _config_id: int, _db_session: MagicMock, new_config_data: dict[str, Any]
+    ) -> None:
+        updated_config_data.update(new_config_data)
+
+    monkeypatch.setattr(mcp_api, "get_session_with_current_tenant", _FakeSession)
+    monkeypatch.setattr(mcp_api, "get_connection_config_by_id", lambda *_a: config)
+    monkeypatch.setattr(mcp_api, "extract_connection_data", lambda *_a: config_data)
+    monkeypatch.setattr(mcp_api, "update_connection_config", _update_connection_config)
+    monkeypatch.setattr(mcp_api.time, "time", lambda: 1000.0)
+
+    await mcp_api.OnyxTokenStorage(config.id).set_tokens(
+        OAuthToken(
+            access_token="new-access-token",
+            token_type="Bearer",
+            expires_in=3600,
+        )
+    )
+
+    stored_tokens = updated_config_data[MCPOAuthKeys.TOKENS.value]
+    assert stored_tokens["access_token"] == "new-access-token"
+    assert stored_tokens["refresh_token"] == "keep-refresh-token"
+    assert stored_tokens[mcp_api.TOKEN_EXPIRES_AT] == 4600.0
+    assert updated_config_data["headers"] == {
+        "Authorization": "Bearer new-access-token"
+    }
+
+
+@pytest.mark.asyncio
+async def test_token_storage_treats_legacy_refresh_tokens_as_expired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = MagicMock()
+    config.id = 100
+    config_data: dict[str, Any] = {
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "legacy-access-token",
+            "refresh_token": "legacy-refresh-token",
+            "token_type": "Bearer",
+        }
+    }
+
+    class _FakeSession:
+        def __enter__(self) -> MagicMock:
+            return MagicMock()
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(mcp_api, "get_session_with_current_tenant", _FakeSession)
+    monkeypatch.setattr(mcp_api, "get_connection_config_by_id", lambda *_a: config)
+    monkeypatch.setattr(mcp_api, "extract_connection_data", lambda *_a: config_data)
+
+    assert await mcp_api.OnyxTokenStorage(config.id).get_token_expiry_time() == 1.0
+
+
+def test_oauth_config_persists_explicit_authorization_params() -> None:
+    config_data = mcp_api._build_oauth_admin_config_data(
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        authorization_url_params={"access_type": "offline", "prompt": "consent"},
+    )
+
+    assert config_data[MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value] == {
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+
+
+def test_non_google_oauth_config_has_no_extra_authorization_params() -> None:
+    config_data = mcp_api._build_oauth_admin_config_data(
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+    )
+
+    assert MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value not in config_data
+
+
+@pytest.mark.asyncio
+async def test_oauth_provider_hydrates_stored_token_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+    mcp_server: MagicMock,
+) -> None:
+    async def _get_tokens(_storage: mcp_api.OnyxTokenStorage) -> OAuthToken:
+        return OAuthToken(access_token="stored-access-token", token_type="Bearer")
+
+    async def _get_client_info(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> OAuthClientInformationFull:
+        return OAuthClientInformationFull.model_validate(_CLIENT_INFO)
+
+    async def _get_token_expiry_time(_storage: mcp_api.OnyxTokenStorage) -> float:
+        return 1234.0
+
+    async def _get_oauth_metadata_context(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(mcp_api.OnyxTokenStorage, "get_tokens", _get_tokens)
+    monkeypatch.setattr(mcp_api.OnyxTokenStorage, "get_client_info", _get_client_info)
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "get_token_expiry_time",
+        _get_token_expiry_time,
+    )
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "get_oauth_metadata_context",
+        _get_oauth_metadata_context,
+    )
+
+    provider = mcp_api.make_oauth_provider(
+        mcp_server=mcp_server,
+        user_id="test-user-id",
+        return_path=_RETURN_PATH,
+        connection_config_id=100,
+        admin_config_id=99,
+    )
+
+    await provider._initialize()
+
+    assert provider.context.token_expiry_time == 1234.0
+
+
+@pytest.mark.asyncio
+async def test_oauth_provider_hydrates_stored_oauth_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    mcp_server: MagicMock,
+) -> None:
+    async def _get_tokens(_storage: mcp_api.OnyxTokenStorage) -> OAuthToken:
+        return OAuthToken(access_token="stored-access-token", token_type="Bearer")
+
+    async def _get_client_info(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> OAuthClientInformationFull:
+        return OAuthClientInformationFull.model_validate(_CLIENT_INFO)
+
+    async def _get_token_expiry_time(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> None:
+        return None
+
+    async def _get_oauth_metadata_context(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> dict[str, object]:
+        return {
+            "auth_server_url": "https://accounts.google.com",
+            "oauth_metadata": {
+                "issuer": "https://accounts.google.com",
+                "authorization_endpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+                "token_endpoint": "https://oauth2.googleapis.com/token",
+            },
+            "protected_resource_metadata": {
+                "resource": "https://logging.googleapis.com/mcp",
+                "authorization_servers": ["https://accounts.google.com"],
+            },
+        }
+
+    monkeypatch.setattr(mcp_api.OnyxTokenStorage, "get_tokens", _get_tokens)
+    monkeypatch.setattr(mcp_api.OnyxTokenStorage, "get_client_info", _get_client_info)
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "get_token_expiry_time",
+        _get_token_expiry_time,
+    )
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "get_oauth_metadata_context",
+        _get_oauth_metadata_context,
+    )
+
+    provider = mcp_api.make_oauth_provider(
+        mcp_server=mcp_server,
+        user_id="test-user-id",
+        return_path=_RETURN_PATH,
+        connection_config_id=100,
+        admin_config_id=99,
+    )
+
+    await provider._initialize()
+
+    assert provider.context.auth_server_url == "https://accounts.google.com"
+    assert str(provider.context.oauth_metadata.token_endpoint) == (
+        "https://oauth2.googleapis.com/token"
+    )
+    assert provider.context.protected_resource_metadata is not None
+
+
+@pytest.mark.asyncio
+async def test_publish_oauth_authorization_url_includes_extra_params(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_url: str | None = None
+
+    async def _redirect_handler(auth_url: str) -> None:
+        nonlocal captured_url
+        captured_url = auth_url
+
+    async def _get_authorization_url_params(
+        _storage: mcp_api.OnyxTokenStorage,
+    ) -> dict[str, str]:
+        return {"access_type": "offline", "prompt": "consent"}
+
+    monkeypatch.setattr(
+        mcp_api.OnyxTokenStorage,
+        "get_authorization_url_params",
+        _get_authorization_url_params,
+    )
+    monkeypatch.setattr(mcp_api, "get_redis_client", lambda: _FakeRedis())
+
+    provider = mcp_api.OnyxOAuthClientProvider(
+        server_url="https://remote-mcp.example.com/mcp",
+        client_metadata=mcp_api.OAuthClientMetadata(
+            client_name="Onyx - test",
+            redirect_uris=[AnyUrl("http://localhost:3000/mcp/oauth/callback")],
+            grant_types=["authorization_code", "refresh_token"],
+            response_types=["code"],
+        ),
+        storage=mcp_api.OnyxTokenStorage(100),
+        redirect_handler=_redirect_handler,
+        callback_handler=None,
+    )
+    provider.context.client_info = OAuthClientInformationFull.model_validate(
+        _CLIENT_INFO
+    )
+
+    await mcp_api._publish_oauth_authorization_url(provider, "test-user-id")
+
+    assert captured_url is not None
+    query = parse_qs(urlparse(captured_url).query)
+    assert query["access_type"] == ["offline"]
+    assert query["prompt"] == ["consent"]
 
 
 @pytest.fixture

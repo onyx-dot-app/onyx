@@ -163,6 +163,7 @@ def _build_oauth_admin_config_data(
     *,
     client_id: str | None,
     client_secret: str | None,
+    authorization_url_params: dict[str, str] | None = None,
 ) -> MCPConnectionData:
     """Construct the admin connection config payload for an OAuth client.
 
@@ -172,6 +173,10 @@ def _build_oauth_admin_config_data(
     Dynamic Client Registration to obtain credentials).
     """
     config_data = MCPConnectionData(headers={})
+    if authorization_url_params:
+        config_data[MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value] = (
+            authorization_url_params
+        )
     if not client_id:
         return config_data
     token_endpoint_auth_method = "client_secret_post" if client_secret else "none"
@@ -193,6 +198,7 @@ def _build_oauth_admin_config_data_for_update(
     client_id: str | None,
     client_secret: str | None,
     existing_client: OAuthClientInformationFull,
+    authorization_url_params: dict[str, str] | None = None,
 ) -> MCPConnectionData:
     """Construct the admin connection config payload for an OAuth client
     that already has a stored `client_info`, preserving provider-managed
@@ -210,7 +216,9 @@ def _build_oauth_admin_config_data_for_update(
         # the template-path behavior of returning an empty config so the
         # OAuth provider can attempt DCR.
         return _build_oauth_admin_config_data(
-            client_id=client_id, client_secret=client_secret
+            client_id=client_id,
+            client_secret=client_secret,
+            authorization_url_params=authorization_url_params,
         )
 
     if existing_client.client_id != client_id:
@@ -219,7 +227,9 @@ def _build_oauth_admin_config_data_for_update(
             "stored DCR registration metadata and starting fresh."
         )
         return _build_oauth_admin_config_data(
-            client_id=client_id, client_secret=client_secret
+            client_id=client_id,
+            client_secret=client_secret,
+            authorization_url_params=authorization_url_params,
         )
 
     merged = existing_client.model_copy(deep=True)
@@ -237,6 +247,10 @@ def _build_oauth_admin_config_data_for_update(
         )
 
     config_data = MCPConnectionData(headers={})
+    if authorization_url_params:
+        config_data[MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value] = (
+            authorization_url_params
+        )
     config_data[MCPOAuthKeys.CLIENT_INFO.value] = merged.model_dump(mode="json")
     return config_data
 
@@ -332,7 +346,26 @@ def _connection_has_oauth_tokens(connection_config_dict: dict[str, object]) -> b
     return bool(connection_config_dict.get(MCPOAuthKeys.TOKENS.value))
 
 
+def _oauth_authorization_url_params_changed(
+    existing_config_data: MCPConnectionData,
+    requested_params: dict[str, str],
+) -> bool:
+    existing_params = existing_config_data.get(
+        MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value, {}
+    )
+    return existing_params != requested_params
+
+
 REQUESTED_SCOPE: str | None = None
+TOKEN_EXPIRES_AT = "expires_at"
+RESERVED_AUTHORIZATION_URL_PARAMS = {
+    "client_id",
+    "code_challenge",
+    "code_challenge_method",
+    "redirect_uri",
+    "response_type",
+    "state",
+}
 
 
 class OnyxTokenStorage(TokenStorage):
@@ -359,11 +392,97 @@ class OnyxTokenStorage(TokenStorage):
                 return OAuthToken.model_validate(tokens_raw)
             return None
 
+    async def get_token_expiry_time(self) -> float | None:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
+            if isinstance(tokens_raw, dict):
+                expires_at = tokens_raw.get(TOKEN_EXPIRES_AT)
+                if isinstance(expires_at, int | float):
+                    return max(float(expires_at), 1.0)
+                if tokens_raw.get("refresh_token"):
+                    return 1.0
+            return None
+
+    async def get_authorization_url_params(self) -> dict[str, str]:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            params_raw = config_data.get(MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value)
+            if isinstance(params_raw, dict):
+                return {
+                    str(key): str(value)
+                    for key, value in params_raw.items()
+                    if key not in RESERVED_AUTHORIZATION_URL_PARAMS
+                }
+
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_config_data = extract_connection_data(alt_config)
+                    alt_params_raw = alt_config_data.get(
+                        MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value
+                    )
+                    if isinstance(alt_params_raw, dict):
+                        return {
+                            str(key): str(value)
+                            for key, value in alt_params_raw.items()
+                            if key not in RESERVED_AUTHORIZATION_URL_PARAMS
+                        }
+            return {}
+
+    async def get_oauth_metadata_context(self) -> dict[str, object] | None:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            metadata_raw = config_data.get(MCPOAuthKeys.METADATA.value)
+            if isinstance(metadata_raw, dict):
+                return metadata_raw
+
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_config_data = extract_connection_data(alt_config)
+                    alt_metadata_raw = alt_config_data.get(MCPOAuthKeys.METADATA.value)
+                    if isinstance(alt_metadata_raw, dict):
+                        return alt_metadata_raw
+            return None
+
+    async def set_oauth_metadata_context(
+        self,
+        metadata_payload: dict[str, object],
+    ) -> None:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            config_data[MCPOAuthKeys.METADATA.value] = metadata_payload
+            update_connection_config(config.id, db_session, config_data)
+
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_config_data = extract_connection_data(alt_config)
+                    alt_config_data[MCPOAuthKeys.METADATA.value] = metadata_payload
+                    update_connection_config(
+                        self.alt_config_id, db_session, alt_config_data
+                    )
+
     async def set_tokens(self, tokens: OAuthToken) -> None:
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
-            config_data[MCPOAuthKeys.TOKENS.value] = tokens.model_dump(mode="json")
+            token_data = tokens.model_dump(mode="json")
+            existing_tokens = config_data.get(MCPOAuthKeys.TOKENS.value)
+            if (
+                isinstance(existing_tokens, dict)
+                and existing_tokens.get("refresh_token")
+                and not token_data.get("refresh_token")
+            ):
+                token_data["refresh_token"] = existing_tokens["refresh_token"]
+            if tokens.expires_in is not None:
+                token_data[TOKEN_EXPIRES_AT] = time.time() + tokens.expires_in
+            config_data[MCPOAuthKeys.TOKENS.value] = token_data
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
@@ -431,6 +550,44 @@ class OnyxTokenStorage(TokenStorage):
                 )
 
 
+class OnyxOAuthClientProvider(OAuthClientProvider):
+    async def _initialize(self) -> None:  # pragma: no cover
+        await super()._initialize()
+        if isinstance(self.context.storage, OnyxTokenStorage):
+            self.context.token_expiry_time = (
+                await self.context.storage.get_token_expiry_time()
+            )
+            metadata = await self.context.storage.get_oauth_metadata_context()
+            if metadata:
+                self.context.oauth_metadata = OAuthMetadata.model_validate(
+                    metadata["oauth_metadata"]
+                )
+                self.context.auth_server_url = metadata.get("auth_server_url")
+                prm_raw = metadata.get("protected_resource_metadata")
+                if prm_raw:
+                    self.context.protected_resource_metadata = (
+                        ProtectedResourceMetadata.model_validate(prm_raw)
+                    )
+                self.context.client_metadata.scope = get_client_metadata_scopes(
+                    None,
+                    self.context.protected_resource_metadata,
+                    self.context.oauth_metadata,
+                )
+            elif (
+                self.context.current_tokens
+                and self.context.current_tokens.refresh_token
+            ):
+                try:
+                    await _discover_oauth_metadata_for_connect(
+                        self, self.context.server_url
+                    )
+                except Exception:
+                    logger.debug(
+                        "Could not discover MCP OAuth metadata while hydrating provider",
+                        exc_info=True,
+                    )
+
+
 def make_oauth_provider(
     mcp_server: DbMCPServer,
     user_id: str,
@@ -496,7 +653,7 @@ def make_oauth_provider(
         r.delete(key_auth_url(user_id), key_state(user_id))
         return code, state_obj.state
 
-    return OAuthClientProvider(
+    return OnyxOAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
@@ -556,6 +713,27 @@ async def _discover_oauth_metadata_for_connect(
             ctx.protected_resource_metadata,
             ctx.oauth_metadata,
         )
+        if isinstance(ctx.storage, OnyxTokenStorage):
+            await ctx.storage.set_oauth_metadata_context(
+                _oauth_metadata_context_payload(oauth_provider)
+            )
+
+
+def _oauth_metadata_context_payload(
+    oauth_provider: OAuthClientProvider,
+) -> dict[str, object]:
+    ctx = oauth_provider.context
+    if ctx.oauth_metadata is None:
+        raise OAuthFlowError("No OAuth metadata discovered for MCP server")
+    payload: dict[str, object] = {
+        "oauth_metadata": ctx.oauth_metadata.model_dump(mode="json"),
+        "auth_server_url": ctx.auth_server_url,
+    }
+    if ctx.protected_resource_metadata is not None:
+        payload["protected_resource_metadata"] = (
+            ctx.protected_resource_metadata.model_dump(mode="json")
+        )
+    return payload
 
 
 def _cache_oauth_discovery_context(
@@ -566,14 +744,7 @@ def _cache_oauth_discovery_context(
     ctx = oauth_provider.context
     if ctx.oauth_metadata is None:
         return
-    payload: dict[str, object] = {
-        "oauth_metadata": ctx.oauth_metadata.model_dump(mode="json"),
-        "auth_server_url": ctx.auth_server_url,
-    }
-    if ctx.protected_resource_metadata is not None:
-        payload["protected_resource_metadata"] = (
-            ctx.protected_resource_metadata.model_dump(mode="json")
-        )
+    payload = _oauth_metadata_context_payload(oauth_provider)
     get_redis_client().set(
         key_oauth_discovery(user_id),
         json.dumps(payload),
@@ -758,6 +929,8 @@ async def _publish_oauth_authorization_url(
         auth_params["resource"] = ctx.get_resource_url()
     if ctx.client_metadata.scope:
         auth_params["scope"] = ctx.client_metadata.scope
+    if isinstance(ctx.storage, OnyxTokenStorage):
+        auth_params.update(await ctx.storage.get_authorization_url_params())
 
     authorization_url = f"{auth_endpoint}?{urlencode(auth_params)}"
     await ctx.redirect_handler(authorization_url)
@@ -1087,6 +1260,7 @@ async def _connect_oauth(
     # values for any field the frontend marked as unchanged. This protects
     # against the resubmit case where the form replays masked placeholders.
     existing_client: OAuthClientInformationFull | None = None
+    existing_data: MCPConnectionData = MCPConnectionData(headers={})
     if mcp_server.admin_connection_config:
         existing_data = extract_connection_data(
             mcp_server.admin_connection_config, apply_mask=False
@@ -1105,6 +1279,17 @@ async def _connect_oauth(
         existing_client=existing_client,
     )
 
+    authorization_url_params = request.oauth_authorization_url_params
+    if (
+        not authorization_url_params
+        and MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value in existing_data
+    ):
+        existing_params = existing_data[MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value]
+        if isinstance(existing_params, dict):
+            authorization_url_params = {
+                str(key): str(value) for key, value in existing_params.items()
+            }
+
     # When we already have a stored `client_info`, merge into it so we
     # preserve any provider-managed fields (DCR registration token,
     # `client_secret_expires_at`, negotiated `token_endpoint_auth_method`,
@@ -1114,11 +1299,13 @@ async def _connect_oauth(
             client_id=request.oauth_client_id,
             client_secret=request.oauth_client_secret,
             existing_client=existing_client,
+            authorization_url_params=authorization_url_params,
         )
         if existing_client is not None
         else _build_oauth_admin_config_data(
             client_id=request.oauth_client_id,
             client_secret=request.oauth_client_secret,
+            authorization_url_params=authorization_url_params,
         )
     )
 
@@ -1556,6 +1743,7 @@ def _db_mcp_server_to_api_mcp_server(
     user_authenticated: bool | None = None
     user_credentials = None
     admin_credentials = None
+    oauth_authorization_url_params: dict[str, str] = {}
     can_view_admin_credentials = bool(include_auth_config) and (
         request_user is not None
         and (
@@ -1586,6 +1774,13 @@ def _db_mcp_server_to_api_mcp_server(
                 user_authenticated = False
                 client_info = None
                 client_info_raw = admin_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
+                params_raw = admin_config_dict.get(
+                    MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value
+                )
+                if isinstance(params_raw, dict):
+                    oauth_authorization_url_params = {
+                        str(key): str(value) for key, value in params_raw.items()
+                    }
                 if client_info_raw:
                     client_info = OAuthClientInformationFull.model_validate(
                         client_info_raw
@@ -1629,6 +1824,13 @@ def _db_mcp_server_to_api_mcp_server(
             client_info_raw = oauth_admin_config_dict.get(
                 MCPOAuthKeys.CLIENT_INFO.value
             )
+            params_raw = oauth_admin_config_dict.get(
+                MCPOAuthKeys.AUTHORIZATION_URL_PARAMS.value
+            )
+            if isinstance(params_raw, dict):
+                oauth_authorization_url_params = {
+                    str(key): str(value) for key, value in params_raw.items()
+                }
             if client_info_raw:
                 client_info = OAuthClientInformationFull.model_validate(client_info_raw)
             if client_info:
@@ -1713,6 +1915,7 @@ def _db_mcp_server_to_api_mcp_server(
         auth_template=auth_template,
         user_credentials=user_credentials,
         admin_credentials=admin_credentials,
+        oauth_authorization_url_params=oauth_authorization_url_params,
     )
 
 
@@ -2085,6 +2288,7 @@ def _upsert_mcp_server(
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
         client_info = None
+        existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
             existing_admin_config_dict = extract_connection_data(
                 mcp_server.admin_connection_config, apply_mask=False
@@ -2119,6 +2323,10 @@ def _upsert_mcp_server(
                     client_info is None
                     or request.oauth_client_id != client_info.client_id
                     or request.oauth_client_secret != (client_info.client_secret or "")
+                    or _oauth_authorization_url_params_changed(
+                        existing_admin_config_dict,
+                        request.oauth_authorization_url_params,
+                    )
                 )
             )
             or (request.auth_type == MCPAuthenticationType.API_TOKEN)
@@ -2265,6 +2473,7 @@ def _upsert_mcp_server(
             cfg: MCPConnectionData = _build_oauth_admin_config_data(
                 client_id=request.oauth_client_id,
                 client_secret=request.oauth_client_secret,
+                authorization_url_params=request.oauth_authorization_url_params,
             )
 
             admin_config = create_connection_config(

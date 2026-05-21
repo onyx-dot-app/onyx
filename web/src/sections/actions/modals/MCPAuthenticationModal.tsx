@@ -7,6 +7,9 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import KeyValueInput, {
+  KeyValue,
+} from "@/refresh-components/inputs/InputKeyValue";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { Button, Divider, MessageCard } from "@opal/components";
@@ -53,6 +56,22 @@ export interface MCPAuthFormValues {
   user_credentials: Record<string, string>;
   oauth_client_id: string;
   oauth_client_secret: string;
+  oauth_authorization_url_params: KeyValue[];
+}
+
+function oauthAuthorizationParamsToRows(
+  params: Record<string, string> | undefined
+): KeyValue[] {
+  return Object.entries(params || {}).map(([key, value]) => ({ key, value }));
+}
+
+function oauthAuthorizationRowsToParams(rows: KeyValue[]): Record<string, string> {
+  return Object.fromEntries(
+    rows
+      .map(({ key, value }) => [key.trim(), value.trim()])
+      .filter(([key, value]) => key || value)
+      .filter(([key]) => key)
+  );
 }
 
 const validationSchema = Yup.object().shape({
@@ -95,6 +114,24 @@ const validationSchema = Yup.object().shape({
     then: (schema) => schema.notRequired(),
     otherwise: (schema) => schema.notRequired(),
   }),
+  oauth_authorization_url_params: Yup.array()
+    .of(
+      Yup.object({
+        key: Yup.string().defined(),
+        value: Yup.string().defined(),
+      })
+    )
+    .test("valid-key-value-params", "Invalid authorization params", (rows) => {
+      const filledRows = (rows || []).filter(
+        ({ key, value }) => key.trim() || value.trim()
+      );
+      if (filledRows.some(({ key }) => !key.trim())) {
+        return false;
+      }
+
+      const keys = filledRows.map(({ key }) => key.trim());
+      return new Set(keys).size === keys.length;
+    }),
 });
 
 export default function MCPAuthenticationModal({
@@ -169,6 +206,7 @@ export default function MCPAuthenticationModal({
         user_credentials: {},
         oauth_client_id: "",
         oauth_client_secret: "",
+        oauth_authorization_url_params: [],
       };
     }
 
@@ -188,6 +226,9 @@ export default function MCPAuthenticationModal({
       // OAuth Credentials
       oauth_client_id: fullServer.admin_credentials?.client_id || "",
       oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
+      oauth_authorization_url_params: oauthAuthorizationParamsToRows(
+        fullServer.oauth_authorization_url_params
+      ),
       // Auth Template
       auth_template: (fullServer.auth_template as MCPAuthTemplate) || {
         headers: { Authorization: "Bearer {api_key}" },
@@ -254,6 +295,10 @@ export default function MCPAuthenticationModal({
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_secret
           : undefined,
+      oauth_authorization_url_params:
+        authType === MCPAuthenticationType.OAUTH
+          ? oauthAuthorizationRowsToParams(values.oauth_authorization_url_params)
+          : undefined,
       ...oauthChangedFlags,
       existing_server_id: mcpServer.id,
     };
@@ -295,6 +340,9 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
+            oauth_authorization_url_params: oauthAuthorizationRowsToParams(
+              values.oauth_authorization_url_params
+            ),
             ...oauthChangedFlags,
             return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
@@ -517,6 +565,47 @@ export default function MCPAuthenticationModal({
                           }}
                         />
                       </FormField>
+                      <FormField
+                        name="oauth_authorization_url_params"
+                        state={
+                          errors.oauth_authorization_url_params &&
+                          touched.oauth_authorization_url_params
+                            ? "error"
+                            : touched.oauth_authorization_url_params
+                              ? "success"
+                              : "idle"
+                        }
+                      >
+                        <FormField.Label optional>
+                          Authorization URL Params
+                        </FormField.Label>
+                        <FormField.Control asChild>
+                          <KeyValueInput
+                            keyTitle="Parameter"
+                            valueTitle="Value"
+                            keyPlaceholder="access_type"
+                            valuePlaceholder="offline"
+                            items={values.oauth_authorization_url_params}
+                            onChange={(items) =>
+                              setFieldValue(
+                                "oauth_authorization_url_params",
+                                items
+                              )
+                            }
+                            addButtonLabel="Add Param"
+                            mode="line"
+                          />
+                        </FormField.Control>
+                        <FormField.Message
+                          messages={{
+                            error:
+                              typeof errors.oauth_authorization_url_params ===
+                              "string"
+                                ? errors.oauth_authorization_url_params
+                                : undefined,
+                          }}
+                        />
+                      </FormField>
 
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
@@ -529,6 +618,11 @@ export default function MCPAuthenticationModal({
                           your Onyx instance with the server provider to obtain
                           these credentials first. Make sure to grant Onyx
                           necessary scopes/permissions for your actions.
+                        </Text>
+                        <Text as="p" text03 secondaryBody>
+                          Authorization URL params are optional provider-specific
+                          OAuth query parameters. Some providers require them for
+                          refresh tokens or offline access.
                         </Text>
 
                         {/* Redirect URI */}

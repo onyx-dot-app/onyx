@@ -30,6 +30,7 @@ export interface MCPServer {
   user_authenticated?: boolean;
   auth_template?: any;
   admin_credentials?: Record<string, string>;
+  oauth_authorization_url_params?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
   last_refreshed_at?: string;

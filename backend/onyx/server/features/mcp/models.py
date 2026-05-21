@@ -58,6 +58,7 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
+    AUTHORIZATION_URL_PARAMS = "authorization_url_params"
 
 
 class MCPConnectionData(TypedDict):
@@ -79,6 +80,7 @@ class MCPConnectionData(TypedDict):
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    authorization_url_params: NotRequired[dict[str, str]]
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
@@ -144,6 +146,10 @@ class MCPToolCreateRequest(BaseModel):
             "an update of an existing server, the stored value is reused and the "
             "request value is ignored."
         ),
+    )
+    oauth_authorization_url_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra OAuth authorization URL query parameters",
     )
     transport: MCPTransport | None = Field(
         None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
@@ -289,6 +295,10 @@ class MCPUserOAuthConnectRequest(BaseModel):
             "the stored value is reused and the request value is ignored."
         ),
     )
+    oauth_authorization_url_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra OAuth authorization URL query parameters",
+    )
 
     @model_validator(mode="after")
     def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
@@ -396,6 +406,10 @@ class MCPServer(BaseModel):
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
+    )
+    oauth_authorization_url_params: dict[str, str] = Field(
+        default_factory=dict,
+        description="Extra OAuth authorization URL query parameters",
     )
 
 
