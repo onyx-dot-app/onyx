@@ -24,6 +24,7 @@
     "test:changed": "jest --onlyChanged",
     "test:diff": "jest --changedSince=main",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
+    "test:bun": "bun test src/lib/user.test.ts src/lib/clipboard.test.ts src/lib/languages.test.ts src/lib/hooks.llmResolver.test.ts src/lib/utils.test.ts src/refresh-components/inputs/PasswordInputTypeIn.test.ts src/components/tools/parseCSV.test.ts lib/opal/src/components/text/InlineMarkdown.test.ts src/app/craft/utils/pathSanitizer.test.ts src/app/app/message/codeUtils.test.ts src/app/app/services/packetUtils.test.ts src/sections/onboarding/__tests__/onboardingReducer.test.ts src/app/app/message/messageComponents/timeline/hooks/packetProcessor.test.ts ./src/lib/hooks/useLLMProviders.bun-test.ts",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build -o storybook-static"
   },

@@ -1,0 +1,7 @@
+[test]
+# Bun reads tsconfig.json `paths` natively, so @/, @tests/, @opal/ all resolve without extra mapping.
+
+# Match jest config's testPathIgnorePatterns.
+# DOM-dependent files (anything with @jest-environment jsdom or .test.tsx) are excluded here —
+# Bun's node-style runner has no built-in DOM. Those would need happy-dom via a preload script.
+root = "."
