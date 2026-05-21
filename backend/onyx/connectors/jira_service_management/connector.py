@@ -38,6 +38,7 @@ from onyx.connectors.jira.connector import (
     make_checkpoint_callback,
     process_jira_issue,
 )
+from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import (
     best_effort_get_field_from_issue,
     build_jira_client,
@@ -239,6 +240,8 @@ class JiraServiceManagementConnector(
         self,
         issue: Issue,
         parent_hierarchy_raw_node_id: str | None = None,
+        include_permissions: bool = False,
+        project_key: str | None = None,
     ) -> Document | None:
         doc = process_jira_issue(
             jira_base_url=self.jira_base,
@@ -249,6 +252,10 @@ class JiraServiceManagementConnector(
         )
         if doc is not None:
             doc.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+            if include_permissions and project_key:
+                doc.external_access = get_project_permissions(
+                    self.jira_client, project_key, add_prefix=True
+                )
         return doc
 
     def _update_has_more(
@@ -331,7 +338,10 @@ class JiraServiceManagementConnector(
                     )
 
                 if doc := self._document_from_issue(
-                    issue, parent_hierarchy_raw_node_id=project_key
+                    issue,
+                    parent_hierarchy_raw_node_id=project_key,
+                    include_permissions=include_permissions,
+                    project_key=project_key,
                 ):
                     yield doc
 
