@@ -104,7 +104,7 @@ def make_skill(
     is_public: bool = False,
     enabled: bool = True,
 ) -> Skill:
-    """Create a single ``Skill`` row.
+    """Create a single custom ``Skill`` row.
 
     Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
     placeholder values; tests that need a real bundle should use the
@@ -117,6 +117,37 @@ def make_skill(
         description="d",
         bundle_file_id=f"bundle-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
+        is_public=is_public,
+        enabled=enabled,
+    )
+    db_session.add(skill)
+    db_session.flush()
+    return skill
+
+
+def make_built_in_skill_row(
+    db_session: Session,
+    *,
+    built_in_skill_id: str,
+    slug: str | None = None,
+    name: str | None = None,
+    description: str = "test built-in",
+    is_public: bool = True,
+    enabled: bool = True,
+) -> Skill:
+    """Insert a built-in-style ``Skill`` row pointing at a
+    ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
+    default seeder convention), but can be overridden to test the
+    multi-row case where several skills share the same built-in id.
+    Bundle fields stay NULL (required by the XOR check constraint)."""
+    skill = Skill(
+        id=uuid4(),
+        slug=slug or built_in_skill_id,
+        name=name or built_in_skill_id,
+        description=description,
+        built_in_skill_id=built_in_skill_id,
+        bundle_file_id=None,
+        bundle_sha256=None,
         is_public=is_public,
         enabled=enabled,
     )

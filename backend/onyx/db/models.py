@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from sqlalchemy import BigInteger
 from sqlalchemy import Boolean
+from sqlalchemy import CheckConstraint
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
@@ -4202,9 +4203,17 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Bundle bytes (single, replaced on re-upload).
-    bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
-    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Discriminator: when set, definition (source files, has_template, etc.)
+    # comes from BUILT_IN_SKILLS in `onyx.skills.built_in`. When NULL, the
+    # row is a custom (admin-uploaded) skill and bundle_file_id is set.
+    # Exactly one of (built_in_skill_id, bundle_file_id) is non-null —
+    # enforced by `ck_skill_definition_source` below.
+    built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Bundle bytes for custom skills. NULL for built-ins (their source
+    # files live on disk under SKILLS_TEMPLATE_PATH).
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -4235,7 +4244,13 @@ class Skill(Base):
         viewonly=True,
     )
 
-    __table_args__ = (UniqueConstraint("slug", name="uq_skill_slug"),)
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_skill_slug"),
+        CheckConstraint(
+            "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
+            name="ck_skill_definition_source",
+        ),
+    )
 
 
 """

@@ -23,6 +23,7 @@ from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -40,6 +41,7 @@ from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.built_in import BUILT_IN_SKILLS
 
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
@@ -75,6 +77,26 @@ def _add_user_visibility_filter(
     return stmt.where(or_(Skill.is_public.is_(True), group_grant_exists))
 
 
+def _exclude_unavailable_built_ins(
+    stmt: Select[tuple[Skill]], db_session: Session
+) -> Select[tuple[Skill]]:
+    """Hide built-ins whose codified ``is_available(db)`` returns False.
+    User reads use this; admin reads don't (admins see all rows)."""
+    unavailable = [
+        d.built_in_skill_id
+        for d in BUILT_IN_SKILLS.values()
+        if not d.is_available(db_session)
+    ]
+    if not unavailable:
+        return stmt
+    return stmt.where(
+        or_(
+            Skill.built_in_skill_id.is_(None),
+            Skill.built_in_skill_id.notin_(unavailable),
+        )
+    )
+
+
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
     stmt = (
         select(Skill)
@@ -83,6 +105,7 @@ def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
         .order_by(Skill.name)
     )
     stmt = _add_user_visibility_filter(stmt, user)
+    stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return list(db_session.scalars(stmt))
 
 
@@ -96,6 +119,7 @@ def fetch_skill_for_user(
         .options(selectinload(Skill.author))
     )
     stmt = _add_user_visibility_filter(stmt, user)
+    stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -109,6 +133,7 @@ def fetch_skill_for_user_by_slug(
         .options(selectinload(Skill.author))
     )
     stmt = _add_user_visibility_filter(stmt, user)
+    stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return db_session.scalars(stmt).one_or_none()
 
 
@@ -172,13 +197,16 @@ def replace_skill_bundle(
     new_description: str,
     db_session: Session,
 ) -> tuple[Skill, str]:
-    """Swap a skill's bundle blob and refresh its display metadata.
+    """Swap a custom skill's bundle blob and refresh its display metadata.
 
-    Returns `(skill, old_bundle_file_id)` so the caller can delete the old
-    blob from FileStore AFTER the transaction commits — never inline.
+    Returns ``(skill, old_bundle_file_id)`` so the caller can delete the
+    old blob from FileStore AFTER the transaction commits — never
+    inline.
 
     Name and description come from the new bundle's SKILL.md frontmatter so
     the DB row stays in lockstep with what's actually pushed to sandboxes.
+
+    Rejects built-in rows — they have no bundle.
     """
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
@@ -186,7 +214,14 @@ def replace_skill_bundle(
             OnyxErrorCode.NOT_FOUND,
             f"Skill {skill_id} not found.",
         )
+    if skill.built_in_skill_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' is a built-in and has no bundle.",
+        )
 
+    # Custom rows always have a bundle (XOR check constraint).
+    assert skill.bundle_file_id is not None
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
@@ -288,3 +323,47 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
         Skill__UserGroup.skill_id == skill_id
     )
     return list(db_session.scalars(stmt))
+
+
+def seed_built_in_skills(db_session: Session) -> None:
+    """Insert one default ``skill`` row per ``BUILT_IN_SKILLS`` entry and
+    keep its display fields in lockstep with the on-disk SKILL.md
+    frontmatter on every boot. Runs from ``setup_postgres``.
+
+    ``name`` and ``description`` are re-read from disk every boot and
+    refreshed via ``ON CONFLICT (slug) DO UPDATE`` so edits to a
+    built-in's frontmatter propagate to the UI without a manual
+    migration — same refresh semantic ``replace_skill_bundle`` provides
+    for custom skills. Lifecycle fields (``enabled``, ``is_public``,
+    ``bundle_*``, ``author_user_id``) are NOT in the update set, so any
+    state on existing rows is preserved across boots.
+    """
+    if not BUILT_IN_SKILLS:
+        return
+
+    rows = []
+    for definition in BUILT_IN_SKILLS.values():
+        name, description = definition.read_metadata()
+        rows.append(
+            {
+                "slug": definition.built_in_skill_id,
+                "name": name,
+                "description": description,
+                "built_in_skill_id": definition.built_in_skill_id,
+                "bundle_file_id": None,
+                "bundle_sha256": None,
+                "author_user_id": None,
+                "is_public": True,
+                "enabled": True,
+            }
+        )
+
+    insert_stmt = pg_insert(Skill).values(rows)
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["slug"],
+        set_={
+            "name": insert_stmt.excluded.name,
+            "description": insert_stmt.excluded.description,
+        },
+    )
+    db_session.execute(stmt)
