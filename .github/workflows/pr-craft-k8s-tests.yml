@@ -17,6 +17,8 @@ on:
       - "backend/onyx/server/features/build/sandbox/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
       - "backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py"
+      - "backend/tests/external_dependency_unit/craft/test_snapshot_restore.py"
+      - "backend/tests/external_dependency_unit/craft/test_idle_cleanup.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
@@ -290,7 +292,9 @@ jobs:
             --log-cli-level=INFO \
             --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
             backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py \
-            backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py
+            backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py \
+            backend/tests/external_dependency_unit/craft/test_snapshot_restore.py \
+            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py
 
       - name: Disk and docker status on failure
         if: failure()
