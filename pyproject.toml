@@ -215,6 +215,10 @@ override-dependencies = [
     "tiktoken",
     "tokenizers",
     "google-cloud-aiplatform>=1.38.0",
+    # magika (a transitive dep via markitdown) pins onnxruntime<=1.20.1 on
+    # Windows, which has no cp314 wheels. Override to a release that ships
+    # cp314 wheels for all platforms we resolve for.
+    "onnxruntime>=1.24.1",
 ]
 
 [tool.ty.environment]
