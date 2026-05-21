@@ -2,6 +2,10 @@
 
 This directory contains the implementation of Onyx's sandbox system for running OpenCode agents in isolated environments.
 
+## Local Development
+
+Craft requires a local kind cluster — see [Local Kubernetes Development](/docs/dev/local-kubernetes.md). One-shot setup: `make craft-up`.
+
 ## Overview
 
 The sandbox system provides isolated execution environments where OpenCode agents can build web applications, run code, and interact with knowledge files. Each sandbox includes:
@@ -15,13 +19,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 ### Deployment Modes
 
-1. **Local Mode** (`SANDBOX_BACKEND=local`)
-   - Sandboxes run as directories on the local filesystem
-   - No automatic cleanup or snapshots
-   - Suitable for development and testing
-   - No isolation: the agent process shares the api_server's user / network / filesystem
-
-2. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`)
+1. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`) — default
    - Sandboxes run as Kubernetes pods, one per user
    - api_server talks to the Kubernetes API for pod lifecycle and `kubectl exec`
    - Automatic snapshots to S3 via a sidecar container with IRSA credentials
@@ -30,7 +28,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Used by Onyx's Helm chart / cloud deployment
    - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
-3. **Docker Mode** (`SANDBOX_BACKEND=docker`)
+2. **Docker Mode** (`SANDBOX_BACKEND=docker`)
    - Sandboxes run as Docker containers on the same host as the rest of the compose stack, one per user
    - api_server mounts `/var/run/docker.sock` and talks to the Docker Engine API for container lifecycle and `docker exec`
    - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
@@ -180,20 +178,17 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 ### Managers
 
 - **`base.py`** - Abstract base class defining the sandbox interface
-- **`local/manager.py`** - Filesystem-based sandbox manager for local development
 - **`kubernetes/kubernetes_sandbox_manager.py`** - Kubernetes-based sandbox manager for Helm/cloud
 - **`docker/docker_sandbox_manager.py`** - Docker Engine-based sandbox manager for docker-compose
 
 ### Managers (Shared)
 
-- **`manager/directory_manager.py`** - Creates sandbox directory structure and copies templates
 - **`manager/snapshot_manager.py`** - Handles snapshot creation and restoration
 
 ### Utilities
 
 - **`util/opencode_config.py`** - Generates OpenCode configuration with MCP support
 - **`util/agent_instructions.py`** - Generates agent instructions (AGENTS.md)
-- **`util/build_venv_template.py`** - Utility to build Python venv template for local development
 
 ### Templates
 
@@ -210,17 +205,10 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ```bash
 # Sandbox backend mode
-SANDBOX_BACKEND=local|kubernetes|docker    # Default: local
-
-# Template paths (local mode)
-OUTPUTS_TEMPLATE_PATH=/templates/outputs   # Default: /templates/outputs
-VENV_TEMPLATE_PATH=/templates/venv        # Default: /templates/venv
-
-# Sandbox base path (local mode)
-SANDBOX_BASE_PATH=/tmp/onyx-sandboxes     # Default: /tmp/onyx-sandboxes
+SANDBOX_BACKEND=kubernetes|docker          # Default: kubernetes
 
 # OpenCode configuration
-OPENCODE_DISABLED_TOOLS=question          # Comma-separated list, default: question
+OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: question
 ```
 
 ### Kubernetes Settings
@@ -276,10 +264,6 @@ SANDBOX_IDLE_TIMEOUT_SECONDS=900          # Default: 900 (15 minutes)
 
 # Max concurrent sandboxes per organization
 SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
-
-# Next.js port range (local mode)
-SANDBOX_NEXTJS_PORT_START=3010            # Default: 3010
-SANDBOX_NEXTJS_PORT_END=3100              # Default: 3100
 ```
 
 ## Testing
@@ -287,29 +271,8 @@ SANDBOX_NEXTJS_PORT_END=3100              # Default: 3100
 ### Integration Tests
 
 ```bash
-# Test local sandbox provisioning
-uv run pytest backend/tests/integration/sandbox/test_local_sandbox.py
-
-# Test Kubernetes sandbox provisioning (requires k8s cluster)
-uv run pytest backend/tests/integration/sandbox/test_kubernetes_sandbox.py
-```
-
-### Manual Testing
-
-```bash
-# Start a local sandbox session
-curl -X POST http://localhost:3000/api/build/session \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "user-123"
-  }'
-
-# Send a message to the agent
-curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Create a simple web page"
-  }'
+# Test Kubernetes sandbox provisioning (requires kind cluster — see make craft-up)
+uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
 ```
 
 ## Troubleshooting
@@ -341,40 +304,9 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 
 **Solutions**:
 
-- **Local mode**: Check if port is already in use
-- **Docker/K8s**: Check container logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
+- Check container logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
 - Verify `bun install` succeeded (check entrypoint.sh logs)
 - Check that web template was copied: `kubectl exec -n onyx-sandboxes sandbox-{sandbox-id} -- ls /workspace/outputs/web`
-
-### Templates Not Found (Local Mode)
-
-**Symptoms**: `RuntimeError: Sandbox templates are missing`
-
-**Solution**: Set up templates as described in the "Local Development" section above:
-
-```bash
-# Symlink web template
-sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /templates/outputs/web
-
-# Create Python venv
-python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
-```
-
-### Permission Denied
-
-**Symptoms**: `Permission denied` error accessing `/templates/`
-
-**Solution**: Either use sudo when creating symlinks, or use custom paths:
-
-```bash
-export OUTPUTS_TEMPLATE_PATH=$HOME/.onyx/templates/outputs
-export VENV_TEMPLATE_PATH=$HOME/.onyx/templates/venv
-
-# Then symlink to your home directory
-mkdir -p $HOME/.onyx/templates/outputs
-ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web $HOME/.onyx/templates/outputs/web
-```
 
 ## Security Considerations
 

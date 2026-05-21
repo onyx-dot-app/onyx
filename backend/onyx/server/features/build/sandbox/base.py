@@ -639,8 +639,10 @@ class SandboxManager(ABC):
     ) -> None:
         """Ensure the Next.js server is running for a session.
 
-        Default is a no-op — only meaningful for local backends that manage
-        process lifecycles directly (e.g., LocalSandboxManager).
+        Default is a no-op — only meaningful for backends that manage Next.js
+        process lifecycles directly from the api_server side. The kubernetes
+        backend starts Next.js inside the sandbox pod at workspace setup, so
+        nothing further is needed.
 
         Args:
             sandbox_id: The sandbox ID
@@ -659,21 +661,15 @@ def get_sandbox_manager() -> SandboxManager:
 
     Returns:
         SandboxManager instance:
-        - LocalSandboxManager for local backend (development)
-        - KubernetesSandboxManager for kubernetes backend (production)
+        - KubernetesSandboxManager for kubernetes backend (production + dev kind)
+        - DockerSandboxManager for self-hosted docker-compose
     """
     global _sandbox_manager_instance
 
     if _sandbox_manager_instance is None:
         with _sandbox_manager_lock:
             if _sandbox_manager_instance is None:
-                if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-                    from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
-                        LocalSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = LocalSandboxManager()
-                elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
                         KubernetesSandboxManager,
                     )

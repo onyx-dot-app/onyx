@@ -2,21 +2,18 @@
 """Build sandbox template for Python venv."""
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-try:
-    from onyx.server.features.build.configs import OUTPUTS_TEMPLATE_PATH
-    from onyx.server.features.build.configs import VENV_TEMPLATE_PATH
-except ImportError:
-    # Fallback if running as standalone script
-    import os
-
-    OUTPUTS_TEMPLATE_PATH = os.environ.get(
-        "OUTPUTS_TEMPLATE_PATH", "/templates/outputs"
-    )
-    VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
+# Env-var driven, identical to backend/scripts/setup_craft_templates.sh. These
+# vars used to be exported from ``onyx.server.features.build.configs`` but
+# the local sandbox backend that consumed them was removed; the docker
+# backend's template-bake step (Dockerfile + setup_craft_templates.sh) still
+# uses them as raw env vars, so this script keeps that contract.
+OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
+VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 
 
 def build_python_venv_template(target_path: Path, requirements_path: Path) -> None:

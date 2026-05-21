@@ -16,9 +16,13 @@ on:
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
+      - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
       - "backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py"
       - "backend/tests/external_dependency_unit/craft/test_snapshot_restore.py"
       - "backend/tests/external_dependency_unit/craft/test_idle_cleanup.py"
+      - "backend/tests/external_dependency_unit/craft/test_skill_push.py"
+      - "backend/tests/external_dependency_unit/craft/test_user_library_sync.py"
+      - "backend/tests/external_dependency_unit/craft/conftest.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
@@ -70,7 +74,7 @@ jobs:
       - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
       - extras=s3-cache
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     env:
       PYTHONPATH: ./backend
@@ -292,9 +296,12 @@ jobs:
             --log-cli-level=INFO \
             --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
             backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py \
+            backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py \
             backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py \
             backend/tests/external_dependency_unit/craft/test_snapshot_restore.py \
-            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py
+            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py \
+            backend/tests/external_dependency_unit/craft/test_skill_push.py \
+            backend/tests/external_dependency_unit/craft/test_user_library_sync.py
 
       - name: Disk and docker status on failure
         if: failure()

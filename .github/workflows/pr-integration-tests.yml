@@ -381,7 +381,6 @@ jobs:
           MCP_SERVER_ENABLED=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
           ENABLE_CRAFT=true
-          SANDBOX_TEMPLATE_MODE=symlink
           # Lowered upload/bundle caps so cap-enforcement tests can use
           # small payloads instead of multi-MiB allocations.
           BUILD_MAX_UPLOAD_FILE_SIZE_MB=2

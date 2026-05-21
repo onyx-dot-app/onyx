@@ -6,21 +6,46 @@ from pathlib import Path
 class SandboxBackend(str, Enum):
     """Backend mode for sandbox operations.
 
-    LOCAL: Development mode - no snapshots, no automatic cleanup
-    KUBERNETES: Production mode (Helm/cloud) - full snapshots and cleanup
-    DOCKER: Self-hosted docker-compose - api_server drives the Docker Engine
+    KUBERNETES: Production + dev (kind) - full snapshots and cleanup.
+    DOCKER: Self-hosted docker-compose - api_server drives the Docker Engine.
     """
 
-    LOCAL = "local"
     KUBERNETES = "kubernetes"
     DOCKER = "docker"
 
 
+def _parse_sandbox_backend(raw: str) -> SandboxBackend:
+    """Parse SANDBOX_BACKEND with a friendly error on the retired ``local`` value.
+
+    The local backend was removed in favour of the kubernetes (kind) dev flow
+    documented in ``docs/dev/local-kubernetes.md``. We raise a deliberate
+    startup error rather than the bare ``ValueError`` from the enum
+    constructor so the operator gets pointed at the migration path.
+    """
+    if raw.lower() == "local":
+        raise RuntimeError(
+            "SANDBOX_BACKEND=local is no longer supported. The local sandbox "
+            "backend has been removed; use the kind-based Kubernetes dev flow. "
+            "See docs/dev/local-kubernetes.md (run `make craft-up`) and unset "
+            "SANDBOX_BACKEND in your environment (it now defaults to "
+            "'kubernetes')."
+        )
+    try:
+        return SandboxBackend(raw)
+    except ValueError as e:
+        raise RuntimeError(
+            f"SANDBOX_BACKEND={raw!r} is not a valid value. Allowed values: "
+            f"{[b.value for b in SandboxBackend]!r}. See "
+            "docs/dev/local-kubernetes.md for the recommended dev setup."
+        ) from e
+
+
 # Sandbox backend mode (controls snapshot and cleanup behavior)
-# "local" = no snapshots, no cleanup (for development)
-# "kubernetes" = full snapshots and cleanup (production Helm/cloud)
+# "kubernetes" = full snapshots and cleanup (production Helm/cloud + dev kind)
 # "docker" = full snapshots and cleanup (self-hosted docker-compose)
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
+SANDBOX_BACKEND = _parse_sandbox_backend(
+    os.environ.get("SANDBOX_BACKEND", "kubernetes")
+)
 
 # Base directory path for persistent document storage (local filesystem)
 # Example: /var/onyx/file-system or /app/file-system
@@ -30,17 +55,6 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 
 _THIS_FILE = Path(__file__)
 
-# Sandbox filesystem paths
-# TODO(security): the sandbox base path holds user-supplied code; the `/tmp`
-# default is fine for dev but production should override via env (or we should
-# pick a non-world-writable default like `/var/lib/onyx-sandboxes`).
-SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")  # noqa: S108
-OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
-VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
-# "copy" (default, safe for production where the agent may pip install) or
-# "symlink" (CI-only: node_modules + venv become symlinks to the template,
-# saving ~45s of per-session copytree).
-SANDBOX_TEMPLATE_MODE = os.environ.get("SANDBOX_TEMPLATE_MODE", "copy").lower()
 SKILLS_TEMPLATE_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
 )
