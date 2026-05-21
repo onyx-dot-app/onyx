@@ -259,7 +259,33 @@ class OnyxConfluence:
         limit: int,
         space_keys: list[str] | None,
     ) -> Iterator[dict[str, Any]]:
-        """Internal helper to paginate through spaces for a specific API endpoint."""
+        """Internal helper to paginate through spaces for a specific API endpoint.
+
+        Server/v1 termination rules (they interact):
+
+        1. Stop when ``_links.next`` is absent. Per Atlassian's docs this
+           is the canonical end-of-pagination signal. Do NOT stop just
+           because ``len(results) < limit``: ``/rest/api/space`` on
+           Server/DC has a fixed code-level page-size cap (currently
+           ``DefaultRestSpaceManager.MAX_SIZE = 50``; not exposed in the
+           admin UI) and silently caps responses to that value when the
+           requested ``limit`` exceeds it (#4129). A capped page is not
+           the end-of-list. Treating it as such caused permission sync
+           to miss every space past the cap and crash with "No external
+           access found for document ID".
+
+        2. Re-derive ``start`` from ``previous_start + len(results)``
+           instead of honoring the ``start`` Confluence embeds in
+           ``_links.next``. The embedded ``start`` under-counts when the
+           page is capped (#4129), and on DC 8.5.8 / 7.19.21 / 8.9.0
+           (CONFSERVER-95272 / -95312) ``start`` past the true total
+           still returns records instead of empty, so we cannot trust
+           the server's offset bookkeeping there either.
+
+        3. Empty ``results`` is kept as a defensive safety net for the
+           known Confluence bug where ``_links.next`` is set but
+           ``results`` is empty.
+        """
         start = 0
         url = self._build_spaces_url(
             is_v2, base_url, limit, space_keys, start if not is_v2 else None
@@ -276,11 +302,13 @@ class OnyxConfluence:
 
             yield from results
 
+            next_link = data.get("_links", {}).get("next", "")
+            if not next_link:
+                return
+
             if is_v2:
-                url = data.get("_links", {}).get("next", "")
+                url = next_link
             else:
-                if len(results) < limit:
-                    return
                 start += len(results)
                 url = self._build_spaces_url(is_v2, base_url, limit, space_keys, start)
 
