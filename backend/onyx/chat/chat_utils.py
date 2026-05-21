@@ -366,10 +366,15 @@ def _get_or_extract_plaintext(
     except Exception:
         logger.exception(f"Error when reading file, id={file_id}")
 
-    # Cache miss — extract and store.
+    # Cache miss — extract and store.  We cache the result unconditionally
+    # (including the empty string) so that files we cannot extract text from
+    # (e.g. .zip, or any extension without a handler in extract_file_text)
+    # don't get re-fetched from object storage and re-attempted on every
+    # subsequent chat turn.  Transient extraction errors surface as raised
+    # exceptions, not empty returns, so they propagate without poisoning the
+    # cache.
     content_text = extract_fn()
-    if content_text:
-        store_plaintext(file_id, content_text)
+    store_plaintext(file_id, content_text)
     return content_text
 
 
