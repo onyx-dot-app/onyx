@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ripgrep \
   socat \
   sudo \
+  supervisor \
   unzip \
   wget \
   zsh \
@@ -79,6 +80,10 @@ WORKDIR /workspace
 # Install Claude Code
 ARG CLAUDE_CODE_VERSION=latest
 RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# Install opencode CLI for Craft agent functionality. Bun runs it directly,
+# so we don't need a separate Node.js install.
+RUN BUN_INSTALL=/usr/local bun install -g opencode-ai
 
 # Configure zsh — source the repo-local zshrc so shell customization
 # doesn't require an image rebuild.
