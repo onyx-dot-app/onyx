@@ -15,6 +15,7 @@ Per project memory: never run these locally — they touch the real cluster.
 from __future__ import annotations
 
 import io
+import os
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -103,8 +104,24 @@ def _s3_client() -> Any:
 
     The K8s manager bypasses the FileStore for snapshots and uses AWS CLI
     in-pod, so the test verifies via boto3 directly against the same bucket.
+
+    In CI the in-pod sidecar talks to MinIO via the cluster-internal DNS
+    name (``AWS_ENDPOINT_URL`` env), but the test process runs on the host
+    and must use the host-accessible endpoint exposed by docker-compose
+    (``S3_ENDPOINT_URL``). Construct the client explicitly so it doesn't
+    inherit the in-cluster endpoint from ``AWS_ENDPOINT_URL``.
     """
-    return boto3.client("s3")
+    endpoint_url = os.environ.get("S3_ENDPOINT_URL")
+    access_key = os.environ.get("S3_AWS_ACCESS_KEY_ID")
+    secret_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+    region = os.environ.get("AWS_REGION") or "us-east-1"
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=region,
+    )
 
 
 def _download_snapshot(storage_path: str, dest: Path) -> None:
