@@ -12,11 +12,11 @@ built-in can hide itself when its runtime dependencies aren't met.
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 
 import yaml
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
@@ -31,16 +31,17 @@ def _always_available(_: Session) -> bool:
     return True
 
 
-@dataclass(frozen=True, kw_only=True)
-class BuiltInSkillDefinition:
+class BuiltInSkillDefinition(BaseModel):
     """``built_in_skill_id`` is the stable identifier (also the seed
     slug and on-disk directory name). ``source_dir`` is an explicit
     field so tests can override it with a tmp_path."""
 
+    model_config = ConfigDict(frozen=True)
+
     built_in_skill_id: str
     has_template: bool
     source_dir: Path
-    is_available: Callable[[Session], bool] = field(default=_always_available)
+    is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
     def read_metadata(self) -> tuple[str, str]:
