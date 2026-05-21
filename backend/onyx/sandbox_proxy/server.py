@@ -16,9 +16,8 @@ from mitmproxy.tools.dump import DumpMaster
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.sandbox_proxy.action_matcher import SlackSendMessageMatcher
+from onyx.sandbox_proxy.action_matcher import SlackPostMessageMatcher
 from onyx.sandbox_proxy.addons.gate import GateAddon
-from onyx.sandbox_proxy.addons.passthrough import PassthroughAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
 from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
@@ -34,17 +33,14 @@ _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
 _DB_APP_NAME = "sandbox_proxy"
 
-# Outer cap on the SIGTERM drain. ``GateAddon.drain_inflight`` writes
-# terminal decisions, wakes parked coroutines, and then awaits the
-# tracked request() tasks so the connections close cleanly. This bound
-# only fires if something hangs (a stuck DB / Redis call or a
-# coroutine that can't make progress); the K8s
-# ``terminationGracePeriodSeconds`` is the outer envelope.
-_DRAIN_TIMEOUT_SECONDS = 10.0
+# Outer cap on the SIGTERM drain. Only fires if something hangs; the
+# K8s ``terminationGracePeriodSeconds`` is the outer envelope. See
+# ``GateAddon.drain_inflight`` for what the drain actually does.
+_DRAIN_TIMEOUT_S = 10.0
 
 # If the watch isn't reachable in this window on startup, the proxy
 # exits non-zero rather than serve traffic with unbacked identity.
-_LOOKUP_INITIAL_SYNC_TIMEOUT_SECONDS = 60.0
+_LOOKUP_INITIAL_SYNC_TIMEOUT_S = 60.0
 
 # Must be the parent of ca._DEFAULT_CA_PEM_PATH.
 _MITM_CONFDIR = "/var/run/sandbox-proxy/mitmproxy-confdir"
@@ -56,7 +52,7 @@ class _Readiness:
     def __init__(self) -> None:
         self.ca_ready = False
         self.lookup_ready = False
-        self.draining = False
+        self.shutting_down = False
 
 
 def _build_healthz_handler(
@@ -77,7 +73,9 @@ def _build_healthz_handler(
                 # not-ready if the informer has lost its watch even
                 # after initial sync.
                 healthy = (
-                    readiness.ca_ready and lookup.is_synced() and not readiness.draining
+                    readiness.ca_ready
+                    and lookup.is_synced()
+                    and not readiness.shutting_down
                 )
                 if healthy:
                     self.send_response(200)
@@ -121,12 +119,12 @@ def _build_lookup() -> K8sInformerLookup:
     lookup = K8sInformerLookup()
     lookup.start()
     synced = lookup.wait_for_initial_sync(
-        timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_SECONDS
+        timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
     )
     if not synced:
         raise RuntimeError(
             "Sandbox IP lookup did not complete initial sync within "
-            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_SECONDS:.1f}s; refusing to "
+            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to "
             "serve traffic with unbacked identity"
         )
     return lookup
@@ -169,26 +167,22 @@ def _install_signal_handlers(
 ) -> None:
     async def _drain_and_shutdown() -> None:
         try:
-            await asyncio.wait_for(
-                gate.drain_inflight(), timeout=_DRAIN_TIMEOUT_SECONDS
-            )
+            await asyncio.wait_for(gate.drain_inflight(), timeout=_DRAIN_TIMEOUT_S)
         except asyncio.TimeoutError:
             logger.warning(
                 "gate drain exceeded %.1fs; exiting anyway",
-                _DRAIN_TIMEOUT_SECONDS,
+                _DRAIN_TIMEOUT_S,
             )
         except Exception:
             logger.exception("gate drain raised; exiting anyway")
         master.shutdown()
 
     def _on_signal() -> None:
-        if readiness.draining:
+        if readiness.shutting_down:
             return
         logger.info("SIGTERM received; flipping readiness and draining")
-        readiness.draining = True
+        readiness.shutting_down = True
         lookup.stop()
-        # Schedule the drain on the event loop; mitmproxy will exit
-        # once master.shutdown() runs from inside _drain_and_shutdown.
         loop.create_task(_drain_and_shutdown())
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -221,11 +215,10 @@ def main() -> int:
         healthz_server = _start_healthz_server(readiness, lookup)
 
         identity = IdentityResolver(ip_lookup=lookup)
-        passthrough = PassthroughAddon(identity=identity)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
         gate = GateAddon(
             identity=identity,
-            action_matcher=SlackSendMessageMatcher(),
+            action_matcher=SlackPostMessageMatcher(),
             db_session_factory=lambda tenant_id: get_session_with_tenant(
                 tenant_id=tenant_id
             ),
@@ -237,7 +230,6 @@ def main() -> int:
         async def _async_main() -> None:
             options = _build_mitm_options()
             master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
-            master.addons.add(passthrough)
             master.addons.add(gate)
             _install_signal_handlers(
                 asyncio.get_running_loop(),

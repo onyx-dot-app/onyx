@@ -1,23 +1,22 @@
-"""Ephemeral Redis state for the approval rendezvous between the
-egress proxy and the api-server.
+"""Ephemeral Redis state for the approval rendezvous.
 
-The Postgres ``action_approval`` row is the source of truth — its
+The Postgres ``action_approval`` row is the source of truth. Its
 conditional ``WHERE decision IS NULL`` UPDATE is the only arbiter of
-who wins a terminal write. Functions here are best-effort cache ops
-that drive UI freshness and unblock the proxy's wait; callers must
-swallow ``CACHE_TRANSIENT_ERRORS`` where appropriate.
+who wins a terminal write. Functions here are best-effort signals.
 
-Two Redis keys back the rendezvous:
+Two single-purpose Redis lists per coordination:
 
-* ``approval:live:{id}`` — a short-TTL presence flag the proxy owns
-  while it's parked on a decision. The chat shows an actionable card
-  iff this key exists AND the DB row is undecided. A hard proxy
-  crash lets the key lapse within ``LIVENESS_TTL_S`` and the card
-  disappears on its own.
+* ``approval:announce:{session_id}`` — the proxy ``RPUSH``es an
+  ``approval_id`` here right after committing the row. The api-server's
+  chat-stream merger ``BLPOP``s and emits an ``ApprovalRequestedPacket``
+  on the open SSE stream so the FE renders the card immediately. A
+  missed announce stays correct because the FE refetches ``/live`` on
+  reconnect / remount, but realtime fidelity depends on this path.
 
-* ``approval:wake:{id}`` — a one-shot BLPOP list the api-server
-  pushes onto when a decision is recorded, so the proxy's wait
-  unblocks immediately rather than timing out 180s later.
+* ``approval:wake:{approval_id}`` — the api-server ``RPUSH``es onto
+  this when a decision is recorded. The parked proxy's ``BLPOP``
+  unblocks so it can write the response back to the sandbox without
+  waiting out ``WAIT_TIMEOUT_S``.
 """
 
 import asyncio
@@ -26,18 +25,20 @@ from uuid import UUID
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import ApprovalDecision
 
-# Heartbeat is the cadence at which the proxy refreshes the liveness
-# key; the TTL is set to 4× the heartbeat so two missed refreshes
-# (network blip, GC pause) still leave the key alive.
-HEARTBEAT_INTERVAL_S = 15
-LIVENESS_TTL_S = HEARTBEAT_INTERVAL_S * 4  # 60s
-# Wake TTL just needs to outlive the gap between the API's RPUSH and
-# the proxy's BLPOP. If no one consumes it, the key auto-evicts.
+# Outer bound on how long the proxy will park on a single approval.
+# Also serves as the "is this row still actionable" window the
+# ``/live`` endpoint applies — rows older than this with
+# ``decision IS NULL`` are considered orphaned.
+WAIT_TIMEOUT_S = 180
+
+# A never-consumed announce / wake auto-evicts. The values only need
+# to outlive the gap between RPUSH and the consumer's BLPOP.
+ANNOUNCE_TTL_S = 60
 WAKE_TTL_S = 30
 
 
-def _live_key(approval_id: UUID) -> str:
-    return f"approval:live:{approval_id}"
+def announce_key(session_id: UUID) -> str:
+    return f"approval:announce:{session_id}"
 
 
 def _wake_key(approval_id: UUID) -> str:
@@ -45,20 +46,19 @@ def _wake_key(approval_id: UUID) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Proxy side — writes the liveness flag, waits on the wake channel.
+# Proxy side — announces new approvals, parks on the wake channel.
 # ---------------------------------------------------------------------------
 
 
-def set_alive(approval_id: UUID, proxy_instance_id: str, cache: CacheBackend) -> None:
-    """Refresh (or initially publish) the proxy's liveness flag.
+def announce_approval(approval_id: UUID, session_id: UUID, cache: CacheBackend) -> None:
+    """Push an approval_id onto the session's announce list.
 
-    Idempotent — used both for the initial set and each heartbeat tick.
+    Best-effort. A missed push degrades to "card surfaces only on the
+    FE's next ``/live`` refetch (reconnect / remount)" — correctness
+    is preserved, realtime is not.
     """
-    cache.set(_live_key(approval_id), proxy_instance_id, ex=LIVENESS_TTL_S)
-
-
-def clear_alive(approval_id: UUID, cache: CacheBackend) -> None:
-    cache.delete(_live_key(approval_id))
+    cache.rpush(announce_key(session_id), str(approval_id))
+    cache.expire(announce_key(session_id), ANNOUNCE_TTL_S)
 
 
 async def wait_for_wake(
@@ -66,10 +66,8 @@ async def wait_for_wake(
 ) -> ApprovalDecision | None:
     """Block until the api-server pushes a decision, or timeout.
 
-    Wraps the blocking BLPOP in ``asyncio.to_thread`` so the proxy's
-    event loop stays free. Returns the decoded ``ApprovalDecision`` or
-    ``None`` on timeout / unparseable payload (caller treats both the
-    same way: re-read the row from Postgres).
+    Returns the decoded decision, or ``None`` on timeout / unparseable
+    payload (caller treats both as "re-read the row from Postgres").
     """
     result = await asyncio.to_thread(cache.blpop, [_wake_key(approval_id)], timeout_s)
     if result is None:
@@ -80,19 +78,12 @@ async def wait_for_wake(
     try:
         return ApprovalDecision(value)
     except ValueError:
-        # Junk on the wake channel — stale key from a previous schema,
-        # or a manual RPUSH. Fall through to the read-back path so the
-        # gate doesn't crash.
         return None
 
 
 # ---------------------------------------------------------------------------
-# API side — reads the liveness flag, signals decisions onto the wake channel.
+# API side — pushes a decision onto the wake channel.
 # ---------------------------------------------------------------------------
-
-
-def is_alive(approval_id: UUID, cache: CacheBackend) -> bool:
-    return cache.exists(_live_key(approval_id))
 
 
 def send_wake(
@@ -100,23 +91,33 @@ def send_wake(
 ) -> None:
     """Push a decision onto the wake channel for the parked proxy.
 
-    Best-effort: a missed wake just means the proxy waits out its
-    timeout and reads the winning decision from Postgres. RPUSH +
-    EXPIRE so a never-consumed wake auto-evicts.
+    Best-effort. A missed wake just means the proxy waits out
+    ``WAIT_TIMEOUT_S`` and reads the winning decision from Postgres.
     """
     cache.rpush(_wake_key(approval_id), decision.value)
     cache.expire(_wake_key(approval_id), WAKE_TTL_S)
 
 
-def finalize(
-    approval_id: UUID, decision: ApprovalDecision, cache: CacheBackend
-) -> None:
-    """End-of-life cache cleanup after a terminal decision is recorded.
+# ---------------------------------------------------------------------------
+# Chat-stream merger side — drains announces during an active turn.
+# ---------------------------------------------------------------------------
 
-    Clears the liveness flag (so the chat hides the card) and pushes
-    the decision onto the wake channel (so the proxy unblocks).
-    Cleared first so a racing ``is_alive`` check sees the terminal
-    state immediately.
+
+def pop_announcement(
+    session_id: UUID, timeout_s: int, cache: CacheBackend
+) -> UUID | None:
+    """BLPOP one announce_id for the session, or ``None`` on timeout.
+
+    Synchronous; intended to run in a producer thread feeding the
+    chat-stream merge queue.
     """
-    clear_alive(approval_id, cache)
-    send_wake(approval_id, decision, cache)
+    result = cache.blpop([announce_key(session_id)], timeout_s)
+    if result is None:
+        return None
+    _key, value = result
+    if isinstance(value, bytes):
+        value = value.decode()
+    try:
+        return UUID(value)
+    except ValueError:
+        return None

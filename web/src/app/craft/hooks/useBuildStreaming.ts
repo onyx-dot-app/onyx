@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useSWRConfig } from "swr";
 
 import {
   Artifact,
@@ -15,6 +16,7 @@ import {
   generateFollowupSuggestions,
   RateLimitError,
 } from "@/app/craft/services/apiServices";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { StreamItem } from "@/app/craft/types/displayTypes";
@@ -31,6 +33,7 @@ import { parsePacket } from "@/app/craft/utils/parsePacket";
  * - Tool calls are interleaved with text in the exact order they arrive
  */
 export function useBuildStreaming() {
+  const { mutate: globalMutate } = useSWRConfig();
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
   );
@@ -395,6 +398,14 @@ export function useBuildStreaming() {
               break;
             }
 
+            // Sandbox-proxy gated an egress request — invalidate the
+            // session's /live SWR cache so any subscribed approval
+            // card refetches and surfaces immediately.
+            case "approval_requested": {
+              void globalMutate(SWR_KEYS.buildSessionLiveApprovals(sessionId));
+              break;
+            }
+
             // Error
             case "error": {
               updateSessionData(sessionId, {
@@ -442,6 +453,7 @@ export function useBuildStreaming() {
       OUTPUT_FILE_DETECTORS,
       setFollowupSuggestions,
       setSuggestionsLoading,
+      globalMutate,
     ]
   );
 
