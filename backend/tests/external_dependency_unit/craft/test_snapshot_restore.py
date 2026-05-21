@@ -219,11 +219,15 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 
     members = _list_archive_members(archive)
     # AGENTS.md, opencode.json live at the session root — they must not be
-    # captured. Likewise the .opencode/skills symlink (which targets
+    # captured. Match the session-root path only (the snapshot tars from the
+    # session dir, so the root would show up as ``AGENTS.md`` or
+    # ``./AGENTS.md``). The scaffolded Next.js project under outputs/web/
+    # ships its own AGENTS.md which is legitimate user code and must remain.
+    # Likewise the .opencode/skills symlink (which targets
     # /workspace/managed/skills) must not leak the managed tree.
     for forbidden in ("AGENTS.md", "opencode.json"):
-        assert not any(m.endswith(forbidden) for m in members), (
-            f"{forbidden} must not appear in snapshot. Members: {members}"
+        assert not any(m in (forbidden, f"./{forbidden}") for m in members), (
+            f"{forbidden} must not appear at snapshot root. Members: {members}"
         )
     assert not any("managed/skills" in m for m in members), (
         f"managed/skills/* must not appear in snapshot. Members: {members}"
