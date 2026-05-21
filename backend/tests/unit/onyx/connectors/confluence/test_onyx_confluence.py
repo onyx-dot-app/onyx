@@ -1094,6 +1094,70 @@ def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
     assert all(f"limit={requested_limit}" in p for p in mock_get_call_paths)
 
 
+def test_paginate_url_server_re_derives_start_when_dc_under_counts(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """#4129: no-callback Server callers (paginated_cql_retrieval, slim
+    docs, etc.) must re-derive ``start`` when DC under-counts
+    ``_links.next.start``.
+    """
+    requested_limit = 10
+    server_cap = 3
+    all_ids = list(range(1, 9))
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        start = 0
+        if "start=" in path:
+            start = int(path.split("start=", 1)[1].split("&", 1)[0])
+
+        ids_on_page = all_ids[start : start + server_cap]
+        has_more = (start + server_cap) < len(all_ids)
+        # Simulate the bug: _links.next.start advances by requested_limit
+        # (10) rather than server_cap (3).
+        links: dict[str, str] = {}
+        if has_more:
+            links["next"] = (
+                f"/rest/api/content/search?cql=type=page"
+                f"&limit={requested_limit}&start={start + requested_limit}"
+            )
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"id": i} for i in ids_on_page],
+                "_links": links,
+                "size": len(ids_on_page),
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(
+        confluence_server_client.paginated_cql_retrieval(
+            cql="type=page", limit=requested_limit
+        )
+    )
+
+    assert [r["id"] for r in returned] == all_ids
+    starts_seen = []
+    for path in mock_get_call_paths:
+        if "start=" in path:
+            starts_seen.append(int(path.split("start=", 1)[1].split("&", 1)[0]))
+        else:
+            starts_seen.append(0)
+    assert starts_seen == [0, 3, 6]
+
+
 def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
     confluence_server_client: OnyxConfluence,
 ) -> None:
