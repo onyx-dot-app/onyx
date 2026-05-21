@@ -263,21 +263,55 @@ class TestProxyRequestWiring:
 
         monkeypatch.setattr(api.httpx, "Client", FakeClient)
 
-        # Send every deny-list entry as input, so dropping any entry from
-        # EXCLUDED_REQUEST_HEADERS surfaces here as a leak in `forwarded_headers`.
-        sensitive_headers: dict[str, str] = {
-            key: f"SHOULD-NOT-LEAK-{key}" for key in api.EXCLUDED_REQUEST_HEADERS
+        # Security spec: every header here must never reach the sandbox,
+        # regardless of how EXCLUDED_REQUEST_HEADERS evolves. Removing a key
+        # from the deny-list while leaving it here surfaces as a leak below.
+        # Mixed-case keys exercise the case-insensitive comparator.
+        sensitive_headers = {
+            "host": "app.onyx.local",
+            "content-length": "7",
+            "Connection": "keep-alive",
+            "Keep-Alive": "timeout=5",
+            "Proxy-Authenticate": "Basic",
+            "Proxy-Authorization": "Basic victim-proxy-token",
+            "TE": "trailers",
+            "Trailer": "Expires",
+            "Transfer-Encoding": "chunked",
+            "Upgrade": "websocket",
+            "Cookie": "fastapiusersauth=victim-session",
+            "Authorization": "Bearer victim-token",
+            "X-Api-Key": "victim-api-key",
+            "X-Auth-Token": "victim-auth-token",
+            "X-CSRF-Token": "csrf-token",
+            "X-XSRF-Token": "xsrf-token",
+            "Forwarded": "for=203.0.113.10;proto=https",
+            "X-Forwarded-For": "203.0.113.10",
+            "X-Forwarded-Host": "evil.example.com",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Server": "evil.example.com",
+            "X-Real-IP": "203.0.113.10",
+            "X-Client-IP": "203.0.113.10",
+            "CF-Connecting-IP": "203.0.113.10",
+            "True-Client-IP": "203.0.113.10",
+            "X-Forwarded-User": "victim@example.com",
+            "X-Forwarded-Email": "victim@example.com",
+            "X-Forwarded-Preferred-Username": "victim",
+            # x-onyx-* prefix matcher (not literal deny-list entries).
+            "X-Onyx-Authorization": "Bearer alt-victim-token",
+            "X-Onyx-Tenant-ID": "victim-tenant",
+            "X-Onyx-Request-ID": "abc-123",
+            "X-Onyx-Future-Header": "should-be-stripped-by-prefix",
         }
-        # Cover the `x-onyx-*` prefix matcher in `_is_header_excluded`. These
-        # keys are not in the literal deny-list set; the prefix is what strips
-        # them. Mixed-case here also exercises the case-insensitive comparator.
-        sensitive_headers["X-Onyx-Authorization"] = "Bearer alt-victim-token"
-        sensitive_headers["X-Onyx-Tenant-ID"] = "victim-tenant"
-        sensitive_headers["X-Onyx-Request-ID"] = "abc-123"
-        sensitive_headers["X-Onyx-Future-Header"] = "should-be-stripped-by-prefix"
-        # Promote one literal deny-list key to mixed-case to confirm the
-        # comparator lowercases before matching.
-        sensitive_headers["Cookie"] = sensitive_headers.pop("cookie")
+
+        # Completeness check: every literal deny-list entry is covered above.
+        # If a new entry is added to EXCLUDED_REQUEST_HEADERS without also
+        # being added here, this assertion fails and forces the test to grow.
+        covered = {key.lower() for key in sensitive_headers}
+        assert api.EXCLUDED_REQUEST_HEADERS <= covered, (
+            f"Deny-list entries missing from test input: "
+            f"{api.EXCLUDED_REQUEST_HEADERS - covered}"
+        )
 
         benign_headers = {"accept": "text/plain", "user-agent": "pytest"}
         request = cast(
