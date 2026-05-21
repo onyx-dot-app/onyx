@@ -15,7 +15,7 @@ import {
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
 import { toast } from "@/hooks/useToast";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
 export function BotConfigCard() {

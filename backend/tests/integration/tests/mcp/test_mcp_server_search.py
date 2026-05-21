@@ -97,7 +97,6 @@ def _auth_headers(user: DATestUser, name: str) -> dict[str, str]:
 
 
 def test_mcp_document_search_flow(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test the complete MCP search flow: initialization, resources, tools, and search."""
@@ -154,7 +153,6 @@ def test_mcp_document_search_flow(
     reason="User group permissions are Enterprise-only",
 )
 def test_mcp_search_respects_acl_filters(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test that search respects ACL filters - privileged users can access, others cannot."""
@@ -214,7 +212,6 @@ def test_mcp_search_respects_acl_filters(
 
 
 def test_mcp_search_filters_by_document_set(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Passing document_set_names should scope results to the named set."""

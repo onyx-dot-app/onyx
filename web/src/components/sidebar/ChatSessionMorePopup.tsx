@@ -11,7 +11,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
-import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";

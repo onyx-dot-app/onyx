@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.5
+version: 0.5.6
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,13 +17,13 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Optional External Secrets Operator support. Set
-        externalSecret.enabled=true to render an ExternalSecret CR that
-        materializes one shared Secret from an upstream secret manager (AWS
-        Secrets Manager, GCP Secret Manager, Vault, ...). Point each
-        auth.*.existingSecret at externalSecret.secretName, and use
-        extraEnvFromSecret to project loose env-var secrets via envFrom. Off
-        by default; rendered output is unchanged when disabled.
+      description: Safeguard against destructive upgrades from chart 0.4.x.
+        A pre-render check fails `helm upgrade` if the legacy `da-vespa`
+        StatefulSet is still present in the release namespace, so the
+        Vespa data volume is not silently deleted by the 0.5.0 subchart
+        removal. Override via legacyVespaCheck.acknowledged=true once
+        migrated to external Vespa, or legacyVespaCheck.enabled=false
+        to disable entirely. See deployment/helm/MIGRATION.md.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

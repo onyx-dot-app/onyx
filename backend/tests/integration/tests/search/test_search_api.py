@@ -35,7 +35,6 @@ def _search(
 
 
 def test_basic_search_returns_results(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -58,7 +57,6 @@ def test_basic_search_returns_results(
 
 
 def test_document_set_filtering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -97,7 +95,6 @@ def test_document_set_filtering(
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -138,7 +135,6 @@ def test_acl_enforcement(
 
 
 def test_persona_scoped_search(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -178,7 +174,6 @@ def test_persona_scoped_search(
 
 
 def test_invalid_persona_returns_404(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -186,9 +181,7 @@ def test_invalid_persona_returns_404(
     assert resp.status_code == 404
 
 
-def test_unauthenticated_returns_401(
-    reset: None,  # noqa: ARG001
-) -> None:
+def test_unauthenticated_returns_401() -> None:
     resp = requests.post(
         SEARCH_URL,
         json={"query": "test"},

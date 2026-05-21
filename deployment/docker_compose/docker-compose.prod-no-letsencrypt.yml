@@ -300,7 +300,7 @@ services:
       && cp -a /nginx-templates/. /etc/nginx/conf.d/
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
-      && /tmp/run-nginx.sh app.conf.template.prod.no-letsencrypt"
+      && /tmp/run-nginx.sh app.conf.template.no-letsencrypt"
     env_file:
       - .env.nginx
     environment:

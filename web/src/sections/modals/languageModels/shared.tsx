@@ -529,7 +529,7 @@ export function ModelSelectionField({
         {models.length === 0 ? (
           <EmptyMessageCard title="No models available." padding="sm" />
         ) : (
-          <Section gap={0.25}>
+          <Section gap={0.25} alignItems="stretch">
             {(() => {
               const displayModels = isAutoMode ? visibleModels : models;
               const isFoldable = displayModels.length > FOLD_THRESHOLD;

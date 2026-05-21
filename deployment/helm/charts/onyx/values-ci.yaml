@@ -1,0 +1,36 @@
+# Values overlay for the Craft K8s CI lane (pr-craft-k8s-tests.yml).
+#
+# The CI workflow renders specific templates with `helm template --show-only`
+# and applies them to a kind cluster, so chart edits flow into the test lane
+# automatically. When you add a new chart component that the K8s sandbox tests
+# depend on, render it here and apply it in the workflow.
+
+configMap:
+  ENABLE_CRAFT: "true"
+  # Placeholder; the K8s sandbox tests don't call back to it. Required to
+  # satisfy the chart's fail() guard for ENABLE_CRAFT=true.
+  SANDBOX_API_SERVER_URL: "http://api.invalid"
+
+# Placeholder secret values so auth-secrets.yaml renders without erroring.
+# Postgres/Redis/MinIO actually run in docker-compose alongside the kind
+# cluster in this lane (see pr-craft-k8s-tests.yml), so the in-chart values
+# only need to satisfy the chart's pre-validate fail() guards.
+auth:
+  postgresql:
+    values:
+      username: "postgres"
+      password: "postgres"
+  redis:
+    values:
+      redis_password: "password"
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+  opensearch:
+    values:
+      opensearch_admin_password: "ci-test-not-used"
+  sandboxPushSecret:
+    enabled: true
+    values:
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="

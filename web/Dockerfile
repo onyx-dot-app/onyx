@@ -11,18 +11,20 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
 
 # Copy package files + the full opal workspace source so that opal's `prepare`
-# lifecycle hook (which runs during `npm ci` for workspace packages) can build
+# lifecycle hook (which runs during `bun install` for workspace packages) can build
 # `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
 # extends web's `tsconfig.json`, so that file must also be present at install
 # time for the DTS build to succeed.
-COPY package.json package-lock.json tsconfig.json ./
+COPY package.json bun.lock tsconfig.json ./
 COPY lib/opal/ ./lib/opal/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
-RUN npm ci
+RUN bun install --frozen-lockfile
 
 # pull in remaining source code
 COPY . .

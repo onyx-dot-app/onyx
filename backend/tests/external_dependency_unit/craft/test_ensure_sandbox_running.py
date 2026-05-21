@@ -15,6 +15,7 @@ DB doesn't seed a default LLM provider.
 """
 
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.manager import SandboxProvisioningError
@@ -38,7 +40,7 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 # valid template directories. Without this, ``_validate_templates()`` raises
 # in CI / dev environments where ``/templates/{outputs,venv}`` don't exist.
 @pytest.fixture(autouse=True)
-def _autouse_local_sandbox_paths(local_sandbox_paths: object) -> None:  # noqa: ARG001
+def _autouse_local_sandbox_paths(local_sandbox_paths: Path) -> None:  # noqa: ARG001
     return None
 
 
@@ -69,8 +71,6 @@ def sandbox_cleanup() -> Generator[list[UUID], None, None]:
     backends. Swallows errors during teardown — the goal is cleanup, not
     a second assertion surface.
     """
-    from onyx.server.features.build.sandbox import get_sandbox_manager
-
     tracked: list[UUID] = []
     yield tracked
     mgr = get_sandbox_manager()

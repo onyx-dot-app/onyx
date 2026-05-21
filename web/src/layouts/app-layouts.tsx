@@ -39,7 +39,7 @@ import {
 import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
-import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Popover, PopoverMenu } from "@opal/components";

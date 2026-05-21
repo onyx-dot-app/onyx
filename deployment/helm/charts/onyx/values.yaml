@@ -1189,6 +1189,17 @@ externalSecret:
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
+# -- Safeguards against destructive upgrades from chart 0.4.x. Chart 0.5.0
+# removed the bundled Vespa subchart; the check below fails `helm upgrade`
+# if the legacy `da-vespa` StatefulSet is still in the namespace, so
+# the StatefulSet and its Vespa data volume are not silently deleted.
+# Set `acknowledged: true` once you've migrated to external Vespa, or
+# `enabled: false` to disable the check entirely.
+# See deployment/helm/MIGRATION.md.
+legacyVespaCheck:
+  enabled: true
+  acknowledged: false
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
@@ -1336,6 +1347,14 @@ auth:
       ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
     values:
       private_key: ""
+
+# NetworkPolicy for the per-sandbox push daemon (port 8731).
+# In prod the strict default is correct: only api_server pods can push.
+# Local-dev enables `allowTelepresenceAmbassador` via values-localdev.yaml so
+# that traffic intercepted from a developer's laptop (which enters the cluster
+# as the telepresence traffic-manager pod) is also permitted.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
 
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this

@@ -29,7 +29,7 @@ import {
 import Switch from "@/refresh-components/inputs/Switch";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { Tooltip } from "@opal/components";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 
 /**

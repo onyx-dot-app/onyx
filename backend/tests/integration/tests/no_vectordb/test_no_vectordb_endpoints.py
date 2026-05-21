@@ -25,7 +25,6 @@ def _headers(user: DATestUser) -> dict[str, str]:
 
 
 def test_admin_search_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
@@ -37,7 +36,6 @@ def test_admin_search_returns_501(
 
 
 def test_document_size_info_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
@@ -49,7 +47,6 @@ def test_document_size_info_returns_501(
 
 
 def test_document_chunk_info_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
@@ -61,7 +58,6 @@ def test_document_chunk_info_returns_501(
 
 
 def test_set_new_search_settings_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
@@ -73,7 +69,6 @@ def test_set_new_search_settings_returns_501(
 
 
 def test_cancel_new_embedding_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
@@ -84,7 +79,6 @@ def test_cancel_new_embedding_returns_501(
 
 
 def test_connector_router_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """The entire /manage router is gated — any connector endpoint should 501."""
@@ -96,7 +90,6 @@ def test_connector_router_returns_501(
 
 
 def test_ingestion_post_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.post(
@@ -108,7 +101,6 @@ def test_ingestion_post_returns_501(
 
 
 def test_ingestion_delete_returns_501(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.delete(
@@ -124,7 +116,6 @@ def test_ingestion_delete_returns_501(
 
 
 def test_settings_endpoint_works(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
@@ -137,7 +128,6 @@ def test_settings_endpoint_works(
 
 
 def test_document_set_list_works(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
@@ -148,7 +138,6 @@ def test_document_set_list_works(
 
 
 def test_persona_list_works(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(
@@ -159,7 +148,6 @@ def test_persona_list_works(
 
 
 def test_tool_list_works(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     resp = requests.get(

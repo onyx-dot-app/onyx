@@ -3,7 +3,6 @@ self-hosted-runner:
   labels:
     - extras=ecr-cache
     - extras=s3-cache
-    - hdd=256
     - runs-on
     - runner=1cpu-linux-arm64
     - runner=1cpu-linux-x64
@@ -18,6 +17,7 @@ self-hosted-runner:
     - ubuntu-slim # Currently in public preview
     - volume=40gb
     - volume=50gb
+    - volume=100gb
 
 # Configuration variables in array of strings defined in your repository or
 # organization. `null` means disabling configuration variables check.
