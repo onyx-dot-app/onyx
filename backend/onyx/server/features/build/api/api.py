@@ -299,15 +299,12 @@ def _check_webapp_access(
 ) -> BuildSession:
     """Check if user can access a session's webapp.
 
-    - public_global: accessible by anyone (no auth required)
-    - public_org: accessible by any authenticated user
     - private: only accessible by the session owner
+    - public_org: accessible by any authenticated user
     """
     session = db_session.get(BuildSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
-        return session
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
@@ -329,8 +326,11 @@ def _offline_html_response() -> Response:
     return Response(content=html, status_code=503, media_type="text/html")
 
 
-# Public router for webapp proxy — no authentication required
-# (access controlled per-session via sharing_scope)
+# Router for the webapp proxy. The route is exempted from the global auth
+# middleware (see PUBLIC_ENDPOINT_SPECS in auth_check.py) so the handler can
+# return a friendly redirect to /auth/login for unauthenticated browsers
+# instead of a bare 401. Auth is enforced inside the handler via
+# _check_webapp_access; never wire a handler here that doesn't enforce it.
 public_build_router = APIRouter(prefix="/build")
 
 
@@ -347,7 +347,8 @@ def get_webapp(
 ) -> StreamingResponse | Response:
     """Proxy the webapp for a specific session (root and subpaths).
 
-    Accessible without authentication when sharing_scope is public_global.
+    Requires authentication; access is further gated by the session's
+    sharing_scope (private = owner only, public_org = any org member).
     Returns a friendly offline page when the sandbox is not running.
     """
     try:
