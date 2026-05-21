@@ -20,8 +20,11 @@ on:
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
-      - "deployment/helm/charts/onyx/templates/sandbox-namespace.yaml"
-      - "deployment/helm/charts/onyx/values-ci.yaml"
+      # Watch the whole chart, not just the templates we render — shared
+      # inputs like _helpers.tpl, values.yaml, and Chart.yaml all feed
+      # into `helm template --show-only`, so a chart edit anywhere can
+      # break the render/apply flow.
+      - "deployment/helm/charts/onyx/**"
 
 permissions:
   contents: read
