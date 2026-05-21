@@ -62,7 +62,6 @@ def _file_is_gone(file_id: UUID, user: DATestUser, timeout: int = 15) -> None:
 
 
 def test_file_upload_process_delete_lifecycle(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -123,7 +122,6 @@ def test_file_upload_process_delete_lifecycle(
 
 
 def test_delete_blocked_while_associated(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:

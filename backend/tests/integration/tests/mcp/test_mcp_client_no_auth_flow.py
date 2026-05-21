@@ -84,7 +84,6 @@ def ensure_mcp_server_exists() -> None:
 
 def test_mcp_client_no_auth_flow(
     mcp_no_auth_server: None,  # noqa: ARG001
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001

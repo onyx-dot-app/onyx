@@ -94,7 +94,6 @@ def test_persona_pagination_basic(
 
 
 def test_persona_pagination_ordering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test ordering - display_priority ASC nulls last, then ID ASC."""
@@ -146,7 +145,6 @@ def test_persona_pagination_ordering(
 
 
 def test_persona_pagination_admin_endpoint(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test admin paginated endpoint returns PersonaSnapshot format."""
@@ -177,7 +175,6 @@ def test_persona_pagination_admin_endpoint(
 
 
 def test_persona_pagination_with_deleted(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test pagination with include_deleted parameter."""
@@ -280,7 +277,6 @@ def test_persona_pagination_count_accuracy(
 
 
 def test_persona_pagination_user_permissions(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
