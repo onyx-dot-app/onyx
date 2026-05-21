@@ -1,37 +1,18 @@
 name: "Install Python deps and generate OpenAPI client"
-description: "Runs uv sync against the bind-mounted workspace, generates openapi.json from the FastAPI app, and produces the Python OpenAPI client."
-inputs:
-  devcontainer-image:
-    description: "Fully qualified devcontainer image reference (registry:tag)"
-    required: true
+description: "Sets up a host-side Python venv with backend deps and runs `ods openapi all` to produce backend/generated/openapi.json and the Python client."
 runs:
   using: "composite"
   steps:
-    - name: Install Python deps and generate OpenAPI client
+    - name: Setup Python and Install Dependencies
+      uses: ./.github/actions/setup-python-and-install-dependencies
+      with:
+        requirements: |
+          backend/requirements/default.txt
+          backend/requirements/dev.txt
+
+    - name: Generate OpenAPI schema and Python client
       shell: bash
       env:
-        DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
-        WORKSPACE: ${{ github.workspace }}
+        LICENSE_ENFORCEMENT_ENABLED: "false"
       run: |
-        docker run --rm \
-          -v "${WORKSPACE}:/workspace" \
-          -w /workspace \
-          "${DEVCONTAINER_IMAGE}" \
-          uv sync --frozen --no-group model_server
-
-        docker run --rm \
-          -v "${WORKSPACE}:/workspace" \
-          -w /workspace/backend \
-          -e LICENSE_ENFORCEMENT_ENABLED=false \
-          "${DEVCONTAINER_IMAGE}" \
-          uv run python scripts/onyx_openapi_schema.py --filename openapi.json
-
-        docker run --rm \
-          -v "${WORKSPACE}/backend:/local" \
-          openapitools/openapi-generator-cli:v7.22.0@sha256:1f459499a7c794aa0ea769c3c9b0eb54806c5ad2f68510a0ebb9338d0a626ced generate \
-            -i /local/openapi.json \
-            -g python \
-            -o /local/generated/onyx_openapi_client \
-            --package-name onyx_openapi_client \
-            --skip-validate-spec \
-            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+        ods openapi all

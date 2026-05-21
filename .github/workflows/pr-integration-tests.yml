@@ -459,8 +459,6 @@ jobs:
 
       - name: Install Python deps and generate OpenAPI client
         uses: ./.github/actions/install-deps-and-generate-openapi-client
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -526,7 +524,7 @@ jobs:
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              uv run pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
+              uv run --frozen --no-group model_server pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down":
@@ -610,8 +608,6 @@ jobs:
 
       - name: Install Python deps and generate OpenAPI client
         uses: ./.github/actions/install-deps-and-generate-openapi-client
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
@@ -638,7 +634,7 @@ jobs:
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              uv run pytest -v --tb=short -rs tests/integration/tests/no_vectordb
+              uv run --frozen --no-group model_server pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump API server logs (onyx-lite)
         if: always()
@@ -722,8 +718,6 @@ jobs:
 
       - name: Install Python deps and generate OpenAPI client
         uses: ./.github/actions/install-deps-and-generate-openapi-client
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Multi-Tenant Integration Tests
         env:
@@ -757,7 +751,7 @@ jobs:
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
             ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            uv run pytest -v --tb=short -rs tests/integration/multitenant_tests
+            uv run --frozen --no-group model_server pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
         if: always()
