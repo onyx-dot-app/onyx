@@ -43,6 +43,17 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
+# System packages backend Python deps need at install or runtime. Python
+# deps themselves are not baked in — CI runs `uv sync` against the
+# bind-mounted workspace, and daily dev uses their own .venv.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  cmake \
+  gcc \
+  libxmlsec1-dev \
+  pkg-config \
+  postgresql-client \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \

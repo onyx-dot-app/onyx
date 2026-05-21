@@ -90,6 +90,35 @@ runs:
         docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
           python -m scripts.seed_dev_license
 
+    - name: Install Python deps and generate OpenAPI client
+      shell: bash
+      env:
+        RUNS_ON_ECR_CACHE: ${{ inputs.runs-on-ecr-cache }}
+        RUN_ID: ${{ inputs.run-id }}
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          ${RUNS_ON_ECR_CACHE}:nightly-llm-it-devcontainer-${RUN_ID} \
+          uv sync --frozen
+
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/backend \
+          -e LICENSE_ENFORCEMENT_ENABLED=false \
+          ${RUNS_ON_ECR_CACHE}:nightly-llm-it-devcontainer-${RUN_ID} \
+          uv run python scripts/onyx_openapi_schema.py --filename openapi.json
+
+        docker run --rm \
+          -v ${{ github.workspace }}/backend:/local \
+          openapitools/openapi-generator-cli:latest generate \
+            -i /local/openapi.json \
+            -g python \
+            -o /local/generated/onyx_openapi_client \
+            --package-name onyx_openapi_client \
+            --skip-validate-spec \
+            --openapi-normalizer "SIMPLIFY_ONEOF_ANYOF=true,SET_OAS3_NULLABLE=true"
+
     - name: Run nightly provider integration test
       uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
       env:
@@ -110,6 +139,8 @@ runs:
         command: |
           docker run --rm --network onyx_default \
             --name test-runner \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace/backend \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
@@ -131,5 +162,5 @@ runs:
             -e NIGHTLY_LLM_DEPLOYMENT_NAME="${NIGHTLY_LLM_DEPLOYMENT_NAME}" \
             -e NIGHTLY_LLM_CUSTOM_CONFIG_JSON="${NIGHTLY_LLM_CUSTOM_CONFIG_JSON}" \
             -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
-            ${RUNS_ON_ECR_CACHE}:nightly-llm-it-${RUN_ID} \
-            /app/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
+            ${RUNS_ON_ECR_CACHE}:nightly-llm-it-devcontainer-${RUN_ID} \
+            uv run pytest -v --tb=short -rs tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
