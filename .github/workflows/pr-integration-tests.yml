@@ -483,6 +483,7 @@ jobs:
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -625,6 +626,7 @@ jobs:
               --name test-runner \
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -735,6 +737,7 @@ jobs:
             --name test-runner \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace/backend \
+            -e INTEGRATION_TESTS_MODE=true \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
