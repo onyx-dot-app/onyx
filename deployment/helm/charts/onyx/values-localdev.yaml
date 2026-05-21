@@ -88,6 +88,17 @@ auth:
     values:
       private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
+# ---- Sandbox push NetworkPolicy ----
+#
+# Allow telepresence's traffic-manager (in the `ambassador` namespace) as a
+# permitted ingress source for the per-sandbox push daemon. When an api_server
+# is intercepted, outbound traffic from a developer's laptop enters the cluster
+# as the traffic-manager pod, not the api_server pod, so the prod-strict
+# policy (api_server-only) blocks skills + user-library hydration. Local-dev
+# clusters opt in here; prod overlays leave this off.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: true
+
 # ---- App pods ----
 #
 # Scaled to 0 since you run these locally via telepresence intercept.
