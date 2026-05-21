@@ -69,6 +69,7 @@ func runWebScript(args []string) {
 
 	bunArgs := []string{"run", scriptName}
 	if len(scriptArgs) > 0 {
+		// bun requires "--" to forward flags to the underlying script.
 		bunArgs = append(bunArgs, "--")
 		bunArgs = append(bunArgs, scriptArgs...)
 	}
