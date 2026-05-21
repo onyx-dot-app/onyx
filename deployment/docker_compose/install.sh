@@ -116,23 +116,23 @@ INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
 CRAFT_COMPOSE_FILE="docker-compose.craft.yml"
 
-# Build the -f flags for docker compose.
+# Populate COMPOSE_FILE_ARGS with the -f flags for docker compose.
 # Pass "true" as $1 to auto-detect previously-downloaded overlays (used by
 # shutdown/delete-data so users don't need to remember --lite/--include-craft).
-compose_file_args() {
+COMPOSE_FILE_ARGS=()
+build_compose_file_args() {
     local auto_detect="${1:-false}"
-    local args="-f docker-compose.yml"
+    COMPOSE_FILE_ARGS=(-f docker-compose.yml)
     if [[ "$LITE_MODE" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; }; then
-        args="$args -f ${LITE_COMPOSE_FILE}"
+        COMPOSE_FILE_ARGS+=(-f "${LITE_COMPOSE_FILE}")
     fi
     # Craft Docker sandbox backend is opt-in (--include-craft) so the host
     # Docker socket isn't bind-mounted on default deployments. Layer the
     # craft overlay on top when explicitly enabled, or auto-detect a
     # previously-downloaded overlay on shutdown/delete-data.
     if [[ "$INCLUDE_CRAFT" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; }; then
-        args="$args -f ${CRAFT_COMPOSE_FILE}"
+        COMPOSE_FILE_ARGS+=(-f "${CRAFT_COMPOSE_FILE}")
     fi
-    echo "$args"
 }
 
 # --- Downloader detection (curl with wget fallback) ---
@@ -341,8 +341,8 @@ if [ "$SHUTDOWN_MODE" = true ]; then
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) stop)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -394,8 +394,8 @@ if [ "$DELETE_DATA_MODE" = true ]; then
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) down -v)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -421,6 +421,7 @@ fi
 install_docker_linux() {
     local distro_id=""
     if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
         distro_id="$(. /etc/os-release && echo "${ID:-}")"
     fi
 
@@ -690,9 +691,6 @@ fi
 # Check Docker resources
 print_step "Verifying Docker resources"
 
-# Get Docker system info
-DOCKER_INFO=$(docker system info 2>/dev/null)
-
 # Try to get memory allocation (method varies by platform)
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS - Docker Desktop
@@ -903,7 +901,8 @@ ENV_FILE="${INSTALL_ROOT}/deployment/.env"
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
+    build_compose_file_args true
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
     if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
         print_error "Onyx services are currently running!"
         echo ""
@@ -1025,6 +1024,7 @@ else
 
     # TODO (jessica): Uncomment this once no auth users still have an account
     # Use basic auth by default
+    # shellcheck disable=SC2034  # Referenced by the commented-out auth prompt above.
     AUTH_SCHEMA="basic"
 
     # Create .env file from template
@@ -1116,15 +1116,24 @@ is_port_available() {
     # Try netcat first if available
     if command -v nc &> /dev/null; then
         # Try to connect to the port, if it fails, the port is available
-        ! nc -z localhost "$port" 2>/dev/null
+        if nc -z localhost "$port" 2>/dev/null; then
+            return 1
+        fi
+        return 0
     # Fallback using curl/telnet approach
     elif command -v curl &> /dev/null; then
         # Try to connect with curl, if it fails, the port might be available
-        ! curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1
+        if curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     # Final fallback using lsof if available
     elif command -v lsof &> /dev/null; then
         # Check if any process is listening on the port
-        ! lsof -i ":$port" >/dev/null 2>&1
+        if lsof -i ":$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     else
         # No port checking tools available, assume port is available
         print_warning "No port checking tools available (nc, curl, lsof). Assuming port $port is available."
@@ -1137,7 +1146,7 @@ find_available_port() {
     local start_port=${1:-3000}
     local port=$start_port
 
-    while [ $port -le 65535 ]; do
+    while [ "$port" -le 65535 ]; do
         if is_port_available "$port"; then
             echo "$port"
             return 0
@@ -1227,8 +1236,8 @@ print_info "Downloading Docker images (this may take a while)..."
 # any `export IMAGE_TAG=...` inherited from the caller's shell. Compose's
 # substitution prefers shell env over .env, so without this an exported
 # IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
-(cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD $(compose_file_args) pull --quiet)
-if [ $? -eq 0 ]; then
+build_compose_file_args
+if (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
@@ -1253,18 +1262,18 @@ echo ""
 UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD $(compose_file_args) up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
     print_info "Current container status:"
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD $(compose_file_args) ps)
+    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1282,7 +1291,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
@@ -1315,7 +1324,7 @@ echo ""
 if is_interactive && command -v gh &>/dev/null; then
     prompt_yn_or_default "Enjoying Onyx? Star the repo on GitHub? [Y/n] " "Y"
     if [[ ! "$REPLY" =~ ^[Nn] ]]; then
-        if GH_PAGER= gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
+        if GH_PAGER='' gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
             print_success "Thanks for the star!"
         else
             print_info "Star us at: https://github.com/onyx-dot-app/onyx"
