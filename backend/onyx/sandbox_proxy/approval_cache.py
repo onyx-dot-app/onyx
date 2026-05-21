@@ -1,10 +1,11 @@
-"""Ephemeral Redis state for the approval rendezvous.
+"""Ephemeral cache state for the approval rendezvous.
 
 The Postgres `action_approval` row is the source of truth. Its
 conditional `WHERE decision IS NULL` UPDATE is the only arbiter of
-who wins a terminal write. Functions here are best-effort signals.
+who wins a terminal write. Functions here are best-effort signals
+over `CacheBackend` (Redis or Postgres-backed; either works).
 
-Two single-purpose Redis lists per coordination:
+Two single-purpose cache lists per coordination:
 
 * `approval:announce:{session_id}` — the proxy `RPUSH`es an
   `approval_id` here right after committing the row. The api-server's

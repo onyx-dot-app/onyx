@@ -133,8 +133,8 @@ def _build_lookup() -> K8sInformerLookup:
 def _build_cache_factory() -> "Callable[[str], CacheBackend]":
     """Return a tenant_id → CacheBackend factory for the gate addon.
 
-    The API side uses ``get_cache_backend(tenant_id=...)`` so the
-    gate must do the same to share the same Redis key prefix.
+    The API side uses `get_cache_backend(tenant_id=...)` so the gate
+    must do the same to share the same tenant-prefixed key namespace.
     """
     from onyx.cache.factory import get_cache_backend
 
