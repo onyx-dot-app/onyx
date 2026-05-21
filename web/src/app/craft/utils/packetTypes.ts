@@ -129,6 +129,12 @@ export interface ParsedError {
   message: string;
 }
 
+export interface ParsedApprovalRequested {
+  type: "approval_requested";
+  approvalId: string;
+  sessionId: string;
+}
+
 export interface ParsedUnknown {
   type: "unknown";
 }
@@ -140,5 +146,6 @@ export type ParsedPacket =
   | ParsedToolCallProgress
   | ParsedPromptResponse
   | ParsedArtifact
+  | ParsedApprovalRequested
   | ParsedError
   | ParsedUnknown;

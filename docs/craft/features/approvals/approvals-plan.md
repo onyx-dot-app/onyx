@@ -59,15 +59,18 @@ do not need to know approvals exist.
 - **Approval lifetime = request lifetime.** The approval is actionable while
 the underlying sandbox request is still in flight. Closing the chat does
 not kill the request (the proxy holds it open), so a user who reopens the
-chat within that window can still act. The proxy enforces a single
-internal wait timeout (default 180s) — users have ~3 minutes to decide.
-Past that, the proxy writes a terminal state on the approval row and
-returns `403 not_authorized` to the sandbox. If the sandbox-side socket
-closes first (SDK timeout shorter than 180s), the proxy still marks the
-row as expired before its coroutine exits — pending rows never linger
-just because a TCP connection went away. We do not preserve approvals
-beyond the live request — there's nothing for an approval to drive once
-the agent has moved on.
+chat within that window can still act. A single coordination constant
+— `WAIT_TIMEOUT_S = 180` in
+`backend/onyx/sandbox_proxy/approval_cache.py` — bounds both the proxy's
+park time and the "still actionable" window the `/live` endpoint applies.
+Users have ~3 minutes to decide. Past that, the proxy writes a terminal
+state on the approval row and returns `403 not_authorized` to the
+sandbox. If the sandbox-side socket closes first (SDK timeout shorter
+than 180s), the proxy still marks the row as expired before its
+coroutine exits — pending rows never linger just because a TCP
+connection went away. We do not preserve approvals beyond the live
+request — there's nothing for an approval to drive once the agent has
+moved on.
 - **Single source of truth.** All trigger sources write to the same
 `action_approval` table, surface in the same UI, respect the same
 policy.
@@ -144,12 +147,17 @@ choices once a deployment outgrows Python — a transition we're not close to.
 The numbered steps:
 
 1. The Craft agent makes an outbound HTTPS request; the proxy intercepts.
-2. The proxy matches it against a gated action, writes an
-   `action_approval` row, publishes a Redis liveness flag, and parks on
-   a per-approval wake channel.
-3. The API server dispatches an `APPROVAL_REQUESTED` notification (body
-   carries only `{approval_id, session_id, action_type}` — no payload
-   contents).
+2. The proxy matches it against a gated action, commits an
+   `action_approval` row, pushes the new `approval_id` onto the
+   session's announce list (`approval:announce:{session_id}`), and
+   parks on a per-approval wake channel
+   (`approval:wake:{approval_id}`).
+3. The api-server's chat-stream merger is already holding an SSE open
+   for the active agent turn. It drains the announce list and emits an
+   `ApprovalRequestedPacket` through the existing stream so the FE
+   renders the card immediately. A fallback `APPROVAL_REQUESTED`
+   notification is also dispatched (body carries only
+   `{approval_id, session_id, action_type}` — no payload contents).
 4. The user decides via the chat UI (4a). The API records the decision
    via a conditional `WHERE decision IS NULL` UPDATE, then pushes the
    decision onto the wake channel (4b) so the proxy unblocks without
@@ -163,58 +171,93 @@ same path.
 
 ### Data flow specifics
 
-- **Postgres `action_approval` is the source of truth.** The row's
-  `decision` column starts as `NULL` and is written exactly once by a
-  conditional `UPDATE ... WHERE decision IS NULL RETURNING *`. That
+- **Postgres `action_approval` is the single source of truth.** The
+  row's `decision` column starts as `NULL` and is written exactly once
+  by a conditional `UPDATE ... WHERE decision IS NULL RETURNING *`
+  (`try_record_decision` in
+  `backend/onyx/server/features/build/db/action_approval.py`). That
   conditional UPDATE is the only arbiter for concurrent decision
   writers — the API server's approve / reject and the proxy's
-  timeout / SIGTERM-drain expiry all race through it.
+  timeout / SIGTERM-drain expiry all race through it. Liveness is a
+  pure SQL predicate: `decision IS NULL AND created_at >= now() -
+  INTERVAL 'WAIT_TIMEOUT_S'`. Rows older than the wait window with
+  `decision IS NULL` are treated as orphaned (the proxy that parked
+  on them is gone and can no longer write EXPIRED) and excluded from
+  the `/live` feed. There is no heartbeat key, no presence flag, no
+  separate liveness signal — Postgres + a clock is the entire story.
 - **`ApprovalDecision` enum** (`backend/onyx/db/enums.py`) has three
   values: `APPROVED`, `REJECTED`, `EXPIRED`. There is **no `PENDING`
   value**; pending is represented by `decision IS NULL`. Clients can
   only submit `APPROVED` or `REJECTED`; `EXPIRED` is server-only,
   written by the proxy on timeout or SIGTERM drain.
-- **Redis is best-effort.** Two keys back the proxy ↔ API rendezvous
-  (defined in `backend/onyx/sandbox_proxy/approval_cache.py`):
-  - `approval:live:{id}` — proxy-owned heartbeat-refreshed presence
-    flag. Heartbeat cadence is 15s; TTL is 60s (4× the heartbeat) so
-    two missed refreshes still leave the key alive. A hard proxy
-    crash lets the key lapse on its own.
-  - `approval:wake:{id}` — one-shot BLPOP list. The API pushes the
-    decision onto it; the proxy's parked `wait_for_wake` returns
-    immediately. TTL 30s so a never-consumed wake auto-evicts.
+- **Two Redis lists for cross-process coordination** (defined in
+  `backend/onyx/sandbox_proxy/approval_cache.py`, both best-effort,
+  both tenant-prefixed via `get_cache_backend(tenant_id=...)`):
+  - `approval:announce:{session_id}` — proxy → api-server. The gate
+    `RPUSH`es the `approval_id` immediately after committing the
+    row; the api-server's chat-stream merger `BLPOP`s during the
+    open SSE turn. A missed announce degrades to "the FE refetches
+    `/live` on reconnect or remount" — correctness is preserved,
+    realtime is not. TTL 60s on the list.
+  - `approval:wake:{approval_id}` — api-server → proxy. On a
+    successful decision write the API `RPUSH`es the decision string
+    onto this list so the parked proxy's `BLPOP` unblocks instead
+    of waiting out `WAIT_TIMEOUT_S`. A missed wake just means the
+    proxy waits out the timeout and reads the winning decision from
+    Postgres. TTL 30s.
 - **Cache module functions** split by role:
-  - Proxy side: `set_alive`, `clear_alive`, `wait_for_wake`.
-  - API side: `is_alive`, `send_wake`.
-  - Shared: `finalize` (clear liveness + push wake in one call;
-    cleared first so a racing `is_alive` check sees the terminal state
-    immediately).
+  - Proxy side: `announce_approval`, `wait_for_wake`.
+  - API side: `send_wake`.
+  - Chat-stream merger side: `pop_announcement`.
 - **Tenant isolation** rides the existing infra: the cache backend
   applies a per-tenant Redis key prefix (callers pass `tenant_id`),
-  and per-tenant Postgres schemas isolate DB rows. The gate addon and
-  API both obtain a `CacheBackend` via
-  `get_cache_backend(tenant_id=...)`.
-- **No in-process `is_live` cache.** The decision API hits Redis
-  EXISTS directly per row. EXISTS is sub-ms; the realistic worst-case
-  load is one user polling one session, and an in-process memo would
-  add eviction, cross-replica staleness, and an invalidation site for
-  no win.
+  and per-tenant Postgres schemas isolate DB rows. The gate addon,
+  decision API, and chat-stream merger all obtain a `CacheBackend`
+  via `get_cache_backend(tenant_id=...)`.
+- **Coordination constants.** `WAIT_TIMEOUT_S = 180` is the only
+  knob shared across processes — proxy park time, `/live` cutoff,
+  and (transitively) the FE card's effective lifetime. The
+  announce-list `BLPOP` inside the merger uses a `timeout_s=1` so
+  the producer thread is responsive to merger shutdown; this is an
+  internal pacing knob, not a coordination bound.
 
 ### Chat surface integration
 
 - **Approvals are not BuildMessages.** The chat surface fetches live
   approvals via `GET /api/build/approvals/sessions/{id}/live` — a
-  separate endpoint that returns only rows where `decision IS NULL`
-  AND the Redis liveness key is present. Orphan rows left by a hard
-  proxy crash drop out within `LIVENESS_TTL_S`.
+  separate endpoint that returns rows where `decision IS NULL` AND
+  `created_at >= now() - WAIT_TIMEOUT_S`. Orphan rows left by a
+  hard proxy crash naturally drop off the feed when their
+  `created_at` ages past the cutoff.
+- **Realtime discovery piggybacks on the chat SSE stream.** The
+  agent turn endpoint already holds an SSE open while the agent is
+  running. `BuildSessionManager._merge_acp_with_announces`
+  (`backend/onyx/server/features/build/session/manager.py`)
+  interleaves ACP events with announce-list pops via two daemon
+  threads writing onto a shared `queue.Queue`: one drives the ACP
+  iterator, one `BLPOP`s `approval:announce:{session_id}` and
+  emits `ApprovalRequestedPacket` instances (defined in
+  `backend/onyx/server/features/build/api/packets.py`) into the
+  same stream. The packet carries only `{approval_id, session_id}`
+  — Postgres remains the source of truth for card contents. On the
+  FE, `useBuildStreaming` invalidates the
+  `SWR_KEYS.buildSessionLiveApprovals(sessionId)` cache key on
+  receipt and `useSWR` consumers refetch automatically.
+- **Fallback discovery for users not in the active SSE.** A
+  best-effort `APPROVAL_REQUESTED` notification is also dispatched
+  from the gate addon so users who reopen the chat later see the
+  pending card. The FE's own `useSWR` refetch on remount /
+  reconnect picks up anything the realtime path misses.
 - **After resolution the card disappears.** The agent's subsequent
   tool-call BuildMessage is the only permanent chat record of the
   action's outcome (success on APPROVED, the sandbox's handling of
   the 403 on REJECTED / EXPIRED). There is no `is_live` field on
-  `MessageResponse`.
+  `MessageResponse`; the `is_live` field on `ApprovalView` is
+  derived per-response from `decision IS NULL AND created_at >=
+  cutoff`.
 - **Audit history is a sibling endpoint.**
   `GET /api/build/approvals/sessions/{id}` returns the full history
-  filterable by `decision`, `from_dt`, `to_dt`.
+  filterable by `decision`, `since`, `until`.
 
 ### Failure-mode posture
 
@@ -252,24 +295,26 @@ forwarding upstream would make the audit log lie.
 
 The drain (`GateAddon.drain_inflight` →
 `backend/onyx/sandbox_proxy/server.py::_install_signal_handlers`)
-iterates the `_inflight_tenant_by_approval` dict and for each
-`(approval_id, tenant_id)`:
+runs in two phases.
 
-1. Issues the same conditional UPDATE the timeout path uses. Wins →
-   row is EXPIRED. Loses → re-reads and gets the API's already-written
-   decision.
-2. Calls `approval_cache.finalize(...)` to clear liveness and push the
-   decision onto the wake channel.
+Phase 1. For every entry in `_parked_approvals` (the `approval_id →
+tenant_id` dict the gate maintains for every in-flight park):
 
-After the iteration, `drain_inflight` `asyncio.wait`s on the
-`GateAddon._inflight_tasks` set — every `request()` task is registered
-on entry — so the drain actually blocks until each parked coroutine
-has serialized its response (including any upstream forward on
-APPROVED) before mitmproxy tears connections down. The outer cap is
-`_DRAIN_TIMEOUT_SECONDS` (10s) so a stuck DB / Redis call can't hang
+1. Issue the same conditional UPDATE the timeout path uses
+   (`_claim_expired_or_read_winner`). Win → row is EXPIRED. Lose →
+   re-read and use the API's already-written decision.
+2. `send_wake(approval_id, decision, …)` so the parked `BLPOP`
+   returns immediately instead of waiting out `WAIT_TIMEOUT_S`.
+
+Phase 2. `asyncio.wait` on `GateAddon._inflight_tasks` — every
+`request()` coroutine registers itself there on entry — so the drain
+actually blocks until each parked coroutine has serialized its
+response (including any upstream forward on APPROVED) before
+mitmproxy tears connections down. The outer cap is `_DRAIN_TIMEOUT_S
+= 10.0` in `server.py` so a stuck DB / Redis call can't hang
 shutdown indefinitely. The deployment's
 `terminationGracePeriodSeconds` sizes to bound the outer window —
-`_DRAIN_TIMEOUT_SECONDS + margin`, i.e. ≥ 20s.
+`_DRAIN_TIMEOUT_S + margin`, i.e. ≥ 20s.
 
 Policy is a config hierarchy, not a service: developer-defined actions, with
 admin per-action policy on top (require / deny / always allow), evaluated by
@@ -339,18 +384,22 @@ Three parts:
   column is nullable (`NULL` = pending);
   `backend/onyx/server/features/build/db/action_approval.py` is the
   single source of SQL; the conditional `WHERE decision IS NULL`
-  UPDATE in `record_decision` is the race-safe arbiter. The
+  UPDATE in `try_record_decision` is the race-safe arbiter. The
   user-facing API
   (`backend/onyx/server/features/build/approvals/api.py`) exposes
   three endpoints: live-rows feed for chat, audit query, decision
-  write.
-- **Gate wiring.** The proxy stops being pass-through. On a gated
-  request the gate addon writes the `action_approval` row and
-  publishes the Redis liveness key in one DB transaction (Redis
-  failure rolls the DB back), blocks on the per-approval wake channel
-  until a decision lands or the 180s wait elapses, then forwards or
-  rejects. Race-safe timeout / cancel / drain paths all flow through
-  the same conditional UPDATE.
+  write. Idempotent same-value double-clicks on `/decision` return
+  200; a different-value submission against an already-decided row
+  raises `CONFLICT`.
+- **Gate wiring.** The proxy stops being pass-through. The gate
+  addon resolves the sandbox identity directly per request via
+  `self._identity.resolve(src_ip)`, classifies the request through
+  `ActionMatcher`, commits the `action_approval` row, pushes the
+  `approval_id` onto the session's announce list, and parks on
+  `approval:wake:{approval_id}` until a decision lands or the
+  `WAIT_TIMEOUT_S` wait elapses, then forwards or rejects. Race-safe
+  timeout / cancel / drain paths all flow through the same
+  conditional UPDATE.
 - **Bash-tool timeout + agent prompt.** Opencode's bash-tool timeout
   config is outside our control in this repo (opencode is consumed
   as a binary). The mitigation is a sentence in the agent's system
@@ -362,9 +411,13 @@ notification deep link until Phase 3 lands the chat surface.
 
 ### Phase 3 — Chat Approval UI
 
-Inline approval card in the chat, driven by polling the
-`/approvals/sessions/{id}/live` endpoint: summary, structured payload,
-Approve / Reject buttons. The card is interactive while the underlying
+Inline approval card in the chat. Discovery is realtime: the existing
+chat SSE stream interleaves `ApprovalRequestedPacket` events from
+`_merge_acp_with_announces`, and the FE invalidates
+`SWR_KEYS.buildSessionLiveApprovals(sessionId)` on receipt so the
+`useSWR` consumer refetches `/approvals/sessions/{id}/live` and the
+card mounts. The card renders summary, structured payload, and
+Approve / Reject buttons. It is interactive while the underlying
 request is still in flight; once the row goes terminal (any of
 APPROVED / REJECTED / EXPIRED) the card disappears. The permanent
 chat record of the action's outcome is the agent's subsequent

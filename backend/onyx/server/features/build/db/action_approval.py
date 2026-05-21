@@ -1,13 +1,9 @@
 """Database operations for the action_approval table.
 
 A row records one agent-initiated gated action and its eventual
-terminal decision (APPROVED / REJECTED / EXPIRED). `decision IS NULL`
-is the pending / in-flight state.
-
-These functions follow the build-feature convention: they flush so the
-caller can read auto-generated columns back, but the caller still owns
-transaction commit. Cache (Redis) operations belong in
-`sandbox_proxy/approval_cache.py`, not here.
+terminal decision (APPROVED / REJECTED / EXPIRED). ``decision IS NULL``
+is the pending / in-flight state. The conditional UPDATE in
+``try_record_decision`` is the only race arbiter.
 """
 
 from datetime import datetime
@@ -34,12 +30,7 @@ def insert_action_approval(
     action_type: str,
     payload: dict[str, Any],
 ) -> ActionApproval:
-    """Insert a new pending action_approval row.
-
-    The row starts with ``decision IS NULL``; the primary key is
-    auto-generated via the ORM's ``default=uuid4``. Flushes so the
-    caller can read ``row.approval_id`` back.
-    """
+    """Insert a new pending row and return it."""
     row = ActionApproval(
         session_id=session_id,
         action_type=action_type,
@@ -50,17 +41,16 @@ def insert_action_approval(
     return row
 
 
-def record_decision(
+def try_record_decision(
     db_session: Session,
     *,
     approval_id: UUID,
     decision: ApprovalDecision,
 ) -> ActionApproval | None:
-    """Race-safe terminal write: only succeeds while ``decision IS NULL``.
+    """Conditional UPDATE: succeeds only while ``decision IS NULL``.
 
     Returns the updated row, or ``None`` if a decision was already
-    recorded. Callers handle the ``None`` case (idempotent retry vs
-    genuine CONFLICT).
+    recorded (caller decides between idempotent retry and CONFLICT).
     """
     stmt = (
         update(ActionApproval)
@@ -103,39 +93,39 @@ def list_session_action_approvals(
     session_id: UUID,
     *,
     decision: ApprovalDecision | None = None,
-    from_dt: datetime | None = None,
-    to_dt: datetime | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> list[ActionApproval]:
-    """User-scoped audit query.
-
-    ``decision=None`` returns every row including ``decision IS NULL``
-    (orphan attempts left by a hard proxy crash). Callers that want to
-    filter to a specific terminal state pass that enum value.
-    """
+    """Audit query for a session. ``decision=None`` includes pending rows."""
     stmt = select(ActionApproval).where(ActionApproval.session_id == session_id)
     if decision is not None:
         stmt = stmt.where(ActionApproval.decision == decision)
-    if from_dt is not None:
-        stmt = stmt.where(ActionApproval.created_at >= from_dt)
-    if to_dt is not None:
-        stmt = stmt.where(ActionApproval.created_at <= to_dt)
+    if since is not None:
+        stmt = stmt.where(ActionApproval.created_at >= since)
+    if until is not None:
+        stmt = stmt.where(ActionApproval.created_at <= until)
     stmt = stmt.order_by(ActionApproval.created_at.desc())
     return list(db_session.scalars(stmt))
 
 
 def list_session_pending_action_approvals(
-    db_session: Session, session_id: UUID
+    db_session: Session,
+    session_id: UUID,
+    *,
+    created_after: datetime | None = None,
 ) -> list[ActionApproval]:
-    """Return every row for the session that has not yet been decided.
+    """Return undecided rows for the session, optionally cutting off by age.
 
-    The decision API filters this further by checking each row's
-    Redis liveness key — rows that are pending but whose liveness has
-    lapsed (orphans from a hard proxy crash) are not actionable.
+    ``created_after`` lets callers exclude rows older than the proxy's
+    wait window (likely orphaned by a crashed proxy that can't write
+    EXPIRED itself).
     """
     stmt = (
         select(ActionApproval)
         .where(ActionApproval.session_id == session_id)
         .where(ActionApproval.decision.is_(None))
-        .order_by(ActionApproval.created_at.desc())
     )
+    if created_after is not None:
+        stmt = stmt.where(ActionApproval.created_at >= created_after)
+    stmt = stmt.order_by(ActionApproval.created_at.desc())
     return list(db_session.scalars(stmt))

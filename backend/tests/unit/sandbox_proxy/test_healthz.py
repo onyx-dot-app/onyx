@@ -91,13 +91,13 @@ def test_returns_200_when_fully_ready(
     assert "ok" in body
 
 
-def test_returns_503_when_draining(
+def test_returns_503_when_shutting_down(
     healthz: tuple[_Readiness, _FakeLookup, int],
 ) -> None:
     readiness, lookup, port = healthz
     readiness.ca_ready = True
     lookup._synced = True
-    readiness.draining = True
+    readiness.shutting_down = True
     status, _ = _get(port, "/healthz")
     assert status == 503
 
