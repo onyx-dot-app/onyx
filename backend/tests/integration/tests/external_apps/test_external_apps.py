@@ -62,12 +62,13 @@ def _assert_user_response_shape_is_safe(
     Runs as a Pydantic model-fields check rather than a dict-keys check so
     a future schema change cannot silently regress the protection.
     """
+    # `app_type` is intentionally NOT forbidden — it's the non-sensitive
+    # provider discriminator the UI needs and is exposed to users.
     forbidden_fields = {
         "organization_credentials",
         "auth_template",
         "upstream_url_patterns",
         "enabled",
-        "app_type",
     }
     actual_fields = set(user_app.model_fields.keys())
     leaked = forbidden_fields & actual_fields

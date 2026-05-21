@@ -382,8 +382,10 @@ class ExternalAppUserResponse(BaseModel):
     deleted/migrated templates are filtered out). `authenticated` is true
     iff `credential_values` covers every key in `credential_keys`.
 
-    Organization credentials and the raw auth template are intentionally
-    omitted — those are admin-only.
+    Admin-only fields (``organization_credentials``, ``auth_template``,
+    ``upstream_url_patterns``, ``enabled``) are intentionally omitted.
+    ``app_type`` is included — it's the non-sensitive provider
+    discriminator the UI needs to render the app.
     """
 
     id: int
