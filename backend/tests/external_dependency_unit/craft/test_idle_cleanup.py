@@ -3,9 +3,9 @@
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
 Redis. The sandbox operations (``list_session_workspaces``,
 ``create_snapshot``, ``terminate``) are routed through the
-``StubSandboxManager`` from ``conftest.py``. The task body is now
+``StubSandboxManager`` from ``conftest.py``. The task body is
 backend-agnostic, so we only need to install the stub via
-``get_sandbox_manager`` and force ``SANDBOX_BACKEND`` away from ``LOCAL``.
+``get_sandbox_manager``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.tasks import tasks as tasks_module
 from onyx.server.features.build.sandbox.tasks.tasks import cleanup_idle_sandboxes_task
@@ -38,17 +37,6 @@ from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _kubernetes_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force ``SANDBOX_BACKEND == KUBERNETES`` for the task body to execute.
-
-    The cleanup task short-circuits early when the configured backend is
-    LOCAL, so every test in this module needs the Kubernetes value
-    installed on the module-level constant.
-    """
-    monkeypatch.setattr(tasks_module, "SANDBOX_BACKEND", SandboxBackend.KUBERNETES)
 
 
 @pytest.fixture
