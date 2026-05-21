@@ -82,9 +82,18 @@ RUN npm install -g pptxgenjs && \
     npm cache clean --force && \
     rm -rf /root/.npm
 
-# Install opencode CLI as sandbox user so it goes to their home directory
+# Bun replaces npm for sandbox-session installs; see
+# docs/craft/features/bun-node-modules-dedup.md.
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash && \
+    /usr/local/bin/bun --version
+
 USER sandbox
 RUN curl -fsSL https://opencode.ai/install | bash
+# Pre-warm Bun's tarball cache in /home/sandbox/.bun so per-session installs
+# hit the local store. node_modules is dropped to keep image size bounded.
+RUN cd /workspace/templates/outputs/web && \
+    bun install --frozen-lockfile && \
+    rm -rf node_modules
 USER root
 
 # Add opencode to PATH (installs to ~/.opencode/bin)

@@ -71,6 +71,8 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
     SnapshotCreateRequest,
@@ -128,6 +130,7 @@ POD_READY_POLL_INTERVAL_SECONDS = 2
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
@@ -207,28 +210,27 @@ def _build_nextjs_start_script(
     Args:
         session_path: Path to the session directory (should be shell-safe)
         nextjs_port: Port number for the NextJS dev server
-        check_node_modules: If True, check for node_modules and run npm install if missing
+        check_node_modules: If True, check for node_modules and run bun install if missing
 
     Returns:
         Shell script string to start the NextJS server
     """
-    npm_install_check = ""
+    install_check = ""
     if check_node_modules:
-        npm_install_check = """
-# Check if npm dependencies are installed
+        install_check = f"""
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
     return f"""
 set -e
 cd {session_path}/outputs/web
-{npm_install_check}
-# Start npm run dev in background
+{install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -1181,25 +1183,30 @@ printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile
 printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
 """
 
-        # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
-# Copy outputs template (baked into image at build time)
 echo "Copying outputs template"
 if [ -d /workspace/templates/outputs ]; then
     cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # Install npm dependencies
-    echo "Installing npm dependencies..."
-    cd {session_path}/outputs/web && npm install
+    # .ready sentinel guards against a partial cp from an interrupted
+    # previous run satisfying the dir-exists check.
+    if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+        echo "Bootstrapping bun cache on workspace volume..."
+        rm -rf {BUN_CACHE_DIR}
+        cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+            || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+        touch {BUN_CACHE_DIR}/.ready
+    fi
+    cd {session_path}/outputs/web && \\
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at /workspace/templates/outputs"
     mkdir -p {session_path}/outputs/web
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup).
-        # Headless callers (scheduled tasks) pass nextjs_port=None and don't
-        # need a dev server — the agent's tools work without one and the
-        # preview iframe isn't attached.
+        # Headless callers (scheduled tasks) pass nextjs_port=None — the
+        # agent's tools work without a dev server.
         nextjs_start_script = (
             _build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=False

@@ -39,6 +39,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+# In-sandbox paths shared by every backend implementation. Kept in sync with
+# the SESSIONS_ROOT constants the individual managers define (those exist
+# separately because the K8s manager emits exec scripts and the Docker
+# manager mounts via the named volume — both happen to land at the same
+# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
+# own copy because it can't import from this package at runtime.
+BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
+BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
+
 # ACPEvent is a union type defined in both local and kubernetes modules
 # Using Any here to avoid circular imports - the actual type checking
 # happens in the implementation modules
