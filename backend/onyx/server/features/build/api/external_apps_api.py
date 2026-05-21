@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.external_app import create_external_app__no_commit
-from onyx.db.external_app import delete_external_app__no_commit
+from onyx.db.external_app import create_external_app
+from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_user_credentials_by_app_id
-from onyx.db.external_app import update_external_app__no_commit
-from onyx.db.external_app import upsert_external_app_user_credential__no_commit
+from onyx.db.external_app import update_external_app
+from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
@@ -84,7 +84,7 @@ def upsert_external_app(
     If `id` is provided but no app with that id exists, returns 404.
     """
     if request.id is not None:
-        app = update_external_app__no_commit(
+        app = update_external_app(
             db_session=db_session,
             external_app_id=request.id,
             name=request.name,
@@ -103,7 +103,7 @@ def upsert_external_app(
         # provider's skill_bundles/<provider>/ blob when the rendering
         # path lands.
         slug = f"{request.app_type.value.lower()}-{uuid.uuid4().hex[:8]}"
-        app = create_external_app__no_commit(
+        app = create_external_app(
             db_session=db_session,
             slug=slug,
             name=request.name,
@@ -118,7 +118,6 @@ def upsert_external_app(
             organization_credentials=request.organization_credentials,
         )
 
-    db_session.commit()
     return _to_admin_response(app)
 
 
@@ -133,7 +132,7 @@ def list_external_apps_admin(
 
 
 @router.delete("/admin/apps/{external_app_id}")
-def delete_external_app(
+def delete_external_app_admin(
     external_app_id: int,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -142,10 +141,7 @@ def delete_external_app(
 
     Returns 404 if no app with `external_app_id` exists.
     """
-    delete_external_app__no_commit(
-        db_session=db_session, external_app_id=external_app_id
-    )
-    db_session.commit()
+    delete_external_app(db_session=db_session, external_app_id=external_app_id)
 
 
 # =============================================================================
@@ -164,13 +160,12 @@ def upsert_user_credentials(
 
     Returns 404 if no app with `external_app_id` exists.
     """
-    upsert_external_app_user_credential__no_commit(
+    upsert_external_app_user_credential(
         db_session=db_session,
         external_app_id=external_app_id,
         user_id=user.id,
         user_credentials=request.user_credentials,
     )
-    db_session.commit()
 
 
 @router.get("/apps")

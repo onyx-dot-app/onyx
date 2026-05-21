@@ -223,7 +223,7 @@ def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
     return list(db_session.scalars(stmt))
 
 
-def create_skill(
+def create_skill__no_commit(
     *,
     slug: str,
     name: str,

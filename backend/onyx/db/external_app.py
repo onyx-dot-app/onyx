@@ -67,7 +67,7 @@ def get_user_credentials_by_app_id(
     return {row.external_app_id: row for row in db_session.scalars(stmt).all()}
 
 
-def create_external_app__no_commit(
+def create_external_app(
     db_session: Session,
     slug: str,
     name: str,
@@ -82,19 +82,20 @@ def create_external_app__no_commit(
     is_public: bool = False,
     author_user_id: UUID | None = None,
 ) -> ExternalApp:
-    """Create the backing Skill row and the ExternalApp that references
-    it in one transaction. The skill row owns display metadata
-    (name/description) and lifecycle (enabled); the external_app row
-    owns gateway state (auth_template, upstream patterns, org creds).
+    """Create the backing Skill row and the ExternalApp that references it,
+    committing both atomically. The skill row owns display metadata
+    (name/description) and lifecycle (enabled); the external_app row owns
+    gateway state (auth_template, upstream patterns, org creds).
 
-    `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision.
+    `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision
+    (before anything is committed).
     """
     # Deferred import: `db.skill` imports `is_user_authenticated_for_app`
     # from this module to filter listings, so the dependency only flows
     # one way at module-load time.
-    from onyx.db.skill import create_skill
+    from onyx.db.skill import create_skill__no_commit
 
-    skill = create_skill(
+    skill = create_skill__no_commit(
         slug=slug,
         name=name,
         description=description,
@@ -115,11 +116,11 @@ def create_external_app__no_commit(
         organization_credentials=organization_credentials,
     )
     db_session.add(app)
-    db_session.flush()
+    db_session.commit()
     return app
 
 
-def update_external_app__no_commit(
+def update_external_app(
     db_session: Session,
     external_app_id: int,
     name: str,
@@ -130,7 +131,8 @@ def update_external_app__no_commit(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
 ) -> ExternalApp:
-    """Replace mutable fields on the external app and its linked skill.
+    """Replace mutable fields on the external app and its linked skill,
+    committing both atomically.
 
     Skill-side fields: name, description, enabled.
     External-app-side fields: app_type, upstream_url_patterns,
@@ -157,17 +159,18 @@ def update_external_app__no_commit(
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
 
-    db_session.flush()
+    db_session.commit()
     return app
 
 
-def delete_external_app__no_commit(
+def delete_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> str | None:
     """Delete the linked Skill (FK ON DELETE CASCADE removes the
-    external_app row as well as user credentials). Returns the skill's
-    ``bundle_file_id`` so the caller can clean up FileStore.
+    external_app row as well as user credentials) and commit. Returns the
+    skill's ``bundle_file_id`` so the caller can clean up FileStore *after*
+    the delete is committed.
 
     Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
     """
@@ -180,17 +183,18 @@ def delete_external_app__no_commit(
 
     bundle_file_id = app.skill.bundle_file_id
     db_session.delete(app.skill)
-    db_session.flush()
+    db_session.commit()
     return bundle_file_id
 
 
-def upsert_external_app_user_credential__no_commit(
+def upsert_external_app_user_credential(
     db_session: Session,
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
 ) -> ExternalAppUserCredential:
-    """Create or replace the calling user's credentials for the given external app.
+    """Create or replace the calling user's credentials for the given external
+    app, and commit.
 
     Atomic via ON CONFLICT against the unique (external_app_id, user_id)
     constraint, so concurrent callers can't both insert a duplicate row.
@@ -218,5 +222,5 @@ def upsert_external_app_user_credential__no_commit(
     ).returning(ExternalAppUserCredential)
 
     cred = db_session.scalars(stmt).one()
-    db_session.flush()
+    db_session.commit()
     return cred
