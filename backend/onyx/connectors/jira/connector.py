@@ -9,6 +9,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from jira import JIRA
@@ -211,6 +212,92 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
 
     # Re-raise for other error types
     raise e
+
+
+def _handle_jsm_api_error(e: Exception, path: str) -> None:
+    status_code = getattr(e, "status_code", None)
+    error_text = getattr(e, "text", str(e))
+
+    if hasattr(e, "response") and e.response is not None:
+        response = e.response  # ty: ignore[unresolved-attribute]
+        status_code = response.status_code
+        try:
+            error_json = response.json()
+            error_text = str(error_json)
+        except Exception:
+            error_text = response.text
+
+    if status_code == 400:
+        raise ConnectorValidationError(
+            f"Invalid Jira Service Management request for {path}. Error: {error_text}"
+        )
+    if status_code == 401:
+        raise CredentialExpiredError(
+            "Jira Service Management credentials are expired or invalid (HTTP 401)."
+        )
+    if status_code == 403:
+        raise InsufficientPermissionsError(
+            f"Insufficient permissions to access Jira Service Management endpoint: {path}"
+        )
+    if status_code == 404:
+        raise ConnectorValidationError(
+            f"Jira Service Management resource was not found for {path}. Error: {error_text}"
+        )
+    if status_code == 429:
+        raise ConnectorValidationError(
+            "Validation failed due to Jira Service Management rate-limits being exceeded. Please try again later."
+        )
+
+    raise e
+
+
+def _build_jsm_api_url(jira_client: JIRA, path: str) -> str:
+    server = str(jira_client._options["server"]).rstrip("/")
+    return f"{server}/rest/servicedeskapi/{path.lstrip('/')}"
+
+
+def _get_jsm_json(
+    jira_client: JIRA,
+    path: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    url = _build_jsm_api_url(jira_client, path)
+    try:
+        response = jira_client._session.get(  # ty: ignore[unresolved-attribute]
+            url,
+            params=params,
+            headers={"Accept": "application/json"},
+        )
+        response.raise_for_status()
+        response_json = response.json()
+    except Exception as e:
+        _handle_jsm_api_error(e, path)
+        raise
+
+    if not isinstance(response_json, dict):
+        raise ConnectorValidationError(
+            f"Jira Service Management endpoint {path} returned an unexpected response."
+        )
+    return response_json
+
+
+def _get_jsm_service_desk_id(
+    jira_client: JIRA,
+    project_key: str,
+) -> str:
+    encoded_project_key = quote(project_key, safe="")
+    response_json = _get_jsm_json(
+        jira_client,
+        f"servicedesk/projectKey:{encoded_project_key}",
+    )
+
+    resolved_service_desk_id = response_json.get("id")
+    if not resolved_service_desk_id:
+        raise ConnectorValidationError(
+            f"Jira Service Management service desk ID could not be resolved for project {project_key}."
+        )
+
+    return str(resolved_service_desk_id)
 
 
 def enhanced_search_ids(
@@ -524,6 +611,7 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        jira_service_management: bool = False,
     ) -> None:
         self.batch_size = batch_size
 
@@ -537,6 +625,8 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.jira_service_management = jira_service_management
+        self._resolved_service_desk_id: str | None = None
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
@@ -580,6 +670,22 @@ class JiraConnector(
                 add_prefix=add_prefix,
             )
         return self._project_permissions_cache[cache_key]
+
+    def _get_service_management_service_desk_id(self) -> str:
+        if self._resolved_service_desk_id is None:
+            if self.jql_query:
+                raise ConnectorValidationError(
+                    "Jira Service Management mode only supports project_key; custom JQL is not supported."
+                )
+            if not self.jira_project:
+                raise ConnectorValidationError(
+                    "Jira Service Management mode requires a Jira project key."
+                )
+            self._resolved_service_desk_id = _get_jsm_service_desk_id(
+                jira_client=self.jira_client,
+                project_key=self.jira_project,
+            )
+        return self._resolved_service_desk_id
 
     def _is_epic(self, issue: Issue) -> bool:
         """Check if issue is an Epic."""
@@ -740,6 +846,9 @@ class JiraConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
+        if self.jira_service_management:
+            self._get_service_management_service_desk_id()
+
         jql = self._get_jql_query(start, end)
         try:
             return self._load_from_checkpoint(
@@ -760,6 +869,11 @@ class JiraConnector(
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """Load documents from checkpoint with permission information included."""
+        if self.jira_service_management:
+            raise ConnectorValidationError(
+                "Jira Service Management permission sync is not supported because request-level ACLs are not implemented."
+            )
+
         jql = self._get_jql_query(start, end)
         try:
             return self._load_from_checkpoint(jql, checkpoint, include_permissions=True)
@@ -888,6 +1002,11 @@ class JiraConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
+        if self.jira_service_management:
+            raise ConnectorValidationError(
+                "Jira Service Management permission sync is not supported because request-level ACLs are not implemented."
+            )
+
         one_day = timedelta(hours=24).total_seconds()
 
         start = start or 0
@@ -968,6 +1087,7 @@ class JiraConnector(
                 if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
+
             self.update_checkpoint_for_next_run(
                 checkpoint, current_offset, prev_offset, JIRA_SLIM_PAGE_SIZE
             )
@@ -979,6 +1099,19 @@ class JiraConnector(
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira")
+
+        if self.jira_service_management:
+            try:
+                self._get_service_management_service_desk_id()
+            except (
+                ConnectorValidationError,
+                CredentialExpiredError,
+                InsufficientPermissionsError,
+            ):
+                raise
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+            return
 
         # If a custom JQL query is set, validate it's valid
         if self.jql_query:
