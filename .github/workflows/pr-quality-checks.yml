@@ -29,15 +29,12 @@ jobs:
           python-version: "3.11"
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # ratchet:hashicorp/setup-terraform@v4.0.0
-      - name: Setup node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v6
-        with: # zizmor: ignore[cache-poisoning]
-          node-version: 24
-          cache: "npm"
-          cache-dependency-path: ./web/package-lock.json
+      - name: Setup bun
+        # zizmor: ignore[cache-poisoning]
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
       - name: Install node dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
       - uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3
         env:
           SKIP: ty

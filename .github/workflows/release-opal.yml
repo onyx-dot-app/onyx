@@ -6,14 +6,14 @@ on:
       - "opal/v*.*.*"
 
 jobs:
-  npm:
+  publish:
     runs-on: ubuntu-latest
-    # Pin Node by image digest. The container ships with Node baked in, so the workflow
-    # never invokes `actions/setup-node` and the runner toolcache is never restored —
+    # Pin bun by image digest. The container ships with bun baked in, so the workflow
+    # never invokes `oven-sh/setup-bun` and the runner toolcache is never restored —
     # mitigates zizmor's cache-poisoning class of finding at the source rather than
-    # suppressing it. Bumping Node = bump the digest.
+    # suppressing it. Bumping bun = bump the digest.
     container:
-      image: node:24@sha256:3a198147c320bc4cc357b418955beb48413c0ea5ba60f9ec1568913631df33aa
+      image: oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4
     environment:
       name: release-opal
     permissions:
@@ -28,25 +28,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Configure npm registry
-        run: |
-          printf 'registry=https://registry.npmjs.org/\n' > "$HOME/.npmrc"
-
       - name: Verify tag matches package.json version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
+          PKG_VERSION=$(bun -e "console.log(require('./package.json').version)")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($PKG_VERSION)"
             exit 1
           fi
 
       - name: Install workspace deps
-        run: npm ci
+        run: bun install --frozen-lockfile
         working-directory: web
 
       - name: Build opal
-        run: npm run build
+        run: bun run build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: bun publish --provenance --access public

@@ -25,8 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   unzip \
   wget \
   zsh \
-  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-  && apt-get install -y nodejs \
   && install -m 0755 -d /etc/apt/keyrings \
   && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
   && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -40,6 +38,10 @@ RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 
 # Install uv (Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Install bun (JavaScript package manager)
+COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
@@ -55,7 +57,7 @@ WORKDIR /workspace
 
 # Install Claude Code
 ARG CLAUDE_CODE_VERSION=latest
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Configure zsh — source the repo-local zshrc so shell customization
 # doesn't require an image rebuild.
