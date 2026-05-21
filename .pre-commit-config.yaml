@@ -148,7 +148,7 @@ repos:
 
       - id: oxfmt
         name: oxfmt
-        entry: bash -c 'cd web && bunx oxfmt'
+        entry: bash -c 'cd web && bunx oxfmt "$@"' _
         language: system
         types_or: [html, css, javascript, ts, tsx]
 
