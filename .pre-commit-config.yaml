@@ -102,8 +102,7 @@ repos:
         exclude: >-
           (?x)^(
             backend/scripts/setup_craft_templates\.sh|
-            deployment/docker_compose/init-letsencrypt\.sh|
-            deployment/docker_compose/install\.sh
+            deployment/docker_compose/init-letsencrypt\.sh
           )$
 
   - repo: https://github.com/golangci/golangci-lint
