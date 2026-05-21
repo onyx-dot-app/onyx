@@ -1,8 +1,11 @@
 """Tests for chat_utils.py, specifically get_custom_agent_prompt."""
 
+from io import BytesIO
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 from onyx.chat.chat_utils import _build_tool_call_response_history_message
+from onyx.chat.chat_utils import _get_or_extract_plaintext
 from onyx.chat.chat_utils import get_custom_agent_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
@@ -170,3 +173,65 @@ class TestBuildToolCallResponseHistoryMessage:
             tool_call_response='{"raw":"value"}',
         )
         assert message == TOOL_CALL_RESPONSE_CROSS_MESSAGE
+
+
+class TestGetOrExtractPlaintext:
+    """Tests for the plaintext extraction cache used by chat file loading."""
+
+    def test_cache_hit_skips_extraction(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.return_value = BytesIO(b"cached text")
+        extract_fn = MagicMock(return_value="should not be called")
+
+        with (
+            patch(
+                "onyx.chat.chat_utils.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-1", extract_fn)
+
+        assert result == "cached text"
+        extract_fn.assert_not_called()
+        store_plaintext.assert_not_called()
+
+    def test_cache_miss_stores_extracted_text(self) -> None:
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="extracted text")
+
+        with (
+            patch(
+                "onyx.chat.chat_utils.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-2", extract_fn)
+
+        assert result == "extracted text"
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("file-2", "extracted text")
+
+    def test_cache_miss_caches_empty_extraction(self) -> None:
+        """Files extract_file_text cannot process (e.g. .zip) return "".
+        We must still cache that result so we don't re-fetch the file from
+        object storage on every subsequent chat turn.
+        """
+        file_store = MagicMock()
+        file_store.read_file.side_effect = RuntimeError("not in store")
+        extract_fn = MagicMock(return_value="")
+
+        with (
+            patch(
+                "onyx.chat.chat_utils.get_default_file_store",
+                return_value=file_store,
+            ),
+            patch("onyx.chat.chat_utils.store_plaintext") as store_plaintext,
+        ):
+            result = _get_or_extract_plaintext("file-3", extract_fn)
+
+        assert result == ""
+        extract_fn.assert_called_once()
+        store_plaintext.assert_called_once_with("file-3", "")
