@@ -283,7 +283,14 @@ TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
 # HTTP statuses we treat as transient and worth retrying.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
-PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410})
+# `GET /sites/getAllSites` returns the tenant-wide directory of every site
+# collection, not just sites the app principal can read. Per-site content
+# access is gated separately, so some listed sites will always reject reads.
+# 403/404/410 cover "no permission / removed / gone"; 423 ("notAllowed")
+# covers admin-locked or M365-archived sites (e.g. `Set-SPOSiteArchiveState
+# -ArchiveState Archived`). All four are per-site conditions — skip the
+# site and continue the run rather than aborting the whole tenant index.
+PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410, 423})
 
 
 def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
