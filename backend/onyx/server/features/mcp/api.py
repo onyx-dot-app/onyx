@@ -3,21 +3,40 @@ import base64
 import datetime
 import hashlib
 import json
+import secrets
+import time
 from enum import Enum
-from secrets import token_urlsafe
 from typing import cast
 from typing import Literal
+from urllib.parse import urlencode
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
+from mcp.client.auth import PKCEParameters
 from mcp.client.auth import TokenStorage
+from mcp.client.auth.exceptions import OAuthFlowError
+from mcp.client.auth.utils import (
+    build_oauth_authorization_server_metadata_discovery_urls,
+)
+from mcp.client.auth.utils import build_protected_resource_metadata_discovery_urls
+from mcp.client.auth.utils import create_client_info_from_metadata_url
+from mcp.client.auth.utils import create_client_registration_request
+from mcp.client.auth.utils import create_oauth_metadata_request
+from mcp.client.auth.utils import get_client_metadata_scopes
+from mcp.client.auth.utils import handle_auth_metadata_response
+from mcp.client.auth.utils import handle_protected_resource_response
+from mcp.client.auth.utils import handle_registration_response
+from mcp.client.auth.utils import should_use_client_metadata_url
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
+from mcp.shared.auth import OAuthMetadata
 from mcp.shared.auth import OAuthToken
+from mcp.shared.auth import ProtectedResourceMetadata
 from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl
@@ -225,6 +244,8 @@ admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
 OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
+OAUTH_FLOW_MODE_PROACTIVE = "proactive"
+OAUTH_FLOW_MODE_SDK = "sdk"
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
 
@@ -247,6 +268,66 @@ def key_tokens(user_id: str) -> str:
 
 def key_client_info(user_id: str) -> str:
     return f"mcp:oauth:{user_id}:client_info"
+
+
+def key_pkce_verifier(user_id: str) -> str:
+    return f"mcp:oauth:{user_id}:pkce_verifier"
+
+
+def key_oauth_discovery(user_id: str) -> str:
+    return f"mcp:oauth:{user_id}:discovery"
+
+
+def key_oauth_flow_mode(user_id: str) -> str:
+    return f"mcp:oauth:{user_id}:flow_mode"
+
+
+def _merge_user_oauth_connection_config(
+    existing_user_data: MCPConnectionData,
+    admin_seed_data: MCPConnectionData,
+    *,
+    credentials_changed: bool,
+) -> MCPConnectionData:
+    """Merge admin OAuth client metadata into the per-user row without dropping tokens."""
+    merged: MCPConnectionData = MCPConnectionData(headers={})
+    merged.update(admin_seed_data)
+    if credentials_changed:
+        return merged
+
+    existing_tokens = existing_user_data.get(MCPOAuthKeys.TOKENS.value)
+    if existing_tokens:
+        merged[MCPOAuthKeys.TOKENS.value] = existing_tokens
+
+    existing_headers = existing_user_data.get("headers")
+    if isinstance(existing_headers, dict) and existing_headers:
+        merged["headers"] = dict(existing_headers)
+
+    return merged
+
+
+def _set_oauth_flow_mode(user_id: str, mode: str) -> None:
+    r = get_redis_client()
+    r.set(key_oauth_flow_mode(user_id), mode, ex=STATE_TTL_SECONDS)
+    if mode == OAUTH_FLOW_MODE_SDK:
+        r.delete(key_pkce_verifier(user_id))
+
+
+def _oauth_callback_uses_proactive_exchange(user_id: str) -> bool:
+    r = get_redis_client()
+    mode_raw = r.get(key_oauth_flow_mode(user_id))
+    if mode_raw is not None:
+        return mode_raw.decode() == OAUTH_FLOW_MODE_PROACTIVE
+    # In-flight connects that set PKCE before flow_mode was written.
+    return r.get(key_pkce_verifier(user_id)) is not None
+
+
+def _connection_has_oauth_tokens(connection_config_dict: dict[str, object]) -> bool:
+    """True when the user's MCP connection config has stored OAuth tokens.
+
+    Do not infer this from ``client_info`` or ``headers`` alone — some servers
+    accept unauthenticated handshake RPCs before any user has completed OAuth.
+    """
+    return bool(connection_config_dict.get(MCPOAuthKeys.TOKENS.value))
 
 
 REQUESTED_SCOPE: str | None = None
@@ -374,9 +455,10 @@ def make_oauth_provider(
             is_admin=admin_config_id is not None,
             state=state,
         )
+        # Persist callback state before the auth URL is visible to the connect waiter.
+        r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
         r.rpush(key_auth_url(user_id), auth_url)
         r.expire(key_auth_url(user_id), OAUTH_WAIT_SECONDS)
-        r.set(key_state(user_id), state_obj.model_dump_json(), ex=STATE_TTL_SECONDS)
 
         # Return immediately; the HTTP layer will read the stored URL and send it to the browser.
 
@@ -425,6 +507,494 @@ def make_oauth_provider(
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
     )
+
+
+async def _discover_oauth_metadata_for_connect(
+    oauth_provider: OAuthClientProvider,
+    server_url: str,
+) -> None:
+    """Discover protected-resource and authorization-server metadata for MCP OAuth.
+
+    Remote servers such as Google Cloud MCP may allow unauthenticated handshake
+    RPCs and return 403 (without WWW-Authenticate) on tool calls, so the MCP SDK
+    auth flow never starts. Proactive discovery avoids relying on HTTP 401.
+    """
+    ctx = oauth_provider.context
+    async with httpx.AsyncClient() as client:
+        for url in build_protected_resource_metadata_discovery_urls(None, server_url):
+            resp = await client.send(create_oauth_metadata_request(url))
+            prm = await handle_protected_resource_response(resp)
+            if prm:
+                ctx.protected_resource_metadata = prm
+                if prm.authorization_servers:
+                    ctx.auth_server_url = str(prm.authorization_servers[0])
+                break
+
+        if not ctx.auth_server_url:
+            raise OAuthFlowError(
+                f"Could not discover OAuth protected resource metadata for {server_url}"
+            )
+
+        for url in build_oauth_authorization_server_metadata_discovery_urls(
+            ctx.auth_server_url, server_url
+        ):
+            resp = await client.send(create_oauth_metadata_request(url))
+            ok, asm = await handle_auth_metadata_response(resp)
+            if ok and asm:
+                ctx.oauth_metadata = asm
+                break
+
+        if not ctx.oauth_metadata:
+            raise OAuthFlowError(
+                f"Could not discover OAuth authorization server metadata for {server_url}"
+            )
+
+        ctx.client_metadata.scope = get_client_metadata_scopes(
+            None,
+            ctx.protected_resource_metadata,
+            ctx.oauth_metadata,
+        )
+
+
+def _cache_oauth_discovery_context(
+    oauth_provider: OAuthClientProvider,
+    user_id: str,
+) -> None:
+    """Persist discovered metadata for the callback route to exchange tokens."""
+    ctx = oauth_provider.context
+    if ctx.oauth_metadata is None:
+        return
+    payload: dict[str, object] = {
+        "oauth_metadata": ctx.oauth_metadata.model_dump(mode="json"),
+        "auth_server_url": ctx.auth_server_url,
+    }
+    if ctx.protected_resource_metadata is not None:
+        payload["protected_resource_metadata"] = (
+            ctx.protected_resource_metadata.model_dump(mode="json")
+        )
+    get_redis_client().set(
+        key_oauth_discovery(user_id),
+        json.dumps(payload),
+        ex=STATE_TTL_SECONDS,
+    )
+
+
+async def _restore_oauth_discovery_context_async(
+    oauth_provider: OAuthClientProvider,
+    user_id: str,
+    server_url: str,
+) -> None:
+    cached = get_redis_client().get(key_oauth_discovery(user_id))
+    ctx = oauth_provider.context
+    if cached:
+        data = json.loads(cached)
+        ctx.oauth_metadata = OAuthMetadata.model_validate(data["oauth_metadata"])
+        ctx.auth_server_url = data.get("auth_server_url")
+        prm_raw = data.get("protected_resource_metadata")
+        if prm_raw:
+            ctx.protected_resource_metadata = ProtectedResourceMetadata.model_validate(
+                prm_raw
+            )
+        ctx.client_metadata.scope = get_client_metadata_scopes(
+            None,
+            ctx.protected_resource_metadata,
+            ctx.oauth_metadata,
+        )
+        return
+    await _discover_oauth_metadata_for_connect(oauth_provider, server_url)
+
+
+async def _complete_oauth_token_exchange_from_callback(
+    oauth_provider: OAuthClientProvider,
+    server_url: str,
+    user_id: str,
+    code: str,
+    state: str,
+) -> None:
+    """Exchange the authorization code for tokens in the callback HTTP handler.
+
+    Proactive connect returns the IdP URL without running the MCP SDK's HTTP 401
+    auth flow, so this handler must finish what ``async_auth_flow`` would normally
+    do after the browser redirect. We intentionally call MCP SDK private methods
+    (``_initialize``, ``_exchange_token_authorization_code``, ``_handle_token_response``)
+    because there is no public "exchange code only" API; they load stored client
+    metadata, build the token request (including PKCE), and persist tokens via
+    ``OnyxTokenStorage``.
+    """
+    await oauth_provider._initialize()
+    await _restore_oauth_discovery_context_async(
+        oauth_provider, user_id, server_url
+    )
+
+    stored_state = get_redis_client().get(key_state(user_id))
+    if not stored_state:
+        raise OAuthFlowError("No pending OAuth state for user")
+    state_obj = MCPOauthState.model_validate_json(stored_state)
+    if not secrets.compare_digest(state, state_obj.state):
+        raise OAuthFlowError("OAuth state parameter mismatch")
+
+    verifier_raw = get_redis_client().get(key_pkce_verifier(user_id))
+    if not verifier_raw:
+        raise OAuthFlowError("Missing PKCE verifier for OAuth token exchange")
+
+    token_request = await oauth_provider._exchange_token_authorization_code(
+        code, verifier_raw.decode()
+    )
+    async with httpx.AsyncClient() as client:
+        token_response = await client.send(token_request)
+        await oauth_provider._handle_token_response(token_response)
+
+    r = get_redis_client()
+    r.delete(
+        key_state(user_id),
+        key_auth_url(user_id),
+        key_pkce_verifier(user_id),
+        key_oauth_discovery(user_id),
+        key_oauth_flow_mode(user_id),
+        key_code(user_id, state),
+    )
+
+
+async def _complete_oauth_callback_legacy_sdk_path(
+    user_id: str,
+    state: str,
+    code: str,
+    admin_config_id: int,
+) -> None:
+    """Original callback path for MCP servers that drive OAuth via HTTP 401 + SDK.
+
+    Unblocks ``callback_handler`` on an in-flight ``initialize_mcp_client`` task and
+    waits for ``OnyxTokenStorage.set_tokens`` to publish the exchanged tokens.
+    """
+    r = get_redis_client()
+    r.rpush(key_code(user_id, state), json.dumps({"code": code, "state": state}))
+    r.expire(key_code(user_id, state), OAUTH_WAIT_SECONDS)
+
+    loop = asyncio.get_running_loop()
+    tokens_raw = await loop.run_in_executor(
+        None,
+        lambda: r.blpop([key_tokens(str(admin_config_id))], timeout=OAUTH_WAIT_SECONDS),
+    )
+    if tokens_raw is None:
+        raise HTTPException(status_code=400, detail="No tokens found")
+    tokens = OAuthToken.model_validate_json(tokens_raw[1].decode())
+    if not tokens.access_token:
+        raise HTTPException(status_code=400, detail="No access_token in OAuth response")
+
+
+async def _ensure_oauth_client_registered(
+    oauth_provider: OAuthClientProvider,
+) -> None:
+    """Register an OAuth client when proactive connect has metadata but no client_id."""
+    await oauth_provider._initialize()
+    ctx = oauth_provider.context
+    if ctx.client_info and ctx.client_info.client_id:
+        return
+
+    if should_use_client_metadata_url(ctx.oauth_metadata, ctx.client_metadata_url):
+        client_information = create_client_info_from_metadata_url(
+            ctx.client_metadata_url,  # type: ignore[arg-type]
+            redirect_uris=ctx.client_metadata.redirect_uris,
+        )
+        ctx.client_info = client_information
+        await ctx.storage.set_client_info(client_information)
+        return
+
+    registration_request = create_client_registration_request(
+        ctx.oauth_metadata,
+        ctx.client_metadata,
+        ctx.get_authorization_base_url(ctx.server_url),
+    )
+    async with httpx.AsyncClient() as client:
+        registration_response = await client.send(registration_request)
+    try:
+        client_information = await handle_registration_response(registration_response)
+    except Exception as e:
+        raise OAuthFlowError(f"Dynamic client registration failed: {e}") from e
+
+    ctx.client_info = client_information
+    await ctx.storage.set_client_info(client_information)
+
+
+async def _publish_oauth_authorization_url(
+    oauth_provider: OAuthClientProvider,
+    user_id: str,
+) -> None:
+    """Build the browser authorization URL and publish it via ``redirect_handler``."""
+    ctx = oauth_provider.context
+    if ctx.client_metadata.redirect_uris is None:
+        raise OAuthFlowError("No redirect URIs configured for MCP OAuth")
+    if not ctx.redirect_handler:
+        raise OAuthFlowError("No redirect handler configured for MCP OAuth")
+    if not ctx.client_info or not ctx.client_info.client_id:
+        raise OAuthFlowError("No OAuth client ID configured for MCP server")
+
+    if ctx.oauth_metadata and ctx.oauth_metadata.authorization_endpoint:
+        auth_endpoint = str(ctx.oauth_metadata.authorization_endpoint)
+    else:
+        auth_base_url = ctx.get_authorization_base_url(ctx.server_url)
+        auth_endpoint = f"{auth_base_url.rstrip('/')}/authorize"
+
+    pkce_params = PKCEParameters.generate()
+    get_redis_client().set(
+        key_pkce_verifier(user_id),
+        pkce_params.code_verifier,
+        ex=STATE_TTL_SECONDS,
+    )
+
+    auth_params: dict[str, str] = {
+        "response_type": "code",
+        "client_id": ctx.client_info.client_id,
+        "redirect_uri": str(ctx.client_metadata.redirect_uris[0]),
+        "state": secrets.token_urlsafe(32),
+        "code_challenge": pkce_params.code_challenge,
+        "code_challenge_method": "S256",
+    }
+    if ctx.should_include_resource_param(ctx.protocol_version):
+        auth_params["resource"] = ctx.get_resource_url()
+    if ctx.client_metadata.scope:
+        auth_params["scope"] = ctx.client_metadata.scope
+
+    authorization_url = f"{auth_endpoint}?{urlencode(auth_params)}"
+    await ctx.redirect_handler(authorization_url)
+
+
+async def _start_proactive_user_oauth(
+    oauth_provider: OAuthClientProvider,
+    server_url: str,
+    user_id: str,
+) -> None:
+    """Discover OAuth metadata, register client if needed, publish the IdP URL."""
+    await oauth_provider._initialize()
+    await _discover_oauth_metadata_for_connect(oauth_provider, server_url)
+    _cache_oauth_discovery_context(oauth_provider, user_id)
+    await _ensure_oauth_client_registered(oauth_provider)
+    _set_oauth_flow_mode(user_id, OAUTH_FLOW_MODE_PROACTIVE)
+    await _publish_oauth_authorization_url(oauth_provider, user_id)
+
+
+def _log_sdk_oauth_init_task_done(task: asyncio.Task[InitializeResult]) -> None:
+    """Log failures from the SDK OAuth initialize task left alive for callback."""
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.exception("SDK OAuth initialize task failed after auth URL was returned")
+
+
+async def _await_sdk_oauth_auth_url(
+    *,
+    probe_url: str,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    oauth_auth: OAuthClientProvider,
+    user_id: str,
+) -> str:
+    """Fall back to the MCP SDK 401/WWW-Authenticate OAuth path for the auth URL.
+
+    The initialize task must stay alive after returning the auth URL so the SDK
+    ``callback_handler`` can receive the browser code and complete token exchange.
+    """
+    _set_oauth_flow_mode(user_id, OAUTH_FLOW_MODE_SDK)
+    init_task = asyncio.create_task(
+        initialize_mcp_client(
+            probe_url,
+            connection_headers=connection_headers,
+            transport=transport,
+            auth=oauth_auth,
+        )
+    )
+    r = get_redis_client()
+    loop = asyncio.get_running_loop()
+    try:
+        raw = await loop.run_in_executor(
+            None,
+            lambda: r.blpop([key_auth_url(user_id)], timeout=OAUTH_WAIT_SECONDS),
+        )
+        if raw is None:
+            init_task.cancel()
+            try:
+                await init_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.debug(
+                    "SDK OAuth initialize task ended after auth URL timeout",
+                    exc_info=True,
+                )
+            raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+        init_task.add_done_callback(_log_sdk_oauth_init_task_done)
+        return raw[1].decode()
+    except HTTPException:
+        raise
+    except Exception:
+        init_task.cancel()
+        try:
+            await init_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.debug(
+                "SDK OAuth initialize task ended after auth URL failure",
+                exc_info=True,
+            )
+        raise
+
+
+async def _await_oauth_auth_url_for_connect(
+    user_id: str,
+    publish_task: asyncio.Task[None],
+) -> str:
+    """Poll Redis for an auth URL until proactive publish succeeds or fails."""
+    r = get_redis_client()
+    loop = asyncio.get_running_loop()
+    deadline = time.monotonic() + OAUTH_WAIT_SECONDS
+    poll_seconds = 2
+
+    while time.monotonic() < deadline:
+        if publish_task.done():
+            publish_exc = publish_task.exception()
+            if publish_exc is not None:
+                raise publish_exc
+
+        remaining = int(deadline - time.monotonic())
+        if remaining <= 0:
+            break
+        block_seconds = min(poll_seconds, remaining)
+        raw = await loop.run_in_executor(
+            None,
+            lambda timeout=block_seconds: r.blpop(
+                [key_auth_url(user_id)], timeout=timeout
+            ),
+        )
+        if raw is not None:
+            return raw[1].decode()
+
+    if publish_task.done():
+        publish_exc = publish_task.exception()
+        if publish_exc is not None:
+            raise publish_exc
+    raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+
+
+async def _await_publish_task_after_auth_url(publish_task: asyncio.Task[None]) -> None:
+    """Let the OAuth publisher finish after the auth URL is already visible."""
+    if publish_task.done():
+        publish_exc = publish_task.exception()
+        if publish_exc is not None:
+            logger.debug(
+                "OAuth publisher finished with error after auth URL was returned: %s",
+                publish_exc,
+            )
+        return
+    try:
+        await publish_task
+    except asyncio.CancelledError:
+        pass
+    except Exception as publish_exc:
+        logger.debug(
+            "OAuth publisher ended after auth URL was returned: %s",
+            publish_exc,
+        )
+
+
+async def _connect_oauth_without_tokens(
+    *,
+    oauth_auth: OAuthClientProvider,
+    probe_url: str,
+    connection_headers: dict[str, str],
+    transport: MCPTransport,
+    user_id: str,
+    mcp_server_name: str,
+) -> str:
+    """Start OAuth for a user without stored tokens; return the browser auth URL."""
+    publish_task = asyncio.create_task(
+        _start_proactive_user_oauth(oauth_auth, probe_url, user_id)
+    )
+
+    async def _unauthenticated_probe() -> InitializeResult:
+        try:
+            return await initialize_mcp_client(
+                probe_url,
+                connection_headers=connection_headers,
+                transport=transport,
+                auth=None,
+            )
+        except Exception:
+            logger.info(
+                "Unauthenticated OAuth probe failed for server %s (expected for "
+                "401-only or handshake-only MCP servers)",
+                mcp_server_name,
+                exc_info=True,
+            )
+            raise
+
+    probe_task = asyncio.create_task(_unauthenticated_probe())
+    auth_task = asyncio.create_task(
+        _await_oauth_auth_url_for_connect(user_id, publish_task)
+    )
+
+    def _cancel_background_task(task: asyncio.Task[object]) -> None:
+        if task.done():
+            return
+        task.cancel()
+
+    try:
+        done, _pending = await asyncio.wait(
+            [auth_task, publish_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if publish_task in done and publish_task.exception() is not None:
+            auth_task.cancel()
+            try:
+                await auth_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            _cancel_background_task(probe_task)
+            publish_exc = publish_task.exception()
+            assert publish_exc is not None
+            logger.warning(
+                "Proactive OAuth failed for server %s, falling back to SDK 401 flow: %s",
+                mcp_server_name,
+                publish_exc,
+            )
+            try:
+                return await _await_sdk_oauth_auth_url(
+                    probe_url=probe_url,
+                    connection_headers=connection_headers,
+                    transport=transport,
+                    oauth_auth=oauth_auth,
+                    user_id=user_id,
+                )
+            except HTTPException:
+                raise
+            except Exception as sdk_exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Failed to start OAuth authorization: {publish_exc}. "
+                        f"SDK fallback also failed: {sdk_exc}"
+                    ),
+                ) from sdk_exc
+
+        if auth_task in done:
+            oauth_url = auth_task.result()
+            _cancel_background_task(probe_task)
+            await _await_publish_task_after_auth_url(publish_task)
+            return oauth_url
+
+        oauth_url = await auth_task
+        _cancel_background_task(probe_task)
+        await _await_publish_task_after_auth_url(publish_task)
+        return oauth_url
+    finally:
+        if probe_task.done():
+            try:
+                probe_task.result()
+            except Exception:
+                pass
 
 
 def _build_headers_from_template(
@@ -476,7 +1046,7 @@ def b64url(b: bytes) -> str:
 
 
 def make_pkce_pair() -> tuple[str, str]:
-    verifier = b64url(token_urlsafe(64).encode())
+    verifier = b64url(secrets.token_urlsafe(64).encode())
     challenge = b64url(hashlib.sha256(verifier.encode("ascii")).digest())
     return verifier, challenge
 
@@ -593,6 +1163,15 @@ async def _connect_oauth(
         update_connection_config(mcp_server.admin_connection_config_id, db, config_data)
 
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
+    existing_user_data: MCPConnectionData = MCPConnectionData(headers={})
+    if connection_config is not None:
+        existing_user_data = extract_connection_data(
+            connection_config, apply_mask=False
+        )
+
+    credentials_changed = (
+        request.oauth_client_id_changed or request.oauth_client_secret_changed
+    )
 
     if connection_config is None:
         connection_config = create_connection_config(
@@ -601,20 +1180,21 @@ async def _connect_oauth(
             user_email=user.email,
             db_session=db,
         )
+        connection_config_dict = extract_connection_data(
+            connection_config, apply_mask=False
+        )
     else:
-        update_connection_config(connection_config.id, db, config_data)
+        merged_user_config = _merge_user_oauth_connection_config(
+            existing_user_data,
+            config_data,
+            credentials_changed=credentials_changed,
+        )
+        update_connection_config(connection_config.id, db, merged_user_config)
+        connection_config_dict = merged_user_config
 
     db.commit()
 
-    connection_config_dict = extract_connection_data(
-        connection_config, apply_mask=False
-    )
-    is_connected = (
-        MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
-        and connection_config_dict.get("headers")
-    )
-    # Step 1: make unauthenticated request and parse returned www authenticate header
-    # Ensure we have a trailing slash for the MCP endpoint
+    has_oauth_tokens = _connection_has_oauth_tokens(connection_config_dict)
 
     if mcp_server.transport is None:
         raise HTTPException(
@@ -622,8 +1202,9 @@ async def _connect_oauth(
             detail="MCP server transport is not configured",
         )
 
-    # always make a http request for the initial probe
-    transport = mcp_server.transport if is_connected else MCPTransport.STREAMABLE_HTTP
+    transport = (
+        mcp_server.transport if has_oauth_tokens else MCPTransport.STREAMABLE_HTTP
+    )
     probe_url = mcp_server.server_url
     logger.info("Probing OAuth server at: %s", probe_url)
 
@@ -635,71 +1216,30 @@ async def _connect_oauth(
         mcp_server.admin_connection_config_id,
     )
 
-    # start the oauth handshake in the background
-    # the background task will block on the callback handler after setting
-    # the auth_url for us to send to the frontend. The callback handler waits for
-    # the auth code to be available in redis; this code gets set by our callback endpoint
-    # which is called by the frontend after the user goes through the login flow.
-    async def tmp_func() -> InitializeResult:
+    user_id_str = str(user.id)
+
+    if not has_oauth_tokens:
         try:
-            x = await initialize_mcp_client(
-                probe_url,
+            oauth_url = await _connect_oauth_without_tokens(
+                oauth_auth=oauth_auth,
+                probe_url=probe_url,
                 connection_headers=connection_config_dict.get("headers", {}),
                 transport=transport,
-                auth=oauth_auth,
+                user_id=user_id_str,
+                mcp_server_name=mcp_server.name,
             )
-            logger.info("OAuth initialization completed successfully: %s", x)
-            return x
-        except Exception:
-            logger.exception("OAuth initialization failed")
+        except HTTPException:
             raise
-
-    init_task = asyncio.create_task(tmp_func())
-
-    # Wait for whichever happens first:
-    # 1) The OAuth redirect URL becomes available in Redis (we should return it)
-    # 2) The initialize task completes (tokens already valid) — return to the provided return_path
-    r = get_redis_client()
-    loop = asyncio.get_running_loop()
-
-    async def wait_auth_url() -> str | None:
-        raw = await loop.run_in_executor(
-            None,
-            lambda: r.blpop([key_auth_url(str(user.id))], timeout=OAUTH_WAIT_SECONDS),
-        )
-        if raw is None:
-            return None
-        return raw[1].decode()
-
-    auth_task = None if is_connected else asyncio.create_task(wait_auth_url())
-
-    done, pending = await asyncio.wait(
-        [init_task] + ([auth_task] if auth_task else []),
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    # If we got an auth URL first, return it
-    if auth_task in done:
-        oauth_url = await auth_task
-        # If no URL was retrieved within the timeout, treat as error
-        if not oauth_url:
-            # If initialization also finished, treat as already authenticated
-            if init_task.done() and not init_task.cancelled():
-                try:
-                    init_result = init_task.result()
-                    logger.info(
-                        "OAuth initialization completed during timeout: %s", init_result
-                    )
-                    return MCPUserOAuthConnectResponse(
-                        server_id=int(request.server_id),
-                        oauth_url=request.return_path,
-                    )
-                except Exception as e:
-                    logger.error("OAuth initialization failed during timeout: %s", e)
-                    raise HTTPException(
-                        status_code=400, detail=f"OAuth initialization failed: {str(e)}"
-                    )
-            raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+        except Exception as e:
+            if isinstance(e, ExceptionGroup):
+                saved_e = log_exception_group(e)
+            else:
+                saved_e = e
+            logger.error("OAuth connect failed: %s", saved_e)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to start OAuth authorization: {saved_e}",
+            ) from e
 
         logger.info(
             "Connected to auth url: %s for mcp server: %s", oauth_url, mcp_server.name
@@ -708,27 +1248,27 @@ async def _connect_oauth(
             server_id=int(request.server_id), oauth_url=oauth_url
         )
 
-    # Otherwise, initialization finished first — no redirect needed; go back to return_path
-    for t in pending:
-        t.cancel()
     try:
-        init_result = init_task.result()
-        logger.info("OAuth initialization completed without redirect: %s", init_result)
+        init_result = await initialize_mcp_client(
+            probe_url,
+            connection_headers=connection_config_dict.get("headers", {}),
+            transport=transport,
+            auth=oauth_auth,
+        )
+        logger.info("OAuth connect completed with existing tokens: %s", init_result)
+        return MCPUserOAuthConnectResponse(
+            server_id=int(request.server_id),
+            oauth_url=request.return_path,
+        )
     except Exception as e:
         if isinstance(e, ExceptionGroup):
             saved_e = log_exception_group(e)
         else:
             saved_e = e
         logger.error("OAuth initialization failed: %s", saved_e)
-        # If initialize failed and we also didn't get an auth URL, surface an error
         raise HTTPException(
             status_code=400, detail=f"Failed to initialize OAuth client: {str(saved_e)}"
-        )
-
-    return MCPUserOAuthConnectResponse(
-        server_id=int(request.server_id),
-        oauth_url=request.return_path,
-    )
+        ) from e
 
 
 @router.post("/oauth/callback", response_model=MCPOAuthCallbackResponse)
@@ -768,35 +1308,60 @@ async def process_oauth_callback(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    user_id = str(user.id)
-
-    r = get_redis_client()
-
-    # Unblock the callback_handler in the asyncio background task
-    r.rpush(key_code(user_id, state), json.dumps({"code": code, "state": state}))
-    r.expire(key_code(user_id, state), OAUTH_WAIT_SECONDS)
-
-    admin_config = mcp_server.admin_connection_config
-    if admin_config is None:
+    if mcp_server.admin_connection_config is None:
         raise HTTPException(
             status_code=400,
             detail="Server referenced by callback is not configured, try recreating",
         )
 
-    # Run the blocking blpop operation in a thread pool to avoid blocking the event loop
-    # Wait until set_tokens is called
-    admin_config_id = admin_config.id
-    loop = asyncio.get_running_loop()
-    tokens_raw = await loop.run_in_executor(
-        None,
-        lambda: r.blpop([key_tokens(str(admin_config_id))], timeout=OAUTH_WAIT_SECONDS),
+    connection_config = get_user_connection_config(
+        mcp_server.id, user.email, db_session
     )
-    if tokens_raw is None:
-        raise HTTPException(status_code=400, detail="No tokens found")
-    tokens = OAuthToken.model_validate_json(tokens_raw[1].decode())
+    if connection_config is None:
+        raise HTTPException(
+            status_code=400,
+            detail="User connection config not found for this MCP server",
+        )
 
-    if not tokens.access_token:
-        raise HTTPException(status_code=400, detail="No access_token in OAuth response")
+    oauth_auth = make_oauth_provider(
+        mcp_server,
+        user_id,
+        state_data.return_path,
+        connection_config.id,
+        mcp_server.admin_connection_config_id,
+    )
+
+    if mcp_server.server_url is None:
+        raise HTTPException(status_code=400, detail="MCP server URL is not configured")
+
+    admin_config_id = mcp_server.admin_connection_config_id
+    assert admin_config_id is not None
+
+    if _oauth_callback_uses_proactive_exchange(user_id):
+        try:
+            await _complete_oauth_token_exchange_from_callback(
+                oauth_auth,
+                mcp_server.server_url,
+                user_id,
+                code,
+                state,
+            )
+        except OAuthFlowError as e:
+            logger.error("MCP OAuth token exchange failed: %s", e)
+            raise HTTPException(
+                status_code=400,
+                detail=f"OAuth token exchange failed: {e}",
+            )
+        except Exception as e:
+            logger.exception("MCP OAuth token exchange failed")
+            raise HTTPException(
+                status_code=400,
+                detail=f"OAuth token exchange failed: {e}",
+            )
+    else:
+        await _complete_oauth_callback_legacy_sdk_path(
+            user_id, state, code, admin_config_id
+        )
 
     db_session.commit()
 
