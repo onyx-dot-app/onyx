@@ -20,6 +20,8 @@ on:
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
+      - "deployment/helm/charts/onyx/templates/sandbox-namespace.yaml"
+      - "deployment/helm/charts/onyx/values-ci.yaml"
 
 permissions:
   contents: read
@@ -149,21 +151,47 @@ jobs:
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
-      # Prod-equivalent of sandbox-namespace.yaml in the helm chart plus
-      # the ServiceAccount that's normally created out-of-band.
-      - name: Apply sandbox namespace + ServiceAccount
+      # `helm template` validates Chart.yaml dependencies up front, even
+      # for --show-only of a parent-chart template. Add the repos and
+      # build the deps so the render step doesn't error out.
+      - name: Build helm chart dependencies
         run: |
-          kubectl apply -f - <<'EOF'
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: onyx-sandboxes
-          ---
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo add opensearch https://opensearch-project.github.io/helm-charts
+          helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts
+          helm repo add ot-container-kit https://ot-container-kit.github.io/helm-charts
+          helm repo add minio https://charts.min.io/
+          helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
+          helm repo update
+          helm dependency build deployment/helm/charts/onyx
+
+      # Render the sandbox namespace from the helm chart rather than
+      # inlining it here, so future chart edits (labels, annotations, new
+      # sandbox-scoped resources) flow into CI automatically. When you add
+      # a new chart component that the K8s sandbox tests depend on, add
+      # its template path to --show-only and apply it here.
+      - name: Render sandbox manifests from chart
+        run: |
+          mkdir -p /tmp/manifests
+          helm template onyx deployment/helm/charts/onyx \
+            -n onyx \
+            -f deployment/helm/charts/onyx/values-ci.yaml \
+            --show-only templates/sandbox-namespace.yaml \
+            > /tmp/manifests/sandbox.yaml
+          echo "--- rendered resources ---"
+          grep -E '^(kind|  name):' /tmp/manifests/sandbox.yaml || true
+
+      # sandbox-file-sync SA isn't in the chart — it's normally created
+      # out-of-band by the dev k8s-up.sh / cluster admin. Apply after the
+      # rendered manifests so the namespace exists first.
+      - name: Apply manifests + sandbox-file-sync SA
+        run: |
+          kubectl apply -f /tmp/manifests/sandbox.yaml
+          kubectl -n onyx-sandboxes apply -f - <<'EOF'
           apiVersion: v1
           kind: ServiceAccount
           metadata:
             name: sandbox-file-sync
-            namespace: onyx-sandboxes
           EOF
 
       - name: Create .env for Docker Compose
