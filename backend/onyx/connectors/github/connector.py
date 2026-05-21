@@ -1,10 +1,12 @@
 import copy
+import os
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from enum import Enum
+from io import BytesIO
 from typing import Any
 from typing import cast
 
@@ -47,6 +49,8 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.file_processing.extract_file_text import detect_encoding
+from onyx.file_processing.extract_file_text import is_text_file
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,6 +62,53 @@ _MAX_NUM_RATE_LIMIT_RETRIES = 5
 
 ONE_DAY = timedelta(days=1)
 SLIM_BATCH_SIZE = 100
+
+# Prose document extensions eligible for document indexing. Intentionally
+# limited to human-readable docs — source code as well as data/config/log
+# formats (.json, .csv, .tsv, .xml, .yml, .yaml, .sql, .log, .conf) are
+# excluded, as they are rarely useful to search as documents.
+GITHUB_INDEXABLE_FILE_EXTENSIONS = {
+    ".md",
+    ".mdx",
+    ".markdown",
+    ".rst",
+    ".txt",
+}
+# Path segments whose presence anywhere in a file's path excludes it.
+GITHUB_PATH_DENYLIST = {
+    ".git",
+    "node_modules",
+    "vendor",
+    "dist",
+    "build",
+    ".venv",
+    "__pycache__",
+}
+# Skip files larger than this (checked against the git tree size before fetching).
+GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
+# Number of files emitted per checkpoint batch in the FILES stage.
+FILE_BATCH_SIZE = 100
+
+
+def _is_indexable_path(path: str, size: int | None) -> bool:
+    """Pure predicate: should this repo file be indexed?
+
+    Filters on extension allowlist, max size, and a path-segment denylist.
+    """
+    if size is not None and size > GITHUB_MAX_FILE_SIZE_BYTES:
+        return False
+
+    _, extension = os.path.splitext(path)
+    if extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return False
+
+    segments = set(path.split("/"))
+    if segments & GITHUB_PATH_DENYLIST:
+        return False
+
+    return True
+
+
 # Cases
 # X (from start) standard run, no fallback to cursor-based pagination
 # X (from start) standard run errors, fallback to cursor-based pagination
@@ -397,10 +448,67 @@ def _convert_issue_to_document(
     )
 
 
+def _decode_file_content(raw: bytes) -> str | None:
+    """Decode raw file bytes to text, or None if the content looks binary."""
+    buf = BytesIO(raw)
+    if not is_text_file(buf):
+        return None
+    encoding = detect_encoding(buf)
+    try:
+        return raw.decode(encoding)
+    except (UnicodeDecodeError, LookupError):
+        return None
+
+
+def _convert_file_to_document(
+    repo: Repository.Repository,
+    path: str,
+    content_text: str,
+    repo_external_access: ExternalAccess | None,
+) -> Document:
+    repo_full_name = repo.full_name
+    parts = repo_full_name.split("/", 1)
+    owner_name = parts[0] if parts else ""
+    repo_name = parts[1] if len(parts) > 1 else repo_full_name
+
+    branch = repo.default_branch
+    html_url = f"{repo.html_url}/blob/{branch}/{path}"
+    _, extension = os.path.splitext(path)
+
+    updated_at = repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
+
+    doc_metadata = {
+        "repo": repo_full_name,
+        "hierarchy": {
+            "source_path": [owner_name, repo_name, "files", *path.split("/")],
+            "owner": owner_name,
+            "repo": repo_name,
+            "object_type": "file",
+        },
+    }
+    return Document(
+        id=html_url,
+        sections=[TextSection(link=html_url, text=content_text)],
+        source=DocumentSource.GITHUB,
+        external_access=repo_external_access,
+        semantic_identifier=path,
+        doc_updated_at=updated_at,
+        doc_metadata=doc_metadata,
+        metadata={
+            "object_type": "File",
+            "repo": repo_full_name,
+            "path": path,
+            "file_extension": extension.lower(),
+            "branch": branch,
+        },
+    )
+
+
 class GithubConnectorStage(Enum):
     START = "start"
     PRS = "prs"
     ISSUES = "issues"
+    FILES = "files"
 
 
 class GithubConnectorCheckpoint(ConnectorCheckpoint):
@@ -410,17 +518,23 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     cached_repo_ids: list[int] | None = None
     cached_repo: SerializedRepository | None = None
 
+    # Resolved + filtered file paths for the current repo's FILES stage.
+    # Populated once when the stage begins, then paginated via curr_page.
+    file_paths: list[str] | None = None
+
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
     cursor_url: str | None = None
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, and cursor_url to their initial values (0, 0, None)
+        Resets curr_page, num_retrieved, cursor_url, and file_paths to their
+        initial values (0, 0, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
+        self.file_paths = None
 
 
 def make_cursor_url_callback(
@@ -448,12 +562,14 @@ class GithubConnector(
         state_filter: str = "all",
         include_prs: bool = True,
         include_issues: bool = False,
+        include_files: bool = False,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
+        self.include_files = include_files
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -568,6 +684,57 @@ class GithubConnector(
         return lambda: repo.get_issues(
             state=self.state_filter, sort="updated", direction="desc"
         )
+
+    def _list_indexable_files(
+        self, repo: Repository.Repository, attempt_num: int = 0
+    ) -> list[str]:
+        """Resolve the repo's default-branch tree and return indexable file paths.
+
+        Returns paths sorted for stable checkpoint pagination.
+        """
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried listing repo files too many times. "
+                "Something is going wrong with fetching objects from Github"
+            )
+        assert self.github_client is not None  # mypy
+        try:
+            git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
+            if git_tree.raw_data.get("truncated"):
+                logger.error(
+                    "Git tree for repo %s was truncated by GitHub; "
+                    "some files will not be indexed",
+                    repo.full_name,
+                )
+            paths = [
+                element.path
+                for element in git_tree.tree
+                if element.type == "blob"
+                and _is_indexable_path(element.path, element.size)
+            ]
+            paths.sort()
+            return paths
+        except RateLimitExceededException:
+            sleep_after_rate_limit_exception(self.github_client)
+            return self._list_indexable_files(repo, attempt_num + 1)
+
+    def _fetch_file_content(
+        self, repo: Repository.Repository, path: str, attempt_num: int = 0
+    ) -> bytes:
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried fetching file content too many times. "
+                "Something is going wrong with fetching objects from Github"
+            )
+        assert self.github_client is not None  # mypy
+        try:
+            content = repo.get_contents(path, ref=repo.default_branch)
+            if isinstance(content, list):
+                raise ValueError(f"Expected a file at {path}, got a directory")
+            return content.decoded_content
+        except RateLimitExceededException:
+            sleep_after_rate_limit_exception(self.github_client)
+            return self._fetch_file_content(repo, path, attempt_num + 1)
 
     def _fetch_from_github(
         self,
@@ -765,9 +932,89 @@ class GithubConnector(
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
-            # issues to get, we move on to the next repo
-            checkpoint.stage = GithubConnectorStage.PRS
+            # issues to get, we move on to indexing files
+            checkpoint.stage = GithubConnectorStage.FILES
             checkpoint.reset()
+
+        # Ensure the FILES stage is reached even when PRs/issues are disabled.
+        # Mirrors the unconditional ISSUES transition above; only reached once
+        # PRs and issues are fully drained (those blocks return early otherwise).
+        checkpoint.stage = GithubConnectorStage.FILES
+
+        if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
+            if checkpoint.file_paths is None:
+                pushed_at = (
+                    repo.pushed_at.replace(tzinfo=timezone.utc)
+                    if repo.pushed_at
+                    else None
+                )
+                if start is not None and pushed_at is not None and pushed_at < start:
+                    # Nothing changed in this repo since the last poll — skip.
+                    logger.info(
+                        "Skipping files for repo %s (pushed_at < start)", repo.name
+                    )
+                    checkpoint.file_paths = []
+                else:
+                    logger.info("Listing files for repo: %s", repo.name)
+                    checkpoint.file_paths = self._list_indexable_files(repo)
+                    logger.info(
+                        "Found %s indexable files for repo: %s",
+                        len(checkpoint.file_paths),
+                        repo.name,
+                    )
+
+            file_paths = checkpoint.file_paths
+            page = checkpoint.curr_page
+            batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
+            checkpoint.curr_page += 1
+
+            for path in batch:
+                html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
+                if is_slim:
+                    yield Document(
+                        id=html_url,
+                        sections=[],
+                        external_access=repo_external_access,
+                        source=DocumentSource.GITHUB,
+                        semantic_identifier="",
+                        metadata={},
+                    )
+                    continue
+                try:
+                    raw = self._fetch_file_content(repo, path)
+                    content_text = _decode_file_content(raw)
+                    if content_text is None:
+                        yield ConnectorFailure(
+                            failed_document=DocumentFailure(
+                                document_id=html_url,
+                                document_link=html_url,
+                            ),
+                            failure_message=(
+                                f"Skipping non-text/undecodable file: {path}"
+                            ),
+                        )
+                        continue
+                    yield _convert_file_to_document(
+                        repo, path, content_text, repo_external_access
+                    )
+                except Exception as e:
+                    error_msg = f"Error converting file {path} to document: {e}"
+                    logger.exception(error_msg)
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=html_url,
+                            document_link=html_url,
+                        ),
+                        failure_message=error_msg,
+                        exception=e,
+                    )
+                    continue
+
+            # More file batches remain for this repo — checkpoint and resume.
+            if (page + 1) * FILE_BATCH_SIZE < len(file_paths):
+                return checkpoint
+
+        # files complete (or disabled) -> fall through to next repo
 
         checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
         if checkpoint.cached_repo_ids:
@@ -902,6 +1149,12 @@ class GithubConnector(
         if not self.repo_owner:
             raise ConnectorValidationError(
                 "Invalid connector settings: 'repo_owner' must be provided."
+            )
+
+        if not (self.include_prs or self.include_issues or self.include_files):
+            raise ConnectorValidationError(
+                "Invalid connector settings: at least one of pull requests, "
+                "issues, or files must be selected for indexing."
             )
 
         try:
