@@ -75,37 +75,6 @@ def record_decision(
     return row
 
 
-def insert_silent_action_approval(
-    db_session: Session,
-    *,
-    session_id: UUID,
-    action_type: str,
-    payload: dict[str, Any],
-    decision: ApprovalDecision,
-) -> ActionApproval:
-    """Insert an audit row for a policy-decided action with no user
-    interaction. No liveness key, no wakeup, no chat card.
-
-    EXPIRED is time-driven and never silent — asserted out.
-    """
-    if decision not in (ApprovalDecision.APPROVED, ApprovalDecision.REJECTED):
-        raise ValueError(
-            f"insert_silent_action_approval only accepts APPROVED / REJECTED, "
-            f"got {decision.value}"
-        )
-
-    row = ActionApproval(
-        session_id=session_id,
-        action_type=action_type,
-        payload=payload,
-        decision=decision,
-        decided_at=datetime.now(timezone.utc),
-    )
-    db_session.add(row)
-    db_session.flush()
-    return row
-
-
 def get_action_approval(
     db_session: Session, approval_id: UUID
 ) -> ActionApproval | None:
@@ -169,44 +138,4 @@ def list_session_pending_action_approvals(
         .where(ActionApproval.decision.is_(None))
         .order_by(ActionApproval.created_at.desc())
     )
-    return list(db_session.scalars(stmt))
-
-
-def list_tenant_action_approvals(
-    db_session: Session,
-    *,
-    decision: ApprovalDecision | None = None,
-    from_dt: datetime | None = None,
-    to_dt: datetime | None = None,
-    limit: int = 100,
-    cursor: UUID | None = None,
-) -> list[ActionApproval]:
-    """Tenant-scoped audit query used by the admin audit page.
-
-    Tenant isolation is provided by the per-tenant Postgres schema
-    (each tenant lives in its own schema), so no explicit tenant
-    filter is needed here. Cursor pagination uses ``approval_id`` as
-    the opaque cursor and orders by ``created_at DESC, approval_id
-    DESC``.
-    """
-    stmt = select(ActionApproval)
-    if decision is not None:
-        stmt = stmt.where(ActionApproval.decision == decision)
-    if from_dt is not None:
-        stmt = stmt.where(ActionApproval.created_at >= from_dt)
-    if to_dt is not None:
-        stmt = stmt.where(ActionApproval.created_at <= to_dt)
-    if cursor is not None:
-        anchor = db_session.get(ActionApproval, cursor)
-        if anchor is not None:
-            stmt = stmt.where(
-                (ActionApproval.created_at < anchor.created_at)
-                | (
-                    (ActionApproval.created_at == anchor.created_at)
-                    & (ActionApproval.approval_id < anchor.approval_id)
-                )
-            )
-    stmt = stmt.order_by(
-        ActionApproval.created_at.desc(), ActionApproval.approval_id.desc()
-    ).limit(limit)
     return list(db_session.scalars(stmt))

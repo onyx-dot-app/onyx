@@ -74,6 +74,7 @@ _CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
 _CODE_BODY_TOO_LARGE = "body_too_large"
 _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
+_CODE_INTERNAL_ERROR = "internal_error"
 
 
 class GateAddon:
@@ -100,20 +101,59 @@ class GateAddon:
         # loop (mitmproxy hooks + drain via ``loop.add_signal_handler``)
         # so a plain dict without a lock is correct.
         self._inflight_tenant_by_approval: dict[UUID, str] = {}
+        # Asyncio tasks running our request() hook. Used by the drain
+        # to await actual completion instead of sleeping a magic
+        # constant. Entries are added on hook entry and discarded
+        # automatically via ``add_done_callback``.
+        self._inflight_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
     # mitmproxy hook
     # ------------------------------------------------------------------
 
     async def request(self, flow: http.HTTPFlow) -> None:
+        # Track this hook's task so drain_inflight can wait for actual
+        # completion. add_done_callback ensures the set drains itself.
+        task = asyncio.current_task()
+        if task is not None:
+            self._inflight_tasks.add(task)
+            task.add_done_callback(self._inflight_tasks.discard)
+
         match_result = self._match_action(flow)
         if match_result is None:
             return  # short-circuited (unidentified / oversize / non-gated)
         ctx, match = match_result
 
-        approval_id = self._create_request(ctx, match)
-        decision = await self._await_decision(approval_id, ctx, match)
-        self._apply_decision_to_flow(flow, decision)
+        # Fail closed on any unhandled exception from row creation or
+        # the wait — mitmproxy's default on addon exceptions is to
+        # forward the original request, which would silently bypass
+        # the gate.
+        approval_id: UUID | None = None
+        try:
+            approval_id = self._create_request(ctx, match)
+            decision = await self._await_decision(approval_id, ctx, match)
+            self._apply_decision_to_flow(flow, decision)
+        except Exception:
+            logger.exception(
+                "gate.unhandled_error session_id=%s tenant_id=%s "
+                "approval_id=%s action_type=%s",
+                ctx.session_id,
+                ctx.tenant_id,
+                approval_id,
+                match.action_type,
+            )
+            flow.response = _http_403(_CODE_INTERNAL_ERROR)
+            # If the row was already committed, terminalize it so an
+            # undecidable pending row doesn't leak into the audit.
+            if approval_id is not None:
+                self._safe_terminalize(approval_id, ctx.tenant_id)
+        finally:
+            # Belt-and-braces: _await_decision's own finally is the
+            # canonical pop path, but if it raised before entering its
+            # try block (e.g., constructing the cache backend) this
+            # guards the drain dict against leaks.
+            if approval_id is not None:
+                self._inflight_tenant_by_approval.pop(approval_id, None)
 
     # ------------------------------------------------------------------
     # request() helpers
@@ -192,10 +232,14 @@ class GateAddon:
         return ctx, match
 
     def _create_request(self, ctx: SessionContext, match: ActionMatch) -> UUID:
-        """Write the row + liveness key in one transaction.
+        """Persist the row, register for the drain, publish liveness.
 
-        Publishing the liveness key inside the ``with`` block means a
-        Redis failure raises and rolls the DB write back.
+        Liveness is published *after* ``db.commit()`` so a commit
+        failure can't leave a phantom liveness key in Redis (which
+        would surface a non-existent approval in the chat for up to
+        ``LIVENESS_TTL_S``). A cache failure here is logged and
+        swallowed; the heartbeat in ``_await_decision`` retries on
+        each tick.
         """
         with self._db_session_factory(ctx.tenant_id) as db:
             row = action_approval.insert_action_approval(
@@ -205,12 +249,31 @@ class GateAddon:
                 payload=match.payload,
             )
             approval_id = row.approval_id  # capture before commit detaches row
+            db.commit()
+
+        # Register here (not in _await_decision) so a SIGTERM firing
+        # between commit and the caller's await still finds the row
+        # in the drain dict.
+        self._inflight_tenant_by_approval[approval_id] = ctx.tenant_id
+
+        try:
             approval_cache.set_alive(
                 approval_id,
                 self._proxy_instance_id,
                 self._cache_factory(ctx.tenant_id),
             )
-            db.commit()
+        except CACHE_TRANSIENT_ERRORS as e:
+            # Without liveness the chat won't surface the card, so the
+            # user can't act on it — there's no point waiting. Mark
+            # the row EXPIRED inline and bubble up so request() emits
+            # a 403 to the sandbox.
+            logger.warning(
+                "gate.initial_set_alive_failed approval_id=%s error=%s",
+                approval_id,
+                str(e),
+            )
+            self._safe_terminalize(approval_id, ctx.tenant_id)
+            raise
 
         logger.info(
             "gate.row_committed approval_id=%s session_id=%s tenant_id=%s "
@@ -244,8 +307,10 @@ class GateAddon:
 
         Returns the recorded ``ApprovalDecision``. Always releases the
         liveness key and the in-flight tracking entry on exit.
+
+        The in-flight entry is set in ``_create_request``; this method
+        only owns its removal in the ``finally`` block.
         """
-        self._inflight_tenant_by_approval[approval_id] = ctx.tenant_id
         cache = self._cache_factory(ctx.tenant_id)
         heartbeat = asyncio.create_task(self._heartbeat_loop(approval_id, cache))
         try:
@@ -270,7 +335,7 @@ class GateAddon:
                 ctx.tenant_id,
                 match.action_type,
             )
-            resolved = self._claim_expired_or_read(approval_id, ctx)
+            resolved = self._terminalize_as_expired(approval_id, ctx.tenant_id)
             if resolved == ApprovalDecision.EXPIRED:
                 logger.info(
                     "gate.expired_on_timeout approval_id=%s session_id=%s tenant_id=%s",
@@ -283,33 +348,40 @@ class GateAddon:
             # Sandbox-side socket closed mid-wait. Same cleanup as
             # timeout: try to claim EXPIRED so the audit row is
             # terminal; re-raise so mitmproxy releases the flow.
-            self._claim_expired_or_read(approval_id, ctx)
+            self._terminalize_as_expired(approval_id, ctx.tenant_id)
             raise
         finally:
             heartbeat.cancel()
-            # Swallow the cancel + any error from the cancelled
-            # heartbeat; CancelledError is a BaseException so list it
-            # explicitly alongside Exception.
+            # Settle the cancellation; log anything unexpected so a
+            # silent heartbeat-loop bug doesn't go missing.
             try:
                 await heartbeat
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception(
+                    "gate.heartbeat_unexpected_error approval_id=%s",
+                    approval_id,
+                )
             try:
                 approval_cache.clear_alive(approval_id, cache)
             except CACHE_TRANSIENT_ERRORS:
                 pass
             self._inflight_tenant_by_approval.pop(approval_id, None)
 
-    def _claim_expired_or_read(
-        self, approval_id: UUID, ctx: SessionContext
+    def _terminalize_as_expired(
+        self, approval_id: UUID, tenant_id: str
     ) -> ApprovalDecision:
-        """Race-safe terminal write or read of the existing winner.
+        """Race-safe terminal write — or read of the existing winner.
 
-        Tries the conditional UPDATE first. If we lose (someone
-        already decided), re-reads the row and returns the winner's
-        decision so the addon forwards/rejects correctly.
+        Tries the conditional UPDATE to claim EXPIRED. If we lose (the
+        API already wrote APPROVED / REJECTED), re-reads the row and
+        returns the winner's decision so the caller forwards / rejects
+        correctly. Used by both the normal wait-timeout path (with the
+        live ``SessionContext.tenant_id``) and the SIGTERM drain path
+        (with the tenant_id snapshotted at registration).
         """
-        with self._db_session_factory(ctx.tenant_id) as db:
+        with self._db_session_factory(tenant_id) as db:
             row = action_approval.record_decision(
                 db,
                 approval_id=approval_id,
@@ -319,11 +391,14 @@ class GateAddon:
                 row = action_approval.get_action_approval(db, approval_id)
             if row is None or row.decision is None:
                 # The row was deleted via FK cascade (build_session
-                # dropped mid-flight) — reject the upstream call.
-                logger.warning(
-                    "gate.row_missing_on_claim approval_id=%s session_id=%s",
+                # dropped mid-flight) — reject the upstream call. This
+                # branch is logically impossible if the row exists and
+                # the conditional UPDATE failed to match, so log loud
+                # if it ever fires.
+                logger.error(
+                    "gate.row_missing_on_claim approval_id=%s tenant_id=%s",
                     approval_id,
-                    ctx.session_id,
+                    tenant_id,
                 )
                 return ApprovalDecision.EXPIRED
             decision = row.decision
@@ -365,6 +440,36 @@ class GateAddon:
         )
         flow.response = _http_403(code)
 
+    def _safe_terminalize(self, approval_id: UUID, tenant_id: str) -> None:
+        """Best-effort cleanup for an unexpected error path.
+
+        Used when an exception fires after the row is committed but
+        before a normal decision can be recorded — runs the same
+        conditional UPDATE the timeout path uses, then clears the
+        liveness key and pushes the resolved decision onto the wake
+        channel. All sub-steps swallow their own errors so a failing
+        cleanup never masks the original exception.
+        """
+        try:
+            decision = self._terminalize_as_expired(approval_id, tenant_id)
+        except Exception:
+            logger.exception(
+                "gate.safe_terminalize_db_failed approval_id=%s tenant_id=%s",
+                approval_id,
+                tenant_id,
+            )
+            return
+        try:
+            approval_cache.finalize(
+                approval_id, decision, self._cache_factory(tenant_id)
+            )
+        except Exception:
+            logger.exception(
+                "gate.safe_terminalize_cache_failed approval_id=%s tenant_id=%s",
+                approval_id,
+                tenant_id,
+            )
+
     # ------------------------------------------------------------------
     # SIGTERM drain
     # ------------------------------------------------------------------
@@ -372,24 +477,25 @@ class GateAddon:
     async def drain_inflight(self) -> None:
         """Best-effort cleanup of in-flight approvals on shutdown.
 
-        For each in-flight approval:
+        Two phases:
 
-        - If we win the conditional UPDATE → row is EXPIRED.
-        - If we lose the claim (API already wrote APPROVED / REJECTED)
-          → the row already has a terminal decision; the re-read
-          returns the winning one.
-
-        Either way we push the resolved decision onto the wake channel
-        so the in-flight ``_await_decision`` coroutine's BLPOP unblocks
-        immediately rather than waiting out ``WAIT_TIMEOUT_S``.
+        1. For each parked approval, write EXPIRED via the conditional
+           UPDATE (or read back the winner if the API just decided),
+           then push the decision onto the wake channel so the parked
+           ``_await_decision`` coroutine's BLPOP unblocks immediately
+           rather than waiting out ``WAIT_TIMEOUT_S``.
+        2. Await every tracked ``request()`` task to actually finish
+           — so the outer shutdown doesn't tear down connections while
+           coroutines are still serializing their 403 / forward
+           response. Outer ``_DRAIN_TIMEOUT_SECONDS`` bounds the wait
+           when something hangs.
         """
-        # Snapshot to avoid mutation during iteration.
+        # Phase 1: snapshot to avoid mutation while we wake everyone.
         for approval_id, tenant_id in list(self._inflight_tenant_by_approval.items()):
             try:
-                decision = self._claim_expired_for_tenant(approval_id, tenant_id)
-                # Wake the parked coroutine — best-effort.
+                decision = self._terminalize_as_expired(approval_id, tenant_id)
                 try:
-                    approval_cache.send_wake(
+                    approval_cache.finalize(
                         approval_id, decision, self._cache_factory(tenant_id)
                     )
                 except CACHE_TRANSIENT_ERRORS:
@@ -415,30 +521,14 @@ class GateAddon:
                     str(e),
                 )
 
-    def _claim_expired_for_tenant(
-        self, approval_id: UUID, tenant_id: str
-    ) -> ApprovalDecision:
-        """Drain-path UPDATE that doesn't need a ``SessionContext``.
-
-        Issues the same conditional UPDATE as ``_claim_expired_or_read``
-        but routes via the explicitly-passed tenant_id from the
-        in-flight tracking dict.
-        """
-        with self._db_session_factory(tenant_id) as db:
-            row = action_approval.record_decision(
-                db,
-                approval_id=approval_id,
-                decision=ApprovalDecision.EXPIRED,
-            )
-            if row is None:
-                row = action_approval.get_action_approval(db, approval_id)
-            decision = (
-                row.decision
-                if row is not None and row.decision is not None
-                else ApprovalDecision.EXPIRED
-            )
-            db.commit()
-        return decision
+        # Phase 2: wait for the woken tasks to actually finish their
+        # cleanup + return from the hook. Exclude the current task so
+        # we don't deadlock if drain_inflight ever ends up tracked.
+        self_task = asyncio.current_task()
+        pending = [t for t in self._inflight_tasks if t is not self_task]
+        if pending:
+            logger.info("gate.drain_awaiting_tasks count=%d", len(pending))
+            await asyncio.wait(pending)
 
     # ------------------------------------------------------------------
     # Notification dispatch
@@ -494,7 +584,7 @@ def _http_403(code: str) -> http.Response:
     the SDK / curl wrapper can match on. Locked enum:
 
       unidentified_sandbox | body_too_large | user_rejected
-      | not_authorized | policy_denied
+      | not_authorized | internal_error
     """
     body = json.dumps({"error": code}).encode()
     return http.Response.make(

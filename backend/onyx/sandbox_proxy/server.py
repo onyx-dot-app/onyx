@@ -34,10 +34,12 @@ _DB_POOL_SIZE = 4
 _DB_MAX_OVERFLOW = 4
 _DB_APP_NAME = "sandbox_proxy"
 
-# How long the SIGTERM drain has to terminalize in-flight approvals
-# before the proxy exits anyway. The K8s terminationGracePeriodSeconds
-# bounds the outer window — this is just a safety against a stuck
-# DB / Redis call hanging the shutdown.
+# Outer cap on the SIGTERM drain. ``GateAddon.drain_inflight`` writes
+# terminal decisions, wakes parked coroutines, and then awaits the
+# tracked request() tasks so the connections close cleanly. This bound
+# only fires if something hangs (a stuck DB / Redis call or a
+# coroutine that can't make progress); the K8s
+# ``terminationGracePeriodSeconds`` is the outer envelope.
 _DRAIN_TIMEOUT_SECONDS = 10.0
 
 # If the watch isn't reachable in this window on startup, the proxy
@@ -177,8 +179,7 @@ def _install_signal_handlers(
             )
         except Exception:
             logger.exception("gate drain raised; exiting anyway")
-        finally:
-            master.shutdown()
+        master.shutdown()
 
     def _on_signal() -> None:
         if readiness.draining:

@@ -74,10 +74,11 @@ class SlackSendMessageMatcher:
         body = request.raw_content or b""
         content_type = (request.headers.get("content-type") or "").lower()
 
-        payload = self._decode_body(body, content_type)
-        if payload is None:
-            return None
-
+        # The URL + method already identify this as a Slack send. Gate
+        # it regardless of body shape — an unparseable / non-dict body
+        # is Slack's problem to reject, not a reason to bypass the
+        # gate.
+        payload = self._decode_body(body, content_type) or {}
         return ActionMatch(
             action_type=ACTION_TYPE_SLACK_SEND_MESSAGE,
             payload=payload,

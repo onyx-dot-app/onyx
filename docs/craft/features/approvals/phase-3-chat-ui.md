@@ -5,16 +5,61 @@ Depends on Phase 2.
 
 ## Goal
 
-Render an actionable Approve / Reject card inline in the chat for every
-`approval_request` `BuildMessage` that the server reports as
-`is_live=true`. When `is_live` flips false, the card disappears
-entirely. The agent's next chat message is the only post-decision
-artifact.
+Render an actionable Approve / Reject card at the bottom of the chat
+for every currently-live approval request on the open session. The
+chat fetches live approvals from a dedicated endpoint that returns
+only undecided, in-flight requests; the card disappears from the next
+refetch onward as soon as the user resolves it or the server expires
+it. The agent's subsequent tool-call `BuildMessage` is the only
+permanent record of the action's outcome.
 
-`is_live` is provided by the server on each `approval_request`
-BuildMessage in the `GET /api/build/sessions/{id}/messages` response
-(Phase 2 deliverable). The frontend treats it as authoritative and
-re-reads it on every refetch.
+The `BuildMessage` stream is not a carrier for approvals: there is no
+`is_live` flag on `MessageResponse` and no dispatch on
+`message_metadata.type`. The chat's saved-message rendering path is
+untouched.
+
+## Backend contract consumed
+
+Phase 3 consumes the approvals API mounted under `/api/build/approvals`.
+
+`GET /api/build/approvals/sessions/{session_id}/live` returns the
+session's currently-actionable approvals:
+
+```ts
+interface ApprovalView {
+  approval_id: string;         // UUID
+  session_id: string;          // UUID
+  action_type: string;         // e.g. "slack.send_message"
+  payload: Record<string, unknown>;
+  created_at: string;          // ISO datetime
+  decision: ApprovalDecision | null;
+  decided_at: string | null;   // ISO datetime
+  is_live: boolean;
+}
+
+interface ApprovalListResponse {
+  items: ApprovalView[];
+}
+```
+
+On the `/live` endpoint every returned row has `decision === null` and
+`is_live === true` — the server filters server-side using a Redis
+liveness key, so orphan rows from a hard proxy crash are excluded.
+
+`POST /api/build/approvals/{approval_id}/decision` with body
+`{decision: "APPROVED" | "REJECTED"}` records the user's decision and
+returns the updated `ApprovalView`. On a competing decision the server
+responds 409 with the standard `OnyxError` shape
+`{error_code: "CONFLICT", detail: "..."}`. Same-value re-submits are
+idempotent and return 200.
+
+```ts
+type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
+
+interface DecisionBody {
+  decision: "APPROVED" | "REJECTED";   // EXPIRED is server-only
+}
+```
 
 ## Module layout
 
@@ -22,60 +67,65 @@ All changes are frontend.
 
 ```
 web/src/app/craft/components/
-  BuildMessageList.tsx                       # new dispatch branch
-  ApprovalCard.tsx                           # new
-  PayloadView.tsx                            # new; per-action_type payload renderer
-  actionLabels.ts                            # new; action_type → display string map
+  LiveApprovalsRegion.tsx                       # new; bottom-of-chat container
+  ApprovalCard.tsx                              # new; single Approve / Reject card
+  PayloadView.tsx                               # new; per-action_type payload renderer
+  actionLabels.ts                               # new; action_type → display string
 
-web/src/app/craft/services/apiServices.ts    # postApprovalDecision
-web/src/app/craft/hooks/useApprovalPolling.ts  # new; fallback poller
-web/src/lib/notifications/interfaces.ts      # APPROVAL_REQUESTED enum value
+web/src/app/craft/services/apiServices.ts       # add fetchLiveApprovals, postApprovalDecision
+web/src/app/craft/hooks/useLiveApprovalsPolling.ts  # new; fallback poller
+web/src/lib/notifications/interfaces.ts         # APPROVAL_REQUESTED enum value
 ```
 
 ## Tasks
 
-### T3.1 — Add a `message_metadata.type` dispatch path in `BuildMessageList`
+### T3.1 — `LiveApprovalsRegion` at the bottom of the chat
 
-`renderAgentMessage` today branches on whether `message.message_metadata?.streamItems`
-is populated; otherwise it falls back to rendering `message.content` via
-`TextChunk`.
+`LiveApprovalsRegion` is rendered by the chat page directly below
+`BuildMessageList`, inside the same scrollable container, styled to
+match an assistant message region (logo + left margin). It holds the
+`ApprovalView[]` state for the open session and renders one
+`ApprovalCard` per item in `created_at` order.
 
-Add `is_live?: boolean` to the `BuildMessage` TypeScript type
-(`web/src/app/craft/types/streamingTypes.ts`) so the dispatch can read
-it. Then add a top-of-function check in `renderAgentMessage` before
-the existing `savedStreamItems` branch:
+The region is the single owner of `fetchLiveApprovals(sessionId)`:
 
-```tsx
-const meta = message.message_metadata;
-if (meta?.type === "approval_request") {
-  if (!message.is_live) return null;
-  return <ApprovalCard message={message} />;
-}
-```
+- Calls it on mount.
+- Exposes a stable `refetchLiveApprovals()` callback (via context or
+  prop drilling from the chat shell) so the message stream,
+  notification stream, and polling hook can all trigger a refresh.
+- Replaces local state with the response on every refetch — server is
+  the authority on what's live.
 
-The `is_live=false` branch returns `null` explicitly — the BuildMessage
-row stays in the database for audit; the chat just doesn't render it.
+When the response has zero items the region renders nothing (no empty
+state, no placeholder).
 
 ### T3.2 — `ApprovalCard` component
 
-Behavioral contract:
+Props: an `ApprovalView` and a `refetchLiveApprovals` callback.
 
-- Input: a `BuildMessage` whose `message_metadata` matches the
-  `approval_request` shape from Phase 2 (`approval_id`,
-  `action_type`, `payload`) and whose `is_live` is `true`. The
-  dispatch in T3.1 guarantees this.
-- Renders: a header string resolved from `actionLabels[action_type]`
-  (e.g. `"Craft is trying to send a message in Slack"`),
-  `<PayloadView>` for the structured payload, and Approve / Reject
-  buttons.
-- On Approve / Reject click: immediately disable both buttons (local
-  state), then POST the decision via `postApprovalDecision`.
-- On success: call `refetchMessages()`. The server will now report
-  `is_live=false` and the dispatch in T3.1 stops rendering the card.
-  Optimistic local hiding is acceptable as a latency optimization, but
-  the refetch is the authoritative source.
-- On CONFLICT (already decided or expired): same path — call
-  `refetchMessages()`.
+Renders:
+
+- A header string resolved from `actionLabels[action_type]`
+  (e.g. `"Craft is trying to send a message in Slack"`).
+- `<PayloadView action_type={...} payload={...} />` for the structured
+  payload.
+- Approve and Reject buttons, side by side.
+
+Behavior:
+
+- Click Approve or Reject → set local `submitting=true` to disable
+  both buttons, then `await postApprovalDecision(approval_id, "APPROVED" | "REJECTED")`.
+- On success (200) → call `refetchLiveApprovals()`. The `/live`
+  endpoint will no longer return this row, so the card unmounts on
+  the next render.
+- On 409 CONFLICT (decided by someone else / expired by the proxy) →
+  same path: call `refetchLiveApprovals()` and unmount.
+- On any other error → re-enable the buttons and surface an inline
+  error string under the buttons.
+
+The card never holds post-decision UI. The user's signal that their
+action took effect is the agent's next tool-call `BuildMessage`
+arriving in the chat above.
 
 ### T3.3 — `PayloadView` per-action_type renderers
 
@@ -84,127 +134,176 @@ Per-action_type rendering for the v0 action set:
 - `slack.send_message` (Slack `chat.postMessage`): channel name and
   message body. Truncate the body at ~300 chars with a "show more"
   expander.
-- `linear.create_issue` (Linear `IssueCreate`): team key, issue title,
-  truncated description.
-- `gcal.create_event` (GCal `events.insert`): event title, start time,
-  attendee count.
-- **Malformed-payload fallback for known action_types.** If a known
-  `action_type` payload is missing fields the renderer expects (e.g.
-  `slack.send_message` without `channel`), render the action label
-  and fall through to the JSON pretty-print path with a small
-  "Payload did not match expected shape" notice. Do not throw or
-  render a blank card.
-- **Fallback for unrecognized action_types**: render `action_type`
-  verbatim as the header and JSON pretty-print of `payload`.
 
-### T3.4 — `postApprovalDecision` helper
+For known action_types whose payload is missing expected fields
+(e.g. `slack.send_message` without `channel`): render the resolved
+action label, JSON-pretty-print the payload, and show a small
+"Payload did not match expected shape" notice. The renderer never
+throws.
 
-Add to `apiServices.ts`, mirroring the existing fetch conventions in
-that file (`/api/build/...` rewrite path, no explicit `credentials`,
-JSON content type, throw on non-OK). Signature:
+For unrecognized action_types: render `action_type` verbatim as the
+header and JSON-pretty-print of `payload`.
+
+### T3.4 — `actionLabels.ts`
+
+Maps `action_type` → display string. Examples:
 
 ```ts
-async function postApprovalDecision(
-  approvalId: string,
-  decision: "approve" | "reject",
-): Promise<void>
+export const actionLabels: Record<string, string> = {
+  "slack.send_message": "Craft is trying to send a message in Slack",
+};
+
+export function resolveActionLabel(actionType: string): string {
+  return actionLabels[actionType] ?? actionType;
+}
 ```
 
-On 409 CONFLICT, throw an `ApprovalConflictError` the card can catch
-distinctly from generic errors. The caller (the card) calls
-`refetchMessages` on success.
+Unknown keys fall back to the verbatim `action_type`.
 
-### T3.5 — Triggers that refresh `is_live`
+### T3.5 — `apiServices.ts` additions
 
-Three paths can flip a card from `is_live=true` to `is_live=false`,
-in order from fastest to slowest:
+Mirror the existing fetch conventions in that file (`/api/build/...`
+rewrite path, JSON content type, throw on non-OK).
+
+```ts
+export async function fetchLiveApprovals(
+  sessionId: string,
+): Promise<ApprovalView[]> {
+  const res = await fetch(
+    `${API_BASE}/approvals/sessions/${sessionId}/live`,
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch live approvals: ${res.status}`);
+  }
+  const data: ApprovalListResponse = await res.json();
+  return data.items;
+}
+
+export class ApprovalConflictError extends Error {
+  public readonly statusCode: number = 409;
+  constructor(detail: string) {
+    super(detail);
+    this.name = "ApprovalConflictError";
+  }
+}
+
+export async function postApprovalDecision(
+  approvalId: string,
+  decision: "APPROVED" | "REJECTED",
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${API_BASE}/approvals/${approvalId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    },
+  );
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    throw new Error(`Failed to post approval decision: ${res.status}`);
+  }
+  return res.json();
+}
+```
+
+`ApprovalConflictError` lets the card distinguish "already resolved"
+from generic network errors and route both into the same
+`refetchLiveApprovals()` path while keeping logs clean.
+
+### T3.6 — Refresh triggers
+
+Three triggers can flip a card from visible to gone, fastest to
+slowest:
 
 1. **Message-stream-triggered refetch (primary).** The chat's existing
-   real-time message stream delivers new assistant messages as the
-   agent emits them. When the sandbox's HTTP call times out or fails,
-   the agent's very next message is a tool-call result — and at that
-   moment the underlying request has resolved (the proxy has already
-   written EXPIRED / REJECTED). In the stream's `onmessage` handler,
-   when a new assistant `BuildMessage` arrives for a session that has
-   at least one visible `approval_request` card with `is_live=true`,
-   call `refetchMessages` for that session. The same refetch that
-   appends the new tool-call message re-evaluates `is_live` for
-   prior approval cards — card disappears at the same instant the
-   tool result renders.
+   SSE message stream delivers new assistant messages as the agent
+   emits them. In the stream's `onmessage` handler, when a new
+   assistant `BuildMessage` arrives for the open session and at least
+   one approval card is currently visible, call
+   `refetchLiveApprovals(sessionId)`. The /live endpoint re-evaluates
+   liveness against Redis; resolved or expired requests drop off in
+   the same tick that the tool-result message renders.
 
 2. **Notification stream.** Add `APPROVAL_REQUESTED` to
-   `web/src/lib/notifications/interfaces.ts`. When the chat is open
-   on the targeted session and a notification of this type arrives,
-   call `refetchMessages`. This is mostly relevant for the initial
-   appearance of the card; decisions don't fire notifications.
+   `web/src/lib/notifications/interfaces.ts`. When a notification of
+   this type arrives for the open session, call
+   `refetchLiveApprovals(sessionId)`. This is the path that surfaces
+   the initial appearance of a new card; decisions don't fire
+   notifications.
 
-3. **Polling fallback.** SSE / notification streams can drop without
-   the user noticing. Add `useApprovalPolling(sessionId)` modeled on
-   the existing `usePreProvisionPolling` hook (same `setInterval` +
-   `isCheckingRef` + try/catch + cleanup shape). Cadence 10s; polls
-   `GET /api/build/sessions/{sessionId}/messages` while the session
-   has at least one visible `approval_request` BuildMessage with
-   `is_live=true`. Stops naturally when no cards are visible.
+3. **Polling fallback.** SSE and notification streams can drop without
+   the user noticing. `useLiveApprovalsPolling(sessionId)` is modeled
+   on the existing `usePreProvisionPolling` hook (same `setInterval`
+   + `isCheckingRef` + try/catch + cleanup shape). Cadence: 10s. It
+   polls `fetchLiveApprovals(sessionId)` while the chat is open and
+   the session is active, and stops on cleanup when the chat closes.
 
-The popover itself needs no logic change for v0; `APPROVAL_REQUESTED`
-notifications render with default UI and deep-link to the session.
+The notifications popover requires no logic change for v0;
+`APPROVAL_REQUESTED` renders with the default UI and deep-links to
+the session.
 
 ## Testing
 
-- **Playwright (happy path).** Stand-in sandbox triggers a gated
-  request, card appears inline within ~1s of the proxy hitting the
-  service, click Approve, assert the card disappears once the
-  messages refetch reports `is_live=false`, and the upstream action
-  completes.
-- **Playwright (Reject).** Same shape; assert the agent receives the
-  rejection and reports the failure in its next message.
-- **Playwright (reload).** Trigger a gated request, reload the chat,
-  assert the card is still actionable.
-- **Playwright (sandbox-side timeout).** Trigger a gated request,
-  let the sandbox's HTTP client time out before the proxy's 180s
-  wait; assert the agent's next tool-result message appears AND
-  the approval card disappears at the same instant — no window
-  where both are visible together.
+Playwright end-to-end tests only.
 
-Component tests are out of scope for Phase 3 — Playwright covers the
-end-to-end paths and bespoke mocks for `refetchMessages` add fragility
-without commensurate coverage. No backend tests in this phase.
+- **Happy path.** Stand-in sandbox triggers a gated request, card
+  appears at the bottom of the chat within ~1s, click Approve, card
+  disappears on the next refetch, the agent's next tool-call message
+  reports success.
+- **Reject.** Same shape; assert the agent's next message reports the
+  failure.
+- **Reload mid-decision.** Trigger a gated request, reload the chat,
+  the card is still rendered and still actionable.
+- **Sandbox-side timeout.** Trigger a gated request, let the sandbox's
+  HTTP client time out before the proxy's 180s wait; the agent's next
+  tool-result message and the disappearance of the card render in the
+  same frame, with no window where both are visible together.
+
+Component tests are out of scope for Phase 3. No backend tests in
+this phase.
 
 ## Dependencies
 
-- Phase 2 merged: `approval_request` `BuildMessage` written by the
-  gate addon at request-create time; `is_live: bool` field returned
-  on every `approval_request` BuildMessage from
-  `GET /api/build/sessions/{id}/messages`, computed server-side as
-  `approval.decision is None AND cache.exists(approval:live:{id})`
-  and cached for 5s.
-- `GET /api/build/sessions/{id}/messages` returns `message_metadata`
-  verbatim (already does), plus the new `is_live` field per approval
-  card.
+- Phase 2 merged: `ActionApproval` rows persisted by the gate addon
+  at request-create time, Redis liveness key set for the duration of
+  the proxy wait, `/api/build/approvals/sessions/{id}/live` and
+  `/api/build/approvals/{id}/decision` endpoints exposed under the
+  `/build` prefix with `BASIC_ACCESS` and Craft-enabled checks.
+- `APPROVAL_REQUESTED` notifications emitted server-side at
+  request-create time, scoped to the session owner.
 
 ## Open during phase
 
-- Visual design: match existing message-card primitives; punt to
-  design review during the phase.
-- Truncation policy for `PayloadView` (proposed: ~300 chars body with
-  "show more"; ~100 chars for inline fields like Linear description).
+- Visual design of `LiveApprovalsRegion` and `ApprovalCard`: match
+  existing assistant message and pill primitives; punt to design
+  review during the phase.
+- Truncation policy for `PayloadView` (proposed: ~300 chars for the
+  Slack body with a "show more" expander).
 
 ## Definition of done
 
-- Actionable card renders inline for every `approval_request`
-  BuildMessage with `is_live=true`, including the per-action_type
-  `PayloadView` for each of the three v0 kinds.
-- Clicking Approve or Reject disables both buttons immediately, posts
-  the decision, and the card disappears once the messages response
-  reports `is_live=false`.
-- On CONFLICT, the card triggers a refetch and disappears.
-- A user who reloads while a card is `is_live=true` sees the same
-  actionable card and can act on it.
-- Message-stream-triggered refetch fires when a new assistant
-  message arrives in a session with a visible approval card —
-  card disappears at the same instant the tool-result renders, no
-  visible mid-state where both are shown.
-- Notification-stream refetch path works on initial appearance;
-  polling fallback works when streams drop, and polling stops
-  naturally once no `is_live=true` cards remain.
-- Playwright happy path green.
+- `LiveApprovalsRegion` renders at the bottom of the chat and shows
+  one `ApprovalCard` per item returned by
+  `GET /api/build/approvals/sessions/{id}/live`.
+- Each card renders the resolved action label and a `PayloadView` for
+  its `action_type`, with the malformed-payload fallback in place for
+  known types and the verbatim + JSON fallback for unknown types.
+- Clicking Approve or Reject disables both buttons, posts the
+  decision, and the card disappears on the next refetch.
+- 409 CONFLICT is treated as a successful resolution: the card
+  refetches and unmounts.
+- A user who reloads while a card is live sees the same actionable
+  card and can act on it.
+- Message-stream-triggered refetch fires when a new assistant message
+  arrives in a session with a visible approval card — the card
+  disappears at the same instant the tool-result renders, with no
+  visible mid-state.
+- Notification-stream refetch surfaces newly-created cards;
+  `useLiveApprovalsPolling` is the safety net when streams drop and
+  stops on chat close.
+- Playwright happy path, reject, reload, and sandbox-timeout tests
+  green.

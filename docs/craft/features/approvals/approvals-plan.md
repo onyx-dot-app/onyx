@@ -1,8 +1,8 @@
 # Craft Approvals — Project Proposal
 
-> **Review status.** [Phase 1](./phase-1-proxy.md) has been reviewed
-> in detail and is the document to trust for implementation specifics.
-> [Phase 2](./phase-2-service-and-gating.md),
+> **Review status.** [Phase 1](./phase-1-proxy.md) and
+> [Phase 2](./phase-2-service-and-gating.md) have been reviewed in
+> detail and are the documents to trust for implementation specifics.
 > [Phase 3](./phase-3-chat-ui.md), [Phase 4](./phase-4-policy.md),
 > and [Phase 5](./phase-5-docker.md) are **rough proposals** —
 > directionally correct, but the task-level detail has not been
@@ -68,8 +68,9 @@ row as expired before its coroutine exits — pending rows never linger
 just because a TCP connection went away. We do not preserve approvals
 beyond the live request — there's nothing for an approval to drive once
 the agent has moved on.
-- **Single source of truth.** All trigger sources write to the same Approval
-Service, surface in the same UI, respect the same policy.
+- **Single source of truth.** All trigger sources write to the same
+`action_approval` table, surface in the same UI, respect the same
+policy.
 - **Forward-compatible with the full interception layer.** The proxy here is
 the seed of a larger workstream (secret injection, broader policy). Same
 monorepo, same package, same data layer.
@@ -130,11 +131,11 @@ choices once a deployment outgrows Python — a transition we're not close to.
    │(Craft agent)│ ◄────────────┤(mitmproxy)│
    └─────────────┘ 5b. 403      └──┬────▲───┘
                   (on reject)      │    │
-                                2. │    │ 4b. relay
-                                   ▼    │    decision
+                                2. │    │ 4b. wake
+                                   ▼    │
                            ┌────────────────────┐ 3. notify  ┌──────────────┐
                            │    API Server      ├───────────►│   Chat UI    │
-                           │ (Approval Service) │            │ user decides │
+                           │                    │            │ user decides │
                            │                    │◄───────────┤              │
                            └────────────────────┘ 4a. POST   └──────────────┘
                                                   decision
@@ -143,27 +144,143 @@ choices once a deployment outgrows Python — a transition we're not close to.
 The numbered steps:
 
 1. The Craft agent makes an outbound HTTPS request; the proxy intercepts.
-2. The proxy matches it against a gated action and calls the Approval
-  Service.
-3. The Approval Service notifies the user.
-4. The user decides via the chat UI (4a). The Approval Service relays the
-  decision back to the proxy (4b).
-5. The proxy forwards the original request to the external API (5a) or
-  returns 403 to the sandbox (5b).
+2. The proxy matches it against a gated action, writes an
+   `action_approval` row, publishes a Redis liveness flag, and parks on
+   a per-approval wake channel.
+3. The API server dispatches an `APPROVAL_REQUESTED` notification (body
+   carries only `{approval_id, session_id, action_type}` — no payload
+   contents).
+4. The user decides via the chat UI (4a). The API records the decision
+   via a conditional `WHERE decision IS NULL` UPDATE, then pushes the
+   decision onto the wake channel (4b) so the proxy unblocks without
+   waiting out its 180s timeout.
+5. The proxy forwards the original request to the external API on
+   APPROVED (5a) or returns a 403 to the sandbox on REJECTED / EXPIRED
+   (5b).
 
-Scheduled-task-driven sessions (cron-initiated prompts) flow through the  
+Scheduled-task-driven sessions (cron-initiated prompts) flow through the
 same path.
+
+### Data flow specifics
+
+- **Postgres `action_approval` is the source of truth.** The row's
+  `decision` column starts as `NULL` and is written exactly once by a
+  conditional `UPDATE ... WHERE decision IS NULL RETURNING *`. That
+  conditional UPDATE is the only arbiter for concurrent decision
+  writers — the API server's approve / reject and the proxy's
+  timeout / SIGTERM-drain expiry all race through it.
+- **`ApprovalDecision` enum** (`backend/onyx/db/enums.py`) has three
+  values: `APPROVED`, `REJECTED`, `EXPIRED`. There is **no `PENDING`
+  value**; pending is represented by `decision IS NULL`. Clients can
+  only submit `APPROVED` or `REJECTED`; `EXPIRED` is server-only,
+  written by the proxy on timeout or SIGTERM drain.
+- **Redis is best-effort.** Two keys back the proxy ↔ API rendezvous
+  (defined in `backend/onyx/sandbox_proxy/approval_cache.py`):
+  - `approval:live:{id}` — proxy-owned heartbeat-refreshed presence
+    flag. Heartbeat cadence is 15s; TTL is 60s (4× the heartbeat) so
+    two missed refreshes still leave the key alive. A hard proxy
+    crash lets the key lapse on its own.
+  - `approval:wake:{id}` — one-shot BLPOP list. The API pushes the
+    decision onto it; the proxy's parked `wait_for_wake` returns
+    immediately. TTL 30s so a never-consumed wake auto-evicts.
+- **Cache module functions** split by role:
+  - Proxy side: `set_alive`, `clear_alive`, `wait_for_wake`.
+  - API side: `is_alive`, `send_wake`.
+  - Shared: `finalize` (clear liveness + push wake in one call;
+    cleared first so a racing `is_alive` check sees the terminal state
+    immediately).
+- **Tenant isolation** rides the existing infra: the cache backend
+  applies a per-tenant Redis key prefix (callers pass `tenant_id`),
+  and per-tenant Postgres schemas isolate DB rows. The gate addon and
+  API both obtain a `CacheBackend` via
+  `get_cache_backend(tenant_id=...)`.
+- **No in-process `is_live` cache.** The decision API hits Redis
+  EXISTS directly per row. EXISTS is sub-ms; the realistic worst-case
+  load is one user polling one session, and an in-process memo would
+  add eviction, cross-replica staleness, and an invalidation site for
+  no win.
+
+### Chat surface integration
+
+- **Approvals are not BuildMessages.** The chat surface fetches live
+  approvals via `GET /api/build/approvals/sessions/{id}/live` — a
+  separate endpoint that returns only rows where `decision IS NULL`
+  AND the Redis liveness key is present. Orphan rows left by a hard
+  proxy crash drop out within `LIVENESS_TTL_S`.
+- **After resolution the card disappears.** The agent's subsequent
+  tool-call BuildMessage is the only permanent chat record of the
+  action's outcome (success on APPROVED, the sandbox's handling of
+  the 403 on REJECTED / EXPIRED). There is no `is_live` field on
+  `MessageResponse`.
+- **Audit history is a sibling endpoint.**
+  `GET /api/build/approvals/sessions/{id}` returns the full history
+  filterable by `decision`, `from_dt`, `to_dt`.
+
+### Failure-mode posture
+
+The gate addon (`backend/onyx/sandbox_proxy/addons/gate.py`) takes a
+deliberate split posture between fail-closed and fail-open:
+
+- **Fail-closed (returns 403, no upstream call).**
+  - No source IP on the TCP connection → 403 `unidentified_sandbox`.
+  - Identity resolver raises → 403 `unidentified_sandbox`. Identity is
+    a precondition for gating; a DB blip cannot grant ungated egress.
+  - `flow.request.raw_content is None` → 403 `body_too_large`.
+    Defensive against a future addon enabling `stream=True`.
+  - Request body exceeds 1 MiB (`PARSER_MAX_BODY_BYTES`) → 403
+    `body_too_large`. A real DoS attempt against the matcher or
+    exfiltration wouldn't show up in the action summary anyway.
+- **Fail-open (forwards unchanged).**
+  - `ActionMatcher.match(...)` raises → log `gate.matcher_error`,
+    forward. Deliberate: the gate is a UX layer plus audit trail, not
+    a sandbox boundary. The real boundary is the in-pod iptables
+    egress lockdown that Phase 1 installs.
+- **Sandbox-facing 403 code enum** (locked, separate protocol from
+  `OnyxError`):
+  `unidentified_sandbox | body_too_large | user_rejected | not_authorized | internal_error`.
+  `policy_denied` is reserved for Phase 4. The body is
+  `json.dumps({"error": code})` with `content-type: application/json`.
+
+### SIGTERM drain
+
+The proxy bundles the backend module tree and runs alongside in-pod
+iptables, so a graceful shutdown matters: dropping a connection
+mid-wait without writing a terminal decision would leave a row in
+`decision IS NULL` indefinitely (until the next admin audit query),
+and dropping a connection on an already-APPROVED row without
+forwarding upstream would make the audit log lie.
+
+The drain (`GateAddon.drain_inflight` →
+`backend/onyx/sandbox_proxy/server.py::_install_signal_handlers`)
+iterates the `_inflight_tenant_by_approval` dict and for each
+`(approval_id, tenant_id)`:
+
+1. Issues the same conditional UPDATE the timeout path uses. Wins →
+   row is EXPIRED. Loses → re-reads and gets the API's already-written
+   decision.
+2. Calls `approval_cache.finalize(...)` to clear liveness and push the
+   decision onto the wake channel.
+
+After the iteration, `drain_inflight` `asyncio.wait`s on the
+`GateAddon._inflight_tasks` set — every `request()` task is registered
+on entry — so the drain actually blocks until each parked coroutine
+has serialized its response (including any upstream forward on
+APPROVED) before mitmproxy tears connections down. The outer cap is
+`_DRAIN_TIMEOUT_SECONDS` (10s) so a stuck DB / Redis call can't hang
+shutdown indefinitely. The deployment's
+`terminationGracePeriodSeconds` sizes to bound the outer window —
+`_DRAIN_TIMEOUT_SECONDS + margin`, i.e. ≥ 20s.
 
 Policy is a config hierarchy, not a service: developer-defined actions, with
 admin per-action policy on top (require / deny / always allow), evaluated by
-the Approval Service at decision time. The schema is built so per-user
+the policy layer at decision time. The schema is built so per-user
 overrides can slot in later, but v0 ships admin-only.
 
 The proxy MITMs sandbox HTTPS so it can identify gated actions from URL and
-body. The Approval Service is the system of record — stores approvals,
-evaluates policy, dispatches notifications, exposes the decision API.
-Independent of trigger source: anything that calls `create_approval` ends up
-in the same chat card.
+body. Trigger sources (gate addon, scheduled-task entrypoint, policy
+evaluator) all write to the same `action_approval` table, so anything
+that wants to surface in chat or in audit history goes through the
+same code path.
 
 ---
 
@@ -213,59 +330,66 @@ Deliverable: all sandbox HTTPS traffic flows through the proxy, MITM'd,
 identifiable to a session, and passed through unmodified. Security posture
 improved (single chokepoint, default-deny) but no approval logic yet.
 
-### Phase 2 — Approval Service & Gate Wiring
+### Phase 2 — Approval Data Layer, API & Gate Wiring
 
-The backend service plus the proxy's first real job. Two parts:
+The backend data layer, decision API, and the proxy's first real job.
+Three parts:
 
-- **Approval Service.** Data model, state machine, REST API. Decision
-endpoint, audit query path, internal Python API consumed by triggers.
-`APPROVAL_REQUESTED` notifications via the existing notification system.
-- **Gate wiring in the proxy.** The proxy starts matching requests against
-the gated-action registry — which is owned by the External Apps
-workstream on `dane/ea-craft-5` (its `upstream_url_patterns` per provider
-is the source of truth for what each action looks like on the wire). We
-consume that registry rather than redefine matchers here. When a match
-fires, the proxy calls the service, blocks the request until a decision
-lands or its internal wait timeout (default 180s) elapses, and forwards,
-rejects, or returns `403 not_authorized` accordingly. If the sandbox-side
-socket closes first, the proxy still writes a terminal state on the row
-so it doesn't linger as `pending`.
-- **Bash-tool timeout + agent prompt.** Verify opencode's default bash-tool
-timeout and raise it to ≥240s so it doesn't dominate the proxy's 180s
-wait for `curl`-style calls. Add a sentence to the agent's system prompt
-explaining the approval window so the LLM sets generous explicit timeouts
-on gated calls.
+- **Data + API.** A single `action_approval` table whose `decision`
+  column is nullable (`NULL` = pending);
+  `backend/onyx/server/features/build/db/action_approval.py` is the
+  single source of SQL; the conditional `WHERE decision IS NULL`
+  UPDATE in `record_decision` is the race-safe arbiter. The
+  user-facing API
+  (`backend/onyx/server/features/build/approvals/api.py`) exposes
+  three endpoints: live-rows feed for chat, audit query, decision
+  write.
+- **Gate wiring.** The proxy stops being pass-through. On a gated
+  request the gate addon writes the `action_approval` row and
+  publishes the Redis liveness key in one DB transaction (Redis
+  failure rolls the DB back), blocks on the per-approval wake channel
+  until a decision lands or the 180s wait elapses, then forwards or
+  rejects. Race-safe timeout / cancel / drain paths all flow through
+  the same conditional UPDATE.
+- **Bash-tool timeout + agent prompt.** Opencode's bash-tool timeout
+  config is outside our control in this repo (opencode is consumed
+  as a binary). The mitigation is a sentence in the agent's system
+  prompt — `AGENTS.md` — telling the LLM to set explicit per-call
+  timeouts ≥200s on gated HTTP calls so the proxy's 180s wait wins.
 
 Deliverable: gated external-app requests work end-to-end. Users decide via
 notification deep link until Phase 3 lands the chat surface.
 
 ### Phase 3 — Chat Approval UI
 
-Inline approval card in the chat: summary, structured payload, Approve /
-Reject buttons. Persisted on the conversation. The card is interactive
-while the underlying request is still in flight; once the request has
-timed out, the card shows a terminal state (expired / not authorized) and
-the buttons are disabled.
+Inline approval card in the chat, driven by polling the
+`/approvals/sessions/{id}/live` endpoint: summary, structured payload,
+Approve / Reject buttons. The card is interactive while the underlying
+request is still in flight; once the row goes terminal (any of
+APPROVED / REJECTED / EXPIRED) the card disappears. The permanent
+chat record of the action's outcome is the agent's subsequent
+tool-call BuildMessage, not the approval card.
 
 Deliverable: approve / reject inline; no notification round-trip.
 
 ### Phase 4 — Policy Management
 
 Developer-defined action registry and an admin settings page for per-action
-org-wide policy (require / deny / always allow). Policy evaluation moves
-out of any hardcoded constant and into the Approval Service so all triggers
-share it. The schema is structured for a future per-user override layer
-but the UI is admin-only in v0.
+org-wide policy (require / deny / always allow). Policy evaluation lives
+on the same code path so all triggers share it; the silent-decision
+write goes through `insert_silent_action_approval` (audit row with
+no liveness key and no chat card). The schema is structured for a
+future per-user override layer but the UI is admin-only in v0.
 
 Deliverable: requirements met in full.
 
 ### Phase 5 — Docker-compose backend support
 
 Run the same proxy against the docker-compose sandbox backend
-(`SANDBOX_BACKEND=docker`). The proxy core, gate logic, Approval
-Service, chat UI, and policy layer are unchanged from Phases 1–4 —
-this phase is exclusively the infrastructure delta: a Docker-events-
-based identity-resolver source slotting into the Phase 1 interface,
+(`SANDBOX_BACKEND=docker`). The proxy core, gate logic, data layer,
+API, chat UI, and policy layer are unchanged from Phases 1–4 — this
+phase is exclusively the infrastructure delta: a Docker-events-based
+identity-resolver source slotting into the Phase 1 interface,
 shared-volume CA distribution, the same `firewall-init.sh` bootstrap
 script run as the docker container's entrypoint wrapper instead of as
 a K8s initContainer, and the proxy delivered as a compose service.
@@ -302,16 +426,17 @@ SDKs (or agent code) that set socket timeouts shorter than 180s, the
 sandbox-side client closes the connection first and the agent sees a
 generic transport error instead of a structured response. The LLM
 handles both — transport errors are common — but the signal is less
-specific. The approval row is still marked terminal in either case.
-Accepted for v0; UX must make the notification noticeable so users
-decide before any timeout fires.
+specific. The approval row is still marked terminal in either case
+(the gate's `CancelledError` branch claims EXPIRED through the same
+conditional UPDATE). Accepted for v0; UX must make the notification
+noticeable so users decide before any timeout fires.
 - **Bash-tool harness timeout is a third bound.** When the agent issues
 HTTPS via `curl` or similar through opencode's bash tool, the harness
-kills the spawned process at its own timeout (default needs verification;
-likely 60–120s). That timer dominates the proxy's 180s wait for any
-bash-mediated request. Mitigations: raise opencode's bash-tool default
-timeout to ≥240s so the proxy wait dominates, and instruct the agent in
-its system prompt to set a generous explicit timeout on gated calls.
+kills the spawned process at its own timeout. Opencode's bash-tool
+timeout config lives outside this repo — opencode is consumed as a
+binary we don't control. Mitigation is the AGENTS.md system-prompt
+note telling the agent to set explicit per-call timeouts ≥200s on
+gated HTTP calls; we can't change the harness default.
 - **Trust-store fragmentation.** Each non-system-trust-store SDK in the
 sandbox needs explicit env-var configuration to honor the proxy CA.
 Untested SDKs fail closed at the in-pod iptables lockdown. Onboarding a
@@ -338,4 +463,3 @@ the flow.
 - **Higher-replica proxy + IP-lookup caching + Redis pool sizing** —
 further scaling work tracked separately.
 - **Local-sandbox support** if/when local Craft needs gating.
-

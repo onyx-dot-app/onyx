@@ -191,15 +191,27 @@ def submit_decision(
         db_session, approval_id=approval_id, decision=body.decision
     )
     if updated is None:
-        # Lost the race; re-read and apply the same idempotency rule.
+        # Lost the race; expire the cached row so the re-read sees the
+        # decision another session wrote (without this, SQLAlchemy's
+        # identity map returns the stale request_row at decision=None).
+        db_session.expire(request_row)
         fresh = action_approval.get_action_approval(db_session, approval_id)
-        if fresh is not None and fresh.decision == body.decision:
+        if fresh is None:
+            # The row was deleted via FK cascade between the initial
+            # read and the UPDATE — surface as NOT_FOUND rather than
+            # CONFLICT so the client distinguishes the cases.
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "approval request not found")
+        if fresh.decision == body.decision:
             return _to_view(fresh, is_live=False)
-        # `record_decision` returned None only because a decision exists,
-        # so `fresh.decision` is guaranteed to be set here.
-        existing = (
-            fresh.decision.value if fresh and fresh.decision is not None else None
-        )
+        # record_decision returned None only because a different
+        # decision is already recorded — fresh.decision is set here.
+        # Explicit check (not `assert`) so `python -O` doesn't strip it.
+        if fresh.decision is None:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "approval row reverted to pending unexpectedly",
+            )
+        existing = fresh.decision.value
         logger.info(
             "approval.decision_conflict approval_id=%s lost_race=true "
             "existing_decision=%s requested_decision=%s",
