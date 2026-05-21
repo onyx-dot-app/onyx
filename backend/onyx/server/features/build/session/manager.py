@@ -4,9 +4,14 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import hashlib
 import io
 import json
 import mimetypes
+import re
+import tempfile
+import time
+import uuid
 import zipfile
 from collections.abc import Generator
 from datetime import datetime
@@ -15,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
+import pypandoc
 from acp.schema import AgentMessageChunk
 from acp.schema import AgentPlanUpdate
 from acp.schema import AgentThoughtChunk
@@ -35,6 +42,7 @@ from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
@@ -50,6 +58,7 @@ from onyx.server.features.build.api.packets import ErrorPacket
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
+from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
@@ -73,6 +82,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.sandbox.base import SSEKeepalive
+from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
@@ -97,6 +107,10 @@ logger = setup_logger()
 
 class UploadLimitExceededError(ValueError):
     """Raised when file upload limits are exceeded."""
+
+
+class SandboxProvisioningError(RuntimeError):
+    """Raised when a sandbox is mid-provision and the caller cannot wait it out."""
 
 
 class BuildStreamingState:
@@ -418,6 +432,151 @@ class SessionManager:
             self._db_session, sandbox.id, sandbox_info.status
         )
 
+    def ensure_sandbox_running(
+        self,
+        user_id: UUID,
+        *,
+        provisioning_wait_seconds: float = 30.0,
+    ) -> Sandbox:
+        """Ensure the user has a RUNNING sandbox, creating/waking as needed.
+
+        Headless entry point for flows (e.g. scheduled tasks) that need the
+        sandbox up but aren't going through ``create_session__no_commit``.
+        Mirrors the sandbox-handling section of ``create_session__no_commit``
+        but without creating a session record. Falls back to the system
+        default LLM config since there is no user cookie context.
+
+        Behavior by current sandbox status:
+        - No sandbox row: creates one and provisions it.
+        - ``RUNNING`` + pod healthy: returns as-is.
+        - ``RUNNING`` + pod missing/unhealthy: terminates and re-provisions.
+        - ``SLEEPING`` / ``TERMINATED`` / ``FAILED``: re-provisions in place.
+        - ``PROVISIONING``: polls up to ``provisioning_wait_seconds`` (default
+          30s) for the concurrent provisioner to finish, then continues
+          based on the resulting status. Raises
+          ``SandboxProvisioningError`` only if the timeout elapses without
+          a transition.
+
+        Honors ``SANDBOX_MAX_CONCURRENT_PER_ORG`` when ``MULTI_TENANT`` for
+        any path that newly counts toward the running limit (creating a new
+        sandbox or waking a SLEEPING / TERMINATED / FAILED one).
+
+        Caller is responsible for committing.
+
+        Raises:
+            SandboxProvisioningError: Sandbox was still PROVISIONING after
+                the wait timeout elapsed.
+            ValueError: Max concurrent sandboxes reached, or user missing.
+            RuntimeError: Sandbox manager failed to provision the pod.
+        """
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+
+        # If a concurrent caller is mid-provision, wait for them rather
+        # than race. We re-enter the state machine below with whatever
+        # status the row ends up in.
+        if sandbox is not None and sandbox.status == SandboxStatus.PROVISIONING:
+            sandbox = self._wait_for_provisioning_to_complete(
+                sandbox, provisioning_wait_seconds
+            )
+
+        # RUNNING + healthy is the hot path — return immediately.
+        if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
+            if self._sandbox_manager.health_check(sandbox.id, timeout=5.0):
+                return sandbox
+            # DB says RUNNING but the pod is gone; fall through to
+            # terminate + re-provision below.
+            logger.warning(
+                "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
+                sandbox.id,
+            )
+            self._sandbox_manager.terminate(sandbox.id)
+            update_sandbox_status__no_commit(
+                self._db_session, sandbox.id, SandboxStatus.TERMINATED
+            )
+
+        # All remaining branches will (re-)provision a pod, so honor
+        # per-tenant concurrency limits up front. We skip this check for
+        # the RUNNING+healthy path above because it doesn't add to the
+        # running count.
+        tenant_id = get_current_tenant_id()
+        if MULTI_TENANT:
+            running_count = get_running_sandbox_count_by_tenant(
+                self._db_session, tenant_id
+            )
+            if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
+                raise ValueError(
+                    f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
+                )
+
+        user = fetch_user_by_id(self._db_session, user_id)
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+
+        llm_config = self._get_llm_config(None, None)
+
+        if sandbox is None:
+            sandbox = create_sandbox__no_commit(
+                db_session=self._db_session,
+                user_id=user_id,
+            )
+            logger.info(
+                "Created sandbox %s for user %s (headless provisioning)",
+                sandbox.id,
+                user_id,
+            )
+        else:
+            logger.info(
+                "Waking sandbox %s (status=%s) for user %s",
+                sandbox.id,
+                sandbox.status.value,
+                user_id,
+            )
+
+        self._provision_sandbox(sandbox, user, user_id, tenant_id, llm_config)
+        return sandbox
+
+    def _wait_for_provisioning_to_complete(
+        self,
+        sandbox: Sandbox,
+        wait_seconds: float,
+        *,
+        poll_interval_seconds: float = 1.0,
+    ) -> Sandbox:
+        """Poll a PROVISIONING sandbox until it transitions or we time out.
+
+        Returns the same ``Sandbox`` object with refreshed attributes once
+        ``status`` is no longer ``PROVISIONING``. We rely on Postgres'
+        default READ COMMITTED isolation: ``session.refresh()`` issues a
+        fresh SELECT each iteration, so commits from the concurrent
+        provisioner become visible.
+
+        Raises:
+            SandboxProvisioningError: Status was still ``PROVISIONING``
+                when the deadline elapsed.
+        """
+        deadline = time.monotonic() + wait_seconds
+        started = time.monotonic()
+        logger.info(
+            "Waiting up to %.1fs for sandbox %s to finish provisioning",
+            wait_seconds,
+            sandbox.id,
+        )
+        while True:
+            self._db_session.refresh(sandbox)
+            if sandbox.status != SandboxStatus.PROVISIONING:
+                logger.info(
+                    "Sandbox %s left PROVISIONING after %.1fs (now=%s)",
+                    sandbox.id,
+                    time.monotonic() - started,
+                    sandbox.status.value,
+                )
+                return sandbox
+            if time.monotonic() >= deadline:
+                raise SandboxProvisioningError(
+                    f"Sandbox {sandbox.id} still PROVISIONING after {wait_seconds}s"
+                )
+            time.sleep(poll_interval_seconds)
+
     def create_session__no_commit(
         self,
         user_id: UUID,
@@ -458,10 +617,6 @@ class SessionManager:
 
         # Check sandbox limits for multi-tenant deployments
         if MULTI_TENANT:
-            from onyx.server.features.build.configs import (
-                SANDBOX_MAX_CONCURRENT_PER_ORG,
-            )
-
             running_count = get_running_sandbox_count_by_tenant(
                 self._db_session, tenant_id
             )
@@ -965,8 +1120,6 @@ class SessionManager:
         Returns:
             List of suggestion dicts or empty list on parse failure
         """
-        import re
-
         # Strategy 1: Try direct JSON parse
         try:
             # Strip common LLM artifacts (code fences, etc.)
@@ -1076,11 +1229,6 @@ class SessionManager:
         # Delete snapshot files from S3 before removing DB records
         snapshots = get_snapshots_for_session(self._db_session, session_id)
         if snapshots:
-            from onyx.file_store.file_store import get_default_file_store
-            from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-                SnapshotManager,
-            )
-
             snapshot_manager = SnapshotManager(get_default_file_store())
             for snapshot in snapshots:
                 try:
@@ -1693,8 +1841,6 @@ class SessionManager:
         Returns:
             List of artifact dicts or None if session not found or user doesn't own session
         """
-        import uuid
-
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1823,10 +1969,6 @@ class SessionManager:
         if not filename.lower().endswith(".md"):
             raise ValueError("Only markdown (.md) files can be exported as DOCX")
 
-        import tempfile
-
-        import pypandoc
-
         md_text = content_bytes.decode("utf-8")
 
         with tempfile.NamedTemporaryFile(suffix=".docx", delete=True) as tmp:
@@ -1860,8 +2002,6 @@ class SessionManager:
         Raises:
             ValueError: If path is invalid or conversion fails
         """
-        import hashlib
-
         # Verify session ownership
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1957,10 +2097,6 @@ class SessionManager:
         Returns True if the server responds with any status code, False on timeout
         or connection error.
         """
-        import httpx
-
-        from onyx.server.features.build.sandbox.base import get_sandbox_manager
-
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
@@ -2360,10 +2496,6 @@ class SessionManager:
         Returns:
             True if sandbox was terminated, False if user had no sandbox
         """
-        from onyx.server.features.build.db.sandbox import (
-            update_sandbox_status__no_commit,
-        )
-
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return False

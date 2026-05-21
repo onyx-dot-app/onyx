@@ -267,27 +267,33 @@ class SandboxHandle:
 
 
 @pytest.fixture(scope="function")
-def running_sandbox(
-    db_session: Session,
-    test_user: User,
-    tenant_context: None,  # noqa: ARG001
-    request: pytest.FixtureRequest,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> Callable[..., SandboxHandle]:
-    """Factory: provision a real sandbox via ``LocalSandboxManager``.
+def local_sandbox_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect ``LocalSandboxManager``'s base + template paths into ``tmp_path``.
 
-    Each call provisions a fresh sandbox under a tmp ``SANDBOX_BASE_PATH``
-    derived from ``tmp_path``. Teardown is LIFO via ``request.addfinalizer``.
+    Patches:
+      * ``SANDBOX_BASE_PATH`` in both the configs module and the manager
+        module (the latter imports it by value at import time).
+      * ``OUTPUTS_TEMPLATE_PATH`` / ``VENV_TEMPLATE_PATH`` so
+        ``LocalSandboxManager._validate_templates()`` passes in CI / dev
+        environments where the real template directories don't exist
+        (they only ship inside the ``Dockerfile.sandbox-templates`` image).
+      * ``LocalSandboxManager._instance`` AND ``base._sandbox_manager_instance``
+        so the next ``LocalSandboxManager()`` / ``get_sandbox_manager()``
+        constructs a fresh manager bound to these paths.
 
-    The ``LocalSandboxManager._instance`` singleton is reset via
-    ``monkeypatch.setattr`` so the pre-test value is restored automatically
-    on teardown, regardless of test outcome.
+    ``raising=False`` on the singleton reset because the attribute may
+    already be ``None`` when no previous test instantiated the manager.
+
+    Returns the redirected base path so callers can compute workspace
+    locations under it.
     """
-    # Redirect SANDBOX_BASE_PATH for both the configs module and the manager
-    # module (the latter imports it by value at import time).
     base_path = tmp_path / "sandboxes"
     base_path.mkdir(parents=True, exist_ok=True)
+    outputs_tpl = tmp_path / "templates" / "outputs"
+    venv_tpl = tmp_path / "templates" / "venv"
+    outputs_tpl.mkdir(parents=True, exist_ok=True)
+    venv_tpl.mkdir(parents=True, exist_ok=True)
+
     monkeypatch.setattr(
         "onyx.server.features.build.configs.SANDBOX_BASE_PATH",
         str(base_path),
@@ -296,12 +302,6 @@ def running_sandbox(
         "onyx.server.features.build.sandbox.local.local_sandbox_manager.SANDBOX_BASE_PATH",
         str(base_path),
     )
-    # Redirect template paths so _validate_templates() passes in CI where the
-    # real template directories do not exist.
-    outputs_tpl = tmp_path / "templates" / "outputs"
-    venv_tpl = tmp_path / "templates" / "venv"
-    outputs_tpl.mkdir(parents=True, exist_ok=True)
-    venv_tpl.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(
         "onyx.server.features.build.sandbox.local.local_sandbox_manager.OUTPUTS_TEMPLATE_PATH",
         str(outputs_tpl),
@@ -310,17 +310,30 @@ def running_sandbox(
         "onyx.server.features.build.sandbox.local.local_sandbox_manager.VENV_TEMPLATE_PATH",
         str(venv_tpl),
     )
-    # Reset the singleton via monkeypatch so the prior value is restored on
-    # teardown. We deliberately use raising=False because the attribute may
-    # already be None when no previous test instantiated the manager.
     monkeypatch.setattr(LocalSandboxManager, "_instance", None, raising=False)
-    # Also reset the module-level cache in base.py so get_sandbox_manager()
-    # constructs a fresh manager that picks up the patched SANDBOX_BASE_PATH.
-    # This is what the push pipeline reads at runtime.
     monkeypatch.setattr(
         "onyx.server.features.build.sandbox.base._sandbox_manager_instance",
         None,
     )
+
+    return base_path
+
+
+@pytest.fixture(scope="function")
+def running_sandbox(
+    db_session: Session,
+    test_user: User,
+    tenant_context: None,  # noqa: ARG001
+    request: pytest.FixtureRequest,
+    local_sandbox_paths: Path,
+) -> Callable[..., SandboxHandle]:
+    """Factory: provision a real sandbox via ``LocalSandboxManager``.
+
+    Each call provisions a fresh sandbox under the tmp ``SANDBOX_BASE_PATH``
+    set up by ``local_sandbox_paths``. Teardown is LIFO via
+    ``request.addfinalizer``.
+    """
+    base_path = local_sandbox_paths
 
     # Track extra sandboxes provisioned via SandboxHandle.provision_for so
     # teardown can terminate them too.
