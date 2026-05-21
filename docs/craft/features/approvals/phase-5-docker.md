@@ -3,19 +3,22 @@
 Reference: [approvals-plan.md](./approvals-plan.md) for architecture.
 Reference: [phase-1-proxy.md](./phase-1-proxy.md) for the K8s baseline
 this phase mirrors.
-Depends on Phase 1 (proxy core, gate addon, service, identity-resolver
-interface). Phases 2–4 are backend-agnostic and apply to docker
+Reference: [Phase 2](./phase-2-service-and-gating.md) for the gate
+addon and data layer this phase deploys unchanged.
+Depends on Phase 1 (proxy core, identity-resolver interface, CA store
+interface, `firewall-init.sh`) and Phase 2 (gate addon + SIGTERM drain
++ data layer). Phases 3–4 are backend-agnostic and apply to docker
 unchanged once Phase 5 lands.
 
 ## Goal
 
 Run the egress proxy against the docker-compose sandbox backend
 (`SANDBOX_BACKEND=docker`) with the **same fail-closed posture** as the
-K8s deployment. The proxy core, Approval Service, chat UI, and policy
-layer are unchanged — this phase is exclusively the infrastructure
-delta: how iptables get installed inside a docker sandbox, how
-identity resolves, how the CA is distributed, and how the proxy ships
-in the compose stack.
+K8s deployment. The proxy core, gate addon, decision API, chat UI, and
+policy layer are unchanged — this phase is exclusively the
+infrastructure delta: how iptables get installed inside a docker
+sandbox, how identity resolves, how the CA is distributed, and how
+the proxy ships in the compose stack.
 
 The sandbox container starts as root with `CAP_NET_ADMIN`, an
 entrypoint wrapper installs the firewall, then drops to UID 1000 via
@@ -46,7 +49,7 @@ backend/onyx/server/features/build/sandbox/docker/
                                  # expand env allowlist, mount CA volume,
                                  # add ContainerCreateKwargs.cap_add field
 
-backend/tests/external_dependency_unit/server/features/build/sandbox/
+backend/tests/unit/onyx/server/features/build/sandbox/
 └── test_docker_manager_config.py  # update locked-down assertions
                                    # for the new caps + env allowlist
 
@@ -78,11 +81,10 @@ on docker-mode sandboxes so the bootstrap reads from the volume mount
   iptables; gosu then drops to UID 1000 before exec'ing the agent.
   Without this change the entrypoint runs as 1000 and the firewall
   install fails.
-- **Add `cap_add: list[str]` to the `ContainerCreateKwargs` TypedDict**
-  (`docker_sandbox_manager.py`), then set `cap_add=["NET_ADMIN"]` on
-  the sandbox container alongside the existing `cap_drop=["ALL"]` —
-  Docker applies `cap_add` after `cap_drop`, so the net effect is
-  `NET_ADMIN`-only at startup.
+- **Add `cap_add: list[str]` to the `ContainerCreateKwargs` TypedDict**,
+  then set `cap_add=["NET_ADMIN"]` on the sandbox container alongside
+  the existing `cap_drop=["ALL"]` — Docker applies `cap_add` after
+  `cap_drop`, so the net effect is `NET_ADMIN`-only at startup.
 - **`security_opt=["no-new-privileges:true"]` stays** — see the
   Goal section for why gosu doesn't conflict.
 - **Env allowlist expansion** (currently `ONYX_PAT` + `ONYX_SERVER_URL`
@@ -101,10 +103,9 @@ on docker-mode sandboxes so the bootstrap reads from the volume mount
 - **Network**: container joins only `onyx_craft_sandbox`. The proxy
   joins the same bridge so `sandbox-proxy` resolves by service DNS.
 
-Update assertions in
-`backend/tests/external_dependency_unit/server/features/build/sandbox/test_docker_manager_config.py`
-for each of the changes above. The current test pins `user="1000:1000"`,
-asserts no `cap_add`, and pins the env allowlist to
+Update assertions in `test_docker_manager_config.py` for each of the
+changes above. The current test pins `user="1000:1000"`, asserts no
+`cap_add`, and pins the env allowlist to
 `{"ONYX_PAT", "ONYX_SERVER_URL"}` — all three need updating.
 
 ### T5.3 — `DockerEventsLookup` (implements `SandboxIPLookup`)
@@ -162,10 +163,15 @@ path (see T5.1).
 
 Add a `sandbox-proxy` service to `deployment/docker_compose/docker-compose.craft.yml`:
 
-- Image: the same proxy image built in Phase 1 T1.1.
-- Networks: `default` (for Postgres/Redis access — the proxy calls
-  the Approval Service via in-process Python imports and needs DB/
-  Redis reachability the same way api-server does) **and**
+- Image: the same proxy image built in Phase 1 T1.1. **The proxy
+  image bundles the backend module tree** — there is no HTTP between
+  the proxy and the api-server. Both processes import
+  `onyx.server.features.build.db.action_approval` and
+  `onyx.sandbox_proxy.approval_cache` directly and rendezvous on
+  Postgres + Redis. The compose service therefore needs DB / Redis
+  reachability the same way api-server does, not a network path to
+  api-server.
+- Networks: `default` (for Postgres / Redis access) **and**
   `onyx_craft_sandbox` (so sandboxes reach it by service name).
   Sandboxes never join `default`; existing isolation preserved.
 - Volumes: `onyx-craft-ca:/var/lib/onyx/ca/` (read-write); Docker
@@ -181,6 +187,10 @@ Add a `sandbox-proxy` service to `deployment/docker_compose/docker-compose.craft
     get `connection refused` on `sandbox-proxy:<port>` until the
     proxy is back. With `restart: unless-stopped` this is typically
     sub-second but the failure mode is real.
+  - On graceful shutdown (compose `down`, `stop`, redeploy) the
+    SIGTERM drain (T5.7) writes EXPIRED for every in-flight approval
+    and wakes the parked coroutines so audit completeness is
+    preserved.
 
 **Docker socket exposure.** The Engine API over the socket is not
 scope-limited the way K8s RBAC is — anyone with the socket can do
@@ -193,8 +203,8 @@ API read-only; it only prevents writing to the socket inode.
 Phase 1's `server.py` currently hardcodes `K8sSecretCAStore()` /
 `K8sInformerLookup()`. Phase 5 extracts the dispatch into a new
 `backend/onyx/sandbox_proxy/config.py` keyed on the existing
-`SandboxBackend` enum (`backend/onyx/server/features/build/configs.py`),
-and `server.py` calls into it:
+`SandboxBackend` enum (`backend/onyx/server/features/build/configs.py`:
+`LOCAL | KUBERNETES | DOCKER`), and `server.py` calls into it:
 
 ```python
 if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
@@ -214,25 +224,41 @@ isn't deployed against the local sandbox backend.
 
 - **Healthz** returns 200 once `DockerEventsLookup` has finished its
   initial container list (sync the cache before serving traffic) and
-  the CA is loaded.
-- **Graceful drain.** On SIGTERM the proxy stops accepting new
-  connections and finishes in-flight flows up to a bounded grace
-  period (~200s, matching the Phase 2 wait), then exits.
-- **SIGTERM approval drain.** Per Phase 2, the proxy's SIGTERM handler
-  enumerates in-flight approvals and writes EXPIRED audit rows before
-  exit. Under the single-instance docker deploy there is no surviving
-  sibling to inherit liveness via the Redis TTL fallback, so without
-  the explicit drain every in-flight approval would dangle until its
-  `approval:live:{id}` key expires. The drain ensures audit
-  completeness and prompt UI dismissal of `approval_request` cards
-  (which hide once `is_live=false`) across proxy restarts.
+  the CA is loaded. Flips to 503 once the readiness `draining` flag
+  is set by the SIGTERM handler.
+- **Graceful drain.** On SIGTERM the proxy flips readiness to
+  `draining`, stops the IP lookup, and schedules the gate addon's
+  `drain_inflight` onto the event loop. The drain iterates a
+  snapshot of `_inflight_tenant_by_approval` and for each entry
+  issues the conditional UPDATE in
+  `server/features/build/db/action_approval.py::record_decision` —
+  winning writes EXPIRED, losing reads back the API-written decision
+  — then calls `approval_cache.finalize` to clear the
+  `approval:live:{id}` key and push the resolved decision onto the
+  `approval:wake:{id}` channel so parked `_await_decision`
+  coroutines unblock immediately and serialize their 403 / forward
+  response before mitmproxy tears connections down.
+- **Compose `terminationGracePeriodSeconds` analogue.** Compose
+  doesn't have a direct equivalent, but `stop_grace_period` on the
+  service is the knob. Size it to bound the outer drain window:
+  `_DRAIN_TIMEOUT_SECONDS` (10s) plus a margin, i.e. **≥ 20s**. Same
+  sizing applies to the K8s Deployment's
+  `terminationGracePeriodSeconds` — they're the same bound from the
+  orchestrator's perspective.
+- **Why the drain matters under single-instance docker.** With no
+  surviving sibling to inherit liveness via the Redis TTL fallback,
+  without the explicit drain every in-flight approval would dangle
+  until its `approval:live:{id}` key expires (60s) and the row would
+  sit at `decision IS NULL` indefinitely. The drain ensures audit
+  completeness and prompt UI dismissal of approval cards (which hide
+  once `is_live=false`) across proxy restarts.
 
 ## Testing
 
 - **External-dependency-unit** —
-  - `DockerIdentityResolver.resolve()` against a real Docker daemon:
+  - `DockerEventsLookup.lookup()` against a real Docker daemon:
     start a labeled container, verify the resolver returns the
-    expected `SessionContext`; stop the container, verify the cache
+    expected `SandboxIdentity`; stop the container, verify the cache
     evicts.
   - CA volume bootstrap: cold start writes the CA; warm start loads
     it without rewriting.
@@ -250,6 +276,11 @@ isn't deployed against the local sandbox backend.
   - Recreate a sandbox container; verify the identity cache evicts on
     the `die` event and the new container's IP resolves on next
     request.
+  - Drive an in-flight gated request, `docker compose stop
+    sandbox-proxy`, observe the SIGTERM drain writes EXPIRED to the
+    `action_approval` row and the parked coroutine returns 403
+    `not_authorized` before the container exits within
+    `stop_grace_period`.
 - **Integration (gating end-to-end)** — Phase 2's existing tests
   re-run against `SANDBOX_BACKEND=docker` and pass without
   modification. This is the proof that backend-agnostic gating works.
@@ -257,6 +288,10 @@ isn't deployed against the local sandbox backend.
 ## Dependencies
 
 - Phase 1 merged.
+- Phase 2 merged (gate addon's `_inflight_tenant_by_approval` +
+  `drain_inflight` are what the docker-mode `stop_grace_period`
+  sizes against; the data layer + cache module are imported
+  in-process by the proxy image).
 - Sandbox image build pipeline can take new tooling (`gosu`,
   `iptables`).
 - Docker socket exposure to the proxy container is acceptable in the
@@ -282,6 +317,11 @@ isn't deployed against the local sandbox backend.
   drop cleared NET_ADMIN from the running process.
 - Identity resolution works against the Docker Engine API; cache
   invalidates on container `die`.
+- SIGTERM drain wins on `docker compose stop`: every in-flight
+  approval reaches a terminal `ApprovalDecision`, the parked
+  `_await_decision` coroutine serializes its response (the drain
+  `asyncio.wait`s on the tracked tasks), and the proxy exits within
+  `stop_grace_period`.
 - Phases 2–4 (gating, chat UI, policy) run unmodified against the
   docker backend and pass their existing tests.
 - `test_docker_manager_config.py` updated and green for the new
