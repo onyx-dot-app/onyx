@@ -61,7 +61,6 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
 
 
 def test_send_message_simple_with_history(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
@@ -121,7 +120,6 @@ def test_send_message__basic_searches(
 
 
 def test_send_message_disconnect_and_cleanup(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """

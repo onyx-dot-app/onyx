@@ -28,7 +28,7 @@ def _patch_personalization(headers: dict, cookies: dict, payload: dict) -> None:
     response.raise_for_status()
 
 
-def test_personalization_round_trip(reset: None) -> None:  # noqa: ARG001
+def test_personalization_round_trip() -> None:
     user = UserManager.create()
     headers, cookies = _get_auth_headers(user)
 
@@ -75,7 +75,7 @@ def test_personalization_round_trip(reset: None) -> None:  # noqa: ARG001
     assert me_final["personalization"]["memories"] == []
 
 
-def test_enable_memory_tool_round_trip(reset: None) -> None:  # noqa: ARG001
+def test_enable_memory_tool_round_trip() -> None:
     user = UserManager.create()
     headers, cookies = _get_auth_headers(user)
 
@@ -94,9 +94,7 @@ def test_enable_memory_tool_round_trip(reset: None) -> None:  # noqa: ARG001
     assert me_reenabled["personalization"]["enable_memory_tool"] is True
 
 
-def test_enable_memory_tool_independent_of_use_memories(
-    reset: None,  # noqa: ARG001
-) -> None:
+def test_enable_memory_tool_independent_of_use_memories() -> None:
     user = UserManager.create()
     headers, cookies = _get_auth_headers(user)
 

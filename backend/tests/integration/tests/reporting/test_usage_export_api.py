@@ -26,7 +26,6 @@ from tests.integration.common_utils.test_models import DATestUser
 class TestUsageExportAPI:
     def test_generate_usage_report(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data for the report
@@ -84,7 +83,6 @@ class TestUsageExportAPI:
 
     def test_generate_usage_report_with_date_range(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data
@@ -150,7 +148,6 @@ class TestUsageExportAPI:
 
     def test_generate_usage_report_invalid_dates(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Test with invalid date format
@@ -166,7 +163,6 @@ class TestUsageExportAPI:
 
     def test_fetch_usage_reports(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # First generate a report to ensure we have at least one
@@ -349,7 +345,6 @@ class TestUsageExportAPI:
 
     def test_read_nonexistent_report(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report that doesn't exist
@@ -361,7 +356,6 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_generate_report(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to generate a report as non-admin
@@ -374,7 +368,6 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_fetch_reports(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to fetch reports as non-admin
@@ -386,7 +379,6 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_download_report(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report as non-admin
@@ -398,7 +390,6 @@ class TestUsageExportAPI:
 
     def test_concurrent_report_generation(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some data

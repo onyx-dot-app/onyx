@@ -28,7 +28,6 @@ def _share_persona(
 
 
 def test_persona_create_update_share_delete(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
