@@ -100,7 +100,7 @@ runs:
           -v ${{ github.workspace }}:/workspace \
           -w /workspace \
           ${RUNS_ON_ECR_CACHE}:nightly-llm-it-devcontainer-${RUN_ID} \
-          uv sync --frozen
+          uv sync --frozen --no-group model_server
 
         docker run --rm \
           -v ${{ github.workspace }}:/workspace \

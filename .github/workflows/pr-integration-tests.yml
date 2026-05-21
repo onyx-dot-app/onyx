@@ -463,7 +463,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv sync --frozen
+            uv sync --frozen --no-group model_server
 
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
@@ -634,7 +634,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-            uv sync --frozen
+            uv sync --frozen --no-group model_server
 
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
@@ -769,7 +769,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            uv sync --frozen
+            uv sync --frozen --no-group model_server
 
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
