@@ -202,6 +202,22 @@
         "panel": "dedicated"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "k8s: alembic upgrade head",
+      "detail": "Run `alembic upgrade head` against the in-cluster Postgres (onyx-pg-rw). Idempotently connects telepresence to kind-onyx-dev so cluster DNS resolves, then loads DB env from .vscode/.env.k8s via python-dotenv.",
+      "type": "process",
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -e; kubectl config get-contexts -o name | grep -qx kind-onyx-dev || { echo 'error: kubectl context kind-onyx-dev not found; run deployment/helm/dev/k8s-up.sh first' >&2; exit 1; }; ENV_FILE=\"${workspaceFolder}/.vscode/.env.k8s\"; [ -f \"$ENV_FILE\" ] || { echo 'error: .vscode/.env.k8s not found; copy .vscode/.env.k8s.template and fill in <REPLACE THIS> values (see docs/dev/local-kubernetes.md).' >&2; exit 1; }; [ -x \"${workspaceFolder}/.venv/bin/python\" ] || { echo 'error: ${workspaceFolder}/.venv/bin/python not found; run `uv sync` first.' >&2; exit 1; }; telepresence connect --context kind-onyx-dev -n onyx; cd \"${workspaceFolder}/backend\" && \"${workspaceFolder}/.venv/bin/python\" -m dotenv -f \"$ENV_FILE\" run -- alembic upgrade head"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ]
 }
