@@ -256,6 +256,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -730,4 +731,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "Service desk tickets, incidents, and requests",
 }
