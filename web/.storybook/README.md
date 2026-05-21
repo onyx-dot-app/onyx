@@ -10,8 +10,8 @@ The Onyx Storybook covers the full component library — from low-level `@opal/c
 
 ```bash
 cd web
-npm run storybook        # dev server on http://localhost:6006
-npm run storybook:build  # static build to storybook-static/
+bun run storybook        # dev server on http://localhost:6006
+bun run storybook:build  # static build to storybook-static/
 ```
 
 The dev server hot-reloads when you edit a component or story file.
@@ -64,7 +64,7 @@ Use the theme toggle (paint roller icon) in the Storybook toolbar to switch betw
 
 ## Deployment
 
-The production Storybook is deployed as a static site on Vercel. The build runs `npm run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
+The production Storybook is deployed as a static site on Vercel. The build runs `bun run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
 
 Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, or `web/.storybook/` change.
 
