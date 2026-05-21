@@ -12,7 +12,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth.exceptions import OAuthFlowError
 from mcp.shared.auth import OAuthClientInformationFull
@@ -21,6 +20,8 @@ from pydantic import AnyUrl
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.models import MCPUserOAuthConnectRequest
@@ -462,9 +463,9 @@ async def test_connect_oauth_errors_instead_of_silent_refresh_when_no_tokens(
     proactive_oauth.side_effect = OAuthFlowError("discovery failed")
 
     async def _sdk_fallback_fail(**_kwargs: object) -> str:
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to start OAuth authorization: discovery failed",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Failed to start OAuth authorization: discovery failed",
         )
 
     monkeypatch.setattr(mcp_api, "_await_sdk_oauth_auth_url", _sdk_fallback_fail)
@@ -479,7 +480,7 @@ async def test_connect_oauth_errors_instead_of_silent_refresh_when_no_tokens(
         oauth_client_secret_changed=True,
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(OnyxError) as exc_info:
         await mcp_api._connect_oauth(request, MagicMock(), is_admin=False, user=user)
 
     assert exc_info.value.status_code == 400
@@ -816,6 +817,55 @@ async def test_connect_oauth_without_tokens_awaits_publisher_after_auth_url(
     publish_task = created_tasks[0]
     assert not publish_task.cancelled()
     assert publish_task.done()
+
+
+@pytest.mark.asyncio
+async def test_connect_oauth_without_tokens_cancels_publisher_on_auth_url_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not leave the publisher running after auth URL retrieval fails."""
+    created_tasks: list[asyncio.Task[object]] = []
+    real_create_task = asyncio.create_task
+    publish_cancelled = asyncio.Event()
+
+    def _tracking_create_task(coro: object) -> asyncio.Task[object]:
+        task = real_create_task(coro)  # type: ignore[arg-type]
+        created_tasks.append(task)
+        return task
+
+    async def _slow_publish(*_args: object, **_kwargs: object) -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            publish_cancelled.set()
+            raise
+
+    async def _failing_auth_url(
+        _user_id: str, _publish_task: asyncio.Task[None]
+    ) -> str:
+        await asyncio.sleep(0)
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Auth URL retrieval timed out")
+
+    monkeypatch.setattr(asyncio, "create_task", _tracking_create_task)
+    monkeypatch.setattr(mcp_api, "_start_proactive_user_oauth", _slow_publish)
+    monkeypatch.setattr(
+        mcp_api, "_await_oauth_auth_url_for_connect", _failing_auth_url
+    )
+    monkeypatch.setattr(mcp_api, "make_oauth_provider", lambda *_a, **_k: MagicMock())
+
+    with pytest.raises(OnyxError, match="Auth URL retrieval timed out"):
+        await mcp_api._connect_oauth_without_tokens(
+            oauth_auth=MagicMock(),
+            probe_url="https://mcp.example.com/mcp",
+            connection_headers={},
+            transport=MCPTransport.STREAMABLE_HTTP,
+            user_id="user-1",
+            mcp_server_name="test-server",
+        )
+
+    publish_task = created_tasks[0]
+    assert publish_task.cancelled()
+    assert publish_cancelled.is_set()
 
 
 _MCP_SDK_OAUTH_PROVIDER_INTERNALS = (

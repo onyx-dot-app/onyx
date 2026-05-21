@@ -77,6 +77,8 @@ from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.models import apply_auto_substitutions
 from onyx.server.features.mcp.models import MCPApiKeyResponse
@@ -676,10 +678,12 @@ async def _complete_oauth_callback_legacy_sdk_path(
         lambda: r.blpop([key_tokens(str(admin_config_id))], timeout=OAUTH_WAIT_SECONDS),
     )
     if tokens_raw is None:
-        raise HTTPException(status_code=400, detail="No tokens found")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No tokens found")
     tokens = OAuthToken.model_validate_json(tokens_raw[1].decode())
     if not tokens.access_token:
-        raise HTTPException(status_code=400, detail="No access_token in OAuth response")
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "No access_token in OAuth response"
+        )
 
 
 async def _ensure_oauth_client_registered(
@@ -823,10 +827,12 @@ async def _await_sdk_oauth_auth_url(
                     "SDK OAuth initialize task ended after auth URL timeout",
                     exc_info=True,
                 )
-            raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "Auth URL retrieval timed out"
+            )
         init_task.add_done_callback(_log_sdk_oauth_init_task_done)
         return raw[1].decode()
-    except HTTPException:
+    except OnyxError:
         raise
     except Exception:
         init_task.cancel()
@@ -875,7 +881,7 @@ async def _await_oauth_auth_url_for_connect(
         publish_exc = publish_task.exception()
         if publish_exc is not None:
             raise publish_exc
-    raise HTTPException(status_code=400, detail="Auth URL retrieval timed out")
+    raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Auth URL retrieval timed out")
 
 
 async def _await_publish_task_after_auth_url(publish_task: asyncio.Task[None]) -> None:
@@ -942,19 +948,27 @@ async def _connect_oauth_without_tokens(
                 oauth_auth=oauth_auth,
                 user_id=user_id,
             )
-        except HTTPException:
+        except OnyxError:
             raise
         except Exception as sdk_exc:
-            raise HTTPException(
-                status_code=400,
-                detail=(
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                (
                     f"Failed to start OAuth authorization: {publish_exc}. "
                     f"SDK fallback also failed: {sdk_exc}"
                 ),
             ) from sdk_exc
 
     if auth_task in done:
-        oauth_url = auth_task.result()
+        try:
+            oauth_url = auth_task.result()
+        except BaseException:
+            publish_task.cancel()
+            try:
+                await publish_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            raise
         await _await_publish_task_after_auth_url(publish_task)
         return oauth_url
 
@@ -1194,7 +1208,7 @@ async def _connect_oauth(
                 user_id=user_id_str,
                 mcp_server_name=mcp_server.name,
             )
-        except HTTPException:
+        except OnyxError:
             raise
         except Exception as e:
             if isinstance(e, ExceptionGroup):
@@ -1301,7 +1315,11 @@ async def process_oauth_callback(
         raise HTTPException(status_code=400, detail="MCP server URL is not configured")
 
     admin_config_id = mcp_server.admin_connection_config_id
-    assert admin_config_id is not None
+    if admin_config_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Server admin config ID is missing; try recreating the server",
+        )
 
     if _oauth_callback_uses_proactive_exchange(user_id):
         try:
@@ -1416,12 +1434,17 @@ def save_user_credentials(
         auth = None
         if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
             # should only be saving user creds if an admin config exists
-            assert mcp_server.admin_connection_config_id is not None
+            admin_config_id = mcp_server.admin_connection_config_id
+            if admin_config_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Server admin config ID is missing; try recreating the server",
+                )
             auth = make_oauth_provider(
                 mcp_server,
                 email,
                 UNUSED_RETURN_PATH,
-                mcp_server.admin_connection_config_id,
+                admin_config_id,
                 None,
             )
 
