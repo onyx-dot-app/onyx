@@ -10,12 +10,10 @@ lands in [Phase 5](./phase-5-docker.md).** The infrastructure layer
 delivery) is K8s-native here. The proxy core, addons, Approval
 Service, chat UI, and policy are backend-agnostic.
 
-**Design constraint for shared modules.** Phase 1 lands the
-backend-swappable interfaces; the K8s implementations are the
-concrete instances. The three extension points are `SandboxIPLookup`
-(T1.4), `CAStore` (T1.2), and the env-driven mode switch in
-`firewall-init.sh` (T1.3). Land them as interfaces now and Phase 5 is
-a slot-in, not a refactor of shared code.
+Phase 1 lands the backend-swappable interfaces (`SandboxIPLookup`
+in T1.4, `CAStore` in T1.2, and the env-driven mode switch in
+`firewall-init.sh` in T1.3) with K8s implementations as the concrete
+instances.
 
 ## Goal
 
@@ -33,8 +31,9 @@ onto in Phase 2.
 
 ## Module layout
 
-New package `backend/onyx/sandbox_proxy/` (the proxy image bundles the backend
-module tree; no HTTP hop between proxy and api-server):
+New package `backend/onyx/sandbox_proxy/`. The proxy image bundles the
+backend module tree; the proxy calls into backend code via in-process
+Python imports, with no HTTP hop between proxy and api-server.
 
 ```
 sandbox_proxy/
@@ -51,9 +50,9 @@ sandbox_proxy/
 ```
 
 Config constants live in `backend/onyx/server/features/build/configs.py`
-under the `SANDBOX_PROXY_*` namespace, alongside the rest of the
-sandbox config — the api-server (constructing sandbox pod specs) and
-the proxy itself both read from the same source of truth.
+under the `SANDBOX_PROXY_*` namespace. The api-server (constructing
+sandbox pod specs) and the proxy itself both read from this same
+source of truth.
 
 The shared sandbox bootstrap script lives in the sandbox image dir:
 
@@ -66,7 +65,7 @@ backend/onyx/server/features/build/sandbox/kubernetes/docker/
 ```
 
 It's colocated with the sandbox Dockerfile so it's auto-pulled into
-the build context — no CI staging step required.
+the build context.
 
 K8s resources under `deployment/helm/charts/onyx/templates/sandbox-proxy/`:
 `deployment.yaml`, `rbac.yaml`, `ca-secret.yaml`, `ca-configmap.yaml`.
@@ -77,28 +76,27 @@ Sandbox pod modifications (existing helm chart):
   pre-startup security setup: CA trust-store population, in-pod iptables
   egress lockdown, writing the proxy IP into `/etc/hosts`, and a
   self-verification step that fails the init if the lockdown isn't
-  actually in effect. **Uses the existing sandbox image** with a
-  different command (no second image to maintain); `iptables` gets
-  installed into that image. Init container runs as root with
-  `CAP_NET_ADMIN`; main container is unchanged (UID 1000, no caps).
+  actually in effect. Uses the existing sandbox image with a different
+  command; `iptables` gets installed into that image. Init container
+  runs as root with `CAP_NET_ADMIN`; main container is unchanged
+  (UID 1000, no caps).
 - New env vars on the main sandbox container: `HTTPS_PROXY`, `HTTP_PROXY`,
   plus a documented set of SDK-specific CA env vars for libraries that
   ignore the system trust store.
-- The existing `sandbox_daemon` sidecar is **unchanged** — stays
-  unprivileged. Init work doesn't belong there: it's one-shot, needs
-  sequenced ordering before the main container starts, and would force
-  the daemon to hold `CAP_NET_ADMIN` for its entire lifetime.
+- The existing `sandbox_daemon` sidecar is unchanged and stays
+  unprivileged.
 
 ## Tasks
 
 ### T1.1 — Repo scaffolding
 
 - Create `backend/onyx/sandbox_proxy/` package.
-- Add `Dockerfile`. Base image is the existing Onyx backend image (the same
-  image celery workers consume — different entrypoint, same install). Install
-  `mitmproxy` on top, set the entrypoint to `python -m onyx.sandbox_proxy
-  .server`. Inheriting from the backend image gives us `onyx.db`,
-  `onyx.cache`, etc. with no separate dependency-graph maintenance.
+- Add `Dockerfile`. Base image is the existing Onyx backend image
+  (same image celery workers consume, different entrypoint). Install
+  `mitmproxy` on top, set the entrypoint to
+  `python -m onyx.sandbox_proxy.server`. Inheriting from the backend
+  image gives the proxy `onyx.db`, `onyx.cache`, etc. without a
+  separate dependency graph.
 - Add image build and push to CI alongside the existing backend image.
 
 ### T1.2 — CA bootstrap
@@ -109,8 +107,7 @@ is backend-specific (K8s Secret here, named volume in Phase 5). Split
 
 ```python
 class CAStore(Protocol):
-    """Persistence backend for the proxy CA. K8s = Secret;
-    docker = shared named volume (Phase 5).
+    """Persistence backend for the proxy CA.
 
     `persist` must be idempotent under concurrent callers: if two
     proxy replicas race on a cold cluster, exactly one write wins
@@ -127,9 +124,9 @@ class CABootstrap:
     def _generate_ca(self) -> tuple[bytes, bytes]: ...
 ```
 
-Phase 1 ships `K8sSecretCAStore`. Phase 5 adds `VolumeCAStore`. The
-bootstrap orchestration (load-or-generate, key params, rotation
-hooks) lives in `CABootstrap` and is unchanged across backends.
+Phase 1 ships `K8sSecretCAStore`. The bootstrap orchestration
+(load-or-generate, key params, rotation hooks) lives in `CABootstrap`
+and is unchanged across backends.
 
 `CABootstrap.ensure_ca` retries on `persist` conflict: re-`load()`,
 return the winner's CA. K8s `persist` translates a `409 Conflict`
@@ -140,9 +137,9 @@ Invariants for the K8s store:
 
 - The Secret is the source of truth. The ConfigMap is derived from it.
 - On startup: load if the Secret exists, otherwise generate and persist
-  both. Persist uses a conditional create (`resourceVersion=""`) so two
-  replicas racing on a cold cluster don't double-write — the loser of
-  the race reads back the winner's CA. Idempotent.
+  both. Persist uses a conditional create (`resourceVersion=""`) so
+  two replicas racing on a cold cluster don't double-write — the loser
+  of the race reads back the winner's CA.
 - ConfigMap lives in the **sandbox** namespace so sandbox pods can mount it
   without cross-namespace ConfigMap mounting.
 - RBAC: proxy SA gets `get,create` on its own Secret; `get,create,update` on
@@ -154,15 +151,14 @@ Invariants for the K8s store:
 
 The bootstrap (CA trust-store population, iptables egress lockdown,
 proxy address resolution, self-verify) is implemented as a **single
-shared script** — `firewall-init.sh`, baked into the sandbox image
-(no separate image to maintain; the existing sandbox image picks up
-`iptables` as a new dependency, plus `gosu` which Phase 5 needs but
-Phase 1 ignores). Phase 1 runs the script as the K8s initContainer
-command; [Phase 5](./phase-5-docker.md) runs the same script as the
-docker container's entrypoint, ending in `exec gosu` to drop
-privileges. The two modes share steps 1–2 (CA + iptables) and step
-4 (self-verify); they diverge only on step 3 and on what the script
-does after step 4:
+shared script** — `firewall-init.sh`, baked into the sandbox image.
+The sandbox image picks up `iptables` and `gosu` as new dependencies
+(`gosu` is consumed by Phase 5; Phase 1 ignores it). Phase 1 runs the
+script as the K8s initContainer command;
+[Phase 5](./phase-5-docker.md) runs the same script as the docker
+container's entrypoint, ending in `exec gosu` to drop privileges. The
+two modes share steps 1–2 (CA + iptables) and step 4 (self-verify);
+they diverge only on step 3 and on what the script does after step 4:
 
 | Env var | K8s value | Docker value (Phase 5) |
 |---|---|---|
@@ -216,25 +212,13 @@ Then on the main container:
 
 **JVM out of scope.** Java SDKs use their own truststore (`cacerts`,
 PKCS12) and require a separate `keytool -importcert` step. Out of v0
-scope; documented so any JVM-based gated app fails closed at the iptables
-lockdown with a clear diagnostic rather than silently misbehaving.
-
-**Why only in-pod iptables, not also a NetworkPolicy?** iptables-in-pod
-has strong fail-closed semantics — if the init container's setup fails,
-the pod doesn't start. A K8s NetworkPolicy as a second layer would fail
-*open* if the cluster's CNI ever stops enforcing (a silent failure
-mode). The single-layer in-pod approach is the stronger of the two and
-closes DNS + IPv6 that NetworkPolicy didn't cover anyway. The
-self-verification in step 4 catches the deploy-time mistake (someone
-changes the init script and removes the lockdown) that NetworkPolicy
-would otherwise backstop.
+scope; any JVM-based gated app fails closed at the iptables lockdown.
 
 ### T1.4 — Identity resolver
 
 The K8s informer is the IP-to-sandbox lookup *source*; the rest of
 identity resolution (sandbox → user → active session) is backend-
-agnostic. Split `sandbox_proxy/identity.py` along that line so the
-docker source from [Phase 5](./phase-5-docker.md) is a slot-in:
+agnostic. `sandbox_proxy/identity.py` is split along that line:
 
 ```python
 @dataclass
@@ -255,8 +239,7 @@ class SandboxIdentity:
 
 class SandboxIPLookup(Protocol):
     """Backend-specific IP → SandboxIdentity resolver.
-    K8s = informer-backed cache; docker = events-stream-backed cache
-    (Phase 5). Both expose the same lookup signature."""
+    K8s = informer-backed cache; docker = events-stream-backed cache."""
     def lookup(self, src_ip: str) -> SandboxIdentity | None: ...
 
 class IdentityResolver:
@@ -264,16 +247,14 @@ class IdentityResolver:
     def resolve(self, src_ip: str) -> SessionContext | None: ...
 ```
 
-Phase 1 ships `K8sInformerLookup`; Phase 5 adds `DockerEventsLookup`.
-The sandbox-row read, user lookup, and active-session resolution
-(steps 2–4 below) live on `IdentityResolver` and are unchanged across
-backends.
+Phase 1 ships `K8sInformerLookup`. The sandbox-row read, user lookup,
+and active-session resolution (steps 2–4 below) live on
+`IdentityResolver` and are unchanged across backends.
 
 Sandbox → session resolution rule:
 
-1. Map `src_ip` to a sandbox via `SandboxIPLookup`. K8s impl reads the
-   pod from the informer-backed cache; the docker impl (Phase 5) reads
-   the container from a docker-events-backed cache. Both return
+1. Map `src_ip` to a sandbox via `SandboxIPLookup`. The K8s impl reads
+   the pod from the informer-backed cache and returns
    `{sandbox_id, tenant_id, sandbox_name}` from labels.
 2. The lookup reads `onyx.app/sandbox-id` and `onyx.app/tenant-id` —
    identical label keys are set by both backends
@@ -287,12 +268,10 @@ Sandbox → session resolution rule:
    status == BuildSessionStatus.ACTIVE`, ordered by `last_activity_at desc`.
    If none, return `None` (unidentified).
 
-**Concurrent sessions on the same sandbox are prevented upstream by the
-scheduled-task executor** (serializes cron-fired sessions against the
-sandbox's interactive session — see Phase 2 deliverable). That guarantees
-step 4 yields a single unambiguous match. `BuildSession.origin`
-(`INTERACTIVE` / `SCHEDULED`) remains available as a future discriminator
-if we ever loosen the serialization rule.
+Concurrent sessions on the same sandbox are prevented upstream by the
+scheduled-task executor (serializes cron-fired sessions against the
+sandbox's interactive session — see Phase 2 deliverable), so step 4
+yields a single unambiguous match.
 
 Identity edge cases / preconditions:
 
@@ -305,15 +284,11 @@ Identity edge cases / preconditions:
   if the initial sandbox list reveals duplicate IPs, fail loud and
   exit non-zero. Don't silently serve traffic with broken identity.
 
-`K8sInformerLookup` (this phase):
+`K8sInformerLookup`:
 
 - Watches pods in the sandbox namespace.
 - Evicts cache entries on `DELETED` or on `MODIFIED` with an IP change.
 - Background thread; reconnects with exponential backoff on K8s API blips.
-
-`DockerEventsLookup` ([Phase 5](./phase-5-docker.md)) plugs into the
-same `SandboxIPLookup` Protocol with the Docker events stream as its
-watch source.
 
 ### T1.5 — Pass-through addon
 

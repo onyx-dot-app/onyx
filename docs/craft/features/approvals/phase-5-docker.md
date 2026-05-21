@@ -17,18 +17,17 @@ delta: how iptables get installed inside a docker sandbox, how
 identity resolves, how the CA is distributed, and how the proxy ships
 in the compose stack.
 
-The pattern matches agent-vault's docker container mode: container
-starts as root with `CAP_NET_ADMIN`, an entrypoint wrapper installs
-the firewall, then drops to UID 1000 via `gosu` before `exec`-ing
-the real entrypoint. After the UID transition the process's
-permitted/effective capability sets are cleared (Linux default on
-UID change), so the agent's process runs without `NET_ADMIN`.
-`no-new-privileges` stays on the container: it blocks privilege gain
-via `execve` of setuid/file-cap binaries, but does **not** block a
-root process calling `setuid()` directly, which is what gosu does.
-The iptables rules installed in step 1 persist in the container's
-network namespace for the container's lifetime regardless of which
-UID the agent runs as.
+The sandbox container starts as root with `CAP_NET_ADMIN`, an
+entrypoint wrapper installs the firewall, then drops to UID 1000 via
+`gosu` before `exec`-ing the real entrypoint. After the UID
+transition the process's permitted/effective capability sets are
+cleared (Linux default on UID change), so the agent's process runs
+without `NET_ADMIN`. `no-new-privileges` stays on the container: it
+blocks privilege gain via `execve` of setuid/file-cap binaries, but
+does **not** block a root process calling `setuid()` directly, which
+is what gosu does. The iptables rules installed in step 1 persist in
+the container's network namespace for the container's lifetime
+regardless of which UID the agent runs as.
 
 ## Module layout
 
@@ -59,21 +58,16 @@ deployment/docker_compose/
 
 ### T5.1 — Sandbox image: `entrypoint` mode
 
-Phase 1 lands `firewall-init.sh` and the two-mode env-var switch (see
-[Phase 1 T1.3](./phase-1-proxy.md#t13--sandbox-bootstrap-initcontainer)
-for the mode table). Phase 5 only adds the **`entrypoint` mode branch**:
+Phase 1 already ships `firewall-init.sh` with both `initcontainer` and
+`entrypoint` modes wired up, and `gosu` + `iptables` are already in
+the sandbox Dockerfile. No script or image changes needed in Phase 5;
+docker-mode containers invoke `firewall-init.sh` as the entrypoint
+with `SANDBOX_PROXY_BOOTSTRAP_MODE=entrypoint` and the script handles
+the gosu drop.
 
-- Skip step 3 (the `/etc/hosts` write — docker-compose service DNS
-  resolves `sandbox-proxy` on the bridge without it).
-- After step 4 (self-verify), `exec gosu 1000:1000 <real-entrypoint>`
-  instead of `exit 0`.
-
-Image changes for docker:
-
-- Install `gosu` in the sandbox image build (Phase 1 already added
-  `iptables`).
-- The image's docker-mode entrypoint is `firewall-init.sh`; the real
-  entrypoint is invoked via `gosu` from inside the script.
+Set `SANDBOX_PROXY_CA_BUNDLE_SRC=/etc/onyx/ca/mitmproxy-confdir/mitmproxy-ca.pem`
+on docker-mode sandboxes so the bootstrap reads from the volume mount
+(T5.4) rather than the K8s ConfigMap default.
 
 ### T5.2 — Docker sandbox manager changes
 
@@ -84,11 +78,11 @@ Image changes for docker:
   iptables; gosu then drops to UID 1000 before exec'ing the agent.
   Without this change the entrypoint runs as 1000 and the firewall
   install fails.
-- **`cap_add=["NET_ADMIN"]`** on the sandbox container (alongside the
-  existing `cap_drop=["ALL"]` — Docker applies `cap_add` after
-  `cap_drop`, so the net effect is `NET_ADMIN`-only at startup). Add
-  `cap_add` as a new field on `ContainerCreateKwargs` (the TypedDict
-  doesn't have it today).
+- **Add `cap_add: list[str]` to the `ContainerCreateKwargs` TypedDict**
+  (`docker_sandbox_manager.py`), then set `cap_add=["NET_ADMIN"]` on
+  the sandbox container alongside the existing `cap_drop=["ALL"]` —
+  Docker applies `cap_add` after `cap_drop`, so the net effect is
+  `NET_ADMIN`-only at startup.
 - **`security_opt=["no-new-privileges:true"]` stays** — see the
   Goal section for why gosu doesn't conflict.
 - **Env allowlist expansion** (currently `ONYX_PAT` + `ONYX_SERVER_URL`
@@ -97,28 +91,27 @@ Image changes for docker:
   `SSL_CERT_FILE`, `AWS_CA_BUNDLE`, `CURL_CA_BUNDLE`,
   `GIT_SSL_CAINFO`. The bootstrap-only vars (`SANDBOX_PROXY_HOST`,
   `SANDBOX_PROXY_PORT`, `SANDBOX_PROXY_BOOTSTRAP_MODE`) are read by
-  `firewall-init.sh` before the gosu drop and could either stay in
-  the agent's env (harmless) or be `unset` at the bottom of the
-  script before exec — pick the latter to keep the agent's runtime
-  env minimal.
+  `firewall-init.sh` before the gosu drop; `unset` them at the
+  bottom of the script before exec to keep the agent's runtime env
+  minimal.
 - **CA volume mount**: read-only mount of the `onyx-craft-ca` named
   volume into `/etc/onyx/ca/` so the entrypoint can populate
   `/usr/local/share/ca-certificates/sandbox-proxy.crt` and run
   `update-ca-certificates`.
-- **Network**: container still joins only `onyx_craft_sandbox`. The
-  proxy joins the same bridge so `sandbox-proxy` resolves by service
-  DNS.
+- **Network**: container joins only `onyx_craft_sandbox`. The proxy
+  joins the same bridge so `sandbox-proxy` resolves by service DNS.
 
-`test_docker_manager_config.py` codifies today's locked-down posture
-(cap_drop=ALL, no env beyond the two allowed, user 1000:1000). Each
-of the changes above needs a matching assertion update in that test.
+Update assertions in
+`backend/tests/external_dependency_unit/server/features/build/sandbox/test_docker_manager_config.py`
+for each of the changes above. The current test pins `user="1000:1000"`,
+asserts no `cap_add`, and pins the env allowlist to
+`{"ONYX_PAT", "ONYX_SERVER_URL"}` — all three need updating.
 
 ### T5.3 — `DockerEventsLookup` (implements `SandboxIPLookup`)
 
 `identity_docker.py` adds a docker-events-driven implementation of
 the [`SandboxIPLookup`](./phase-1-proxy.md#t14--identity-resolver)
-Protocol that Phase 1 lands. The shared `IdentityResolver` consumes
-it unchanged; only the IP-to-sandbox lookup differs from K8s.
+Protocol. The shared `IdentityResolver` consumes it unchanged.
 
 ```python
 class DockerEventsLookup:
@@ -144,31 +137,37 @@ class DockerEventsLookup:
 ### T5.4 — `VolumeCAStore` (implements `CAStore`)
 
 `ca_docker.py` adds a named-volume-backed implementation of the
-[`CAStore`](./phase-1-proxy.md#t12--ca-bootstrap) Protocol that
-Phase 1 lands. `CABootstrap` orchestration is unchanged.
+[`CAStore`](./phase-1-proxy.md#t12--ca-bootstrap) Protocol.
+`CABootstrap` orchestration is unchanged.
 
 - Named volume `onyx-craft-ca` is mounted **read-write** into the
   proxy container at `/var/lib/onyx/ca/`, and **read-only** into every
   sandbox container at `/etc/onyx/ca/`.
-- `VolumeCAStore.persist` uses `O_CREAT | O_EXCL` so the cold-start
-  path is idempotent if (somehow) two proxies race; with the
-  single-replica deployment (T5.5) this is belt-and-suspenders.
+- `VolumeCAStore.persist` uses `O_CREAT | O_EXCL` to keep the
+  cold-start path idempotent.
 - The proxy writes to the volume only on cold-start; at steady state
   it's read-only from the proxy's perspective. Sandboxes only read.
-- The bootstrap script reads the cert from
-  `/etc/onyx/ca/sandbox-proxy.crt` instead of from a ConfigMap mount.
+- The bootstrap script reads the cert from the named volume mount
+  rather than the K8s ConfigMap mount.
+
+**On-volume layout.** mitmproxy auto-loads
+`$confdir/mitmproxy-ca.pem`, so the PEM lives in a `mitmproxy-confdir`
+subdirectory of the mount. Proxy: read-write at
+`/var/lib/onyx/ca/mitmproxy-confdir/mitmproxy-ca.pem`. Sandbox:
+read-only at `/etc/onyx/ca/mitmproxy-confdir/mitmproxy-ca.pem`.
+Sandbox-mode containers set `SANDBOX_PROXY_CA_BUNDLE_SRC` to that
+path (see T5.1).
 
 ### T5.5 — Proxy delivery via docker-compose
 
 Add a `sandbox-proxy` service to `deployment/docker_compose/docker-compose.craft.yml`:
 
 - Image: the same proxy image built in Phase 1 T1.1.
-- Networks: `default` (for Postgres/Redis access — the proxy bundles
-  the backend module tree and calls the Approval Service via
-  in-process Python imports, so it needs DB/Redis reachability the
-  same way api-server does) **and** `onyx_craft_sandbox` (so
-  sandboxes reach it by service name). Sandboxes never join
-  `default`; existing isolation preserved.
+- Networks: `default` (for Postgres/Redis access — the proxy calls
+  the Approval Service via in-process Python imports and needs DB/
+  Redis reachability the same way api-server does) **and**
+  `onyx_craft_sandbox` (so sandboxes reach it by service name).
+  Sandboxes never join `default`; existing isolation preserved.
 - Volumes: `onyx-craft-ca:/var/lib/onyx/ca/` (read-write); Docker
   socket (`/var/run/docker.sock`) for the identity resolver to query
   the Docker Engine API.
@@ -176,57 +175,57 @@ Add a `sandbox-proxy` service to `deployment/docker_compose/docker-compose.craft
   automatically.
 - `SANDBOX_BACKEND=docker` env so the proxy boots the docker
   lookup and CA store.
-- **Single instance** — docker-compose has no native equivalent of
-  K8s Service load balancing, and the docker-compose target is
-  smaller installs. Trade-offs vs the K8s two-replica deploy:
+- **Single instance.** Known limitations:
   - A proxy crash drops all in-flight flows with TCP RST.
   - During the restart window, the iptables lockdown means sandboxes
     get `connection refused` on `sandbox-proxy:<port>` until the
     proxy is back. With `restart: unless-stopped` this is typically
     sub-second but the failure mode is real.
-  Documented as a known limitation; revisit if docker-compose
-  installs grow.
 
-**Docker socket exposure is a real security delta vs K8s.** The
-Engine API over the socket is not scope-limited the way K8s RBAC is
-(`get,list,watch` on pods in one namespace) — anyone with the
-socket can do anything the daemon can do, including launch
-privileged containers. A read-only mount of the socket file (`:ro`)
-does **not** make the API read-only; it only prevents writing to
-the socket inode. Acceptable given the proxy container is built
-from our own image and operated as infrastructure, but worth flagging
-as a deployment posture choice, not a parity with K8s RBAC.
+**Docker socket exposure.** The Engine API over the socket is not
+scope-limited the way K8s RBAC is — anyone with the socket can do
+anything the daemon can do, including launch privileged containers.
+A read-only mount of the socket file (`:ro`) does **not** make the
+API read-only; it only prevents writing to the socket inode.
 
 ### T5.6 — Backend selection in proxy
 
-Phase 1's `config.py` reads `SANDBOX_BACKEND` and instantiates the
-K8s implementations of `SandboxIPLookup` and `CAStore`. Phase 5 adds
-the `docker` branch:
+Phase 1's `server.py` currently hardcodes `K8sSecretCAStore()` /
+`K8sInformerLookup()`. Phase 5 extracts the dispatch into a new
+`backend/onyx/sandbox_proxy/config.py` keyed on the existing
+`SandboxBackend` enum (`backend/onyx/server/features/build/configs.py`),
+and `server.py` calls into it:
 
 ```python
-if SANDBOX_BACKEND == "kubernetes":
+if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
     ip_lookup = K8sInformerLookup(...)
     ca_store = K8sSecretCAStore(...)
-elif SANDBOX_BACKEND == "docker":
+elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
     ip_lookup = DockerEventsLookup(...)
     ca_store = VolumeCAStore(...)
 else:
     raise ConfigError(f"Unsupported SANDBOX_BACKEND: {SANDBOX_BACKEND}")
 ```
 
-No silent fallback. `SANDBOX_BACKEND=local` is rejected — the proxy
+No silent fallback. `SandboxBackend.LOCAL` is rejected — the proxy
 isn't deployed against the local sandbox backend.
 
 ### T5.7 — Operational
 
 - **Healthz** returns 200 once `DockerEventsLookup` has finished its
   initial container list (sync the cache before serving traffic) and
-  the CA is loaded — the docker equivalent of Phase 1's "informer
-  has synced" condition.
-- **Graceful drain** simplified vs K8s: on SIGTERM the proxy stops
-  accepting new connections and finishes in-flight flows up to a
-  bounded grace period (~200s, matching the Phase 2 wait), then
-  exits. There's no rolling-deploy survivor to flip readiness for.
+  the CA is loaded.
+- **Graceful drain.** On SIGTERM the proxy stops accepting new
+  connections and finishes in-flight flows up to a bounded grace
+  period (~200s, matching the Phase 2 wait), then exits.
+- **SIGTERM approval drain.** Per Phase 2, the proxy's SIGTERM handler
+  enumerates in-flight approvals and writes EXPIRED audit rows before
+  exit. Under the single-instance docker deploy there is no surviving
+  sibling to inherit liveness via the Redis TTL fallback, so without
+  the explicit drain every in-flight approval would dangle until its
+  `approval:live:{id}` key expires. The drain ensures audit
+  completeness and prompt UI dismissal of `approval_request` cards
+  (which hide once `is_live=false`) across proxy restarts.
 
 ## Testing
 
