@@ -7,7 +7,7 @@ import { Dialog } from "@headlessui/react";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
-import { useModalContext } from "../context/ModalContext";
+import { useModalContext } from "@/components/context/ModalContext";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import {
   SvgArrowRight,

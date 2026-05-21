@@ -8,8 +8,8 @@ import type { ProjectFile } from "../../projects/projectsService";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Button, Divider } from "@opal/components";
 
-import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import AddInstructionModal from "@/sections/modals/AddInstructionModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
 import { FileCard, FileCardSkeleton } from "@/sections/cards/FileCard";

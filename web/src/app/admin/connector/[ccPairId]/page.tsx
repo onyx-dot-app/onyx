@@ -37,10 +37,10 @@ import {
   statusIsNotCurrentlyActive,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import EditPropertyModal from "@/components/modals/EditPropertyModal";
+import EditPropertyModal from "@/sections/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import * as Yup from "yup";
 import {
   AlertCircle,
