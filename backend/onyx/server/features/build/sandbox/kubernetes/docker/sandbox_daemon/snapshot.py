@@ -13,6 +13,10 @@ from uuid import UUID
 from sandbox_daemon.models import SnapshotCreateStatus
 
 SESSIONS_ROOT = Path("/workspace/sessions")
+# Must match onyx.server.features.build.sandbox.base.BUN_CACHE_DIR — the
+# daemon can't import from the main package at runtime, hence the copy.
+BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
+BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
 
 
 class SnapshotError(RuntimeError):
@@ -25,7 +29,7 @@ def _run(script: str) -> None:
     """Run a shell script with stderr captured into the raised error."""
     try:
         subprocess.run(
-            ["/bin/sh", "-c", script],
+            ["/bin/bash", "-c", script],
             check=True,
             capture_output=True,
             text=True,
@@ -68,13 +72,17 @@ def create_snapshot(
     safe_session_path = shlex.quote(str(session_path))
     safe_s3_uri = shlex.quote(s3_uri)
 
+    # node_modules + .next are excluded; restore_snapshot rebuilds them.
+    # Including them would also break post-restore dedup since extracted
+    # files get fresh inodes.
     script = f"""
 set -eo pipefail
 cd {safe_session_path}
 dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
 [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
-tar -czf - $dirs | aws s3 cp - {safe_s3_uri}
+tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
+    -czf - $dirs | aws s3 cp - {safe_s3_uri}
 """
 
     _run(script)
@@ -86,7 +94,7 @@ def restore_snapshot(
     s3_bucket: str,
     storage_path: str,
 ) -> None:
-    """Download a snapshot from S3 and extract into the session directory."""
+    """Download snapshot from S3, extract, then bun-install to rebuild node_modules."""
     session_path = SESSIONS_ROOT / str(session_id)
     session_path.mkdir(parents=True, exist_ok=True)
 
@@ -94,9 +102,26 @@ def restore_snapshot(
     safe_session_path = shlex.quote(str(session_path))
     safe_s3_uri = shlex.quote(s3_uri)
 
+    # Keep in sync with docker_sandbox_manager.restore_snapshot's install.
     script = f"""
 set -eo pipefail
 aws s3 cp {safe_s3_uri} - | tar -xzf - -C {safe_session_path}
+
+web_dir={safe_session_path}/outputs/web
+if [ -f "$web_dir/bun.lock" ]; then
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd "$web_dir"
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
+fi
 """
 
     _run(script)

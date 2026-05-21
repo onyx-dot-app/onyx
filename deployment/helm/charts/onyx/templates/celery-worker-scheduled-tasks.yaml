@@ -1,4 +1,4 @@
-{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

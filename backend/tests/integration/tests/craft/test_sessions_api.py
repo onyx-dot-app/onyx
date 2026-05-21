@@ -168,31 +168,47 @@ def test_delete_session_returns_204_and_actually_deletes(
 
 def test_set_sharing_scope_changes_webapp_visibility(
     admin_user: DATestUser,
+    basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
-    """PATCH to public_global flips the webapp from auth-required to anon-accessible.
+    """PATCH to public_org opens the webapp to other org members.
 
-    We don't assert a 200 from the unauthenticated webapp call — the local
-    sandbox typically has no Next.js dev server running, so the proxy hands
-    back the branded "offline" 503 page. What matters is that the auth gate
-    stops being applied: the unauthenticated call no longer redirects to
-    ``/auth/login`` (which is what private sessions do).
+    With the default ``private`` scope, only the session owner can hit the
+    webapp; another org user gets the auth-gate response (302/401/403/404).
+    Flipping the scope to ``public_org`` via the PATCH endpoint must
+    propagate to ``_check_webapp_access`` so the same other-user call now
+    reaches the proxy. We don't pin a 200 from that call — the local
+    sandbox has no Next.js dev server running and the proxy returns the
+    offline page (status 5xx HTML), which still proves the auth gate is
+    no longer applied.
     """
     body = _create_session(admin_user)
     session_id = body["id"]
     webapp_url = f"{API_SERVER_URL}/build/sessions/{session_id}/webapp"
 
-    # Private (default): unauthenticated call is redirected to /auth/login.
-    private_response = requests.get(webapp_url, allow_redirects=False)
-    assert private_response.status_code in (302, 401, 403)
+    # Private (default): an authenticated non-owner gets 404 (existence-hiding).
+    private_response = requests.get(
+        webapp_url,
+        headers=basic_user.headers,
+        cookies=basic_user.cookies,
+        allow_redirects=False,
+    )
+    assert private_response.status_code == 404
 
     BuildSessionManager.set_sharing(
-        admin_user, uuid.UUID(session_id), SharingScope.PUBLIC_GLOBAL
+        admin_user, uuid.UUID(session_id), SharingScope.PUBLIC_ORG
     )
 
-    # Public global: no auth challenge — request reaches the proxy.
-    public_response = requests.get(webapp_url, allow_redirects=False)
-    assert public_response.status_code not in (302, 401, 403)
+    # public_org: same other org user reaches the proxy; with no upstream
+    # Next.js dev server, the proxy returns the branded offline HTML (5xx).
+    public_response = requests.get(
+        webapp_url,
+        headers=basic_user.headers,
+        cookies=basic_user.cookies,
+        allow_redirects=False,
+    )
+    assert public_response.status_code in (200, 502, 503, 504)
+    assert "text/html" in public_response.headers.get("content-type", "").lower()
 
 
 def test_restore_session_returns_409_when_lock_held(

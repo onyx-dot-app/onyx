@@ -304,6 +304,7 @@ def test_create_skill_failure_cleans_up_orphan_blob(
     first_row = _fetch_skill_row(first.id) if first.id is not None else None
     assert first_row is not None
     first_blob_id = first_row.bundle_file_id
+    assert first_blob_id is not None  # custom skills always have a bundle
 
     # Snapshot file store blobs before the failing create.
     blobs_before = _skill_bundle_blob_ids()

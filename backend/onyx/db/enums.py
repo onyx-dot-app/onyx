@@ -284,7 +284,6 @@ class SessionOrigin(str, PyEnum):
 class SharingScope(str, PyEnum):
     PRIVATE = "private"
     PUBLIC_ORG = "public_org"
-    PUBLIC_GLOBAL = "public_global"
 
 
 class ScheduledTaskStatus(str, PyEnum):

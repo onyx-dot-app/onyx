@@ -4,7 +4,6 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from onyx.db.models import Skill
-from onyx.skills.registry import BuiltinSkill
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,17 +95,11 @@ def _truncate(text: str) -> str:
     return text
 
 
-def build_skills_section_from_data(
-    builtins: Iterable[BuiltinSkill],
-    customs: Iterable[Skill],
-) -> str:
-    """Render the AGENTS.md skills section from registry + DB rows."""
-    entries: list[tuple[str, str]] = []
-    for b in builtins:
-        entries.append((b.slug, _truncate(b.description)))
-    for c in customs:
-        entries.append((c.slug, _truncate(c.description)))
-
+def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
+    """Render the AGENTS.md skills section from one unified list of
+    ``Skill`` rows. Built-ins and customs are indistinguishable here —
+    both show up as ``- **slug**: description`` bullets."""
+    entries = [(s.slug, _truncate(s.description)) for s in skills]
     if not entries:
         return "No skills available."
 

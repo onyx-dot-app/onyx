@@ -102,7 +102,7 @@ docker build -t onyxdotapp/sandbox:latest .
   - Web template at `/templates/outputs/web` (lightweight Next.js scaffold, ~2MB)
   - Python venv template at `/templates/venv` (pre-installed packages, ~50MB)
 - **Init container** (Kubernetes only): Syncs knowledge files from S3
-- **Sandbox startup**: Runs `npm install` (for fresh dependency locks) + `next dev`
+- **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
 
 ### Running Backend Directly (Without Docker)
 
@@ -162,7 +162,7 @@ sudo apt-get install libreoffice-impress poppler-utils
 
 1. Web template is copied from `/templates/outputs/web`
 2. Python venv is copied from `/templates/venv`
-3. `npm install` runs automatically to install fresh Next.js dependencies
+3. `bun install --frozen-lockfile` runs automatically, hardlinking from the image's pre-warmed Bun tarball cache
 
 ## OpenCode Configuration
 
@@ -343,7 +343,7 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 
 - **Local mode**: Check if port is already in use
 - **Docker/K8s**: Check container logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
-- Verify npm install succeeded (check entrypoint.sh logs)
+- Verify `bun install` succeeded (check entrypoint.sh logs)
 - Check that web template was copied: `kubectl exec -n onyx-sandboxes sandbox-{sandbox-id} -- ls /workspace/outputs/web`
 
 ### Templates Not Found (Local Mode)
