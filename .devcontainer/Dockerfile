@@ -51,6 +51,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
+# Install Python 3.11 via uv into a stable, image-level path so venvs
+# created in bind-mounted workspaces survive across `docker run`s.
+# Ubuntu 26.04's system Python is 3.14, but onnxruntime only ships
+# cp311–cp313 wheels; the repo pins 3.11 via .python-version.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv python install 3.11
+
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
   echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && \
