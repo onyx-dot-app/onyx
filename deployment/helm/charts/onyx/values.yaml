@@ -1337,6 +1337,14 @@ auth:
     values:
       private_key: ""
 
+# NetworkPolicy for the per-sandbox push daemon (port 8731).
+# In prod the strict default is correct: only api_server pods can push.
+# Local-dev enables `allowTelepresenceAmbassador` via values-localdev.yaml so
+# that traffic intercepted from a developer's laptop (which enters the cluster
+# as the telepresence traffic-manager pod) is also permitted.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
+
 configMap:
   # WARNING: do NOT copy hostname keys from a docker-compose .env into this
   # block. The compose stack uses underscored service names (e.g. `api_server`,

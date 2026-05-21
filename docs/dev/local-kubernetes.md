@@ -79,6 +79,18 @@ with `unable to setup PKI infrastructure: no operator deployment found`
 against Docker Desktop's bundled kubernetes. Use kind (the default in
 `k8s-up.sh`) or a deployed dev cluster (`st-dev`).
 
+**Recovery: `onyx-sandboxes` namespace exists without Helm ownership.** If a
+previous `k8s-up.sh` (or any manual `kubectl create namespace onyx-sandboxes`)
+created the sandbox namespace before the chart could, helm install bails out
+with `exists and cannot be imported into the current release`. Adopt the
+namespace, then re-run `k8s-up.sh`:
+
+```bash
+kubectl label   namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite
+kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite
+kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace=onyx --overwrite
+```
+
 ## Daily workflow
 
 ### vscode tasks
@@ -91,6 +103,39 @@ Run Task):
 - `k8s: resume cluster` — start it back up; kubelet reconciles pods.
 - `k8s: cluster down (full teardown)` — delete the kind cluster and all PVC data.
 - `k8s: telepresence connect`, `... intercept api_server`, `... quit`.
+
+### Set up your `.env.k8s`
+
+The K8s api_server launch loads env from `.vscode/.env.k8s`. You own this
+file end-to-end — the telepresence intercept no longer regenerates it.
+Copy from the tracked template:
+
+```bash
+cp .vscode/.env.k8s.template .vscode/.env.k8s
+```
+
+Then fill in `<REPLACE THIS>` values. **Mirror everything you have in
+`.vscode/.env` into this file** — the K8s launch does not read `.env`,
+only `.env.k8s`. If you set `GEN_AI_API_KEY` only in `.env`, it won't be
+present in K8s mode and you'll hit confusing missing-key errors. The
+template's section 1 lists the standard `.env` vars to copy.
+
+**You must also set `SANDBOX_BACKEND=kubernetes`** (included in the
+template). This is what flips the api_server from local Docker sandboxes
+to in-cluster pod sandboxes. The vscode `(k8s)` launch profiles set it via
+their `env:` block as a safety net, but anything that reads `.env.k8s`
+directly (CLI scripts, ad-hoc invocations, tests) needs the value to be
+in the file too.
+
+`OPENSEARCH_ADMIN_PASSWORD` is the one cluster-random value — leave it as
+`<AUTO_FROM_CLUSTER>` in your `.env.k8s`. The `k8s: telepresence intercept
+api_server` preLaunchTask reads the `onyx-opensearch` Secret and rewrites
+that one line before each launch, so the password stays in sync even
+across `k8s-up.sh` reinstalls (which rotate it).
+
+The preLaunchTask fails fast if `.env.k8s` doesn't exist or if the
+opensearch Secret can't be read (cluster down), so you'll know immediately
+if you missed a step.
 
 ### Run your local processes
 
@@ -118,8 +163,8 @@ Individual `Celery <name> (k8s)` configs are hidden from the picker
 (`presentation.hidden: true`); flip `hidden` to `false` in
 `.vscode/launch.json` to run a single worker.
 
-Every `(k8s)` profile sources `.vscode/.env.k8s` (written by
-`telepresence intercept --env-file`) and sets `SANDBOX_BACKEND=kubernetes`.
+Every `(k8s)` profile sources `.vscode/.env.k8s` (the file you copied from
+`.env.k8s.template`) and sets `SANDBOX_BACKEND=kubernetes`.
 
 Visit `http://localhost:3000` once running.
 
@@ -190,34 +235,20 @@ kubectl -n onyx delete pvc --all
 deployment/helm/dev/k8s-up.sh
 ```
 
-## `.env.k8s.local`
+## `.env.k8s`
 
-`.env.k8s` is regenerated each preLaunchTask run by `telepresence intercept
---env-file`; `.env.k8s.local` is then appended (last-wins). Neither is
-checked in.
+`.env.k8s` is dev-owned and gitignored. The `k8s: telepresence intercept
+api_server` task no longer writes it — copy it once from
+`.env.k8s.template` and edit the `<REPLACE THIS>` values. See
+[Set up your `.env.k8s`](#set-up-your-envk8s) above for the workflow.
 
-Start `.env.k8s.local` from your `.vscode/.env`, then **remove** any keys
-that should come from the cluster — overriding these breaks DNS or auth into
-cluster services:
-
-- `POSTGRES_*`, `REDIS_*`, `OPENSEARCH_*`, `VESPA_HOST`
-- `S3_*` (MinIO endpoint + creds)
-- `MODEL_SERVER_HOST`, `INDEXING_MODEL_SERVER_HOST`
-- `INTERNAL_URL`
-
-Also drop `SANDBOX_BACKEND=local`-only keys (`SANDBOX_BASE_PATH`,
-`OUTPUTS_TEMPLATE_PATH`, `VENV_TEMPLATE_PATH`,
-`PERSISTENT_DOCUMENT_STORAGE_PATH`).
-
-Keep personal vars: API keys (OPENAI, BRAINTRUST, EXA), log levels,
-password-rule relaxations, feature flags, OAuth client IDs.
-
-For Craft development, these are required:
+For Craft development, the required vars (already in the template) are:
 
 ```
 ENABLE_CRAFT=true
-SANDBOX_CONTAINER_IMAGE=sandbox:dev
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev
 SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
+ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 ```
 
 `sandbox:dev` must be built and loaded into kind before sandbox pods can
