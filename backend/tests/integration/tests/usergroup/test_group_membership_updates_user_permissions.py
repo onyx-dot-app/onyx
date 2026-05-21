@@ -17,9 +17,8 @@ from tests.integration.common_utils.test_models import DATestUser
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_user_gets_permissions_when_added_to_group() -> None:
-    admin_user: DATestUser = UserManager.create(name="admin_for_perm_test")
-    basic_user: DATestUser = UserManager.create(name="basic_user_for_perm_test")
+def test_user_gets_permissions_when_added_to_group(admin_user: DATestUser) -> None:
+    basic_user: DATestUser = UserManager.create()
 
     # basic_user starts with only "basic" from the default group
     initial_permissions = UserManager.get_permissions(basic_user)
@@ -63,10 +62,11 @@ def test_user_gets_permissions_when_added_to_group() -> None:
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_group_permission_change_propagates_to_all_members() -> None:
-    admin_user: DATestUser = UserManager.create(name="admin_propagate")
-    user_a: DATestUser = UserManager.create(name="user_a_propagate")
-    user_b: DATestUser = UserManager.create(name="user_b_propagate")
+def test_group_permission_change_propagates_to_all_members(
+    admin_user: DATestUser,
+) -> None:
+    user_a: DATestUser = UserManager.create()
+    user_b: DATestUser = UserManager.create()
 
     group = UserGroupManager.create(
         name="propagate-test-group",
