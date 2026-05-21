@@ -56,7 +56,7 @@ jobs:
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
-      - volume=256gb
+      - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
       - extras=s3-cache
     timeout-minutes: 20
