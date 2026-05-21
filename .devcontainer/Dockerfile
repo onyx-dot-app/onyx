@@ -40,11 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # fd-find installs as fdfind on Debian/Ubuntu — symlink to fd
 RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 
-# Install uv (Python package manager). Python deps themselves are not
-# baked in — CI runs `uv sync` against the bind-mounted workspace, and
-# daily dev uses their own .venv. The apt block above includes the
-# system libraries `uv sync` needs to compile native extensions
-# (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
+# Install uv (Python package manager)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Install bun (JavaScript package manager)
