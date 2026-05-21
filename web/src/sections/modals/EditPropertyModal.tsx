@@ -46,7 +46,10 @@ export default function EditPropertyModal({
           {({ isSubmitting, isValid, values }) => (
             <Form className="w-full">
               <Modal.Body>
-                <InputVertical title={propertyDetails ?? ""} withLabel>
+                <InputVertical
+                  title={propertyDetails ?? ""}
+                  withLabel="propertyValue"
+                >
                   <InputTypeInField
                     name="propertyValue"
                     placeholder="Property value"
