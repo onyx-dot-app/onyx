@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
@@ -18,19 +17,6 @@ export default function AddInstructionModal() {
   const modal = useModal();
   const { currentProjectDetails, upsertInstructions } = useProjectsContext();
 
-  // Capture the value when the modal opens so SWR revalidations mid-edit
-  // don't wipe unsaved changes.
-  const [initialInstructions, setInitialInstructions] = useState(
-    currentProjectDetails?.project?.instructions ?? ""
-  );
-  useEffect(() => {
-    if (modal.isOpen) {
-      setInitialInstructions(
-        currentProjectDetails?.project?.instructions ?? ""
-      );
-    }
-  }, [modal.isOpen]);
-
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
       <Modal.Content width="sm">
@@ -41,7 +27,9 @@ export default function AddInstructionModal() {
           onClose={() => modal.toggle(false)}
         />
         <Formik
-          initialValues={{ instructions: initialInstructions }}
+          initialValues={{
+            instructions: currentProjectDetails?.project?.instructions ?? "",
+          }}
           validationSchema={validationSchema}
           onSubmit={async (values, { setSubmitting }) => {
             try {
@@ -54,7 +42,7 @@ export default function AddInstructionModal() {
             }
           }}
         >
-          {({ isSubmitting }) => (
+          {({ isSubmitting, dirty, isValid }) => (
             <Form>
               <Modal.Body>
                 <InputTextAreaField
@@ -70,7 +58,10 @@ export default function AddInstructionModal() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || !dirty || !isValid}
+                >
                   Save Instructions
                 </Button>
               </Modal.Footer>
