@@ -313,11 +313,14 @@ class WorkspaceProxy:
         )
         resolved = out.strip()
         # Strip the /workspace/ prefix if present; otherwise treat as absolute.
+        # Split into individual segments either way so ``__truediv__`` and
+        # ``_abs_posix`` produce correct results when callers continue to
+        # navigate from the resolved proxy.
         if resolved.startswith("/workspace/"):
             rel = resolved[len("/workspace/") :]
-            parts = tuple(p for p in rel.split("/") if p)
         else:
-            parts = (resolved.lstrip("/"),)
+            rel = resolved.lstrip("/")
+        parts = tuple(p for p in rel.split("/") if p)
         return WorkspaceProxy(
             _k8s_client=self._k8s_client,
             _pod_name=self._pod_name,
@@ -510,13 +513,14 @@ def _cleanup_pool_workspace(
     on a shared emptyDir, writable from either container.
     """
     # managed/{skills,user_library} live under the RO mount — clean via sidecar.
+    # ``find -mindepth 1 -delete`` removes only the directory's contents
+    # (including dotfiles) without the ``.*`` glob expanding to ``.``/``..``.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
-        "rm -rf /workspace/managed/skills/* /workspace/managed/user_library/* "
-        "/workspace/managed/skills/.* /workspace/managed/user_library/.* "
-        "2>/dev/null; true",
+        "find /workspace/managed/skills /workspace/managed/user_library "
+        "-mindepth 1 -delete 2>/dev/null; true",
         container="sidecar",
     )
     # sessions/ is the per-session emptyDir tree.
@@ -524,7 +528,7 @@ def _cleanup_pool_workspace(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
-        "rm -rf /workspace/sessions/* /workspace/sessions/.* 2>/dev/null; true",
+        "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
         container="sandbox",
     )
 
