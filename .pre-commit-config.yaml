@@ -148,13 +148,13 @@ repos:
 
       - id: oxfmt
         name: oxfmt
-        entry: npx --prefix web oxfmt
+        entry: bash -c 'cd web && bunx oxfmt "$@"' _
         language: system
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && npx oxlint'
+        entry: bash -c 'cd web && bunx oxlint'
         language: system
         pass_filenames: false
         types_or: [javascript, ts, tsx]
