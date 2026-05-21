@@ -243,9 +243,7 @@ def reset_postgres(
 
     The target database name is read from the POSTGRES_DB env var. If
     POSTGRES_DB is unset or empty this function raises rather than silently
-    falling back to a default — previously a "postgres" default could DROP
-    SCHEMA on a shared CNPG cluster's bootstrap DB if a test runner was
-    misconfigured.
+    falling back to a default.
     """
     database = os.environ.get("POSTGRES_DB", "").strip()
     if not database:
