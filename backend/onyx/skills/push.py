@@ -44,12 +44,9 @@ def _is_excluded(path: Path, source_dir: Path) -> bool:
     return False
 
 
-def _add_from_disk(
+def _add_static_builtin(
     files: FileSet, skill: Skill, definition: BuiltInSkillDefinition
 ) -> None:
-    """Copy a built-in's on-disk source into the fileset under
-    ``{slug}/``. ``SKILL.md.template`` is excluded — templates are
-    rendered separately by the caller."""
     source_dir = definition.source_dir
     for path in source_dir.rglob("*"):
         if not path.is_file() or _is_excluded(path, source_dir):
@@ -123,7 +120,7 @@ def _assemble_fileset(
                 skill.built_in_skill_id,
             )
             continue
-        _add_from_disk(files, skill, definition)
+        _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
 

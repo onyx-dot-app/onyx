@@ -1,17 +1,4 @@
-"""Ext-dep tests for ``build_skills_fileset_for_user``.
-
-The test pattern is:
-- write a tmp_path "skill directory" with SKILL.md (and optional siblings)
-- monkeypatch a fresh entry into ``BUILT_IN_SKILLS`` whose ``source_dir``
-  points at the tmp_path
-- insert a ``Skill`` row referencing that ``built_in_skill_id``
-- call ``build_skills_fileset_for_user`` and assert on the rendered fileset
-
-This keeps each test fully isolated from on-disk built-ins seeded by
-``setup_postgres`` — we use synthetic ``built_in_skill_id`` values that
-never collide with the canonical pptx / image-generation /
-company-search rows.
-"""
+"""Ext-dep tests for ``build_skills_fileset_for_user``."""
 
 from __future__ import annotations
 

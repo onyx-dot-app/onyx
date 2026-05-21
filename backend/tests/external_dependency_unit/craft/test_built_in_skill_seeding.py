@@ -1,11 +1,4 @@
-"""Tests for the built-in skill bootstrap path:
-
-- ``seed_built_in_skills`` inserts one row per codified definition,
-  idempotently.
-- ``list_skills_for_user`` / ``fetch_skill_for_user`` hide built-ins
-  whose ``is_available(db)`` returns False.
-- The API blocks every mutation path on built-in rows.
-"""
+"""Tests for the built-in skill bootstrap path"""
 
 from __future__ import annotations
 

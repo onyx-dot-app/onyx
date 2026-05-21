@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
@@ -38,7 +39,11 @@ class BuiltInSkillDefinition(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    built_in_skill_id: str
+    # Must match the slug grammar enforced for custom bundles (see
+    # SLUG_REGEX in skills/bundle.py): doubles as the seeded ``slug`` and
+    # the directory name under SKILLS_TEMPLATE_PATH, so an invalid value
+    # would silently violate uploads and on-disk lookups.
+    built_in_skill_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,63}$")
     has_template: bool
     source_dir: Path
     is_available: Callable[[Session], bool] = _always_available

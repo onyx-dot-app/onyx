@@ -15,13 +15,22 @@ two bundle columns become nullable; a CHECK constraint enforces
 multiple ``skill`` rows (different slugs, sharing scopes). Slug
 remains the unique natural key and is what the seeder deduplicates on.
 
-Backfill is unnecessary: every pre-existing row is a custom skill
-(``bundle_file_id`` already NOT NULL and ``built_in_skill_id`` defaults
-to NULL on add) and satisfies the XOR.
+Backfill of existing custom rows is unnecessary: ``bundle_file_id`` is
+already NOT NULL and ``built_in_skill_id`` defaults to NULL, so every
+pre-existing row satisfies the XOR.
+
+Seed step: also inserts the default built-in rows in the same revision.
+Required for MT upgrades — ``setup_postgres`` (which calls the boot-time
+seeder) only runs for *new* tenants in multi-tenant mode, so existing
+tenants would otherwise silently lose all built-in skills after this
+migration. Alembic runs per-tenant schema, so this seeds every tenant.
 """
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.orm import Session
+
+from onyx.db.skill import seed_built_in_skills
 
 # revision identifiers, used by Alembic.
 revision = "7f5b159041be"
@@ -44,6 +53,12 @@ def upgrade() -> None:
         "skill",
         "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
     )
+
+    # Seed default built-in rows so existing tenants pick them up on
+    # upgrade. Idempotent via ON CONFLICT — re-running this migration
+    # on a tenant that's already booted under the new code is safe.
+    with Session(bind=op.get_bind()) as session:
+        seed_built_in_skills(session)
 
 
 def downgrade() -> None:
