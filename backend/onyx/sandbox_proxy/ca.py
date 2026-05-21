@@ -18,7 +18,9 @@ _CA_KEY_SIZE_BITS = 4096
 _CA_VALIDITY_DAYS = 1825
 _CA_COMMON_NAME = "Onyx Sandbox Proxy CA"
 _CA_ORG_NAME = "Onyx"
-_DEFAULT_CA_PEM_PATH = "/var/run/sandbox-proxy/ca.pem"
+# mitmproxy auto-loads `$confdir/mitmproxy-ca.pem` as its CA. The subdir
+# under the mount is ours to chmod 0o700 (the mount root is root-owned).
+_DEFAULT_CA_PEM_PATH = "/var/run/sandbox-proxy/mitmproxy-confdir/mitmproxy-ca.pem"
 
 logger = setup_logger()
 

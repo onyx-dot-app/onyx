@@ -10,6 +10,7 @@ from http.server import HTTPServer
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.addons.passthrough import PassthroughAddon
 from onyx.sandbox_proxy.ca import CABootstrap
 from onyx.sandbox_proxy.ca import MaterializedCA
@@ -22,10 +23,15 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
 from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
 from onyx.utils.logger import setup_logger
 
+_DB_POOL_SIZE = 4
+_DB_MAX_OVERFLOW = 4
+_DB_APP_NAME = "sandbox_proxy"
+
 # If the watch isn't reachable in this window on startup, the proxy
 # exits non-zero rather than serve traffic with unbacked identity.
 _LOOKUP_INITIAL_SYNC_TIMEOUT_SECONDS = 60.0
 
+# Must be the parent of ca._DEFAULT_CA_PEM_PATH.
 _MITM_CONFDIR = "/var/run/sandbox-proxy/mitmproxy-confdir"
 
 logger = setup_logger()
@@ -111,15 +117,13 @@ def _build_lookup() -> K8sInformerLookup:
     return lookup
 
 
-def _build_mitm_options(ca_pem_path: str) -> Options:
+def _build_mitm_options() -> Options:
     return Options(
         listen_host="0.0.0.0",  # noqa: S104 — container scope; pod network only
         listen_port=SANDBOX_PROXY_LISTEN_PORT,
         confdir=_MITM_CONFDIR,
-        certs=[f"*={ca_pem_path}"],
         mode=["regular"],
         ssl_insecure=False,
-        flow_detail=0,
     )
 
 
@@ -155,6 +159,9 @@ def main() -> int:
 
     readiness = _Readiness()
 
+    SqlEngine.set_app_name(_DB_APP_NAME)
+    SqlEngine.init_engine(pool_size=_DB_POOL_SIZE, max_overflow=_DB_MAX_OVERFLOW)
+
     materialized_ca = _bootstrap_ca()
     readiness.ca_ready = True
     logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
@@ -170,17 +177,17 @@ def main() -> int:
         identity = IdentityResolver(ip_lookup=lookup)
         addon = PassthroughAddon(identity=identity)
 
-        options = _build_mitm_options(str(materialized_ca.pem_path))
-        master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
-        master.addons.add(addon)
+        # DumpMaster's constructor binds to the running event loop.
+        async def _async_main() -> None:
+            options = _build_mitm_options()
+            master = DumpMaster(options=options, with_termlog=True, with_dumper=False)
+            master.addons.add(addon)
+            _install_signal_handlers(
+                asyncio.get_running_loop(), master, readiness, lookup
+            )
+            await _run_master(master)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        _install_signal_handlers(loop, master, readiness, lookup)
-        try:
-            loop.run_until_complete(_run_master(master))
-        finally:
-            loop.close()
+        asyncio.run(_async_main())
     finally:
         lookup.stop()
         if healthz_server is not None:

@@ -23,7 +23,7 @@ CA_SRC="${SANDBOX_PROXY_CA_BUNDLE_SRC:-/sandbox-ca/ca.crt}"
 CA_DST="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
 
 # Resolved once in step_apply_iptables before the lockdown closes DNS,
-# then reused in step_pre_resolve_proxy and step_self_verify.
+# then reused in step_self_verify.
 PROXY_IP=""
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
@@ -85,21 +85,9 @@ step_apply_iptables() {
 }
 
 
-step_pre_resolve_proxy() {
-    case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
-        initcontainer)
-            # DNS is closed by step_apply_iptables; write the IP we
-            # already have into /etc/hosts so HTTPS_PROXY resolves.
-            if ! grep -qE "^${PROXY_IP//./\\.}[[:space:]]+sandbox-proxy" /etc/hosts; then
-                echo "${PROXY_IP} sandbox-proxy" >> /etc/hosts
-            fi
-            log "wrote sandbox-proxy -> ${PROXY_IP} into /etc/hosts"
-            ;;
-        entrypoint)
-            log "step 3 skipped in entrypoint mode"
-            ;;
-    esac
-}
+# `sandbox-proxy` resolution after the lockdown comes from outside this
+# script: pod hostAliases under K8s (kubelet won't propagate /etc/hosts
+# writes across containers), Docker's embedded DNS under compose.
 
 
 step_self_verify() {
@@ -128,7 +116,6 @@ step_self_verify() {
 
 step_install_ca
 step_apply_iptables
-step_pre_resolve_proxy
 step_self_verify
 
 
