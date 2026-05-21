@@ -1666,18 +1666,15 @@ echo "Session cleanup complete"
         opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
+        # Snapshot tar only carries outputs/, attachments/, .opencode-data/ —
+        # re-link the managed-tree symlinks that setup_session_workspace creates.
         config_script = f"""
 set -e
-
-# Write agent instructions
-echo "Writing AGENTS.md"
+mkdir -p {session_path}/.opencode
+ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
+ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Write opencode config
-echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-
-echo "Session config regeneration complete"
 """
 
         logger.info("Regenerating session configuration files")
