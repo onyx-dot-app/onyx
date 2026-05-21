@@ -47,7 +47,11 @@ telepresence connect -n onyx
 
 ## One-time setup
 
-Bring up the cluster:
+Follow the four steps below in order. Skipping step 3 (the sandbox image)
+is the most common Craft setup failure — sandbox pods can't pull
+`onyxdotapp/sandbox:dev` from anywhere, so Build sessions hang.
+
+### 1. Bring up the cluster
 
 ```bash
 deployment/helm/dev/k8s-up.sh
@@ -55,7 +59,8 @@ deployment/helm/dev/k8s-up.sh
 
 Or run the **`k8s: cluster up`** vscode task. The script is idempotent and
 refuses to run unless your kubectl context is exactly `kind-onyx-dev` (the
-`onyx` namespace also exists in prod EKS).
+`onyx` namespace also exists in prod EKS). It also installs the
+telepresence traffic-manager once per cluster.
 
 Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
 
@@ -63,16 +68,56 @@ Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
 kubectl -n onyx get pods -w
 ```
 
-Install the in-cluster telepresence traffic-manager (once per cluster):
-
-```bash
-telepresence helm install
-```
-
 The chart pins images to the `:edge` tag in
 [`values-localdev.yaml`](/deployment/helm/charts/onyx/values-localdev.yaml)
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
+
+### 2. Copy `.env.k8s` from the template
+
+```bash
+cp .vscode/.env.k8s.template .vscode/.env.k8s
+```
+
+Then fill in `<REPLACE THIS>` values (at minimum `GEN_AI_API_KEY`). See
+[Set up your `.env.k8s`](#set-up-your-envk8s) below for the full workflow
+and what to mirror from `.vscode/.env`.
+
+### 3. Build and load the sandbox image
+
+**Required for Craft (`SANDBOX_BACKEND=kubernetes`).** The chart points
+sandbox pods at `onyxdotapp/sandbox:dev`, which is local-only — it isn't on
+any registry, so kind's `imagePullPolicy: IfNotPresent` will fail until
+you've built it and loaded it into the kind node:
+
+```bash
+docker build -t onyxdotapp/sandbox:dev \
+  backend/onyx/server/features/build/sandbox/kubernetes/docker
+kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
+```
+
+Rebuild + reload when you change anything under that directory. The image
+tag (`onyxdotapp/sandbox:dev`) must match `SANDBOX_CONTAINER_IMAGE` in your
+`.env.k8s` and the chart's `sandbox.image.*` values.
+
+Verify it's present in the kind node:
+
+```bash
+docker exec onyx-dev-control-plane crictl images | grep sandbox
+```
+
+### 4. Connect telepresence
+
+```bash
+telepresence connect -n onyx
+```
+
+This sets up the DNS bridge so your local api_server can resolve
+in-cluster services (`onyx-pg-rw`, `onyx-minio`, etc.). The vscode `(k8s)`
+launch profiles also run an `intercept` automatically — `connect` here is
+only needed if you're driving telepresence outside of vscode.
+
+---
 
 **Known issue: CNPG operator on Docker Desktop k8s.** CloudNativePG fails
 with `unable to setup PKI infrastructure: no operator deployment found`
@@ -246,19 +291,49 @@ For Craft development, the required vars (already in the template) are:
 
 ```
 ENABLE_CRAFT=true
+SANDBOX_BACKEND=kubernetes
 SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev
 SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080
 ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 ```
 
-`sandbox:dev` must be built and loaded into kind before sandbox pods can
-start:
+The `onyxdotapp/sandbox:dev` image referenced here is **local-only**; build
+and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
+before launching the api_server.
+
+## Troubleshooting
+
+### Craft tab missing from the sidebar (and `/craft` 404s)
+
+The web doesn't read `ENABLE_CRAFT` directly. The sidebar (`AppSidebar.tsx`)
+and the `/craft` route guard (`app/craft/layout.tsx`) both check
+`combinedSettings.settings.onyx_craft_enabled`, which is computed by the
+backend in `is_onyx_craft_enabled(user)`
+(`backend/onyx/server/features/build/utils.py`) and returned from
+`GET /api/settings` (`backend/onyx/server/settings/api.py`).
+
+That backend check returns **`False`** when:
+
+1. **No user is authenticated** — the settings endpoint short-circuits to
+   `False` for anonymous requests, so the tab won't appear on the login page
+   or in incognito. Log in first.
+2. **The api_server you're hitting doesn't have `ENABLE_CRAFT=true`.** Most
+   common cause: running the plain `API Server` launch (loads `.vscode/.env`)
+   instead of the `(k8s)` launch (loads `.vscode/.env.k8s`). The `(k8s)`
+   compound and `Run All Onyx Services (k8s)` are the only profiles that
+   source `.env.k8s`.
+
+Confirm by hitting `/api/settings` while logged in and checking
+`onyx_craft_enabled`:
 
 ```bash
-cd backend/onyx/server/features/build/sandbox/kubernetes/docker
-docker build -t sandbox:dev .
-kind load docker-image sandbox:dev --name onyx-dev
+# from a logged-in browser session, copy the cookie and:
+curl -sS http://localhost:3000/api/settings -H "Cookie: <paste>" | jq .settings.onyx_craft_enabled
 ```
+
+If that returns `true` but the tab is still missing, hard-reload (the
+settings response is fetched server-side; stale Next.js cache can hide a
+just-flipped flag).
 
 ## References
 
