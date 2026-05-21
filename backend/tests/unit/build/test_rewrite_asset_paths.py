@@ -236,6 +236,80 @@ class TestProxyRequestWiring:
             "<title>x</title>"
         )
 
+    def test_proxy_request_strips_sensitive_viewer_headers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credential, CSRF, and forwarded-identity headers must not reach the sandbox."""
+        upstream = httpx.Response(
+            200, headers={"content-type": "text/plain"}, content=b"ok"
+        )
+        forwarded_headers: dict[str, str] = {}
+
+        monkeypatch.setattr(api, "_get_sandbox_url", lambda *_args: "http://sandbox")
+
+        class FakeClient:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                pass
+
+            def __enter__(self) -> "FakeClient":
+                return self
+
+            def __exit__(self, *_args: object) -> Literal[False]:
+                return False
+
+            def get(self, _url: str, headers: dict[str, str]) -> httpx.Response:
+                forwarded_headers.update(headers)
+                return upstream
+
+        monkeypatch.setattr(api.httpx, "Client", FakeClient)
+
+        # Mix of lower- and mixed-case keys to exercise the case-insensitive
+        # filter (real Starlette Headers arrive lowercased, but defense-in-depth
+        # in the comparator should still work if that ever changes).
+        sensitive_headers = {
+            "host": "app.onyx.local",
+            "content-length": "7",
+            "Cookie": "fastapiusersauth=victim-session",
+            "Authorization": "Bearer victim-token",
+            "X-Onyx-Authorization": "Bearer alt-victim-token",
+            "X-Onyx-Tenant-ID": "victim-tenant",
+            "X-Onyx-Request-ID": "abc-123",
+            "X-Onyx-Future-Header": "should-be-stripped-by-prefix",
+            "x-api-key": "victim-api-key",
+            "x-auth-token": "victim-auth-token",
+            "proxy-authorization": "Basic victim-proxy-token",
+            "x-csrf-token": "csrf-token",
+            "x-xsrf-token": "xsrf-token",
+            "x-forwarded-for": "203.0.113.10",
+            "x-forwarded-host": "evil.example.com",
+            "x-forwarded-proto": "https",
+            "x-real-ip": "203.0.113.10",
+            "x-client-ip": "203.0.113.10",
+            "cf-connecting-ip": "203.0.113.10",
+            "true-client-ip": "203.0.113.10",
+            "x-forwarded-user": "victim@example.com",
+            "x-forwarded-email": "victim@example.com",
+            "forwarded": "for=203.0.113.10;proto=https",
+        }
+        benign_headers = {"accept": "text/plain", "user-agent": "pytest"}
+        request = cast(
+            Request,
+            SimpleNamespace(
+                headers={**sensitive_headers, **benign_headers},
+                query_params="",
+            ),
+        )
+
+        api._proxy_request(
+            "", request, UUID(SESSION_ID), cast(Session, SimpleNamespace())
+        )
+
+        lower = {key.lower(): value for key, value in forwarded_headers.items()}
+        # Exact match: no sensitive header survives, no extra header leaks
+        # through. If a new sensitive header is added to the request without a
+        # corresponding deny-list entry, this assertion will catch it.
+        assert lower == benign_headers
+
     def test_rewrites_absolute_link_header_font_preload_paths(self) -> None:
         headers = {
             "link": (
