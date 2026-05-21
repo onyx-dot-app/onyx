@@ -359,8 +359,14 @@ class SandboxStatus(str, PyEnum):
 
 
 class ExternalAppType(str, PyEnum):
-    """Built-in OAuth providers in `external_apps.providers`. CUSTOM
-    is for admin-defined apps with no built-in dispatch."""
+    """Discriminator for the External Apps OAuth dispatch layer.
+
+    Each built-in value names a provider with its own configured
+    authorize URL, token URL, scope, and response parser in
+    `external_apps.providers`. `CUSTOM` is for admin-defined apps
+    that don't go through any built-in OAuth flow (static-token
+    integrations, internal services, etc.).
+    """
 
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
     SLACK = "SLACK"
