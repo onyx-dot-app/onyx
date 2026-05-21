@@ -61,6 +61,12 @@ ENV DEVCONTAINER=true
 RUN mkdir -p /workspace && \
   chown -R dev:dev /workspace
 
+# Mark /workspace as safe for git regardless of host/container UID mismatch.
+# Daily dev sidesteps "dubious ownership" via init-dev-user.sh (UID remap or
+# rootless-root). One-shot `docker run` uses (e.g. CI) skip postStartCommand
+# entirely, so we set this system-wide.
+RUN git config --system --add safe.directory /workspace
+
 WORKDIR /workspace
 
 # Install Claude Code

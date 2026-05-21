@@ -18,4 +18,4 @@ runs:
           -w /workspace \
           -e LICENSE_ENFORCEMENT_ENABLED=false \
           "${DEVCONTAINER_IMAGE}" \
-          bash -c 'git config --global --add safe.directory /workspace && uv sync --frozen --no-group model_server && uv run --no-sync ods openapi all'
+          bash -c 'uv sync --frozen --no-group model_server && uv run --no-sync ods openapi all'
