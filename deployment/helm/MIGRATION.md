@@ -37,10 +37,11 @@ time and fails fast with a clear message instead of silently breaking. See
 
 1. **Stand up an external Vespa cluster.** Vespa Cloud or a self-hosted
    deployment outside this chart, whichever fits your operational model.
-2. **Re-index** your documents into the new cluster (Vespa data does not
-   roundtrip directly between releases; the chunk schemas have changed
-   over time anyway). Onyx connectors will reindex as part of normal
-   operation once they can reach the new endpoint.
+2. **Re-index is automatic.** Vespa data does not roundtrip directly
+   between releases (chunk schemas have changed over time anyway). No
+   manual action here; Onyx connectors will reindex on their own once
+   the api-server can reach the new endpoint (after the upgrade in
+   step 5).
 3. **Update your values** to point Onyx at the external Vespa endpoint
    (the api-server respects `VESPA_HOST` / `VESPA_PORT` env vars; set
    them through your `configMap:` block).
