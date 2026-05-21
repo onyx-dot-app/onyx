@@ -409,8 +409,25 @@ class KubernetesSandboxManager(SandboxManager):
         )
 
         # Sidecar container — runs the push daemon + snapshot API on port 8731.
-        # Receives IRSA credentials for S3 access.
+        # Receives IRSA credentials for S3 access in prod; falls back to
+        # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
+        # local-dev / CI where IRSA isn't available and an S3-compatible
+        # service (e.g. minio) is reachable in-cluster.
         _, push_public_key_b64 = _get_push_key_pair()
+        sidecar_env = [
+            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+        ]
+        for var in (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "AWS_ENDPOINT_URL",
+        ):
+            value = os.environ.get(var)
+            if value:
+                sidecar_env.append(client.V1EnvVar(name=var, value=value))
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
@@ -421,9 +438,7 @@ class KubernetesSandboxManager(SandboxManager):
                     name="push-daemon", container_port=PUSH_DAEMON_PORT
                 ),
             ],
-            env=[
-                client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
-            ],
+            env=sidecar_env,
             volume_mounts=[
                 client.V1VolumeMount(
                     name="workspace", mount_path="/workspace/sessions"
