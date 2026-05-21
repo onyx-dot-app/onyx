@@ -65,6 +65,37 @@ _CODE_NOT_AUTHORIZED = "not_authorized"
 _CODE_INTERNAL_ERROR = "internal_error"
 
 
+class ParkedApprovals:
+    """Approvals the proxy is currently parked on, grouped by tenant.
+
+    Cross-tenant in-memory state — UUIDs and tenant slugs, no user
+    data. Exists so the SIGTERM drain can fan out per-tenant in
+    parallel (``asyncio.gather`` + ``asyncio.to_thread``) without one
+    slow tenant starving another's drain budget.
+
+    Mutated only from the event loop; the drain reads via
+    ``snapshot()`` to iterate safely while the source mutates.
+    """
+
+    def __init__(self) -> None:
+        self._by_tenant: dict[str, set[UUID]] = {}
+
+    def add(self, tenant_id: str, approval_id: UUID) -> None:
+        self._by_tenant.setdefault(tenant_id, set()).add(approval_id)
+
+    def remove(self, tenant_id: str, approval_id: UUID) -> None:
+        parked = self._by_tenant.get(tenant_id)
+        if parked is None:
+            return
+        parked.discard(approval_id)
+        if not parked:
+            del self._by_tenant[tenant_id]
+
+    def snapshot(self) -> list[tuple[str, set[UUID]]]:
+        """One-shot copy safe to iterate while the source mutates."""
+        return [(tenant_id, ids.copy()) for tenant_id, ids in self._by_tenant.items()]
+
+
 class GateAddon:
     """mitmproxy addon that gates external-app requests on user approval."""
 
@@ -81,13 +112,9 @@ class GateAddon:
         self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
-        # approval_id -> tenant_id for every approval the proxy is
-        # currently parked on. The SIGTERM drain reads this to route
-        # the conditional UPDATE to the right schema. Mutated only
-        # from the event loop (mitmproxy hooks + drain), so no lock.
-        # Invariant: ``_persist_approval_row`` is the only writer,
+        # Invariant: ``_persist_approval_row`` is the only writer;
         # ``_await_decision``'s finally is the only remover.
-        self._parked_approvals: dict[UUID, str] = {}
+        self._parked = ParkedApprovals()
         # Each running ``request()`` coroutine registers itself here so
         # the drain can ``asyncio.wait`` on real completion instead of
         # sleeping. Self-cleaning via ``add_done_callback``.
@@ -216,7 +243,7 @@ class GateAddon:
             approval_id = row.approval_id
             db.commit()
 
-        self._parked_approvals[approval_id] = ctx.tenant_id
+        self._parked.add(ctx.tenant_id, approval_id)
         try:
             approval_cache.announce_approval(
                 approval_id,
@@ -303,7 +330,7 @@ class GateAddon:
             self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
             raise
         finally:
-            self._parked_approvals.pop(approval_id, None)
+            self._parked.remove(ctx.tenant_id, approval_id)
 
     def _claim_expired_or_read_winner(
         self, approval_id: UUID, tenant_id: str
@@ -389,44 +416,49 @@ class GateAddon:
 
         Two phases, each best-effort:
 
-        1. For every parked approval, claim EXPIRED (or read the
+        1. For every parked approval (iterated per-tenant so each
+           tenant uses one cache backend), claim EXPIRED (or read the
            winner if the API just decided) and push the decision onto
-           the wake channel so the parked BLPOP returns immediately
-           instead of waiting out ``WAIT_TIMEOUT_S``.
+           the wake channel so the parked BLPOP returns immediately.
+           Runs synchronously in the event loop; at the documented
+           scale (few hundred approvals max) this completes well
+           inside ``_DRAIN_TIMEOUT_S``.
         2. ``asyncio.wait`` on every tracked ``request()`` task so the
-           hook coroutines fully serialize their responses before the
-           outer caller tears down connections. The caller is
-           responsible for bounding the total wait.
+           hook coroutines pick up their wakes and return to mitmproxy
+           before the outer caller tears down connections.
         """
-        for approval_id, tenant_id in list(self._parked_approvals.items()):
-            try:
-                decision = self._claim_expired_or_read_winner(approval_id, tenant_id)
+        for tenant_id, approval_ids in self._parked.snapshot():
+            cache = self._cache_factory(tenant_id)
+            for approval_id in approval_ids:
                 try:
-                    approval_cache.send_wake(
-                        approval_id, decision, self._cache_factory(tenant_id)
+                    decision = self._claim_expired_or_read_winner(
+                        approval_id, tenant_id
                     )
-                except CACHE_TRANSIENT_ERRORS:
-                    pass
-                if decision == ApprovalDecision.EXPIRED:
-                    logger.info(
-                        "gate.drain_expired approval_id=%s tenant_id=%s",
+                    try:
+                        approval_cache.send_wake(approval_id, decision, cache)
+                    except CACHE_TRANSIENT_ERRORS:
+                        pass
+                    if decision == ApprovalDecision.EXPIRED:
+                        logger.info(
+                            "gate.drain_expired approval_id=%s tenant_id=%s",
+                            approval_id,
+                            tenant_id,
+                        )
+                    else:
+                        logger.info(
+                            "gate.drain_forwarded approval_id=%s "
+                            "tenant_id=%s decision=%s",
+                            approval_id,
+                            tenant_id,
+                            decision.value,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "gate.drain_error approval_id=%s tenant_id=%s error=%s",
                         approval_id,
                         tenant_id,
+                        str(e),
                     )
-                else:
-                    logger.info(
-                        "gate.drain_forwarded approval_id=%s tenant_id=%s decision=%s",
-                        approval_id,
-                        tenant_id,
-                        decision.value,
-                    )
-            except Exception as e:
-                logger.warning(
-                    "gate.drain_error approval_id=%s tenant_id=%s error=%s",
-                    approval_id,
-                    tenant_id,
-                    str(e),
-                )
 
         # Exclude self so we don't deadlock if drain ever ends up
         # registered in the inflight set.
