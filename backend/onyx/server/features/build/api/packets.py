@@ -65,7 +65,7 @@ class ApprovalRequestedPacket(BasePacket):
     """Signal that a new approval row is awaiting the user's decision.
 
     Carries only the approval_id — the FE refetches the row via
-    ``GET /approvals/sessions/{session_id}/live`` to render the card.
+    `GET /approvals/sessions/{session_id}/live` to render the card.
     Keeps the packet small and Postgres as the single source of truth
     for card contents.
     """
