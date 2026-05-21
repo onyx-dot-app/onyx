@@ -38,9 +38,13 @@ export default function EditPropertyModal({
             propertyValue,
           }}
           validationSchema={validationSchema}
-          onSubmit={(values) => {
-            onSubmit(values.propertyName, values.propertyValue);
-            onClose();
+          onSubmit={async (values, { setSubmitting }) => {
+            try {
+              await onSubmit(values.propertyName, values.propertyValue);
+              onClose();
+            } finally {
+              setSubmitting(false);
+            }
           }}
         >
           {({ isSubmitting, isValid, values }) => (

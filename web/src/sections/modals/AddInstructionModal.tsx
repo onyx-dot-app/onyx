@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
@@ -17,8 +18,18 @@ export default function AddInstructionModal() {
   const modal = useModal();
   const { currentProjectDetails, upsertInstructions } = useProjectsContext();
 
-  const initialInstructions =
-    currentProjectDetails?.project?.instructions ?? "";
+  // Capture the value when the modal opens so SWR revalidations mid-edit
+  // don't wipe unsaved changes.
+  const [initialInstructions, setInitialInstructions] = useState(
+    currentProjectDetails?.project?.instructions ?? ""
+  );
+  useEffect(() => {
+    if (modal.isOpen) {
+      setInitialInstructions(
+        currentProjectDetails?.project?.instructions ?? ""
+      );
+    }
+  }, [modal.isOpen]);
 
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
@@ -32,15 +43,14 @@ export default function AddInstructionModal() {
         <Formik
           initialValues={{ instructions: initialInstructions }}
           validationSchema={validationSchema}
-          enableReinitialize
           onSubmit={async (values, { setSubmitting }) => {
             try {
               await upsertInstructions(values.instructions.trim());
+              modal.toggle(false);
             } catch (e) {
               console.error("Failed to save instructions", e);
             } finally {
               setSubmitting(false);
-              modal.toggle(false);
             }
           }}
         >

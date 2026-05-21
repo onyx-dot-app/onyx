@@ -54,10 +54,10 @@ export default function CreateProjectModal({
               }
             }}
           >
-            {({ isSubmitting, isValid, dirty }) => (
+            {({ isSubmitting, isValid }) => (
               <Form>
                 <Modal.Body>
-                  <InputVertical title="Project Name" withLabel>
+                  <InputVertical title="Project Name" withLabel="projectName">
                     <InputTypeInField
                       name="projectName"
                       placeholder="What are you working on?"
@@ -73,10 +73,7 @@ export default function CreateProjectModal({
                   >
                     Cancel
                   </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || !isValid || !dirty}
-                  >
+                  <Button type="submit" disabled={isSubmitting || !isValid}>
                     Create Project
                   </Button>
                 </Modal.Footer>
