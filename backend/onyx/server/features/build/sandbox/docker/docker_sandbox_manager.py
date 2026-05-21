@@ -753,15 +753,18 @@ echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs {session_path}/attachments {session_path}/.opencode
 if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
     cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    # .ready sentinel guards against a partial cp from an interrupted
-    # previous run satisfying the dir-exists check.
-    if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-        echo "Bootstrapping bun cache on workspace volume..."
-        rm -rf {BUN_CACHE_DIR}
-        cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \
-            || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-        touch {BUN_CACHE_DIR}/.ready
-    fi
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 200
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 200>{BUN_CACHE_DIR}.lock
     cd {session_path}/outputs/web && \
         BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
         bun install --frozen-lockfile --backend=hardlink
@@ -995,12 +998,15 @@ echo "Session cleanup complete"
 set -e
 web_dir={session_path}/outputs/web
 if [ -f "$web_dir/bun.lock" ]; then
-    if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-        rm -rf {BUN_CACHE_DIR}
-        cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
-            || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-        touch {BUN_CACHE_DIR}/.ready
-    fi
+    (
+        flock -x 200
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 200>{BUN_CACHE_DIR}.lock
     cd "$web_dir"
     BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
         bun install --frozen-lockfile --backend=hardlink

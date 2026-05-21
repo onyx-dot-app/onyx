@@ -1187,15 +1187,18 @@ printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_str
 echo "Copying outputs template"
 if [ -d /workspace/templates/outputs ]; then
     cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # .ready sentinel guards against a partial cp from an interrupted
-    # previous run satisfying the dir-exists check.
-    if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-        echo "Bootstrapping bun cache on workspace volume..."
-        rm -rf {BUN_CACHE_DIR}
-        cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
-            || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-        touch {BUN_CACHE_DIR}/.ready
-    fi
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 200
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 200>{BUN_CACHE_DIR}.lock
     cd {session_path}/outputs/web && \\
         BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
         bun install --frozen-lockfile --backend=hardlink
