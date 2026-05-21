@@ -18,6 +18,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -154,6 +155,36 @@ def make_built_in_skill_row(
     db_session.add(skill)
     db_session.flush()
     return skill
+
+
+def reset_built_in_skill_row(
+    db_session: Session,
+    *,
+    built_in_skill_id: str,
+    slug: str | None = None,
+    name: str | None = None,
+    description: str = "test built-in",
+    is_public: bool = True,
+    enabled: bool = True,
+) -> Skill:
+    """Idempotently (re)create a built-in row for ``built_in_skill_id``.
+
+    Deletes any existing row with the same slug first, so tests stay
+    robust whether or not the migration-seeded canonical row is present
+    (it always is on a migrated DB, but another test's teardown may have
+    removed it). Returns the freshly inserted row.
+    """
+    target_slug = slug or built_in_skill_id
+    db_session.execute(delete(Skill).where(Skill.slug == target_slug))
+    return make_built_in_skill_row(
+        db_session,
+        built_in_skill_id=built_in_skill_id,
+        slug=slug,
+        name=name,
+        description=description,
+        is_public=is_public,
+        enabled=enabled,
+    )
 
 
 def grant_skill_to_group(

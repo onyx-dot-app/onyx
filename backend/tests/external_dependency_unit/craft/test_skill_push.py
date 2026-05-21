@@ -40,7 +40,6 @@ from onyx.db.skill import delete_skill
 from onyx.db.skill import patch_skill
 from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
-from onyx.db.skill import seed_built_in_skills
 from onyx.db.skill import SkillPatch
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import FatalWriteError
@@ -54,6 +53,7 @@ from tests.external_dependency_unit.craft._test_helpers import make_built_in_ski
 from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
 from tests.external_dependency_unit.craft._test_helpers import make_group
 from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
@@ -470,12 +470,12 @@ class TestSkillPush:
         creating PRIVATE cc_pairs (baseline), then again AFTER. The diff
         isolates our cc_pairs from any PUBLIC ones leaked by other tests.
 
-        Seeds the company-search built-in row inline; ``setup_postgres``
-        is not invoked in this test harness.
+        (Re)creates the company-search built-in row inline so the test is
+        self-contained regardless of migration/other-test state.
         """
         handle = running_sandbox()
 
-        seed_built_in_skills(db_session)
+        reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
 
         user_a = make_user(db_session)
@@ -566,7 +566,6 @@ class TestSkillPush:
             slug,
             BuiltInSkillDefinition(
                 built_in_skill_id=slug,
-                has_template=False,
                 source_dir=source_dir,
             ),
         )

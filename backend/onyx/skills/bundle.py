@@ -17,6 +17,7 @@ import yaml
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.skills.built_in import SLUG_REGEX
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024
@@ -28,7 +29,6 @@ DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
 
-SLUG_REGEX: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
     r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
     re.DOTALL,

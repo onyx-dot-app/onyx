@@ -13,24 +13,28 @@ two bundle columns become nullable; a CHECK constraint enforces
 
 ``built_in_skill_id`` is *not* unique — a single built-in can back
 multiple ``skill`` rows (different slugs, sharing scopes). Slug
-remains the unique natural key and is what the seeder deduplicates on.
+remains the unique natural key and is what the seed step deduplicates on.
 
 Backfill of existing custom rows is unnecessary: ``bundle_file_id`` is
 already NOT NULL and ``built_in_skill_id`` defaults to NULL, so every
 pre-existing row satisfies the XOR.
 
-Seed step: also inserts the default built-in rows in the same revision.
-Required for MT upgrades — ``setup_postgres`` (which calls the boot-time
-seeder) only runs for *new* tenants in multi-tenant mode, so existing
-tenants would otherwise silently lose all built-in skills after this
-migration. Alembic runs per-tenant schema, so this seeds every tenant.
+Seed step: inserts the default built-in rows in the same revision.
+Migrations are the source of truth for built-in ``skill`` rows — adding
+or changing a built-in is done by writing a migration, not by reading
+application code at boot. Alembic runs per-tenant schema (at deploy and
+at new-tenant provisioning), so this seeds every tenant. The name and
+description below are hardcoded snapshots, copied from each built-in's
+SKILL.md frontmatter at the time of this revision; the migration reads
+no application code or on-disk files, so its behavior is frozen forever.
 """
+
+import uuid
+from dataclasses import dataclass
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.orm import Session
-
-from onyx.db.skill import seed_built_in_skills
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "7f5b159041be"
@@ -39,14 +43,127 @@ branch_labels = None
 depends_on = None
 
 
+# Use built-in python module instead of pydantic
+@dataclass(frozen=True)
+class _BuiltIn:
+    # ``built_in_skill_id`` doubles as the seeded slug for the default row.
+    built_in_skill_id: str
+    name: str
+    description: str
+
+
+# Frozen snapshot of the built-ins as of this revision. Hardcoded on
+# purpose — a later built-in add/edit gets its own migration; this one
+# must never change.
+_BUILT_INS: tuple[_BuiltIn, ...] = (
+    _BuiltIn(
+        built_in_skill_id="pptx",
+        name="pptx",
+        description=(
+            "Use this skill any time a .pptx file is involved in any way — as "
+            "input, output, or both. This includes: creating slide decks, pitch "
+            "decks, or presentations; reading, parsing, or extracting text from "
+            "any .pptx file (even if the extracted content will be used "
+            "elsewhere, like in an email or summary); editing, modifying, or "
+            "updating existing presentations; combining or splitting slide files; "
+            "working with templates, layouts, speaker notes, or comments. Trigger "
+            'whenever the user mentions "deck," "slides," "presentation," or '
+            "references a .pptx filename, regardless of what they plan to do with "
+            "the content afterward. If a .pptx file needs to be opened, created, "
+            "or touched, use this skill."
+        ),
+    ),
+    _BuiltIn(
+        built_in_skill_id="image-generation",
+        name="image-generation",
+        description="Generate images using nano banana.",
+    ),
+    _BuiltIn(
+        built_in_skill_id="company-search",
+        name="company-search",
+        description=(
+            "Search company knowledge using onyx-cli. Returns permissioned, "
+            "citation-rich results from connected sources."
+        ),
+    ),
+)
+
+# Lightweight Core table — deliberately not the ``Skill`` ORM model, which
+# is free to evolve. Only the columns this migration writes are declared.
+_skill_table = sa.table(
+    "skill",
+    sa.column("id", postgresql.UUID(as_uuid=True)),
+    sa.column("slug", sa.String),
+    sa.column("name", sa.String),
+    sa.column("description", sa.Text),
+    sa.column("built_in_skill_id", sa.String),
+    sa.column("bundle_file_id", sa.String),
+    sa.column("bundle_sha256", sa.String),
+    sa.column("author_user_id", postgresql.UUID(as_uuid=True)),
+    sa.column("is_public", sa.Boolean),
+    sa.column("enabled", sa.Boolean),
+)
+
+
+def _seed_built_in_skills() -> None:
+    """Insert one default ``skill`` row per frozen built-in. ON CONFLICT
+    DO UPDATE on name/description keeps the migration idempotent if it is
+    re-applied; lifecycle and bundle fields are left out of the update set.
+
+    No slug-collision handling here on purpose: this migration introduces
+    built-in rows for the first time, so the table holds no rows that could
+    collide. A *future* migration that adds a built-in whose slug a tenant's
+    custom skill may already own must guard against that (gate the upsert on
+    ``built_in_skill_id IS NOT NULL`` and fail loud) — that's not a concern
+    for this revision.
+    """
+    rows = [
+        {
+            "id": uuid.uuid4(),
+            "slug": b.built_in_skill_id,
+            "name": b.name,
+            "description": b.description,
+            "built_in_skill_id": b.built_in_skill_id,
+            "bundle_file_id": None,
+            "bundle_sha256": None,
+            "author_user_id": None,
+            "is_public": True,
+            "enabled": True,
+        }
+        for b in _BUILT_INS
+    ]
+
+    insert_stmt = postgresql.insert(_skill_table).values(rows)
+    stmt = insert_stmt.on_conflict_do_update(
+        index_elements=["slug"],
+        set_={
+            "name": insert_stmt.excluded.name,
+            "description": insert_stmt.excluded.description,
+        },
+    )
+    op.get_bind().execute(stmt)
+
+
 def upgrade() -> None:
     op.add_column(
         "skill",
         sa.Column("built_in_skill_id", sa.String(), nullable=True),
     )
 
-    op.alter_column("skill", "bundle_file_id", nullable=True)
-    op.alter_column("skill", "bundle_sha256", nullable=True)
+    op.alter_column(
+        "skill",
+        "bundle_file_id",
+        existing_type=sa.String(),
+        nullable=True,
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "skill",
+        "bundle_sha256",
+        existing_type=sa.String(length=64),
+        nullable=True,
+        existing_nullable=False,
+    )
 
     op.create_check_constraint(
         "ck_skill_definition_source",
@@ -54,11 +171,9 @@ def upgrade() -> None:
         "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
     )
 
-    # Seed default built-in rows so existing tenants pick them up on
-    # upgrade. Idempotent via ON CONFLICT — re-running this migration
-    # on a tenant that's already booted under the new code is safe.
-    with Session(bind=op.get_bind()) as session:
-        seed_built_in_skills(session)
+    # Seed default built-in rows. Idempotent via ON CONFLICT, so this is
+    # safe if the rows somehow already exist.
+    _seed_built_in_skills()
 
 
 def downgrade() -> None:
@@ -68,7 +183,19 @@ def downgrade() -> None:
     # drop them so the downgrade is clean. Custom rows are unaffected.
     op.execute("DELETE FROM skill WHERE built_in_skill_id IS NOT NULL")
 
-    op.alter_column("skill", "bundle_sha256", nullable=False)
-    op.alter_column("skill", "bundle_file_id", nullable=False)
+    op.alter_column(
+        "skill",
+        "bundle_sha256",
+        existing_type=sa.String(length=64),
+        nullable=False,
+        existing_nullable=True,
+    )
+    op.alter_column(
+        "skill",
+        "bundle_file_id",
+        existing_type=sa.String(),
+        nullable=False,
+        existing_nullable=True,
+    )
 
     op.drop_column("skill", "built_in_skill_id")

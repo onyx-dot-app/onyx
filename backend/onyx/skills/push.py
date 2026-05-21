@@ -23,6 +23,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 )
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.built_in import COMPANY_SEARCH
 from onyx.skills.rendering import render_company_search_skill
 from onyx.utils.logger import setup_logger
 
@@ -65,7 +66,7 @@ def _render_template(
     """Overwrite ``{slug}/SKILL.md`` with a per-user rendering. Only
     company-search has a renderer today; other templated built-ins log
     a warning and ship the static siblings as-is."""
-    if definition.built_in_skill_id == "company-search":
+    if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
         )

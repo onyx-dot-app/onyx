@@ -1,4 +1,13 @@
-"""Tests for the built-in skill bootstrap path"""
+"""Tests for built-in skill *row* behavior.
+
+The ``skill`` rows for built-ins are seeded by the
+``skill_built_in_id_discriminator`` migration — migrations are the source
+of truth and there is no boot-time seeder. These tests cover the runtime
+behaviors that depend on those rows plus the codified ``BUILT_IN_SKILLS``:
+availability gating, admin-immutability, the non-unique
+``built_in_skill_id``, and the XOR schema invariant. Rows are inserted
+directly via ``make_built_in_skill_row`` so each test is self-contained
+and order-independent."""
 
 from __future__ import annotations
 
@@ -7,15 +16,17 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import CheckConstraint
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy import Table
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import list_skills_for_user
-from onyx.db.skill import seed_built_in_skills
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import _ensure_custom
 from onyx.skills import built_in as built_in_module
@@ -29,9 +40,9 @@ from tests.external_dependency_unit.craft._test_helpers import make_skill
 def _isolate_built_in_skill_rows(
     db_session: Session,
 ) -> Generator[None, None, None]:
-    """Drop any built-in rows before and after each test so admin-edits
-    from one test don't bleed into the next. The seeder is idempotent
-    and gets re-run inside each test that needs it."""
+    """Start and end each test with no built-in rows so the
+    migration-seeded canonical rows don't interfere; each test inserts
+    exactly the rows it needs."""
     db_session.execute(delete(Skill).where(Skill.built_in_skill_id.is_not(None)))
     db_session.commit()
     yield
@@ -39,112 +50,18 @@ def _isolate_built_in_skill_rows(
     db_session.commit()
 
 
-def _seeded(db_session: Session, built_in_skill_id: str) -> Skill:
-    """The seeder produces one default row per built-in with
-    ``slug == built_in_skill_id``. Look up by slug since
-    ``built_in_skill_id`` is no longer unique (other code paths can
-    add additional rows referencing the same built-in)."""
+def _seed_canonical(db_session: Session) -> None:
+    """Insert one default row per codified built-in, mirroring what the
+    migration seeds (slug == built_in_skill_id, public, enabled)."""
+    for built_in_skill_id in BUILT_IN_SKILLS:
+        make_built_in_skill_row(db_session, built_in_skill_id=built_in_skill_id)
+    db_session.commit()
+
+
+def _row(db_session: Session, built_in_skill_id: str) -> Skill:
     row = db_session.scalar(select(Skill).where(Skill.slug == built_in_skill_id))
-    assert row is not None, f"expected seeded row for {built_in_skill_id}"
+    assert row is not None, f"expected built-in row for {built_in_skill_id}"
     return row
-
-
-class TestSeed:
-    def test_seeder_inserts_one_row_per_codified_built_in(
-        self, db_session: Session
-    ) -> None:
-        seed_built_in_skills(db_session)
-        db_session.commit()
-
-        for built_in_skill_id in BUILT_IN_SKILLS:
-            row = _seeded(db_session, built_in_skill_id)
-            assert row.slug == built_in_skill_id
-            assert row.bundle_file_id is None
-            assert row.bundle_sha256 is None
-            assert row.is_public is True
-            assert row.enabled is True
-
-    def test_seeder_is_idempotent(self, db_session: Session) -> None:
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        first_ids = {
-            s.id
-            for s in db_session.scalars(
-                select(Skill).where(Skill.built_in_skill_id.is_not(None))
-            )
-        }
-
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        second_ids = {
-            s.id
-            for s in db_session.scalars(
-                select(Skill).where(Skill.built_in_skill_id.is_not(None))
-            )
-        }
-
-        assert first_ids == second_ids
-
-    def test_seeder_refreshes_name_and_description_from_disk(
-        self,
-        db_session: Session,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Edits to a built-in's SKILL.md frontmatter must propagate to
-        the row on the next boot — matches what ``replace_skill_bundle``
-        does for custom skills. Simulated by pointing the definition at
-        a tmp_path with a freshly-written SKILL.md."""
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        row = _seeded(db_session, "pptx")
-        original_id = row.id
-
-        fake_source = tmp_path / "pptx"
-        fake_source.mkdir()
-        (fake_source / "SKILL.md").write_text(
-            "---\nname: Refreshed Name\ndescription: Refreshed description\n---\n"
-        )
-        monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
-            "pptx",
-            BuiltInSkillDefinition(
-                built_in_skill_id="pptx",
-                has_template=False,
-                source_dir=fake_source,
-            ),
-        )
-
-        seed_built_in_skills(db_session)
-        db_session.commit()
-
-        db_session.refresh(row)
-        assert row.id == original_id  # same row, just updated
-        assert row.name == "Refreshed Name"
-        assert row.description == "Refreshed description"
-
-    def test_seeder_preserves_lifecycle_state(
-        self,
-        db_session: Session,
-    ) -> None:
-        """Re-seeding must not clobber lifecycle fields. Built-ins are
-        codified as ``is_public=True, enabled=True``, but if a future
-        flow ever toggles them in the DB, re-seeding shouldn't undo it."""
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        row = _seeded(db_session, "pptx")
-
-        # Simulate a non-default lifecycle state on the seeded row.
-        row.enabled = False
-        row.is_public = False
-        db_session.commit()
-
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        db_session.refresh(row)
-
-        assert row.enabled is False
-        assert row.is_public is False
 
 
 class TestAvailabilityGate:
@@ -154,8 +71,7 @@ class TestAvailabilityGate:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        seed_built_in_skills(db_session)
-        db_session.commit()
+        _seed_canonical(db_session)
 
         gated_id = "pptx"
         original = built_in_module.BUILT_IN_SKILLS[gated_id]
@@ -164,7 +80,6 @@ class TestAvailabilityGate:
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
-                has_template=original.has_template,
                 source_dir=original.source_dir,
                 is_available=lambda _: False,
                 unavailable_reason="dependency missing in test",
@@ -181,8 +96,7 @@ class TestAvailabilityGate:
         db_session: Session,
         test_user: User,
     ) -> None:
-        seed_built_in_skills(db_session)
-        db_session.commit()
+        _seed_canonical(db_session)
 
         visible_built_ins = {
             s.built_in_skill_id
@@ -197,18 +111,16 @@ class TestAvailabilityGate:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        seed_built_in_skills(db_session)
-        db_session.commit()
+        _seed_canonical(db_session)
 
         gated_id = "pptx"
-        row = _seeded(db_session, gated_id)
+        row = _row(db_session, gated_id)
         original = built_in_module.BUILT_IN_SKILLS[gated_id]
         monkeypatch.setitem(
             built_in_module.BUILT_IN_SKILLS,
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
-                has_template=original.has_template,
                 source_dir=original.source_dir,
                 is_available=lambda _: False,
             ),
@@ -224,9 +136,8 @@ class TestBuiltInIsImmutable:
     ``built_in_skill_id IS NOT NULL``."""
 
     def test_ensure_custom_rejects_built_in_rows(self, db_session: Session) -> None:
-        seed_built_in_skills(db_session)
+        row = make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         db_session.commit()
-        row = _seeded(db_session, "pptx")
 
         with pytest.raises(OnyxError, match="cannot be modified"):
             _ensure_custom(row)
@@ -245,12 +156,7 @@ class TestNonUniqueBuiltInId:
         """``built_in_skill_id`` is not unique — a single built-in can
         back multiple rows (different slugs / sharing scopes). Slug
         remains the natural unique key."""
-        # Default seeded row: slug == built_in_skill_id == "pptx".
-        seed_built_in_skills(db_session)
-        db_session.commit()
-
-        # A second row references the same built-in but uses a
-        # different slug (e.g. team-specific instance).
+        make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         make_built_in_skill_row(
             db_session,
             built_in_skill_id="pptx",
@@ -266,53 +172,48 @@ class TestNonUniqueBuiltInId:
         assert len(matches) == 2
         assert {s.slug for s in matches} == {"pptx", "pptx-team-a"}
 
-    def test_seeder_does_not_duplicate_when_extra_rows_exist(
-        self, db_session: Session
-    ) -> None:
-        """Re-running the seeder when additional rows for the same
-        built-in already exist must not add another default row, must
-        not delete the extras."""
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        make_built_in_skill_row(
-            db_session, built_in_skill_id="pptx", slug="pptx-team-a"
-        )
-        db_session.commit()
-
-        seed_built_in_skills(db_session)
-        db_session.commit()
-
-        slugs = {
-            s.slug
-            for s in db_session.scalars(
-                select(Skill).where(Skill.built_in_skill_id == "pptx")
-            )
-        }
-        assert slugs == {"pptx", "pptx-team-a"}
-
 
 class TestSchemaInvariant:
     def test_built_in_row_has_null_bundle_fields(self, db_session: Session) -> None:
         """``ck_skill_definition_source`` enforces XOR — built-in rows
         keep ``bundle_file_id`` NULL, custom rows keep it set."""
-        seed_built_in_skills(db_session)
+        row = make_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
-        row = _seeded(db_session, "company-search")
         assert row.bundle_file_id is None
         assert row.bundle_sha256 is None
-
-    def test_metadata_round_trips_to_frontmatter(self, db_session: Session) -> None:
-        """The DB ``name`` matches the on-disk SKILL.md frontmatter for
-        each seeded built-in — the seeder reads frontmatter authoritatively."""
-        seed_built_in_skills(db_session)
-        db_session.commit()
-        for built_in_skill_id, definition in BUILT_IN_SKILLS.items():
-            row = _seeded(db_session, built_in_skill_id)
-            disk_name, disk_description = definition.read_metadata()
-            assert row.name == disk_name
-            assert row.description == disk_description
 
     def test_source_dir_resolves_under_skills_template_path(self) -> None:
         for definition in BUILT_IN_SKILLS.values():
             assert isinstance(definition.source_dir, Path)
             assert definition.source_dir.is_dir()
+
+    def test_xor_check_constraint_model_matches_db(self, db_session: Session) -> None:
+        """The XOR ``ck_skill_definition_source`` constraint is declared in
+        two places — ``Skill.__table_args__`` and the migration. Guard
+        against drift by comparing the model's declared predicate to the
+        constraint actually applied to the DB (which came from the
+        migration)."""
+        constraint_name = "ck_skill_definition_source"
+
+        table = Skill.__table__
+        assert isinstance(table, Table)
+        model_cc = next(
+            c
+            for c in table.constraints
+            if isinstance(c, CheckConstraint) and c.name == constraint_name
+        )
+        model_predicate = str(model_cc.sqltext)
+
+        db_predicate = db_session.execute(
+            text(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                "WHERE conname = :name AND conrelid = 'skill'::regclass"
+            ),
+            {"name": constraint_name},
+        ).scalar_one()
+
+        def _normalize(clause: str) -> str:
+            clause = clause.lower().replace("check", "")
+            return "".join(ch for ch in clause if ch not in "() \t\n")
+
+        assert _normalize(model_predicate) == _normalize(db_predicate)

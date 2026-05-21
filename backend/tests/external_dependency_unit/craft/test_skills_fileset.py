@@ -13,7 +13,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.models import UserGroup
-from onyx.db.skill import seed_built_in_skills
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
@@ -21,6 +20,7 @@ from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
 from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
 from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
 from tests.external_dependency_unit.craft._test_helpers import make_group
+from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
 
 _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
 
@@ -30,16 +30,16 @@ def _register_built_in(
     db_session: Session,
     *,
     source_dir: Path,
-    has_template: bool,
 ) -> str:
     """Register a fresh built-in definition + Skill row for one test.
 
+    ``has_template`` is computed from ``source_dir`` (whether a
+    ``SKILL.md.template`` exists), so callers just write the right files.
     Returns the synthetic ``built_in_skill_id`` (also used as slug).
     """
     built_in_skill_id = f"test-builtin-{uuid4().hex[:8]}"
     definition = BuiltInSkillDefinition(
         built_in_skill_id=built_in_skill_id,
-        has_template=has_template,
         source_dir=source_dir,
     )
     monkeypatch.setitem(built_in_module.BUILT_IN_SKILLS, built_in_skill_id, definition)
@@ -94,9 +94,7 @@ class TestBuiltInFromDisk:
         source = _write_static_dir(
             tmp_path, "pptx", {"scripts/preview.py": "print('hi')"}
         )
-        slug = _register_built_in(
-            monkeypatch, db_session, source_dir=source, has_template=False
-        )
+        slug = _register_built_in(monkeypatch, db_session, source_dir=source)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -119,9 +117,7 @@ class TestBuiltInFromDisk:
                 "scripts/.hidden": "junk",
             },
         )
-        slug = _register_built_in(
-            monkeypatch, db_session, source_dir=source, has_template=False
-        )
+        slug = _register_built_in(monkeypatch, db_session, source_dir=source)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -152,18 +148,17 @@ class TestBuiltInTemplate:
             tmp_path, "company-search", template_body=template_body
         )
         # Redirect the company-search definition at the tmp_path source
-        # AND seed the matching row — setup_postgres is not invoked in
-        # this test harness.
+        # and (re)create its row. reset_* is idempotent against the
+        # migration-seeded canonical row.
         monkeypatch.setitem(
             built_in_module.BUILT_IN_SKILLS,
             "company-search",
             BuiltInSkillDefinition(
                 built_in_skill_id="company-search",
-                has_template=True,
                 source_dir=source,
             ),
         )
-        seed_built_in_skills(db_session)
+        reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
         make_cc_pair(db_session, DocumentSource.SLACK)
 
@@ -195,11 +190,10 @@ class TestBuiltInTemplate:
             "company-search",
             BuiltInSkillDefinition(
                 built_in_skill_id="company-search",
-                has_template=True,
                 source_dir=source,
             ),
         )
-        seed_built_in_skills(db_session)
+        reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
         make_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE)
 

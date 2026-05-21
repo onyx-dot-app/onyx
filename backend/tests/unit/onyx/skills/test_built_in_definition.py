@@ -20,7 +20,6 @@ from onyx.skills.built_in import BuiltInSkillDefinition
 def _definition(slug: str) -> BuiltInSkillDefinition:
     return BuiltInSkillDefinition(
         built_in_skill_id=slug,
-        has_template=False,
         source_dir=Path("/tmp/does-not-matter"),
     )
 

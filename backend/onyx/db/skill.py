@@ -23,7 +23,6 @@ from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -220,8 +219,14 @@ def replace_skill_bundle(
             f"Skill '{skill.slug}' is a built-in and has no bundle.",
         )
 
-    # Custom rows always have a bundle (XOR check constraint).
-    assert skill.bundle_file_id is not None
+    # Custom rows always have a bundle (XOR check constraint), but guard
+    # explicitly rather than assert so a corrupt row fails loud, not silent.
+    if skill.bundle_file_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' has no bundle to replace.",
+        )
+
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
@@ -323,47 +328,3 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
         Skill__UserGroup.skill_id == skill_id
     )
     return list(db_session.scalars(stmt))
-
-
-def seed_built_in_skills(db_session: Session) -> None:
-    """Insert one default ``skill`` row per ``BUILT_IN_SKILLS`` entry and
-    keep its display fields in lockstep with the on-disk SKILL.md
-    frontmatter on every boot. Runs from ``setup_postgres``.
-
-    ``name`` and ``description`` are re-read from disk every boot and
-    refreshed via ``ON CONFLICT (slug) DO UPDATE`` so edits to a
-    built-in's frontmatter propagate to the UI without a manual
-    migration — same refresh semantic ``replace_skill_bundle`` provides
-    for custom skills. Lifecycle fields (``enabled``, ``is_public``,
-    ``bundle_*``, ``author_user_id``) are NOT in the update set, so any
-    state on existing rows is preserved across boots.
-    """
-    if not BUILT_IN_SKILLS:
-        return
-
-    rows = []
-    for definition in BUILT_IN_SKILLS.values():
-        name, description = definition.read_metadata()
-        rows.append(
-            {
-                "slug": definition.built_in_skill_id,
-                "name": name,
-                "description": description,
-                "built_in_skill_id": definition.built_in_skill_id,
-                "bundle_file_id": None,
-                "bundle_sha256": None,
-                "author_user_id": None,
-                "is_public": True,
-                "enabled": True,
-            }
-        )
-
-    insert_stmt = pg_insert(Skill).values(rows)
-    stmt = insert_stmt.on_conflict_do_update(
-        index_elements=["slug"],
-        set_={
-            "name": insert_stmt.excluded.name,
-            "description": insert_stmt.excluded.description,
-        },
-    )
-    db_session.execute(stmt)
