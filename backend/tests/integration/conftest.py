@@ -38,6 +38,18 @@ load_env_vars()
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+# Import `onyx.main` BEFORE calling fetch_versioned_implementation ourselves.
+# onyx.main's module body (line 706) already calls fetch_versioned_implementation
+# under set_is_ee_based_on_env_variable(). If our fixture is the first to invoke
+# the dispatcher, the recursion goes:
+#   fixture -> fetch_versioned_implementation -> import ee.onyx.main
+#     -> ee.onyx.main line 53 `from onyx.main import get_application`
+#     -> onyx.main line 706 calls fetch_versioned_implementation again
+#     -> tries to import ee.onyx.main (mid-init), AttributeError on get_application.
+# Letting onyx.main load first means ee.onyx.main's back-reference to
+# onyx.main.get_application (defined at line 429, before line 706) resolves cleanly.
+import onyx.main  # noqa: E402, F401
+
 from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
@@ -46,9 +58,6 @@ from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
-)
-from onyx.utils.variable_functionality import (  # noqa: E402
-    set_is_ee_based_on_env_variable,
 )
 from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
@@ -168,11 +177,13 @@ def _test_client(
     # builds get ee.onyx.main.get_application — that's the one that
     # registers add_api_server_tenant_id_middleware (required to populate
     # CURRENT_TENANT_ID_CONTEXTVAR from the auth cookie in cloud mode).
+    # `set_is_ee_based_on_env_variable()` already ran at onyx.main module
+    # load above; the dispatcher hits the lru_cache and resolves to the
+    # right implementation.
     # Patch setup_prometheus_metrics to avoid "Duplicated timeseries" if
     # get_application() is ever called more than once in the same process.
     # Use TestClient as a context manager so the real lifespan runs
     # (setup_onyx / file store init / pool metrics).
-    set_is_ee_based_on_env_variable()
     get_application = fetch_versioned_implementation(
         module="onyx.main", attribute="get_application"
     )
