@@ -65,10 +65,10 @@ function stripIntraPackageImports(source, filePath) {
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
   const raw = readFileSync(file, "utf8");
-  const cleaned =
-    file === referenceCss
-      ? raw
-      : stripIntraPackageImports(stripReferenceDirectives(raw), file);
+  const cleaned = stripIntraPackageImports(
+    file === referenceCss ? raw : stripReferenceDirectives(raw),
+    file
+  );
   return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });
 
