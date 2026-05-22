@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import threading
 import time
@@ -798,6 +799,45 @@ def pod_exec(
     return str(resp) if resp is not None else ""
 
 
+def pod_exec_async(
+    client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    namespace: str,
+    url: str,
+    output_path: str,
+    *,
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
+    body: str | None = None,
+    max_time_s: int = 240,
+    container: str = "sandbox",
+) -> None:
+    """Kick off a sandbox-side ``curl`` in the background, writing to a tempfile.
+
+    The pod's ``sh`` runs ``curl`` with ``-o body`` + ``-w '%{http_code}'``
+    so the resulting tempfile starts with the HTTP status code followed
+    by the response body, separated by a newline. Returns immediately;
+    callers poll the tempfile (via ``wait_for_pod_exec_output``) to observe
+    completion. The tempfile is written atomically only after curl exits,
+    so callers can rely on a valid leading integer meaning "the call is done".
+    """
+    header_args = ""
+    for key, value in (headers or {}).items():
+        header_args += f" -H {json.dumps(f'{key}: {value}')}"
+    body_arg = f" --data {json.dumps(body)}" if body is not None else ""
+    script = (
+        f"nohup sh -c '"
+        f"curl -s -X {method}{header_args}{body_arg} "
+        f"--max-time {max_time_s} "
+        f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
+        f"> {output_path}.code 2>&1; "
+        f'{{ cat {output_path}.code; printf "\\n"; cat {output_path}.body; }} '
+        f"> {output_path}"
+        f"' > /dev/null 2>&1 &"
+    )
+    pod_exec(client, pod_name, namespace, script, container=container)
+
+
 def wait_for_nextjs_ready(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
@@ -850,6 +890,85 @@ def wait_for_pod_deletion(
     )
 
 
+def wait_for_pod_exec_output(
+    client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    output_path: str,
+    timeout_s: float,
+    namespace: str = SANDBOX_NAMESPACE,
+    container: str = "sandbox",
+) -> tuple[int, str]:
+    """Poll an in-pod tempfile (written by ``pod_exec_async``) until it appears.
+
+    The tempfile's first line is the HTTP status code, followed by a newline
+    and the response body. Returns ``(status_code, body)``; raises on timeout.
+    """
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        raw = pod_exec(
+            client,
+            pod_name,
+            namespace,
+            f"cat {output_path} 2>/dev/null || true",
+            container=container,
+        )
+        if raw:
+            head, _, rest = raw.partition("\n")
+            head = head.strip()
+            if head.isdigit():
+                return int(head), rest
+        time.sleep(2)
+    raise RuntimeError(
+        f"pod_exec output {output_path} on pod {pod_name} did not arrive within "
+        f"{timeout_s:.1f}s"
+    )
+
+
+def wait_for_proxy_redeploy(
+    client: "k8s_client_module.CoreV1Api",
+    timeout_s: float = 120,
+) -> None:
+    """Wait until the sandbox-proxy Deployment reports a ready replica.
+
+    Used after a SIGTERM-driven respawn (e.g. test deletes the proxy pod) so
+    the next test doesn't run against a half-baked Deployment. Polls both the
+    Deployment status and the pod-level readiness as belt-and-suspenders.
+    """
+    from kubernetes import client as k8s_client_module
+
+    from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
+
+    proxy_component_label = "app.kubernetes.io/component=sandbox-proxy"
+    apps_v1 = k8s_client_module.AppsV1Api()
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        deployments = apps_v1.list_namespaced_deployment(
+            namespace=SANDBOX_PROXY_NAMESPACE,
+            label_selector=proxy_component_label,
+        )
+        for deploy in deployments.items or []:
+            ready = deploy.status.ready_replicas or 0
+            desired = (
+                deploy.spec.replicas if deploy.spec and deploy.spec.replicas else 1
+            )
+            if ready >= desired:
+                pods = client.list_namespaced_pod(
+                    namespace=SANDBOX_PROXY_NAMESPACE,
+                    label_selector=proxy_component_label,
+                )
+                ready_pods = [
+                    p
+                    for p in (pods.items or [])
+                    if any(cs.ready for cs in (p.status.container_statuses or []))
+                ]
+                if ready_pods:
+                    return
+        time.sleep(2)
+    raise RuntimeError(
+        f"sandbox-proxy Deployment did not return to ready within {timeout_s:.1f}s"
+    )
+
+
 # ---------------------------------------------------------------------------
 # K8s shared fixtures (canonical home for k8s_manager + live_pod).
 #
@@ -865,7 +984,7 @@ def wait_for_pod_deletion(
 # ---------------------------------------------------------------------------
 
 
-_K8S_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
+K8S_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 
 @pytest.fixture(scope="function")
@@ -903,7 +1022,7 @@ def live_pod(
 
     info = k8s_manager.provision(
         sandbox_id=sandbox_id,
-        user_id=_K8S_TEST_USER_ID,
+        user_id=K8S_TEST_USER_ID,
         tenant_id=TEST_TENANT_ID,
         llm_config=llm_config,
         onyx_pat="ci-test-pat",

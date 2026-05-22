@@ -6,30 +6,7 @@ from uuid import uuid4
 
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIdentity
-from onyx.sandbox_proxy.identity import SandboxIPLookup
-
-
-class _StaticLookup(SandboxIPLookup):
-    def __init__(self, cache: dict[str, SandboxIdentity]) -> None:
-        self._cache = cache
-
-    def start(self) -> None:
-        return None
-
-    def lookup(self, src_ip: str) -> SandboxIdentity | None:
-        return self._cache.get(src_ip)
-
-    def wait_for_initial_sync(
-        self,
-        timeout_seconds: float,  # noqa: ARG002
-    ) -> bool:
-        return True
-
-    def is_synced(self) -> bool:
-        return True
-
-    def stop(self) -> None:
-        return None
+from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 
 class _StubSession:
@@ -64,77 +41,75 @@ def _identity(ip: str = "10.0.0.1") -> SandboxIdentity:
     )
 
 
-def test_happy_path_resolves_session_context() -> None:
+# ---------------------------------------------------------------------------
+# resolve_sandbox — pod IP → sandbox + user (no session lookup)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_sandbox_happy_path() -> None:
     sandbox_user_id = uuid4()
-    active_session_id = uuid4()
-    stub = _StubSession([sandbox_user_id, active_session_id])
-    lookup = _StaticLookup({"10.0.0.1": _identity()})
+    stub = _StubSession([sandbox_user_id])
+    lookup = StaticLookup({"10.0.0.1": _identity()})
     factory = _factory(stub)
 
     resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
-    ctx = resolver.resolve("10.0.0.1")
+    sandbox = resolver.resolve_sandbox("10.0.0.1")
 
-    assert ctx is not None
-    assert ctx.session_id == active_session_id
-    assert ctx.user_id == sandbox_user_id
-    assert ctx.sandbox_id == UUID("11111111-1111-1111-1111-111111111111")
-    assert ctx.tenant_id == "public"
-    assert ctx.sandbox_name == "sandbox-aaaa1111"
-    assert ctx.sandbox_ip == "10.0.0.1"
+    assert sandbox is not None
+    assert sandbox.user_id == sandbox_user_id
+    assert sandbox.sandbox_id == UUID("11111111-1111-1111-1111-111111111111")
+    # Tenant must be threaded into the DB factory so the per-tenant
+    # SqlAlchemy session is opened correctly.
+    assert sandbox.tenant_id == "public"
     assert factory.last_tenant_id == "public"
-    assert stub.scalar_calls == 2
+    # Session lookup is deferred to `resolve_active_session()` — only
+    # the sandbox-user query runs here. Pinning this short-circuit so
+    # non-gated traffic doesn't pay an extra round-trip per request.
+    assert stub.scalar_calls == 1
 
 
-def test_unknown_ip_returns_none_without_db_calls() -> None:
+def test_resolve_sandbox_unknown_ip_skips_db() -> None:
     stub = _StubSession([])
-    lookup = _StaticLookup({})
+    lookup = StaticLookup({})
     factory = _factory(stub)
 
     resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
 
-    assert resolver.resolve("203.0.113.10") is None
+    assert resolver.resolve_sandbox("203.0.113.10") is None
     assert stub.scalar_calls == 0
     assert factory.last_tenant_id is None
 
 
-def test_missing_sandbox_row_returns_none() -> None:
+def test_resolve_sandbox_missing_sandbox_row_returns_none() -> None:
     stub = _StubSession([None])
-    lookup = _StaticLookup({"10.0.0.1": _identity()})
+    lookup = StaticLookup({"10.0.0.1": _identity()})
     factory = _factory(stub)
 
     resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
 
-    assert resolver.resolve("10.0.0.1") is None
-    # Short-circuit: only the sandbox-user lookup fires.
+    assert resolver.resolve_sandbox("10.0.0.1") is None
     assert stub.scalar_calls == 1
 
 
-def test_no_active_session_returns_none() -> None:
-    sandbox_user_id = uuid4()
-    stub = _StubSession([sandbox_user_id, None])
-    lookup = _StaticLookup({"10.0.0.1": _identity()})
+# ---------------------------------------------------------------------------
+# resolve_active_session — user → active BuildSession (called only on gated)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_active_session_propagates_scalar() -> None:
+    """Both the session-id and the None case in one test.
+
+    The production code is `return db.scalar(stmt)`; a unit test that
+    only exercises one branch is testing the stub, not the resolver.
+    Pin both so a future change (e.g. wrapping the scalar in a default)
+    fails here.
+    """
+    found_id = uuid4()
+    stub = _StubSession([found_id, None])
     factory = _factory(stub)
+    resolver = IdentityResolver(ip_lookup=StaticLookup({}), db_session_factory=factory)
 
-    resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
-
-    assert resolver.resolve("10.0.0.1") is None
+    assert resolver.resolve_active_session(uuid4(), "public") == found_id
+    assert resolver.resolve_active_session(uuid4(), "public") is None
+    assert factory.last_tenant_id == "public"
     assert stub.scalar_calls == 2
-
-
-def test_tenant_id_threaded_to_db_factory() -> None:
-    identity = SandboxIdentity(
-        sandbox_id=UUID("22222222-2222-2222-2222-222222222222"),
-        tenant_id="tenant_acme",
-        sandbox_name="sandbox-xxxx2222",
-        sandbox_ip="10.0.0.2",
-    )
-    stub = _StubSession([uuid4(), uuid4()])
-    lookup = _StaticLookup({"10.0.0.2": identity})
-    factory = _factory(stub)
-
-    resolver = IdentityResolver(ip_lookup=lookup, db_session_factory=factory)
-    ctx = resolver.resolve("10.0.0.2")
-
-    assert ctx is not None
-    assert ctx.tenant_id == "tenant_acme"
-    assert factory.last_tenant_id == "tenant_acme"

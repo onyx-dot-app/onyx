@@ -19,37 +19,14 @@ from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIdentity
-from onyx.sandbox_proxy.identity import SandboxIPLookup
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
-
-
-class _StaticLookup(SandboxIPLookup):
-    def __init__(self, identity: SandboxIdentity | None) -> None:
-        self._identity = identity
-
-    def start(self) -> None:
-        return None
-
-    def lookup(self, src_ip: str) -> SandboxIdentity | None:  # noqa: ARG002
-        return self._identity
-
-    def wait_for_initial_sync(
-        self,
-        timeout_seconds: float,  # noqa: ARG002
-    ) -> bool:
-        return True
-
-    def is_synced(self) -> bool:
-        return True
-
-    def stop(self) -> None:
-        return None
+from tests.unit.sandbox_proxy.conftest import StaticLookup
 
 
 def _resolver_with(identity: SandboxIdentity | None) -> IdentityResolver:
     return IdentityResolver(
-        ip_lookup=_StaticLookup(identity),
+        ip_lookup=StaticLookup.single(identity),
         db_session_factory=lambda tenant_id: get_session_with_tenant(
             tenant_id=tenant_id
         ),
@@ -91,28 +68,39 @@ def _identity_for(sandbox_id: UUID) -> SandboxIdentity:
     )
 
 
-def test_resolves_active_session(
+# ---------------------------------------------------------------------------
+# resolve_sandbox — pod IP → user/tenant (no session lookup)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_sandbox_returns_owner_for_known_pod(
     seeded_sandbox: tuple[UUID, UUID, UUID],
 ) -> None:
-    sandbox_id, user_id, active_session_id = seeded_sandbox
-    ctx = _resolver_with(_identity_for(sandbox_id)).resolve("10.0.0.1")
+    sandbox_id, user_id, _ = seeded_sandbox
+    sandbox = _resolver_with(_identity_for(sandbox_id)).resolve_sandbox("10.0.0.1")
 
-    assert ctx is not None
-    assert ctx.session_id == active_session_id
-    assert ctx.user_id == user_id
-    assert ctx.sandbox_id == sandbox_id
-
-
-def test_returns_none_when_sandbox_missing() -> None:
-    ctx = _resolver_with(_identity_for(uuid4())).resolve("10.0.0.1")
-    assert ctx is None
+    assert sandbox is not None
+    assert sandbox.sandbox_id == sandbox_id
+    assert sandbox.user_id == user_id
+    assert sandbox.tenant_id == POSTGRES_DEFAULT_SCHEMA
 
 
-def test_returns_none_when_no_active_session(
+def test_resolve_sandbox_returns_none_when_sandbox_row_missing() -> None:
+    sandbox = _resolver_with(_identity_for(uuid4())).resolve_sandbox("10.0.0.1")
+    assert sandbox is None
+
+
+def test_resolve_sandbox_succeeds_without_any_active_session(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    user = create_test_user(db_session, "no_active")
+    """Pod identity is independent of session liveness.
+
+    This is the regression test for the "npm install gets 403 when
+    the user has no ACTIVE session" bug: sandbox identity must resolve
+    even when every session is IDLE, so non-gated egress can flow.
+    """
+    user = create_test_user(db_session, "identity_no_session")
     sandbox = Sandbox(id=uuid4(), user_id=user.id)
     db_session.add(sandbox)
     idle = BuildSession(
@@ -124,18 +112,48 @@ def test_returns_none_when_no_active_session(
     db_session.add(idle)
     db_session.commit()
 
-    ctx = _resolver_with(_identity_for(sandbox.id)).resolve("10.0.0.1")
-    assert ctx is None
+    resolved = _resolver_with(_identity_for(sandbox.id)).resolve_sandbox("10.0.0.1")
+    assert resolved is not None
+    assert resolved.user_id == user.id
 
 
-def test_picks_most_recent_active_session(
+# ---------------------------------------------------------------------------
+# resolve_active_session — user → most-recent ACTIVE BuildSession
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_active_session_returns_active_id(
+    seeded_sandbox: tuple[UUID, UUID, UUID],
+) -> None:
+    _, user_id, active_session_id = seeded_sandbox
+    resolver = _resolver_with(None)
+    found = resolver.resolve_active_session(user_id, POSTGRES_DEFAULT_SCHEMA)
+    assert found == active_session_id
+
+
+def test_resolve_active_session_returns_none_when_only_idle(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = create_test_user(db_session, "no_active")
+    idle = BuildSession(
+        id=uuid4(),
+        user_id=user.id,
+        status=BuildSessionStatus.IDLE,
+        last_activity_at=dt.datetime.now(dt.timezone.utc),
+    )
+    db_session.add(idle)
+    db_session.commit()
+
+    resolver = _resolver_with(None)
+    assert resolver.resolve_active_session(user.id, POSTGRES_DEFAULT_SCHEMA) is None
+
+
+def test_resolve_active_session_picks_most_recent(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = create_test_user(db_session, "two_active")
-    sandbox = Sandbox(id=uuid4(), user_id=user.id)
-    db_session.add(sandbox)
-
     now = dt.datetime.now(dt.timezone.utc)
     older = BuildSession(
         id=uuid4(),
@@ -153,6 +171,6 @@ def test_picks_most_recent_active_session(
     db_session.add(newer)
     db_session.commit()
 
-    ctx = _resolver_with(_identity_for(sandbox.id)).resolve("10.0.0.1")
-    assert ctx is not None
-    assert ctx.session_id == newer.id
+    resolver = _resolver_with(None)
+    found = resolver.resolve_active_session(user.id, POSTGRES_DEFAULT_SCHEMA)
+    assert found == newer.id
