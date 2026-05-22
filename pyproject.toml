@@ -128,6 +128,8 @@ backend = [
     "stripe==10.12.0",
     "urllib3==2.7.0",
     "mistune==3.2.1",
+    # Pinned: 11.1+ requires Python 3.12.
+    "mitmproxy==11.0.2",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
@@ -219,6 +221,13 @@ override-dependencies = [
     "tiktoken",
     "tokenizers",
     "google-cloud-aiplatform>=1.38.0",
+    # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
+    # backend's newer versions.
+    "brotli>=1.2.0,<2.0",
+    "h11>=0.11,<1.0",
+    "cryptography>=42.0,<50.0",
+    "h2>=4.3.0,<5.0",
+    "hyperframe>=6.1.0,<7.0",
 ]
 
 [tool.ty.environment]
