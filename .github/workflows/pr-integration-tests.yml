@@ -94,8 +94,16 @@ jobs:
       - name: Discover test directories
         id: set-matrix
         run: |
-          # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" -exec basename {} \; | sort)
+          # Find all leaf-level directories in both test directories.
+          # ``craft`` is intentionally excluded: the suite was written
+          # against the now-deleted local sandbox backend and the docker
+          # backend needs SANDBOX_API_SERVER_URL + the onyx_craft_sandbox
+          # network + a pullable sandbox image to provision, none of
+          # which this lane sets up. Coverage of the same paths lives in
+          # backend/tests/external_dependency_unit/craft (HTTP boundary
+          # via StubSandboxManager) and pr-craft-k8s-tests.yml (real
+          # KubernetesSandboxManager against kind).
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "craft" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
