@@ -50,7 +50,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 # Letting onyx.main load first means ee.onyx.main's back-reference to
 # onyx.main.get_application (defined at line 429, before line 706) resolves cleanly.
 import onyx.main  # noqa: E402, F401
-
 from onyx.auth.schemas import UserRole  # noqa: E402
 from onyx.background.celery.apps.client import celery_app  # noqa: E402
 from onyx.configs.constants import DocumentSource  # noqa: E402
