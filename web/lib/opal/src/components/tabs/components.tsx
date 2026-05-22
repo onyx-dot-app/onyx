@@ -1,6 +1,7 @@
 "use client";
 
 import "@opal/components/tabs/styles.css";
+
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { mergeRefs, cn } from "@opal/utils";
@@ -20,6 +21,12 @@ import {
    TABS ROOT
    ============================================================================= */
 
+interface TabsRootProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+> {
+  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Root>>;
+}
+
 /**
  * Tabs Root — container for tab navigation and content.
  * Supports both controlled (`value` + `onValueChange`) and uncontrolled
@@ -35,13 +42,9 @@ import {
  *   <Tabs.Content value="tab2">Details content</Tabs.Content>
  * </Tabs>
  */
-const TabsRoot = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Root>,
-  WithoutStyles<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>>
->(({ ...props }, ref) => (
-  <TabsPrimitive.Root ref={ref} className="w-full" {...props} />
-));
-TabsRoot.displayName = TabsPrimitive.Root.displayName;
+function TabsRoot({ ref, ...props }: TabsRootProps) {
+  return <TabsPrimitive.Root ref={ref} className="w-full" {...props} />;
+}
 
 /* =============================================================================
    TABS LIST
@@ -51,6 +54,7 @@ interface TabsListProps extends Omit<
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
   "style"
 > {
+  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.List>>;
   /**
    * Visual variant of the tab list.
    *
@@ -65,155 +69,147 @@ interface TabsListProps extends Omit<
   enableScrollArrows?: boolean;
 }
 
-const TabsList = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.List>,
-  TabsListProps
->(
-  (
-    {
-      variant = "contained",
-      rightContent,
-      enableScrollArrows = false,
-      children,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    const listRef = useRef<HTMLDivElement>(null);
-    const tabsContainerRef = useRef<HTMLDivElement>(null);
-    const scrollArrowsRef = useRef<HTMLDivElement>(null);
-    const rightContentRef = useRef<HTMLDivElement>(null);
-    const [rightOffset, setRightOffset] = useState(0);
-    const isPill = variant === "pill" || variant === "underline";
+function TabsList({
+  ref,
+  variant = "contained",
+  rightContent,
+  enableScrollArrows = false,
+  children,
+  className,
+  ...props
+}: TabsListProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const scrollArrowsRef = useRef<HTMLDivElement>(null);
+  const rightContentRef = useRef<HTMLDivElement>(null);
+  const [rightOffset, setRightOffset] = useState(0);
+  const isPill = variant === "pill" || variant === "underline";
 
-    const { style: indicatorStyle } = usePillIndicator(
-      listRef,
-      isPill,
-      enableScrollArrows ? tabsContainerRef : undefined
-    );
-    const contextValue = useMemo(() => ({ variant }), [variant]);
-    const {
-      canScrollLeft,
-      canScrollRight,
-      scrollLeft: handleScrollLeft,
-      scrollRight: handleScrollRight,
-    } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
+  const { style: indicatorStyle } = usePillIndicator(
+    listRef,
+    isPill,
+    enableScrollArrows ? tabsContainerRef : undefined
+  );
+  const contextValue = useMemo(() => ({ variant }), [variant]);
+  const {
+    canScrollLeft,
+    canScrollRight,
+    scrollLeft: handleScrollLeft,
+    scrollRight: handleScrollRight,
+  } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
 
-    const showScrollArrows =
-      isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
+  const showScrollArrows =
+    isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
 
-    useEffect(() => {
-      if (!isPill) {
-        setRightOffset(0);
-        return;
-      }
+  useEffect(() => {
+    if (!isPill) {
+      setRightOffset(0);
+      return;
+    }
 
-      const updateWidth = () => {
-        let totalWidth = 0;
-        if (scrollArrowsRef.current)
-          totalWidth += scrollArrowsRef.current.offsetWidth;
-        if (rightContentRef.current)
-          totalWidth += rightContentRef.current.offsetWidth;
-        setRightOffset(totalWidth);
-      };
-
-      updateWidth();
-
-      const resizeObserver = new ResizeObserver(updateWidth);
+    const updateWidth = () => {
+      let totalWidth = 0;
       if (scrollArrowsRef.current)
-        resizeObserver.observe(scrollArrowsRef.current);
+        totalWidth += scrollArrowsRef.current.offsetWidth;
       if (rightContentRef.current)
-        resizeObserver.observe(rightContentRef.current);
+        totalWidth += rightContentRef.current.offsetWidth;
+      setRightOffset(totalWidth);
+    };
 
-      return () => resizeObserver.disconnect();
-    }, [isPill, rightContent, showScrollArrows]);
+    updateWidth();
 
-    return (
-      <TabsPrimitive.List
-        ref={mergeRefs(listRef, ref)}
-        data-variant={variant}
-        className={cn("opal-tabs-list", className)}
-        style={
-          variant === "contained"
-            ? {
-                gridTemplateColumns: `repeat(${React.Children.count(children)}, 1fr)`,
-              }
-            : undefined
-        }
-        {...props}
-      >
-        <TabsContext.Provider value={contextValue}>
-          {isPill ? (
-            enableScrollArrows ? (
-              <div
-                ref={tabsContainerRef}
-                className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                {children}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 pt-1">{children}</div>
-            )
-          ) : (
-            children
-          )}
+    const resizeObserver = new ResizeObserver(updateWidth);
+    if (scrollArrowsRef.current)
+      resizeObserver.observe(scrollArrowsRef.current);
+    if (rightContentRef.current)
+      resizeObserver.observe(rightContentRef.current);
 
-          {showScrollArrows && (
+    return () => resizeObserver.disconnect();
+  }, [isPill, rightContent, showScrollArrows]);
+
+  return (
+    <TabsPrimitive.List
+      ref={mergeRefs(listRef, ref)}
+      data-variant={variant}
+      className={cn("opal-tabs-list", className)}
+      style={
+        variant === "contained"
+          ? {
+              gridTemplateColumns: `repeat(${React.Children.count(children)}, 1fr)`,
+            }
+          : undefined
+      }
+      {...props}
+    >
+      <TabsContext.Provider value={contextValue}>
+        {isPill ? (
+          enableScrollArrows ? (
             <div
-              ref={scrollArrowsRef}
-              className="flex items-center gap-1 pl-2 shrink-0"
+              ref={tabsContainerRef}
+              className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
-              <Button
-                disabled={!canScrollLeft}
-                prominence="tertiary"
-                size="sm"
-                icon={SvgChevronLeft}
-                onClick={handleScrollLeft}
-                tooltip="Scroll tabs left"
-              />
-              <Button
-                disabled={!canScrollRight}
-                prominence="tertiary"
-                size="sm"
-                icon={SvgChevronRight}
-                onClick={handleScrollRight}
-                tooltip="Scroll tabs right"
-              />
+              {children}
             </div>
-          )}
+          ) : (
+            <div className="flex items-center gap-2 pt-1">{children}</div>
+          )
+        ) : (
+          children
+        )}
 
-          {isPill && rightContent && (
-            <div ref={rightContentRef} className="ml-auto shrink-0">
-              {rightContent}
-            </div>
-          )}
+        {showScrollArrows && (
+          <div
+            ref={scrollArrowsRef}
+            className="flex items-center gap-1 pl-2 shrink-0"
+          >
+            <Button
+              disabled={!canScrollLeft}
+              prominence="tertiary"
+              size="sm"
+              icon={SvgChevronLeft}
+              onClick={handleScrollLeft}
+              tooltip="Scroll tabs left"
+            />
+            <Button
+              disabled={!canScrollRight}
+              prominence="tertiary"
+              size="sm"
+              icon={SvgChevronRight}
+              onClick={handleScrollRight}
+              tooltip="Scroll tabs right"
+            />
+          </div>
+        )}
 
-          {isPill && (
-            <>
-              {variant !== "underline" && (
-                <div
-                  className="opal-tabs-pill-baseline"
-                  style={{ right: rightOffset }}
-                />
-              )}
+        {isPill && rightContent && (
+          <div ref={rightContentRef} className="ml-auto shrink-0">
+            {rightContent}
+          </div>
+        )}
+
+        {isPill && (
+          <>
+            {variant !== "underline" && (
               <div
-                className="opal-tabs-pill-indicator"
-                style={{
-                  left: indicatorStyle.left,
-                  width: indicatorStyle.width,
-                  opacity: indicatorStyle.opacity,
-                }}
+                className="opal-tabs-pill-baseline"
+                style={{ right: rightOffset }}
               />
-            </>
-          )}
-        </TabsContext.Provider>
-      </TabsPrimitive.List>
-    );
-  }
-);
-TabsList.displayName = TabsPrimitive.List.displayName;
+            )}
+            <div
+              className="opal-tabs-pill-indicator"
+              style={{
+                left: indicatorStyle.left,
+                width: indicatorStyle.width,
+                opacity: indicatorStyle.opacity,
+              }}
+            />
+          </>
+        )}
+      </TabsContext.Provider>
+    </TabsPrimitive.List>
+  );
+}
 
 /* =============================================================================
    TABS TRIGGER
@@ -222,6 +218,7 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 interface TabsTriggerProps extends WithoutStyles<
   Omit<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>, "children">
 > {
+  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Trigger>>;
   /**
    * Visual variant. Inherited from `Tabs.List` via context; only set this to
    * override the inherited value on a specific trigger.
@@ -239,91 +236,82 @@ interface TabsTriggerProps extends WithoutStyles<
   isLoading?: boolean;
 }
 
-const TabsTrigger = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Trigger>,
-  TabsTriggerProps
->(
-  (
-    {
-      variant: variantProp,
-      tooltip,
-      tooltipSide = "top",
-      icon: Icon,
-      children,
-      disabled,
-      isLoading,
-      ...props
-    },
-    ref
-  ) => {
-    const context = useTabsContext();
-    const variant = variantProp ?? context?.variant ?? "contained";
+function TabsTrigger({
+  ref,
+  variant: variantProp,
+  tooltip,
+  tooltipSide = "top",
+  icon: Icon,
+  children,
+  disabled,
+  isLoading,
+  ...props
+}: TabsTriggerProps) {
+  const context = useTabsContext();
+  const variant = variantProp ?? context?.variant ?? "contained";
 
-    const inner = (
-      <>
-        {Icon && (
-          <div className="p-0.5">
-            <Icon size={14} className="opal-tabs-trigger-icon" />
-          </div>
-        )}
-        {typeof children === "string" ? (
-          <div className="px-0.5">
-            <Text color="inherit">{children}</Text>
-          </div>
-        ) : (
-          children
-        )}
-        {isLoading && (
-          <span
-            className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
-            aria-label="Loading"
-          />
-        )}
-      </>
-    );
+  const inner = (
+    <>
+      {Icon && (
+        <div className="p-0.5">
+          <Icon size={14} className="opal-tabs-trigger-icon" />
+        </div>
+      )}
+      {typeof children === "string" ? (
+        <div className="px-0.5">
+          <Text color="inherit">{children}</Text>
+        </div>
+      ) : (
+        children
+      )}
+      {isLoading && (
+        <span
+          className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ml-1"
+          aria-label="Loading"
+        />
+      )}
+    </>
+  );
 
-    const trigger = (
-      <TabsPrimitive.Trigger
-        ref={ref}
-        disabled={disabled}
-        data-variant={variant}
-        className="opal-tabs-trigger"
-        {...props}
-      >
-        {tooltip && !disabled ? (
-          <Tooltip tooltip={tooltip} side={tooltipSide}>
-            <span className="inline-flex items-center gap-inherit">
-              {inner}
-            </span>
-          </Tooltip>
-        ) : (
-          inner
-        )}
-      </TabsPrimitive.Trigger>
-    );
-
-    // Disabled buttons don't emit pointer events so tooltips won't fire.
-    // Wrap only when disabled to preserve layout for the enabled case.
-    if (tooltip && disabled) {
-      return (
+  const trigger = (
+    <TabsPrimitive.Trigger
+      ref={ref}
+      disabled={disabled}
+      data-variant={variant}
+      className="opal-tabs-trigger"
+      {...props}
+    >
+      {tooltip && !disabled ? (
         <Tooltip tooltip={tooltip} side={tooltipSide}>
-          <span className="flex-1 inline-flex align-middle justify-center">
-            {trigger}
-          </span>
+          <span className="inline-flex items-center gap-inherit">{inner}</span>
         </Tooltip>
-      );
-    }
+      ) : (
+        inner
+      )}
+    </TabsPrimitive.Trigger>
+  );
 
-    return trigger;
+  // Disabled buttons don't emit pointer events so tooltips won't fire.
+  // Wrap only when disabled to preserve layout for the enabled case.
+  if (tooltip && disabled) {
+    return (
+      <Tooltip tooltip={tooltip} side={tooltipSide}>
+        <span className="flex-1 inline-flex align-middle justify-center">
+          {trigger}
+        </span>
+      </Tooltip>
+    );
   }
-);
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
+
+  return trigger;
+}
 
 /* =============================================================================
    TABS CONTENT
    ============================================================================= */
 
 interface TabsContentProps {
+  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Content>>;
   value: string;
   /** Padding applied to the content area in rem units. @default 0 */
   padding?: number;
@@ -331,22 +319,26 @@ interface TabsContentProps {
   className?: string;
 }
 
-const TabsContent = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Content>,
-  TabsContentProps
->(({ children, value, className, padding = 0 }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    value={value}
-    className={cn(
-      "pt-4 focus:outline-hidden focus:border-theme-primary-05 w-full",
-      className
-    )}
-  >
-    <div style={{ padding: `${padding}rem` }}>{children}</div>
-  </TabsPrimitive.Content>
-));
-TabsContent.displayName = TabsPrimitive.Content.displayName;
+function TabsContent({
+  ref,
+  children,
+  value,
+  className,
+  padding = 0,
+}: TabsContentProps) {
+  return (
+    <TabsPrimitive.Content
+      ref={ref}
+      value={value}
+      className={cn(
+        "pt-4 focus:outline-hidden focus:border-theme-primary-05 w-full",
+        className
+      )}
+    >
+      <div style={{ padding: `${padding}rem` }}>{children}</div>
+    </TabsPrimitive.Content>
+  );
+}
 
 /* =============================================================================
    EXPORTS
@@ -360,6 +352,7 @@ const Tabs = Object.assign(TabsRoot, {
 
 export {
   Tabs,
+  type TabsRootProps,
   type TabsListProps,
   type TabsTriggerProps,
   type TabsContentProps,
