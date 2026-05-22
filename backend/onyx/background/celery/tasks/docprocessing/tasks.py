@@ -47,11 +47,13 @@ from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
@@ -108,6 +110,8 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+from onyx.indexing.persistent_indexing import build_generic_connector_failure
+from onyx.indexing.persistent_indexing import record_generic_failure
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
@@ -1392,6 +1396,10 @@ def _check_failure_threshold(
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    # Persistent indexing: never abort on failure volume.
+    if PERSISTENT_INDEXING:
+        return
+
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
@@ -1507,6 +1515,105 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
         )
 
 
+def _record_docprocessing_failure_persistent(
+    *,
+    exc: BaseException,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    documents: list[Document] | None,
+    cross_batch_db_lock: RedisLock | None,
+) -> None:
+    """Catch-all recovery for `_docprocessing_task` under PERSISTENT_INDEXING.
+
+    Records per-doc `DocumentFailure`s (when `documents` was loaded) or a single
+    `EntityFailure` (when the batch never made it past load), then marks the
+    batch complete with zero counts so `check_indexing_completion` can resolve
+    the attempt as `COMPLETED_WITH_ERRORS`.
+
+    Every step is wrapped so a follow-on error here does not re-raise out of
+    the Celery task — we have already swallowed the original exception."""
+    task_logger.info(
+        "PERSISTENT_INDEXING enabled; recording docprocessing failure for "
+        "attempt=%s batch=%s",
+        index_attempt_id,
+        batch_num,
+    )
+
+    # Source lookup is best-effort; only used for Sentry tagging.
+    source: DocumentSource = DocumentSource.NOT_APPLICABLE
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cc_pair = get_connector_credential_pair_from_id(
+                db_session, cc_pair_id, eager_load_connector=True
+            )
+            if cc_pair is not None:
+                source = cc_pair.connector.source
+    except Exception:
+        task_logger.exception(
+            "Failed to look up source for cc_pair %s during persistent indexing "
+            "recovery; falling back to NOT_APPLICABLE",
+            cc_pair_id,
+        )
+
+    if documents:
+        for doc in documents:
+            record_generic_failure(
+                index_attempt_id=index_attempt_id,
+                cc_pair_id=cc_pair_id,
+                source=source,
+                tenant_id=tenant_id,
+                failure=build_generic_connector_failure(exc=exc, document=doc),
+            )
+    else:
+        record_generic_failure(
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            source=source,
+            tenant_id=tenant_id,
+            failure=build_generic_connector_failure(
+                exc=exc,
+                entity_id=(
+                    f"docprocessing:attempt_{index_attempt_id}:batch_{batch_num}"
+                ),
+            ),
+        )
+
+    # Mark the batch complete with zero counts so check_indexing_completion
+    # doesn't wait forever for this batch. Best-effort: if the lock or DB
+    # write fails we still return cleanly.
+    try:
+        if cross_batch_db_lock is not None:
+            with (
+                get_session_with_current_tenant() as db_session,
+                cross_batch_db_lock,
+            ):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+        else:
+            with get_session_with_current_tenant() as db_session:
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+    except Exception:
+        task_logger.exception(
+            "Failed to mark batch %s complete during persistent indexing "
+            "recovery for attempt %s",
+            batch_num,
+            index_attempt_id,
+        )
+
+
 def _docprocessing_task(
     index_attempt_id: int,
     cc_pair_id: int,
@@ -1578,6 +1685,12 @@ def _docprocessing_task(
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
+
+    # Hoisted so the except block can safely reference them under
+    # PERSISTENT_INDEXING when the failure happens mid-try.
+    documents: list[Document] | None = None
+    cross_batch_db_lock: RedisLock | None = None
+
     try:
         # FIX: Monitor memory before loading documents to track problematic batches
         emit_process_memory(
@@ -1813,7 +1926,9 @@ def _docprocessing_task(
         # This helps prevent memory accumulation across multiple batches
         # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
         # via the _cleanup_thread_local decorator in search_nlp_models.py
-        del documents
+        # NOTE: We assign None rather than `del` so the variable stays bound;
+        # the except block under PERSISTENT_INDEXING needs to safely inspect it.
+        documents = None
         gc.collect()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
@@ -1852,12 +1967,24 @@ def _docprocessing_task(
             f"elapsed={elapsed_time:.2f}s"
         )
 
-    except Exception:
+    except Exception as e:
         task_logger.exception(
             f"Document batch processing failed: batch_num={batch_num} attempt={index_attempt_id} "
         )
 
-        raise
+        if not PERSISTENT_INDEXING:
+            raise
+
+        _record_docprocessing_failure_persistent(
+            exc=e,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=batch_num,
+            documents=documents,
+            cross_batch_db_lock=cross_batch_db_lock,
+        )
+        return
     finally:
         if per_batch_lock and per_batch_lock.owned():
             per_batch_lock.release()

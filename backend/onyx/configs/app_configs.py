@@ -891,6 +891,15 @@ ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS = os.environ.get(
 CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
     "CONTINUE_ON_CONNECTOR_FAILURE", ""
 ).lower() not in ["false", ""]
+# When true, indexing tolerates ALL operational errors raised from inside the
+# connector / pipeline data path: anything that would otherwise crash an index
+# attempt is recorded as a ConnectorFailure (DocumentFailure when a doc id is
+# known, otherwise EntityFailure) and the attempt continues. Also disables
+# the >3-failures-AND->10%-ratio abort. Does NOT suppress mark_attempt_failed
+# triggered by the watchdog/heartbeat, usage-limit overflow, inconsistent
+# attempt state, or completion-monitor exceptions — those signal that the
+# worker itself or the tenant's quota is broken, not connector data errors.
+PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "").lower() == "true"
 # When swapping to a new embedding model, a secondary index is created in the background, to conserve
 # resources, we pause updates on the primary index by default while the secondary index is created
 DISABLE_INDEX_UPDATE_ON_SWAP = (

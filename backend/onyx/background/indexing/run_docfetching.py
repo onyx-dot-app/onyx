@@ -23,6 +23,7 @@ from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -68,6 +69,8 @@ from onyx.file_store.staging import build_raw_file_callback
 from onyx.file_store.staging import RawFileCallback
 from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.indexing.persistent_indexing import build_generic_connector_failure
+from onyx.indexing.persistent_indexing import record_generic_failure
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import cache_hierarchy_nodes_batch
 from onyx.redis.redis_hierarchy import ensure_source_node_exists
@@ -279,6 +282,10 @@ def _check_failure_threshold(
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    # Persistent indexing: never abort on failure volume.
+    if PERSISTENT_INDEXING:
+        return
+
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
@@ -601,12 +608,14 @@ def connector_document_extraction(
             checkpoint=checkpoint,
         )
 
-    try:
-        batch_num = last_batch_num  # starts at 0 if no last batch
-        total_doc_batches_queued = 0
-        total_failures = 0
-        document_count = 0
+    # Initialize loop state before the try so the except block can reference
+    # batch_num when reporting/recording errors under PERSISTENT_INDEXING.
+    batch_num = last_batch_num  # starts at 0 if no last batch
+    total_doc_batches_queued = 0
+    total_failures = 0
+    document_count = 0
 
+    try:
         # Ensure the SOURCE-type root hierarchy node exists before processing.
         # This is the root of the hierarchy tree for this source - all other
         # hierarchy nodes should ultimately have this as an ancestor.
@@ -917,6 +926,39 @@ def connector_document_extraction(
                         index_attempt_id,
                     )
                     raise e
+
+                if PERSISTENT_INDEXING:
+                    # Persistent indexing: record this as a generic EntityFailure
+                    # and let check_indexing_completion resolve the attempt as
+                    # COMPLETED_WITH_ERRORS instead of marking it FAILED.
+                    logger.info(
+                        "PERSISTENT_INDEXING enabled; recording docfetching "
+                        "failure as ConnectorFailure for attempt %s",
+                        index_attempt_id,
+                    )
+                    failure = build_generic_connector_failure(
+                        exc=e,
+                        entity_id=(
+                            f"docfetching:{db_connector.source.value}"
+                            f":cc_pair_{cc_pair_id}:batch_{batch_num}"
+                        ),
+                    )
+                    record_generic_failure(
+                        index_attempt_id=index_attempt_id,
+                        cc_pair_id=cc_pair_id,
+                        source=db_connector.source,
+                        tenant_id=tenant_id,
+                        failure=failure,
+                    )
+                    # Set total_batches so check_indexing_completion can resolve
+                    # the attempt. Without this the attempt would hang in
+                    # IN_PROGRESS forever.
+                    IndexingCoordination.set_total_batches(
+                        db_session=db_session_temp,
+                        index_attempt_id=index_attempt_id,
+                        total_batches=batch_num,
+                    )
+                    return
 
                 mark_attempt_failed(
                     index_attempt_id,
