@@ -14,8 +14,8 @@
  * own CSS — this file covers only library-owned tokens and stylesheets.
  */
 
-@import "./colors.css";
-@import "./typography.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
 
 :root {
   /* LINE HEIGHTS + CONTAINER SIZES */

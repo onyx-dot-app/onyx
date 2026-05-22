@@ -22,7 +22,7 @@ function findCss(dir) {
   return out;
 }
 
-const colorsCss = join(srcDir, "colors.css");
+const colorsCss = join(srcDir, "tokens", "colors.css");
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
 const allCss = findCss(srcDir).sort();
