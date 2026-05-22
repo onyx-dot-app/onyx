@@ -475,6 +475,10 @@ def _convert_file_to_document(
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
     _, extension = os.path.splitext(path)
 
+    # NOTE: GitHub's tree API does not expose per-file modification times without
+    # additional per-file commit-history calls. repo.pushed_at is the closest
+    # proxy available without extra API requests, but it reflects any push to
+    # any branch, so every file in the repo shares the same timestamp.
     updated_at = repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
 
     doc_metadata = {
@@ -731,6 +735,11 @@ class GithubConnector(
             content = repo.get_contents(path, ref=repo.default_branch)
             if isinstance(content, list):
                 raise ValueError(f"Expected a file at {path}, got a directory")
+            if content.decoded_content is None:
+                raise ValueError(
+                    f"Could not decode content for {path} "
+                    f"(encoding={content.encoding!r})"
+                )
             return content.decoded_content
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
@@ -861,7 +870,10 @@ class GithubConnector(
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
-        checkpoint.stage = GithubConnectorStage.ISSUES
+        # Advance into ISSUES only from PRS — never regress a later stage
+        # (e.g. a resumed FILES checkpoint) back to ISSUES.
+        if checkpoint.stage == GithubConnectorStage.PRS:
+            checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info("Fetching issues for repo: %s", repo.name)
@@ -936,10 +948,14 @@ class GithubConnector(
             checkpoint.stage = GithubConnectorStage.FILES
             checkpoint.reset()
 
-        # Ensure the FILES stage is reached even when PRs/issues are disabled.
-        # Mirrors the unconditional ISSUES transition above; only reached once
-        # PRs and issues are fully drained (those blocks return early otherwise).
-        checkpoint.stage = GithubConnectorStage.FILES
+        # Advance into FILES from PRS/ISSUES, but never regress a resumed FILES
+        # checkpoint (mid file-pagination) — that would null out file_paths and
+        # re-index from page 0.
+        if checkpoint.stage in (
+            GithubConnectorStage.PRS,
+            GithubConnectorStage.ISSUES,
+        ):
+            checkpoint.stage = GithubConnectorStage.FILES
 
         if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
             if checkpoint.file_paths is None:

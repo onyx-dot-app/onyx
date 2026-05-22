@@ -195,6 +195,31 @@ def test_binary_file_yields_failure(
     assert isinstance(items[0], ConnectorFailure)
 
 
+def test_undecodable_content_yields_failure(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """decoded_content is None for non-base64 encodings (LFS, encoding='none').
+
+    This must surface as a ConnectorFailure, not an unhandled TypeError.
+    """
+    connector = _build_connector(mock_github_client)
+    mock_repo = create_mock_repo({"big.md": b"placeholder"})
+
+    none_content = MagicMock()
+    none_content.decoded_content = None
+    none_content.encoding = "none"
+    mock_repo.get_contents = MagicMock(return_value=none_content)
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    items = _all_items(outputs)
+    assert len(items) == 1
+    assert isinstance(items[0], ConnectorFailure)
+
+
 def test_pushed_at_gate_skips_file_stage(
     mock_github_client: MagicMock,
     create_mock_repo: Callable[..., MagicMock],
@@ -231,4 +256,38 @@ def test_files_paginated_across_checkpoints(
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     assert len(docs) == 250
+    assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_files_paginated_with_issues_enabled_no_stage_regression(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Resuming a multi-batch FILES checkpoint must not regress to ISSUES.
+
+    With include_issues=True, the unconditional stage transitions previously
+    overwrote a resumed FILES checkpoint back to ISSUES, nulling file_paths and
+    re-indexing files from page 0. Each file must be indexed exactly once.
+    """
+    connector = GithubConnector(
+        repo_owner="test-org",
+        repositories="test-repo",
+        include_prs=False,
+        include_issues=True,
+        include_files=True,
+    )
+    connector.github_client = mock_github_client
+
+    files = {f"doc{i:03d}.md": f"content {i}".encode() for i in range(250)}
+    mock_repo = create_mock_repo(files)
+    mock_repo.get_issues.return_value.get_page.return_value = []  # no issues
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    ids = [d.id for d in docs]
+    assert len(ids) == 250
+    assert len(set(ids)) == 250  # no duplicates from re-indexing page 0
     assert outputs[-1].next_checkpoint.has_more is False
