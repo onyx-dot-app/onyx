@@ -6,16 +6,15 @@ These tests pin the contract for the user library push pipeline:
   return a ``FileSet`` keyed by file_path.
 - ``hydrate_user_library`` — single-sandbox cold-start hydration.
 
-All tests run against real Postgres and a real ``LocalSandboxManager`` bound
-to ``tmp_path``. Tests seed data via the same DB-layer helpers production uses
-(``store_user_file`` / ``delete_user_file``), so the assertions reflect the
-real upload → sync path.
+All tests run against real Postgres and a real ``KubernetesSandboxManager``
+bound to a kind cluster. Tests seed data via the same DB-layer helpers
+production uses (``store_user_file`` / ``delete_user_file``), so the
+assertions reflect the real upload → sync path.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -33,9 +32,10 @@ from onyx.server.features.build.sandbox.user_library import (
 )
 from tests.external_dependency_unit.craft._test_helpers import make_user
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
+from tests.external_dependency_unit.craft.conftest import WorkspaceProxy
 
 
-def _library_path(workspace: Path, file_path: str) -> Path:
+def _library_path(workspace: WorkspaceProxy, file_path: str) -> WorkspaceProxy:
     return workspace / "managed" / "user_library" / file_path
 
 

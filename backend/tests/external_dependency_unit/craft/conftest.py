@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import shlex
 import threading
 import time
 import zipfile
@@ -16,7 +17,8 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import field
+from pathlib import PurePosixPath
 from typing import Any
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -50,9 +52,6 @@ from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
-)
-from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
-    LocalSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
@@ -200,44 +199,235 @@ def build_session_with_user(
     return _make
 
 
+# ---------------------------------------------------------------------------
+# Pod-aware workspace proxy
+#
+# Migrated tests inspect files inside provisioned sandboxes via a ``Path``-like
+# interface. With the local backend gone, those paths live inside a pod — but
+# the call sites still want to write ``workspace.exists()``,
+# ``(workspace / "managed" / "skills" / slug / "SKILL.md").read_bytes()``,
+# etc. ``WorkspaceProxy`` mirrors the subset of ``pathlib.Path`` semantics the
+# craft tests actually use; everything else raises so misuse fails loudly.
+#
+# All file operations go through ``pod_exec`` against the ``sandbox`` container,
+# matching how production sandbox file ops work (read/list use exec; the
+# managed/ tree is RO from the sandbox container but the tests read from it,
+# which is fine).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorkspaceProxy:
+    """``Path``-shaped proxy for a sandbox pod's ``/workspace/<sandbox_id>``.
+
+    Implements the subset of ``pathlib.Path`` used by craft external-dep tests:
+    ``/``, ``exists``, ``is_file``, ``is_symlink``, ``resolve``, ``read_bytes``,
+    ``read_text``, ``rglob('*')``, ``name``. Everything else raises.
+
+    Construct via :meth:`SandboxHandle.provision_for` — never directly.
+    """
+
+    _k8s_client: "k8s_client_module.CoreV1Api"
+    _pod_name: str
+    _sandbox_id: UUID
+    _rel_parts: tuple[str, ...] = field(default_factory=tuple)
+
+    # The "absolute path" inside the pod that this proxy represents. We use
+    # ``/workspace`` (the per-pod root) + sandbox-id segment so the production
+    # path layout (``managed/skills/...``, ``sessions/<id>/...``) matches what
+    # the tests already write. Note: in the k8s manager, ``/workspace/managed``
+    # and ``/workspace/sessions`` are pod-scoped, NOT sandbox-id-scoped, so we
+    # drop the sandbox_id prefix unlike the old local layout.
+    @property
+    def _abs_posix(self) -> str:
+        return (
+            "/workspace/" + "/".join(self._rel_parts)
+            if self._rel_parts
+            else "/workspace"
+        )
+
+    @property
+    def name(self) -> str:
+        return self._rel_parts[-1] if self._rel_parts else "workspace"
+
+    def __truediv__(self, segment: str | "WorkspaceProxy") -> "WorkspaceProxy":
+        if isinstance(segment, WorkspaceProxy):
+            raise TypeError("Cannot join two WorkspaceProxy instances")
+        new_parts = self._rel_parts + tuple(
+            p for p in PurePosixPath(segment).parts if p
+        )
+        return WorkspaceProxy(
+            _k8s_client=self._k8s_client,
+            _pod_name=self._pod_name,
+            _sandbox_id=self._sandbox_id,
+            _rel_parts=new_parts,
+        )
+
+    def _exec(self, command: str) -> str:
+        from kubernetes.stream import stream as k8s_stream
+
+        resp = k8s_stream(
+            self._k8s_client.connect_get_namespaced_pod_exec,
+            name=self._pod_name,
+            namespace=SANDBOX_NAMESPACE,
+            container="sandbox",
+            command=["/bin/sh", "-c", command],
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+        )
+        return str(resp) if resp is not None else ""
+
+    def exists(self) -> bool:
+        quoted = shlex.quote(self._abs_posix)
+        # `test -e` returns true for files, dirs, and symlinks to anything.
+        # We also accept dangling symlinks (`test -L`) so symlink presence
+        # tests don't fall through to "missing" when the target is unset.
+        out = self._exec(
+            f"if [ -e {quoted} ] || [ -L {quoted} ]; then echo Y; else echo N; fi"
+        )
+        return "Y" in out
+
+    def is_file(self) -> bool:
+        out = self._exec(
+            f"if [ -f {shlex.quote(self._abs_posix)} ]; then echo Y; else echo N; fi"
+        )
+        return "Y" in out
+
+    def is_symlink(self) -> bool:
+        out = self._exec(
+            f"if [ -L {shlex.quote(self._abs_posix)} ]; then echo Y; else echo N; fi"
+        )
+        return "Y" in out
+
+    def resolve(self) -> "WorkspaceProxy":
+        """Best-effort symlink resolution via ``readlink -f``.
+
+        Returned proxy points at the resolved absolute path. Tests use this
+        only for symlink-target equality checks, so we return a proxy with
+        the resolved path inlined as the ``_rel_parts`` tail.
+        """
+        out = self._exec(
+            f"readlink -f {shlex.quote(self._abs_posix)} || echo {shlex.quote(self._abs_posix)}"
+        )
+        resolved = out.strip()
+        # Strip the /workspace/ prefix if present; otherwise treat as absolute.
+        # Split into individual segments either way so ``__truediv__`` and
+        # ``_abs_posix`` produce correct results when callers continue to
+        # navigate from the resolved proxy.
+        if resolved.startswith("/workspace/"):
+            rel = resolved[len("/workspace/") :]
+        else:
+            rel = resolved.lstrip("/")
+        parts = tuple(p for p in rel.split("/") if p)
+        return WorkspaceProxy(
+            _k8s_client=self._k8s_client,
+            _pod_name=self._pod_name,
+            _sandbox_id=self._sandbox_id,
+            _rel_parts=parts,
+        )
+
+    def read_bytes(self) -> bytes:
+        import base64
+
+        out = self._exec(
+            f"base64 {shlex.quote(self._abs_posix)} 2>/dev/null || echo __MISSING__"
+        )
+        if "__MISSING__" in out:
+            raise FileNotFoundError(self._abs_posix)
+        return base64.b64decode(out.strip())
+
+    def read_text(self) -> str:
+        return self.read_bytes().decode("utf-8")
+
+    def rglob(self, pattern: str) -> list["WorkspaceProxy"]:
+        if pattern != "*":
+            raise NotImplementedError(
+                "WorkspaceProxy.rglob only supports '*' (used by craft tests)"
+            )
+        out = self._exec(
+            f"find {shlex.quote(self._abs_posix)} -mindepth 1 2>/dev/null || true"
+        )
+        results: list[WorkspaceProxy] = []
+        for line in out.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Each line is an absolute pod path; convert to ``_rel_parts``.
+            if line.startswith("/workspace/"):
+                rel = line[len("/workspace/") :]
+            elif line == "/workspace":
+                continue
+            else:
+                rel = line.lstrip("/")
+            parts = tuple(p for p in rel.split("/") if p)
+            results.append(
+                WorkspaceProxy(
+                    _k8s_client=self._k8s_client,
+                    _pod_name=self._pod_name,
+                    _sandbox_id=self._sandbox_id,
+                    _rel_parts=parts,
+                )
+            )
+        return results
+
+    def __fspath__(self) -> str:
+        return self._abs_posix
+
+    def __str__(self) -> str:
+        return self._abs_posix
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, WorkspaceProxy):
+            return self._abs_posix == other._abs_posix
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._abs_posix)
+
+
 @dataclass(frozen=True)
 class SandboxHandle:
     """Handle returned by the ``running_sandbox`` factory.
 
     Exposes the provisioned manager + IDs and resolves common workspace paths
     so call-sites stay short. Also supports ``provision_for(user)`` to add
-    additional sandboxes for other users that share the same redirected
-    ``SANDBOX_BASE_PATH`` and singleton manager — this is how the push-pipeline
-    tests provision FS for the cohort returned by ``granted_users``.
+    additional sandboxes for other users (each gets its own pod), mirroring
+    the way push-pipeline tests provision a cohort returned by
+    ``granted_users``.
     """
 
-    manager: LocalSandboxManager
+    manager: KubernetesSandboxManager
     sandbox_id: UUID
     session_id: UUID | None
     info: SandboxInfo
-    base_path: Path
+    _k8s_client: "k8s_client_module.CoreV1Api"
     # Required to provision additional sandboxes for other users.
     _db_session: Session
     _llm_config: LLMProviderConfig
     _register_extra: Callable[[UUID], None]
 
     @property
-    def workspace_path(self) -> Path:
-        return self.base_path / str(self.sandbox_id)
+    def workspace_path(self) -> WorkspaceProxy:
+        return WorkspaceProxy(
+            _k8s_client=self._k8s_client,
+            _pod_name=self.manager._get_pod_name(self.sandbox_id),
+            _sandbox_id=self.sandbox_id,
+        )
 
     @property
-    def skills_path(self) -> Path:
+    def skills_path(self) -> WorkspaceProxy:
         return self.workspace_path / "managed" / "skills"
 
     def provision_for(
         self, user: User, status: SandboxStatus = SandboxStatus.RUNNING
-    ) -> tuple[Sandbox, Path]:
-        """Create a Sandbox row for ``user``, provision its FS, return (row, workspace).
+    ) -> tuple[Sandbox, WorkspaceProxy]:
+        """Create a Sandbox row for ``user``, provision its pod, return (row, workspace).
 
-        Use this when a test needs more than one sandbox provisioned under the
-        same redirected ``SANDBOX_BASE_PATH`` — e.g. push-pipeline tests that
-        iterate over a cohort from ``granted_users``. The new sandbox is
-        terminated on teardown via the same finalizer chain the fixture set up.
+        Each provisioned sandbox lives in its own pod (k8s pods are per-
+        sandbox-id). The pod is torn down on test teardown via the registered
+        finalizer chain.
 
         If ``status`` is not RUNNING, the row is updated after provisioning
         (the manager always starts with RUNNING).
@@ -251,7 +441,8 @@ class SandboxHandle:
         self._db_session.commit()
         self._db_session.refresh(sandbox_row)
 
-        self.manager.provision(
+        _provision_with_retry(
+            self.manager,
             sandbox_id=sandbox_row.id,
             user_id=user.id,
             tenant_id=TEST_TENANT_ID,
@@ -263,60 +454,226 @@ class SandboxHandle:
             sandbox_row.status = status
             self._db_session.commit()
 
-        return sandbox_row, self.base_path / str(sandbox_row.id)
+        workspace = WorkspaceProxy(
+            _k8s_client=self._k8s_client,
+            _pod_name=self.manager._get_pod_name(sandbox_row.id),
+            _sandbox_id=sandbox_row.id,
+        )
+        return sandbox_row, workspace
 
 
-@pytest.fixture(scope="function")
-def local_sandbox_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect ``LocalSandboxManager``'s base + template paths into ``tmp_path``.
+def _wait_until_healthy(
+    manager: KubernetesSandboxManager,
+    sandbox_id: UUID,
+    max_attempts: int = 15,
+    timeout: float = 5.0,
+) -> None:
+    for _ in range(max_attempts):
+        if manager.health_check(sandbox_id, timeout=timeout):
+            return
+        time.sleep(2)
+    raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
 
-    Patches:
-      * ``SANDBOX_BASE_PATH`` in both the configs module and the manager
-        module (the latter imports it by value at import time).
-      * ``OUTPUTS_TEMPLATE_PATH`` / ``VENV_TEMPLATE_PATH`` so
-        ``LocalSandboxManager._validate_templates()`` passes in CI / dev
-        environments where the real template directories don't exist
-        (they only ship inside the ``Dockerfile.sandbox-templates`` image).
-      * ``LocalSandboxManager._instance`` AND ``base._sandbox_manager_instance``
-        so the next ``LocalSandboxManager()`` / ``get_sandbox_manager()``
-        constructs a fresh manager bound to these paths.
 
-    ``raising=False`` on the singleton reset because the attribute may
-    already be ``None`` when no previous test instantiated the manager.
+def _provision_with_retry(
+    manager: KubernetesSandboxManager,
+    *,
+    sandbox_id: UUID,
+    user_id: UUID,
+    tenant_id: str,
+    llm_config: LLMProviderConfig,
+    onyx_pat: str | None = "ci-test-pat",
+) -> SandboxInfo:
+    """Provision + wait-healthy with a one-shot retry on flake.
 
-    Returns the redirected base path so callers can compute workspace
-    locations under it.
+    kind under load occasionally times out the manager's
+    ``_wait_for_pod_ready`` (cluster scheduling pressure, transient
+    image-pull retries). When that happens we terminate the half-baked
+    pod and try once more — fresh scheduling usually succeeds. Real
+    deterministic failures still raise on the second try.
     """
-    base_path = tmp_path / "sandboxes"
-    base_path.mkdir(parents=True, exist_ok=True)
-    outputs_tpl = tmp_path / "templates" / "outputs"
-    venv_tpl = tmp_path / "templates" / "venv"
-    outputs_tpl.mkdir(parents=True, exist_ok=True)
-    venv_tpl.mkdir(parents=True, exist_ok=True)
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            info = manager.provision(
+                sandbox_id=sandbox_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                llm_config=llm_config,
+                onyx_pat=onyx_pat,
+            )
+            _wait_until_healthy(manager, sandbox_id)
+            return info
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt == 0:
+                # Tear down the half-baked pod before retrying so the
+                # second attempt starts from a clean slate.
+                try:
+                    manager.terminate(sandbox_id)
+                except Exception:
+                    pass
+                continue
+            raise
+    # Unreachable — the loop either returns or raises — but type-checkers
+    # complain without an explicit terminator.
+    raise RuntimeError(
+        f"provision retry exhausted for {sandbox_id}: {last_err}"
+    ) from last_err
 
-    monkeypatch.setattr(
-        "onyx.server.features.build.configs.SANDBOX_BASE_PATH",
-        str(base_path),
+
+# ---------------------------------------------------------------------------
+# Pool pod amortization
+#
+# Pod provisioning costs ~20s. With ~15 tests calling running_sandbox(), naive
+# per-test provisioning would burn ~5 min of CI time on idle pod startup. The
+# pool_pod fixture provisions exactly one pod per test module and lets each
+# test reuse it via a fresh-session-id pattern + pre-test cleanup of the
+# mutable workspace trees (managed/skills, managed/user_library, sessions/).
+#
+# Tests that need multiple distinct pods (cohort tests via
+# ``SandboxHandle.provision_for``) still pay per-pod cost — those scenarios
+# inherently require multiple pod identities, so amortization is impossible
+# there. The savings come from amortizing the *primary* handle's pod.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PoolPod:
+    sandbox_id: UUID
+    pod_name: str
+    manager: KubernetesSandboxManager
+    k8s_client: "k8s_client_module.CoreV1Api"
+    info: SandboxInfo
+
+
+def _cleanup_pool_workspace(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+) -> None:
+    """Wipe mutable trees on the pool pod before the next test runs.
+
+    ``managed/`` is read-only in the sandbox container but writable from the
+    sidecar (see ``kubernetes_sandbox_manager._build_pod_spec``), so we exec
+    via the sidecar for the skills + user_library subtrees. ``sessions/`` is
+    on a shared emptyDir, writable from either container.
+    """
+    # managed/{skills,user_library} live under the RO mount — clean via sidecar.
+    # ``find -mindepth 1 -delete`` removes only the directory's contents
+    # (including dotfiles) without the ``.*`` glob expanding to ``.``/``..``.
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "find /workspace/managed/skills /workspace/managed/user_library "
+        "-mindepth 1 -delete 2>/dev/null; true",
+        container="sidecar",
     )
-    monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.local.local_sandbox_manager.SANDBOX_BASE_PATH",
-        str(base_path),
-    )
-    monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.local.local_sandbox_manager.OUTPUTS_TEMPLATE_PATH",
-        str(outputs_tpl),
-    )
-    monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.local.local_sandbox_manager.VENV_TEMPLATE_PATH",
-        str(venv_tpl),
-    )
-    monkeypatch.setattr(LocalSandboxManager, "_instance", None, raising=False)
-    monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.base._sandbox_manager_instance",
-        None,
+    # sessions/ is the per-session emptyDir tree.
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
+        container="sandbox",
     )
 
-    return base_path
+
+@pytest.fixture(scope="module")
+def _pool_pod(
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[_PoolPod, None, None]:
+    """Module-scoped sandbox pod shared by all ``running_sandbox()`` calls.
+
+    Yields a :class:`_PoolPod` whose ``sandbox_id`` is reused across every
+    function-scoped ``running_sandbox()`` call in the module. The function
+    fixture wipes mutable trees on entry, so each test sees a clean
+    workspace.
+
+    The DB row backing the pool sandbox is owned by a module-scoped "pool
+    user". Tests that pass ``user=`` to ``running_sandbox()`` get the pool
+    sandbox anyway (the kwarg is honored for back-compat but the primary
+    pod's identity stays stable); tests that genuinely need a user-owned
+    sandbox should use ``SandboxHandle.provision_for(user)`` instead.
+    """
+    from onyx.server.features.build.configs import SANDBOX_BACKEND
+    from onyx.server.features.build.configs import SandboxBackend
+
+    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
+        pytest.skip(
+            "_pool_pod requires SANDBOX_BACKEND=kubernetes "
+            "(run via pr-craft-k8s-tests.yml or against a local kind cluster)"
+        )
+
+    SqlEngine.init_engine(pool_size=10, max_overflow=5)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    manager = KubernetesSandboxManager()
+
+    password_helper = PasswordHelper()
+    pool_user_id = uuid4()
+    pool_sandbox_id = uuid4()
+    pool_user_email = f"pool_{pool_user_id.hex[:8]}@example.com"
+
+    # Create pool user + sandbox DB rows.
+    with get_session_with_current_tenant() as session:
+        pool_user = User(
+            id=pool_user_id,
+            email=pool_user_email,
+            hashed_password=password_helper.hash(password_helper.generate()),
+            is_active=True,
+            is_superuser=False,
+            is_verified=True,
+            role=UserRole.EXT_PERM_USER,
+            account_type=AccountType.EXT_PERM_USER,
+        )
+        session.add(pool_user)
+        session.add(
+            Sandbox(
+                id=pool_sandbox_id,
+                user_id=pool_user_id,
+                status=SandboxStatus.RUNNING,
+            )
+        )
+        session.commit()
+
+    # Provision the pod once, with a one-shot retry on flake.
+    pool_info = _provision_with_retry(
+        manager,
+        sandbox_id=pool_sandbox_id,
+        user_id=pool_user_id,
+        tenant_id=TEST_TENANT_ID,
+        llm_config=default_llm_config(
+            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
+        ),
+    )
+    pod_name = manager._get_pod_name(pool_sandbox_id)
+
+    try:
+        yield _PoolPod(
+            sandbox_id=pool_sandbox_id,
+            pod_name=pod_name,
+            manager=manager,
+            k8s_client=k8s_client,
+            info=pool_info,
+        )
+    finally:
+        try:
+            manager.terminate(pool_sandbox_id)
+        except Exception:
+            pass
+        try:
+            wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+        except Exception:
+            pass
+        with get_session_with_current_tenant() as session:
+            row = session.get(Sandbox, pool_sandbox_id)
+            if row is not None:
+                session.delete(row)
+            user_row = session.get(User, pool_user_id)
+            if user_row is not None:
+                session.delete(user_row)
+            session.commit()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture(scope="function")
@@ -325,18 +682,47 @@ def running_sandbox(
     test_user: User,
     tenant_context: None,  # noqa: ARG001
     request: pytest.FixtureRequest,
-    local_sandbox_paths: Path,
 ) -> Callable[..., SandboxHandle]:
-    """Factory: provision a real sandbox via ``LocalSandboxManager``.
+    """Factory: hand out a ``SandboxHandle`` bound to the module pool pod.
 
-    Each call provisions a fresh sandbox under the tmp ``SANDBOX_BASE_PATH``
-    set up by ``local_sandbox_paths``. Teardown is LIFO via
-    ``request.addfinalizer``.
+    Each call returns a handle backed by the shared :func:`_pool_pod`. The
+    function fixture wipes ``/workspace/managed/skills``,
+    ``/workspace/managed/user_library``, and ``/workspace/sessions`` on the
+    pool pod before yielding, so every test sees a clean slate without
+    paying the ~20s pod-provisioning cost. See module docstring above
+    ``_PoolPod`` for the amortization rationale.
+
+    Migration history: this fixture previously bound to
+    ``LocalSandboxManager`` against ``tmp_path``. With the local backend
+    gone (see ``docs/craft/2026-05-21-nuke-local-sandbox-manager.md``), it
+    now wraps a real ``KubernetesSandboxManager`` pool pod against the kind
+    cluster. The fixture self-gates on ``SANDBOX_BACKEND == KUBERNETES`` and
+    ``pytest.skip``s otherwise, so test files using this fixture can sit in
+    the same directory as stub-backed tests without a module-level
+    ``pytestmark``. Tests consuming it run in the K8s CI lane only
+    (``pr-craft-k8s-tests.yml``).
+
+    The ``user=`` kwarg on ``_make`` is accepted for source-compat but
+    ignored — the pool pod is owned by a module-scoped pool user. Tests
+    that need a user-owned sandbox should call
+    ``SandboxHandle.provision_for(user)`` instead.
     """
-    base_path = local_sandbox_paths
+    from onyx.server.features.build.configs import SANDBOX_BACKEND
+    from onyx.server.features.build.configs import SandboxBackend
 
-    # Track extra sandboxes provisioned via SandboxHandle.provision_for so
-    # teardown can terminate them too.
+    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
+        pytest.skip(
+            "running_sandbox fixture requires SANDBOX_BACKEND=kubernetes "
+            "(run via pr-craft-k8s-tests.yml or against a local kind cluster)"
+        )
+    pool: _PoolPod = request.getfixturevalue("_pool_pod")
+
+    # Pre-test cleanup of mutable trees on the pool pod.
+    _cleanup_pool_workspace(pool.k8s_client, pool.pod_name)
+
+    # Track per-test pods provisioned via SandboxHandle.provision_for so
+    # teardown can terminate them. The pool pod itself is NOT terminated
+    # here — that's the module fixture's job.
     extra_sandbox_ids: list[UUID] = []
 
     def _register_extra(sandbox_id: UUID) -> None:
@@ -347,84 +733,51 @@ def running_sandbox(
         llm_config: LLMProviderConfig | None = None,
         with_session: bool = False,
     ) -> SandboxHandle:
-        owner = user or test_user
-        config = llm_config or LLMProviderConfig(
-            provider="openai",
-            model_name="gpt-4",
-            api_key="test-key",
-            api_base=None,
-        )
-
-        sandbox_row = Sandbox(
-            id=uuid4(),
-            user_id=owner.id,
-            status=SandboxStatus.RUNNING,
-        )
-        db_session.add(sandbox_row)
-        db_session.commit()
-        db_session.refresh(sandbox_row)
-
-        # Force a brand-new singleton bound to the redirected base path. The
-        # monkeypatch above restores the prior class attribute on teardown.
-        LocalSandboxManager._instance = None
-        manager = LocalSandboxManager()
-
-        info = manager.provision(
-            sandbox_id=sandbox_row.id,
-            user_id=owner.id,
-            tenant_id=TEST_TENANT_ID,
-            llm_config=config,
+        config = llm_config or default_llm_config(
+            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         )
 
         session_id: UUID | None = None
         if with_session:
+            # Fresh session id per call — sessions are namespaced under the
+            # pool pod's /workspace/sessions/{id}/, so multiple calls in the
+            # same test don't collide.
+            session_id = uuid4()
             session_row = BuildSession(
-                id=uuid4(),
-                user_id=owner.id,
+                id=session_id,
+                user_id=(user or test_user).id,
                 name="running-sandbox-session",
                 status=BuildSessionStatus.ACTIVE,
             )
             db_session.add(session_row)
             db_session.commit()
-            db_session.refresh(session_row)
-            session_id = session_row.id
 
-            manager.setup_session_workspace(
-                sandbox_id=sandbox_row.id,
+            pool.manager.setup_session_workspace(
+                sandbox_id=pool.sandbox_id,
                 session_id=session_id,
                 llm_config=config,
                 nextjs_port=None,
                 skills_section="No skills available.",
             )
 
-        # LIFO teardown: terminate sandbox + any extras added via
-        # SandboxHandle.provision_for, then delete the primary DB row.
         def _cleanup() -> None:
             for extra_id in extra_sandbox_ids:
                 try:
-                    manager.terminate(extra_id)
-                except (FileNotFoundError, OSError):
+                    pool.manager.terminate(extra_id)
+                except Exception:
                     pass
-            try:
-                manager.terminate(sandbox_row.id)
-            except (FileNotFoundError, OSError):
-                # The workspace directory may already be gone if the test
-                # tore it down explicitly. Any other exception is a real bug
-                # and must propagate.
-                pass
-            existing = db_session.get(Sandbox, sandbox_row.id)
-            if existing is not None:
-                db_session.delete(existing)
-                db_session.commit()
+            # Pool pod is NOT terminated; the module fixture owns its
+            # lifecycle. We deliberately leave mutable trees in place — the
+            # next test's pre-yield cleanup wipes them.
 
         request.addfinalizer(_cleanup)
 
         return SandboxHandle(
-            manager=manager,
-            sandbox_id=sandbox_row.id,
+            manager=pool.manager,
+            sandbox_id=pool.sandbox_id,
             session_id=session_id,
-            info=info,
-            base_path=base_path,
+            info=pool.info,
+            _k8s_client=pool.k8s_client,
             _db_session=db_session,
             _llm_config=config,
             _register_extra=_register_extra,
@@ -740,10 +1093,11 @@ def acp_event_sequence() -> Callable[[Iterable[ACPEvent]], list[ACPEvent]]:
 # Kubernetes helpers (Part V.1)
 #
 # These are imported by the K8s-only test modules (test_kubernetes_sandbox.py,
-# test_snapshot_restore.py). They never run under the local backend because
-# the consumers gate execution behind a module-level ``pytestmark`` that
-# skips when SANDBOX_BACKEND != KUBERNETES. The helpers are defined at module
-# scope here so they can be imported as top-level callables.
+# test_snapshot_restore.py, test_kubernetes_sandbox_file_ops.py). They never
+# run against the deleted local backend — consumers gate execution behind a
+# module-level ``pytestmark`` that skips when SANDBOX_BACKEND != KUBERNETES.
+# The helpers are defined at module scope here so they can be imported as
+# top-level callables.
 # ---------------------------------------------------------------------------
 
 
@@ -890,6 +1244,43 @@ def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
 
 
 @pytest.fixture(scope="function")
+def pool_session(
+    _pool_pod: _PoolPod,
+) -> tuple[UUID, UUID, str]:
+    """Fresh session on the module pool pod — drop-in for ``live_pod``.
+
+    Same return shape as ``live_pod`` (``sandbox_id, session_id,
+    pod_name``) but reuses the module-scoped pool pod instead of
+    provisioning + tearing down a fresh one per test. Saves ~14s of pod
+    startup per test.
+
+    Per call: wipes mutable trees on the pool pod
+    (``/workspace/managed/skills``, ``/workspace/managed/user_library``,
+    ``/workspace/sessions``) via :func:`_cleanup_pool_workspace`, then
+    sets up a fresh session workspace with a new ``session_id``. The
+    returned ``sandbox_id`` is the pool pod's stable ID.
+
+    Use this for any test that needs a sandbox pod + a session and does
+    NOT terminate / restart / re-provision the pod itself. Tests that
+    assert on pod lifecycle (terminate cleanup, restart count, IRSA
+    env, RO mount) must keep using ``live_pod`` so they don't break
+    state for subsequent tests in the module.
+    """
+    _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
+    session_id = uuid4()
+    _pool_pod.manager.setup_session_workspace(
+        sandbox_id=_pool_pod.sandbox_id,
+        session_id=session_id,
+        llm_config=default_llm_config(
+            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
+        ),
+        nextjs_port=None,
+        skills_section="No skills available.",
+    )
+    return _pool_pod.sandbox_id, session_id, _pool_pod.pod_name
+
+
+@pytest.fixture(scope="function")
 def live_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
@@ -900,6 +1291,10 @@ def live_pod(
     health via a 15-attempt poll on ``manager.health_check``; if the pod
     never becomes healthy the fixture raises ``RuntimeError`` so the test
     fails fast rather than running against a half-baked sandbox.
+
+    Prefer ``pool_session`` for tests that just need a sandbox + session
+    and don't mutate pod-level state; this fixture exists for tests that
+    require their own pod (lifecycle assertions, terminate, etc.).
     """
     sandbox_id = uuid4()
     session_id = uuid4()
@@ -907,21 +1302,14 @@ def live_pod(
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
     )
 
-    info = k8s_manager.provision(
+    info = _provision_with_retry(
+        k8s_manager,
         sandbox_id=sandbox_id,
         user_id=_K8S_TEST_USER_ID,
         tenant_id=TEST_TENANT_ID,
         llm_config=llm_config,
-        onyx_pat="ci-test-pat",
     )
     assert info.status == SandboxStatus.RUNNING
-
-    for _ in range(15):
-        if k8s_manager.health_check(sandbox_id, timeout=5.0):
-            break
-        time.sleep(2)
-    else:
-        raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
 
     k8s_manager.setup_session_workspace(
         sandbox_id=sandbox_id,

@@ -5,12 +5,11 @@ attached to api_server / celery / web.
 
 ## When you need this
 
-The default path in [CONTRIBUTING.md](/CONTRIBUTING.md) (docker-compose deps +
-vscode debugger + `SANDBOX_BACKEND=local`) is faster and covers ~90% of the
-codebase. Use it unless you're working on **Onyx Craft (build mode)** with
-`SANDBOX_BACKEND=kubernetes`: sandboxes are real pods, so anything touching
-the pod spec, the sandbox image, or the cluster-side push / auth paths must
-be exercised on a real cluster.
+This is the canonical local setup for **Onyx Craft (build mode)** — sandboxes
+are real Kubernetes pods, so there is no longer a non-cluster shortcut.
+Non-Craft work can still use the docker-compose deps + vscode debugger path
+described in [CONTRIBUTING.md](/CONTRIBUTING.md); use that when you don't
+need a sandbox.
 
 ## Prerequisites
 
@@ -45,22 +44,69 @@ One sudo prompt at session start; the daemon stays alive afterward:
 telepresence connect -n onyx
 ```
 
-## One-time setup
+## kubectl context
 
-Follow the four steps below in order. Skipping step 3 (the sandbox image)
-is the most common Craft setup failure — sandbox pods can't pull
-`onyxdotapp/sandbox:dev` from anywhere, so Build sessions hang.
+Every script in this doc — and the `make craft-up` wrapper — refuses to
+operate unless your `kubectl` context is exactly `kind-onyx-dev`. This is
+a deliberate safety guard: the `onyx` namespace also exists in production
+EKS, and `helm uninstall` / `kubectl delete` on the wrong cluster is
+catastrophic.
 
-### 1. Bring up the cluster
+List your contexts:
 
 ```bash
-deployment/helm/dev/k8s-up.sh
+kubectl config get-contexts
 ```
 
-Or run the **`k8s: cluster up`** vscode task. The script is idempotent and
-refuses to run unless your kubectl context is exactly `kind-onyx-dev` (the
-`onyx` namespace also exists in prod EKS). It also installs the
-telepresence traffic-manager once per cluster.
+Check which one is active:
+
+```bash
+kubectl config current-context
+```
+
+Switch to the kind cluster:
+
+```bash
+kubectl config use-context kind-onyx-dev
+```
+
+**Verify before anything destructive** (uninstall, namespace delete, etc.):
+
+```bash
+kubectl config current-context    # expect: kind-onyx-dev
+```
+
+## One-time setup
+
+Run **`make craft-up`** (or the **`craft: up`** vscode task). It handles
+the cluster, helm install, sandbox image build/load, and `.env.k8s`
+bootstrap in one shot. Idempotent — safe to re-run.
+
+```bash
+make craft-up
+```
+
+Then fill in `<REPLACE THIS>` values in `.vscode/.env.k8s` (at minimum
+`GEN_AI_API_KEY`). See [Set up your `.env.k8s`](#set-up-your-envk8s) below.
+
+If telepresence isn't already connected when you go to run the api_server,
+the vscode `(k8s)` launch profile's preLaunchTask connects + intercepts
+automatically. Outside vscode:
+
+```bash
+telepresence connect -n onyx
+```
+
+### What `craft-up` does
+
+For transparency / debugging, `craft-up.sh` runs these steps in order. You
+can also invoke them individually for tighter rebuild loops.
+
+**1. Bring up the cluster.** Delegates to
+[`deployment/helm/dev/k8s-up.sh`](/deployment/helm/dev/k8s-up.sh). The
+script is idempotent and refuses to run unless your kubectl context is
+`kind-onyx-dev`. It also installs the telepresence traffic-manager once
+per cluster.
 
 Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
 
@@ -73,22 +119,20 @@ The chart pins images to the `:edge` tag in
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
 
-### 2. Copy `.env.k8s` from the template
+**2. Bootstrap `.vscode/.env.k8s`.** Copies `.vscode/.env.k8s.template` to
+`.vscode/.env.k8s` if absent. Existing files are never overwritten — your
+secrets stay intact across `craft-up` runs.
+
+**3. Build and load the sandbox image.** The chart points sandbox pods at
+`onyxdotapp/sandbox:dev`, which is local-only. Skipping this is the most
+common Craft setup failure — kind's `imagePullPolicy: IfNotPresent` will
+fail and Build sessions hang. The standalone rebuild command:
 
 ```bash
-cp .vscode/.env.k8s.template .vscode/.env.k8s
+make craft-sandbox-image
 ```
 
-Then fill in `<REPLACE THIS>` values (at minimum `GEN_AI_API_KEY`). See
-[Set up your `.env.k8s`](#set-up-your-envk8s) below for the full workflow
-and what to mirror from `.vscode/.env`.
-
-### 3. Build and load the sandbox image
-
-**Required for Craft (`SANDBOX_BACKEND=kubernetes`).** The chart points
-sandbox pods at `onyxdotapp/sandbox:dev`, which is local-only — it isn't on
-any registry, so kind's `imagePullPolicy: IfNotPresent` will fail until
-you've built it and loaded it into the kind node:
+which is equivalent to:
 
 ```bash
 docker build -t onyxdotapp/sandbox:dev \
@@ -96,26 +140,14 @@ docker build -t onyxdotapp/sandbox:dev \
 kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
 ```
 
-Rebuild + reload when you change anything under that directory. The image
-tag (`onyxdotapp/sandbox:dev`) must match `SANDBOX_CONTAINER_IMAGE` in your
-`.env.k8s` and the chart's `sandbox.image.*` values.
+The image tag (`onyxdotapp/sandbox:dev`) must match `SANDBOX_CONTAINER_IMAGE`
+in your `.env.k8s` and the chart's `sandbox.image.*` values.
 
 Verify it's present in the kind node:
 
 ```bash
 docker exec onyx-dev-control-plane crictl images | grep sandbox
 ```
-
-### 4. Connect telepresence
-
-```bash
-telepresence connect -n onyx
-```
-
-This sets up the DNS bridge so your local api_server can resolve
-in-cluster services (`onyx-pg-rw`, `onyx-minio`, etc.). The vscode `(k8s)`
-launch profiles also run an `intercept` automatically — `connect` here is
-only needed if you're driving telepresence outside of vscode.
 
 ---
 
@@ -143,17 +175,48 @@ kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace=onyx --
 All cluster + telepresence commands are exposed as tasks (Cmd+Shift+P → Tasks:
 Run Task):
 
+- `craft: up (cluster + sandbox image + .env.k8s)` — one-shot setup.
+- `craft: down (teardown + telepresence quit)` — symmetric teardown.
+- `craft: rebuild sandbox image` — rebuild + reload the sandbox image.
 - `k8s: cluster up` — bring up or reconcile the cluster.
 - `k8s: pause cluster (data preserved)` — stop the kind node container at end of day.
 - `k8s: resume cluster` — start it back up; kubelet reconciles pods.
 - `k8s: cluster down (full teardown)` — delete the kind cluster and all PVC data.
 - `k8s: telepresence connect`, `... intercept api_server`, `... quit`.
 
+### Common commands
+
+The recipes you'll hit in your first week:
+
+```bash
+# Watch pods come up / go down
+kubectl -n onyx get pods -w
+
+# Tail logs from one pod
+kubectl -n onyx logs -f <pod>
+
+# Stream logs across all api_server replicas (uses stern)
+stern -n onyx onyx-api-server
+
+# Shell into the postgres primary
+kubectl -n onyx exec -it onyx-pg-1 -- psql -U postgres
+
+# Restart api_server after a chart edit
+kubectl -n onyx rollout restart deployment/onyx-api-server
+
+# Delete one sandbox pod (test a recovery path)
+kubectl -n onyx-sandboxes delete pod <name>
+
+# Inspect cluster events (most-recent 30)
+kubectl -n onyx get events --sort-by=.lastTimestamp | tail -30
+```
+
 ### Set up your `.env.k8s`
 
 The K8s api_server launch loads env from `.vscode/.env.k8s`. You own this
 file end-to-end — the telepresence intercept no longer regenerates it.
-Copy from the tracked template:
+`make craft-up` bootstraps it from the template on first run; if you ever
+need to recreate it by hand:
 
 ```bash
 cp .vscode/.env.k8s.template .vscode/.env.k8s
@@ -302,6 +365,65 @@ and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
 before launching the api_server.
 
 ## Troubleshooting
+
+### Sandbox pods stuck in `ImagePullBackOff`
+
+**Symptoms:** Pods in the `onyx-sandboxes` namespace fail to start, with
+`ImagePullBackOff` or `ErrImagePull` for `onyxdotapp/sandbox:dev`. Build
+sessions hang at PROVISIONING.
+
+**Cause:** `onyxdotapp/sandbox:dev` is local-only — it isn't on any
+registry. You either skipped the build step or you have a fresh cluster
+without the image loaded.
+
+**Recovery:**
+
+```bash
+make craft-sandbox-image
+```
+
+(equivalent to `docker build` + `kind load docker-image`).
+
+### api_server can't resolve `onyx-pg-rw` (or other in-cluster DNS)
+
+**Symptoms:** Your local api_server (run from vscode) crashes on startup
+with `Name or service not known` / `Temporary failure in name resolution`
+for `onyx-pg-rw`, `onyx-minio`, etc.
+
+**Cause:** telepresence is not connected, so your host DNS doesn't know
+about the in-cluster Service records.
+
+**Recovery:**
+
+```bash
+telepresence status        # should report "Connected"
+telepresence connect -n onyx
+```
+
+The vscode `(k8s)` launch profiles wire `k8s: telepresence intercept
+api_server` as their `preLaunchTask`, so this is usually only an issue when
+running api_server outside vscode.
+
+### `kubectl` operating against the wrong cluster
+
+**Symptoms:** `kubectl get pods` returns prod pods (or empty when you
+expect kind pods), or destructive commands surprise you.
+
+**Cause:** Your kubectl current-context isn't `kind-onyx-dev` — it's
+probably `docker-desktop`, a real EKS context, or a different kind cluster.
+
+**Recovery:**
+
+```bash
+kubectl config current-context              # see what you're on
+kubectl config use-context kind-onyx-dev    # switch
+kubectl config current-context              # verify
+```
+
+The `k8s-up.sh` / `k8s-down.sh` / `craft-up.sh` / `craft-down.sh` scripts
+all refuse to operate unless the current context is exactly
+`kind-onyx-dev`, so this won't bite you when going through them — only on
+ad-hoc `kubectl` invocations.
 
 ### Craft tab missing from the sidebar (and `/craft` 404s)
 

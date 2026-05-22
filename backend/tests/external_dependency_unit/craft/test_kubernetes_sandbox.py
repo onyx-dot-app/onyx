@@ -196,13 +196,13 @@ def test_provisioned_pod_has_sandbox_image_directories(
 def test_session_workspace_setup_creates_expected_tree(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After ``setup_session_workspace``, the session dir contains the
     canonical tree: ``outputs/``, ``attachments/``, ``AGENTS.md``,
     ``opencode.json``, and the ``.opencode/skills`` symlink.
     """
-    _, session_id, pod_name = live_pod
+    _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
 
     # Directories
@@ -262,12 +262,12 @@ def test_session_workspace_setup_creates_expected_tree(
 
 def test_send_message_streams_acp_events(
     k8s_manager: KubernetesSandboxManager,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """``send_message`` streams ACP events including a tool_call cycle and
     at least one ``AgentMessageChunk``.
     """
-    sandbox_id, session_id, _ = live_pod
+    sandbox_id, session_id, _ = pool_session
 
     events: list[ACPEvent] = []
     for event in k8s_manager.send_message(
@@ -314,13 +314,13 @@ def test_send_message_streams_acp_events(
 def test_push_signed_tarball_lands_under_mount_path(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """``write_files_to_sandbox`` with a ``{slug}/SKILL.md`` fileset must
     land the file at ``/workspace/managed/skills/<slug>/SKILL.md`` after
     the in-pod daemon extracts the tarball.
     """
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
     slug = f"push-test-{uuid4().hex[:8]}"
     body = f"---\nname: {slug}\ndescription: pushed bundle\n---\n# v1\n"
 
@@ -363,10 +363,10 @@ def test_push_signed_tarball_lands_under_mount_path(
 def test_push_second_call_replaces_previous_via_atomic_swap(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """Push v1 then v2; the post-push file content reflects v2 (atomic swap)."""
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
     slug = f"swap-test-{uuid4().hex[:8]}"
     mount_path = f"/workspace/managed/skills/{slug}"
     target = f"{mount_path}/SKILL.md"
@@ -396,7 +396,7 @@ def test_push_second_call_replaces_previous_via_atomic_swap(
 def test_push_with_bad_signature_returns_401(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """A push request with a deliberately wrong signature returns 401 from
     the in-pod daemon.
@@ -405,7 +405,7 @@ def test_push_with_bad_signature_returns_401(
     header and timestamp), but supplies a garbage signature so the daemon's
     Ed25519 verify fails.
     """
-    sandbox_id, _, pod_name = live_pod
+    sandbox_id, _, pod_name = pool_session
 
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
     pod_ip = pod.status.pod_ip
@@ -566,6 +566,10 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 
     Without this, a compromised agent could swap a pushed skill bundle
     after the daemon extracts it.
+
+    Stays on ``live_pod`` (not ``pool_session``) because the sidecar
+    write in the second half lands a stray ``/workspace/managed/probe.txt``
+    that pool cleanup doesn't sweep.
     """
     _, _, pod_name = live_pod
 
@@ -666,13 +670,13 @@ def test_pod_name_uses_full_uuid_not_first_8_chars() -> None:
 def test_ephemeral_acp_client_started_fresh_per_send(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """Two consecutive ``send_message`` calls spawn two distinct
     ``opencode acp`` processes in the pod (regression for SHA ``96a38dcc06``
     — multi-replica session corruption from a shared long-lived process).
     """
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
 
     # Drain the first message stream fully before sampling PIDs.
     for _ in k8s_manager.send_message(sandbox_id, session_id, "say hi"):
@@ -707,7 +711,7 @@ def test_ephemeral_acp_client_started_fresh_per_send(
 def test_acp_resumes_existing_session_when_present(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """After the first ``send_message``, the second call should resume
     the existing opencode session rather than creating a new one.
@@ -716,7 +720,7 @@ def test_acp_resumes_existing_session_when_present(
     send (opencode materialised its state) and that the second send
     completes without error (the resume path worked).
     """
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
 
     # First send populates opencode session data on disk.
@@ -782,7 +786,7 @@ def test_acp_resumes_existing_session_when_present(
 
 def test_cancel_during_send_does_not_corrupt_sandbox(
     k8s_manager: KubernetesSandboxManager,
-    live_pod: tuple[UUID, UUID, str],
+    pool_session: tuple[UUID, UUID, str],
 ) -> None:
     """Early consumer exit (partial iteration) must not corrupt the sandbox.
 
@@ -793,7 +797,7 @@ def test_cancel_during_send_does_not_corrupt_sandbox(
     allow ``generator.close()`` from a *different* thread while
     ``__next__`` is executing.
     """
-    sandbox_id, session_id, _ = live_pod
+    sandbox_id, session_id, _ = pool_session
 
     stream = k8s_manager.send_message(
         sandbox_id,

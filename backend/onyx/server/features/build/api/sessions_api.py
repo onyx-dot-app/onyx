@@ -42,8 +42,6 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
@@ -479,11 +477,9 @@ def restore_session(
                     # Commit port allocation before long-running operations
                     db_session.commit()
 
-                # All non-local backends support snapshot restoration.
-                # Local sandboxes persist on disk so they don't snapshot.
-                snapshot = None
-                if SANDBOX_BACKEND != SandboxBackend.LOCAL:
-                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                # All supported backends snapshot session state to durable
+                # storage (S3 for kubernetes, host disk for docker).
+                snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
                 skills_section, skills_files = build_user_skills_payload(
                     user, db_session

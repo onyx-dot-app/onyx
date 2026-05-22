@@ -16,9 +16,15 @@ on:
     paths:
       - "backend/onyx/server/features/build/sandbox/**"
       - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
+      - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
       - "backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py"
       - "backend/tests/external_dependency_unit/craft/test_snapshot_restore.py"
       - "backend/tests/external_dependency_unit/craft/test_idle_cleanup.py"
+      - "backend/tests/external_dependency_unit/craft/test_skill_push.py"
+      - "backend/tests/external_dependency_unit/craft/test_user_library_sync.py"
+      - "backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py"
+      - "backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py"
+      - "backend/tests/external_dependency_unit/craft/conftest.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - "deployment/docker_compose/docker-compose.yml"
@@ -50,6 +56,15 @@ env:
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+  # CI runs on a 4 vCPU runner, and tests like test_skill_push provision
+  # up to 4 sandbox pods concurrently (pool + 3 cohort). With prod-default
+  # requests of 1 CPU/pod, the 4th pod stays Pending and trips the 60s
+  # readiness ceiling. Override to tiny requests so kind's scheduler can
+  # fit all four — kind isn't enforcing fairness here, just placement.
+  SANDBOX_POD_CPU_REQUEST: "100m"
+  SANDBOX_POD_MEMORY_REQUEST: "256Mi"
+  SANDBOX_POD_CPU_LIMIT: "2000m"
+  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
   # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
   # tests never call back to it, so the URL doesn't need to resolve.
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
@@ -70,7 +85,7 @@ jobs:
       - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
       - extras=s3-cache
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     env:
       PYTHONPATH: ./backend
@@ -292,9 +307,14 @@ jobs:
             --log-cli-level=INFO \
             --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
             backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py \
+            backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py \
             backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py \
             backend/tests/external_dependency_unit/craft/test_snapshot_restore.py \
-            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py
+            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py \
+            backend/tests/external_dependency_unit/craft/test_skill_push.py \
+            backend/tests/external_dependency_unit/craft/test_user_library_sync.py \
+            backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py \
+            backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py
 
       - name: Disk and docker status on failure
         if: failure()
