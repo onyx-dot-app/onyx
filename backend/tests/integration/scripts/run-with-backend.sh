@@ -19,8 +19,13 @@ HEALTH_TIMEOUT_SECONDS="${API_SERVER_HEALTH_TIMEOUT_SECONDS:-600}"
 
 cd "$BACKEND_DIR"
 
-echo "==> Running alembic upgrade head"
-uv run --no-sync alembic upgrade head
+if [[ "${MULTI_TENANT:-false}" == "true" ]]; then
+    echo "==> Running alembic -n schema_private upgrade head"
+    uv run --no-sync alembic -n schema_private upgrade head
+else
+    echo "==> Running alembic upgrade head"
+    uv run --no-sync alembic upgrade head
+fi
 
 if [[ "${ENABLE_CRAFT:-false}" == "true" ]]; then
     echo "==> Setting up Craft templates"
