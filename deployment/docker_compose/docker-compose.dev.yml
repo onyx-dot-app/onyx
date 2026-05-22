@@ -1,5 +1,18 @@
 # Docker Compose Override for Development/Testing
-# This file exposes service ports for development and testing purposes
+#
+# This overlay:
+#   1. Exposes service ports so they can be hit directly from the host.
+#   2. Bind-mounts ./backend into /app on the api_server,
+#      inference_model_server, and indexing_model_server containers and
+#      switches their uvicorn invocations to --reload, so backend and
+#      model-server code changes hot-reload without an image rebuild.
+#
+# NOT covered by hot reload in this overlay:
+#   - The `background` (Celery / supervisord) service still bakes source
+#     into the image at build time. Code changes there require
+#     `docker compose up -d --build background`.
+#   - The `web_server` (Next.js) container runs the production build;
+#     web hot reload is out of scope here.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -7,6 +20,11 @@
 # Or set COMPOSE_FILE environment variable:
 #   export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 #   docker compose up -d --wait
+#
+# First-time note: if your existing onyx-backend / onyx-model-server
+# images predate the `watchfiles` dependency being added to the default
+# requirements, run a one-time `docker compose ... up -d --build` to
+# pick it up. After that, code changes do not require rebuilds.
 
 services:
   api_server:
@@ -17,6 +35,23 @@ services:
         limits:
           cpus: "${API_SERVER_CPU_LIMIT:-0}"
           memory: "${API_SERVER_MEM_LIMIT:-0}"
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      echo \"Starting Onyx Api Server (hot-reload)\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080
+      --reload
+      --reload-dir /app/onyx
+      --reload-dir /app/ee
+      --reload-dir /app/shared_configs"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      - ../../backend:/app
+      # Mask the bind mount at the Playwright browser cache subpath so
+      # the Chromium install baked into the image during `docker build`
+      # is not shadowed by the host source tree (which does not contain
+      # browser binaries).
+      - playwright_browsers_cache:/app/.cache/ms-playwright
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
@@ -39,6 +74,44 @@ services:
   inference_model_server:
     ports:
       - "9000:9000"
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000
+        --reload
+        --reload-dir /app/model_server
+        --reload-dir /app/shared_configs
+        --reload-dir /app/onyx;
+      fi"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # The HuggingFace model cache named volume from the base compose
+      # file (model_cache_huggingface:/app/.cache/huggingface/) keeps
+      # masking that subpath on top of this bind mount.
+      - ../../backend:/app
+
+  indexing_model_server:
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000
+        --reload
+        --reload-dir /app/model_server
+        --reload-dir /app/shared_configs
+        --reload-dir /app/onyx;
+      fi"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # indexing_huggingface_model_cache:/app/.cache/huggingface/ from
+      # the base compose file masks the HF cache subpath on top of this
+      # bind mount.
+      - ../../backend:/app
 
   cache:
     ports:
@@ -53,3 +126,6 @@ services:
   code-interpreter:
     ports:
       - "8000:8000"
+
+volumes:
+  playwright_browsers_cache:
