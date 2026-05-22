@@ -62,6 +62,12 @@ def try_record_decision(
     )
     row = db_session.execute(stmt).scalar_one_or_none()
     db_session.flush()
+    if row is not None:
+        # The session is `expire_on_commit=False`, and our UPDATE uses
+        # `synchronize_session=False`. Without this refresh the caller
+        # would see the pre-UPDATE in-memory state of the identity-mapped
+        # row (decision=None) even though Postgres has the new value.
+        db_session.refresh(row)
     return row
 
 
