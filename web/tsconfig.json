@@ -51,6 +51,9 @@
   ],
   "exclude": [
     "node_modules",
-    "lib/opal"
+    "lib/opal",
+    "tests",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }
