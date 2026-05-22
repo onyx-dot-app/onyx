@@ -168,6 +168,53 @@ def _configure_celery_eager() -> None:
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = True
 
+    # Import the task modules so @shared_task registers task functions on
+    # this client celery_app (it has no autodiscover_tasks of its own —
+    # registration happens via the @shared_task side-effect on import).
+    # The list mirrors the union of autodiscover_tasks() calls across the
+    # primary / light / heavy / docfetching / docprocessing / monitoring /
+    # user_file_processing worker apps.
+    import importlib
+
+    task_modules = [
+        "onyx.background.celery.tasks.connector_deletion.tasks",
+        "onyx.background.celery.tasks.docfetching.tasks",
+        "onyx.background.celery.tasks.docprocessing.tasks",
+        "onyx.background.celery.tasks.docprocessing.targeted_reindex_task",
+        "onyx.background.celery.tasks.evals.tasks",
+        "onyx.background.celery.tasks.hierarchyfetching.tasks",
+        "onyx.background.celery.tasks.llm_model_update.tasks",
+        "onyx.background.celery.tasks.monitoring.tasks",
+        "onyx.background.celery.tasks.pruning.tasks",
+        "onyx.background.celery.tasks.scheduled_tasks.tasks",
+        "onyx.background.celery.tasks.shared.tasks",
+        "onyx.background.celery.tasks.user_file_processing.tasks",
+        "onyx.background.celery.tasks.vespa.tasks",
+        "onyx.background.celery.tasks.vespa.document_sync",
+    ]
+    for module in task_modules:
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            # Not every module exists in every build (EE-only, OS-only).
+            pass
+
+    # Celery's `send_task` always dispatches through the broker — it ignores
+    # `task_always_eager` (the framework prints AlwaysEagerIgnored). Production
+    # code uses `client_app.send_task(name, ...)` to fan out work; without a
+    # worker consuming the broker queue the tasks just pile up in Redis and
+    # tests time out waiting for results. Re-route `send_task` through
+    # `apply_async` so eager mode actually runs the task inline.
+    _real_send_task = celery_app.send_task
+
+    def _eager_send_task(name, args=None, kwargs=None, **options):  # type: ignore[no-untyped-def]
+        task = celery_app.tasks.get(name)
+        if task is None:
+            return _real_send_task(name, args=args, kwargs=kwargs, **options)
+        return task.apply_async(args=args or (), kwargs=kwargs or {}, **options)
+
+    celery_app.send_task = _eager_send_task  # type: ignore[method-assign]
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_client(
