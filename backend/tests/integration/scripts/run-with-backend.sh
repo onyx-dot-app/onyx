@@ -32,6 +32,14 @@ if [[ "${ENABLE_CRAFT:-false}" == "true" ]]; then
     bash "${BACKEND_DIR}/scripts/setup_craft_templates.sh"
 fi
 
+if [[ "$MODE" != "api_only" ]]; then
+    # The web_search tests exercise OnyxWebCrawler's Playwright fallback.
+    # The devcontainer image ships the apt deps; download the browser
+    # binary here so its version tracks the lockfile's playwright-python.
+    echo "==> Installing Playwright Chromium browser"
+    uv run --no-sync playwright install chromium
+fi
+
 SUPERVISORD_PID=""
 UVICORN_PID=""
 
