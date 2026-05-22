@@ -62,6 +62,11 @@
 
 .opal-input-field {
   @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
+  font-family: var(--font-hanken-grotesk);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  letter-spacing: 0px;
 }
 
 .opal-input[data-variant="primary"] .opal-input-field,
@@ -75,11 +80,6 @@
   @apply text-text-01;
 }
 
-.opal-input[data-variant="primary"] .opal-input-field::placeholder {
-  font-family: var(--font-hanken-grotesk);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 16px;
-  letter-spacing: 0px;
+.opal-input-field::placeholder {
   color: var(--text-02);
 }
