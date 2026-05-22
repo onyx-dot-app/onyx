@@ -705,12 +705,8 @@ def build_chat_turn(
             llm_provider_api_key=llm.config.api_key,
         )
         llms.append(llm)
-        model_display_names.append(_build_model_display_name(override))
+        model_display_names.append(_build_model_display_name(override, llm))
     token_counter = get_llm_token_counter(llms[0])
-
-    # not sure why we do this, but to maintain parity with previous code:
-    if not is_multi:
-        model_display_names = [""]
 
     # Verify that the user-specified files actually belong to the user
     verify_user_files(
@@ -938,6 +934,7 @@ def build_chat_turn(
             chat_session_id=chat_session.id,
             parent_message=user_message.id,
             message_type=MessageType.ASSISTANT,
+            model_display_name=model_display_names[0],
         )
         reserved_messages = [assistant_response]
         yield MessageResponseIDInfo(
@@ -1572,11 +1569,18 @@ def handle_stream_message_objects(
     )
 
 
-def _build_model_display_name(override: LLMOverride | None) -> str:
-    """Build a human-readable display name from an LLM override."""
-    if override is None:
-        return "unknown"
-    return override.display_name or override.model_version or "unknown"
+def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
+    """Build a human-readable display name for the LLM that will answer.
+
+    Falls back to the configured ``llm.config.model_name`` when no override is
+    set (default persona LLM) so the usage-metrics export always records the
+    actual model used, not an "unknown" sentinel or empty string.
+    """
+    if override is not None:
+        chosen = override.display_name or override.model_version
+        if chosen:
+            return chosen
+    return llm.config.model_name
 
 
 def handle_multi_model_stream(
