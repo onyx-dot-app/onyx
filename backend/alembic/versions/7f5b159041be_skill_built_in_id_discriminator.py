@@ -145,6 +145,13 @@ def _seed_built_in_skills() -> None:
 
 
 def upgrade() -> None:
+    # Older tenants ran an earlier version of b6d184cfdaf3_skills that created
+    # `manifest_metadata` NOT NULL; that migration was later edited to drop
+    # the column, but already-migrated tenants still carry it. The ORM no
+    # longer references it, so remove it before seeding to avoid NOT NULL
+    # violations on the upsert below.
+    op.execute("ALTER TABLE skill DROP COLUMN IF EXISTS manifest_metadata")
+
     op.add_column(
         "skill",
         sa.Column("built_in_skill_id", sa.String(), nullable=True),
