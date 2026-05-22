@@ -63,7 +63,7 @@ import {
   MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
 } from "@/lib/indexing";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import {
   saveAdminSettings,
   cancelNewEmbedding,

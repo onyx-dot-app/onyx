@@ -129,3 +129,11 @@ export {
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsListProps,
+  type TabsTriggerProps,
+  type TabsContentProps,
+} from "@opal/components/tabs/components";

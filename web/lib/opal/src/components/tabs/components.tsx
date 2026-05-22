@@ -8,12 +8,12 @@ import React, {
   useCallback,
 } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { mergeRefs } from "@/lib/utils";
-import { cn } from "@opal/utils";
-import { Section, SectionProps } from "@/layouts/general-layouts";
-import { IconProps, WithoutStyles } from "@opal/types";
+import { mergeRefs, cn } from "@opal/utils";
+import { type IconProps, type WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import { Tooltip, Button, Text } from "@opal/components";
+import { Tooltip } from "@opal/components/tooltip/components";
+import { Button } from "@opal/components/buttons/button/components";
+import { Text } from "@opal/components/text/components";
 
 /* =============================================================================
    CONTEXT
@@ -356,7 +356,7 @@ TabsRoot.displayName = TabsPrimitive.Root.displayName;
 /**
  * Tabs List Props
  */
-interface TabsListProps extends Omit<
+export interface TabsListProps extends Omit<
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
   "style"
 > {
@@ -495,7 +495,7 @@ const TabsList = React.forwardRef<
             enableScrollArrows ? (
               <div
                 ref={tabsContainerRef}
-                className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1 min-w-0"
+                className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
                 {children}
@@ -556,7 +556,7 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 /**
  * Tabs Trigger Props
  */
-interface TabsTriggerProps extends WithoutStyles<
+export interface TabsTriggerProps extends WithoutStyles<
   Omit<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>, "children">
 > {
   /**
@@ -706,6 +706,17 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Tabs Content Props
+ */
+export interface TabsContentProps {
+  value: string;
+  /** Padding applied to the content area in rem units. @default 0 */
+  padding?: number;
+  children?: React.ReactNode;
+  className?: string;
+}
+
+/**
  * Tabs Content Component
  *
  * Container for the content associated with each tab.
@@ -715,8 +726,8 @@ TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
  */
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
-  SectionProps & { value: string }
->(({ children, value, className, ...props }, ref) => (
+  TabsContentProps
+>(({ children, value, className, padding = 0 }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     value={value}
@@ -725,9 +736,7 @@ const TabsContent = React.forwardRef<
       className
     )}
   >
-    <Section padding={0} {...props}>
-      {children}
-    </Section>
+    <div style={{ padding: `${padding}rem` }}>{children}</div>
   </TabsPrimitive.Content>
 ));
 TabsContent.displayName = TabsPrimitive.Content.displayName;
@@ -736,8 +745,10 @@ TabsContent.displayName = TabsPrimitive.Content.displayName;
    EXPORTS
    ============================================================================= */
 
-export default Object.assign(TabsRoot, {
+const Tabs = Object.assign(TabsRoot, {
   List: TabsList,
   Trigger: TabsTrigger,
   Content: TabsContent,
 });
+
+export { Tabs };

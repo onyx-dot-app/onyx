@@ -14,7 +14,7 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";

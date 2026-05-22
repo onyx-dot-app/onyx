@@ -24,7 +24,7 @@ import {
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@/hooks/useToast";

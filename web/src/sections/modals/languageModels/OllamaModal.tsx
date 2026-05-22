@@ -28,7 +28,7 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";

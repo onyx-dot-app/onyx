@@ -12,7 +12,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
