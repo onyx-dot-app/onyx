@@ -1532,10 +1532,10 @@ echo "Session cleanup complete"
         llm_config: LLMProviderConfig,
         skills_section: str,
     ) -> None:
-        """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
+        """Download snapshot from S3 via s5cmd, extract, regenerate config, and start NextJS.
 
         Steps:
-        1. Download snapshot from S3 via aws s3 cp in the sandbox container
+        1. Download snapshot from S3 via s5cmd cat in the sandbox container
         2. Pipe directly to tar for extraction
         3. Regenerate configuration files (AGENTS.md, opencode.json)
         4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,

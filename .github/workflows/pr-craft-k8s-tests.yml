@@ -134,6 +134,10 @@ jobs:
           context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
           file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
           platforms: linux/amd64
+          # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
+          # so skip LibreOffice et al. to keep the CI image lean.
+          build-args: |
+            ENABLE_SKILLS=false
           tags: localhost:5001/onyx-sandbox:ci
           push: true
           cache-from: type=gha,scope=craft-sandbox

@@ -1,24 +1,17 @@
 # Sandbox Container Image
 #
-# User-shared sandbox model:
-# - One pod per user, shared across all user's sessions
-# - Session workspaces created via kubectl exec (setup_session_workspace)
-# - OpenCode agent runs via kubectl exec when needed
-#
-# Directory structure (created by init container + session setup):
-#   /workspace/
-#   ├── managed/skills/  # Pushed at session-setup time by the API server
-#   ├── templates/       # Output templates (baked into image)
-#   └── sessions/        # Per-session workspaces (created via exec)
-#       └── $session_id/
-#           ├── files/   # User's knowledge files (synced from S3)
-#           ├── outputs/
-#           ├── AGENTS.md
-#           └── opencode.json
+# User-shared sandbox: one pod per user, sessions created via kubectl exec.
+# See docs/craft/sandbox/image-and-spinup.md for image-layer rationale.
 
-FROM node:20-slim
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
 
-# Install system dependencies
+# Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
+# poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed
+# by the API server at session-setup, but their runtime tools must already
+# be in the image.
+ARG ENABLE_SKILLS=true
+ARG OPENCODE_VERSION=1.15.7
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -27,21 +20,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     procps \
     unzip \
-    \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
+    apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-core \
     libreoffice-common \
     libreoffice-impress \
     libreoffice-draw \
     poppler-utils \
-    gcc \
-    libc6-dev \
     fontconfig \
     fonts-dejavu-core \
     fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
 
-# Create non-root user (matches pod securityContext)
-# Handle existing user/group with UID/GID 1000 in base image
+# Reconcile UID/GID 1000 with whatever the base image already ships with.
 RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     EXISTING_GROUP=$(getent group 1000 | cut -d: -f1 2>/dev/null || echo ""); \
     if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "sandbox" ]; then \
@@ -57,15 +53,12 @@ RUN EXISTING_USER=$(id -nu 1000 2>/dev/null || echo ""); \
     useradd -u 1000 -g sandbox -m -s /bin/bash sandbox; \
     fi
 
-# Create workspace directories
 RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed && \
     chown -R sandbox:sandbox /workspace
 
-# Copy outputs template (web app scaffold, without node_modules)
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
 RUN chown -R sandbox:sandbox /workspace/templates
 
-# Copy and install Python requirements into a venv
 COPY initial-requirements.txt /tmp/initial-requirements.txt
 RUN python3 -m venv /workspace/.venv && \
     /workspace/.venv/bin/pip install --no-cache-dir --upgrade pip && \
@@ -73,57 +66,42 @@ RUN python3 -m venv /workspace/.venv && \
     rm -rf /tmp/initial-requirements.txt /root/.cache/pip && \
     chown -R sandbox:sandbox /workspace/.venv
 
-# Add venv to PATH so python/pip use it by default
 ENV PATH="/workspace/.venv/bin:${PATH}"
 ENV PYTHONPATH="/workspace:${PYTHONPATH}"
 
-# Install pptxgenjs globally for creating presentations from scratch
-RUN npm install -g pptxgenjs && \
+RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
+    npm install -g pptxgenjs && \
     npm cache clean --force && \
-    rm -rf /root/.npm
+    rm -rf /root/.npm; \
+    fi
 
-# Bun replaces npm for sandbox-session installs; see
-# docs/craft/features/bun-node-modules-dedup.md.
-# Pinned: bun.sh/install defaults to "latest" which would make image builds
-# non-reproducible. Bump intentionally when validating a new bun version
-# against the install + hardlink semantics this PR depends on.
-ARG BUN_VERSION=1.3.14
-RUN curl -fsSL https://bun.sh/install \
-    | BUN_INSTALL=/usr/local bash -s "bun-v${BUN_VERSION}" && \
-    /usr/local/bin/bun --version
+COPY --from=oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 \
+    /usr/local/bin/bun /usr/local/bin/bun
+
+COPY --from=peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 \
+    /s5cmd /usr/local/bin/s5cmd
 
 USER sandbox
-RUN curl -fsSL https://opencode.ai/install | bash
-# Pre-warm Bun's tarball cache in /home/sandbox/.bun so per-session installs
-# hit the local store. node_modules is dropped to keep image size bounded.
+RUN curl -fsSL https://opencode.ai/install \
+    | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
+# Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
     rm -rf node_modules
 USER root
 
-# Add opencode to PATH (installs to ~/.opencode/bin)
 ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 
-# Set ownership
 RUN chown -R sandbox:sandbox /workspace
 
-# Install AWS CLI (needed for snapshot operations)
-COPY --from=amazon/aws-cli:latest /usr/local/aws-cli /usr/local/aws-cli
-RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
-
-# Switch to non-root user
 USER sandbox
 WORKDIR /workspace
 
-# Expose ports
-# - 3000: Next.js dev server (started per-session if needed)
-# - 8081: OpenCode ACP HTTP server (started via exec)
-# - 8731: Push daemon (receives tar.gz files from sandbox manager)
+# 3000: Next.js dev server, 8081: OpenCode ACP, 8731: push daemon
 EXPOSE 3000 8081 8731
 
-# Entrypoint runs push daemon + keeps container alive
 ENTRYPOINT ["/workspace/entrypoint.sh"]

@@ -1,8 +1,8 @@
 """Snapshot create/restore operations for the sandbox sidecar.
 
-Shells out to the AWS CLI (already in the image) to upload/download tar.gz
-archives to/from S3. Tarring/extraction happens via shell pipelines so we
-don't buffer large snapshots in memory.
+Shells out to s5cmd (baked into the image via multi-stage COPY) to
+upload/download tar.gz archives to/from S3. Tarring/extraction happens
+via shell pipelines so we don't buffer large snapshots in memory.
 """
 
 import shlex
@@ -21,7 +21,7 @@ BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
 
 class SnapshotError(RuntimeError):
     """Raised when a snapshot subprocess fails. Carries stderr from the
-    underlying tool (aws s3 cp / tar) so the manager can see the cause.
+    underlying tool (s5cmd / tar) so the manager can see the cause.
     """
 
 
@@ -82,7 +82,7 @@ dirs="outputs"
 [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
 [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
 tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
-    -czf - $dirs | aws s3 cp - {safe_s3_uri}
+    -czf - $dirs | s5cmd pipe {safe_s3_uri}
 """
 
     _run(script)
@@ -105,7 +105,7 @@ def restore_snapshot(
     # Keep in sync with docker_sandbox_manager.restore_snapshot's install.
     script = f"""
 set -eo pipefail
-aws s3 cp {safe_s3_uri} - | tar -xzf - -C {safe_session_path}
+s5cmd cat {safe_s3_uri} | tar -xzf - -C {safe_session_path}
 
 web_dir={safe_session_path}/outputs/web
 if [ -f "$web_dir/bun.lock" ]; then
