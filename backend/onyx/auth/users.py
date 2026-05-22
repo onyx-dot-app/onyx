@@ -495,8 +495,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                 verified_user = await tenant_user_db.update(user, {"is_verified": True})
 
-            await self.on_after_verify(verified_user, request)
-            return verified_user
+                await self.on_after_verify(verified_user, request)
+                return verified_user
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
