@@ -255,12 +255,38 @@ class TestDeleteFile:
 # ---------------------------------------------------------------------------
 
 
-# The "empty-session returns None" short-circuit lives in the file-sync
-# sidecar's snapshot endpoint, not in the k8s manager — and exercising it
-# end-to-end requires the sidecar to actually run a no-op S3 upload. The
-# populated-session happy path is already covered by test_snapshot_restore.py;
-# the manager's empty-response handling is small enough that we don't need a
-# dedicated integration test for it here.
+class TestCreateSnapshot:
+    """The full snapshot/restore round-trip lives in test_snapshot_restore.py.
+    Here we pin the no-outputs short-circuit which the local manager could
+    not exercise."""
+
+    def test_create_snapshot_returns_none_when_session_has_no_outputs(
+        self,
+        k8s_manager: KubernetesSandboxManager,
+        k8s_client: client.CoreV1Api,
+        live_pod: tuple[UUID, UUID, str],
+    ) -> None:
+        sandbox_id, session_id, pod_name = live_pod
+
+        # ``setup_session_workspace`` populates outputs/web/ with the Next.js
+        # scaffold, so a freshly-set-up session is never literally empty.
+        # Wipe the snapshot-eligible trees first to exercise the sidecar's
+        # ``status="empty"`` short-circuit. (managed/* lives outside the
+        # snapshot, so we don't need to clean it.)
+        session_root = f"/workspace/sessions/{session_id}"
+        pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"rm -rf {session_root}/outputs {session_root}/attachments "
+            f"{session_root}/.opencode-data 2>/dev/null; true",
+        )
+
+        result = k8s_manager.create_snapshot(
+            sandbox_id, session_id, tenant_id="tenant_test"
+        )
+
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
