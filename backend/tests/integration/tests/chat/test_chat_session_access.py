@@ -1,9 +1,8 @@
 from uuid import uuid4
 
 import pytest
-import requests
-from requests import HTTPError
-
+from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import HTTPError
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS

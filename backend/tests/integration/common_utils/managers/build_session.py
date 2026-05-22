@@ -13,8 +13,7 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
@@ -37,7 +36,7 @@ def _parse_sse_lines(response: requests.Response) -> Iterator[dict[str, Any]]:
     The send-message endpoint emits Server-Sent Events: ``data: {...}\\n\\n``.
     Lines without a ``data:`` prefix (comments, retry hints) are skipped.
     """
-    for raw_line in response.iter_lines(decode_unicode=True):
+    for raw_line in response.iter_lines():
         if not raw_line:
             continue
         if raw_line.startswith("data:"):

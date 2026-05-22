@@ -1,8 +1,7 @@
 import time
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY

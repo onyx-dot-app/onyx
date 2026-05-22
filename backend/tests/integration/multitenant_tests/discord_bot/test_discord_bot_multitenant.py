@@ -8,8 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import register_guild

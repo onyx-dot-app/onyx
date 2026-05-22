@@ -3,8 +3,7 @@ import json
 import os
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource

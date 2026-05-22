@@ -1,7 +1,6 @@
 """Manager for Discord bot API integration tests."""
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.discord_bot import create_channel_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import register_guild

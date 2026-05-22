@@ -15,8 +15,7 @@ at the configured interval.
 import time
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
 

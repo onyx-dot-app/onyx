@@ -4,8 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus

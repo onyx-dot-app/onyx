@@ -2,8 +2,7 @@ import os
 import time
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

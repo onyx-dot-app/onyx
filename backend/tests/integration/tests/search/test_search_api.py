@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

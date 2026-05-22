@@ -5,9 +5,8 @@ from typing import Literal
 from typing import TypedDict
 from uuid import UUID
 
-import requests
-from requests.models import Response
-
+from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import Response
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor

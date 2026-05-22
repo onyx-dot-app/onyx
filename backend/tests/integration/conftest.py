@@ -1,64 +1,19 @@
 import os
+import platform
+import subprocess
 from collections.abc import Callable
+from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 
 # Integration tests rely on this mode to enable mock_llm_response paths.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
-from onyx.auth.schemas import UserRole
-from onyx.configs.constants import DocumentSource
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.search_settings import get_current_search_settings
-from shared_configs.configs import MULTI_TENANT
-from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.managers.api_key import APIKeyManager
-from tests.integration.common_utils.managers.document import DocumentManager
-from tests.integration.common_utils.managers.image_generation import (
-    ImageGenerationConfigManager,
+# Backend directory (`/workspace/backend`) — root for alembic / craft / etc.
+BACKEND_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.reset import _seed_dev_license_if_set
-from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.reset import reset_all_multitenant
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestImageGenerationConfig
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import SimpleTestDocument
-from tests.integration.common_utils.vespa import vespa_fixture
-
-BASIC_USER_NAME = "basic_user"
-
-DocumentBuilderType = Callable[[list[str]], list[SimpleTestDocument]]
-
-
-@pytest.fixture(scope="session", autouse=True)
-def initialize_db() -> None:
-    # Make sure that the db engine is initialized before any tests are run
-    SqlEngine.init_engine(
-        pool_size=10,
-        max_overflow=5,
-    )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def seed_dev_license_for_session(initialize_db: None) -> None:  # noqa: ARG001
-    # ``reset_postgres`` re-seeds the dev license after every wipe, but tests
-    # that don't take the ``reset`` fixture would otherwise hit Business-tier
-    # endpoints (e.g. /admin/api-key) with no License row and 402. Seed once at
-    # session start; no-op when ONYX_DEV_LICENSE is unset. Skip in multi-tenant
-    # mode: License rows live in tenant schemas, and the public-schema session
-    # here would seed into the wrong place.
-    if MULTI_TENANT:
-        return
-    with get_session_with_current_tenant() as db_session:
-        _seed_dev_license_if_set(db_session)
 
 
 def load_env_vars(env_file: str = ".env") -> None:
@@ -77,8 +32,157 @@ def load_env_vars(env_file: str = ".env") -> None:
         print(f"File {env_file} not found")
 
 
-# Load environment variables at the module level
+# Env must be in place before any onyx.* / shared_configs imports below pull
+# in module-level constants that read os.environ once.
 load_env_vars()
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from onyx.auth.schemas import UserRole  # noqa: E402
+from onyx.background.celery.apps.client import celery_app  # noqa: E402
+from onyx.configs.constants import DocumentSource  # noqa: E402
+from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
+from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
+from onyx.db.search_settings import get_current_search_settings  # noqa: E402
+from onyx.main import get_application  # noqa: E402
+from shared_configs.configs import MULTI_TENANT  # noqa: E402
+from tests.integration.common_utils import http_client  # noqa: E402
+from tests.integration.common_utils.constants import ADMIN_USER_NAME  # noqa: E402
+from tests.integration.common_utils.constants import GENERAL_HEADERS  # noqa: E402
+from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
+from tests.integration.common_utils.managers.document import DocumentManager  # noqa: E402
+from tests.integration.common_utils.managers.image_generation import (  # noqa: E402
+    ImageGenerationConfigManager,
+)
+from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
+    LLMProviderManager,
+)
+from tests.integration.common_utils.managers.user import build_email  # noqa: E402
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD  # noqa: E402
+from tests.integration.common_utils.managers.user import UserManager  # noqa: E402
+from tests.integration.common_utils.reset import _seed_dev_license_if_set  # noqa: E402
+from tests.integration.common_utils.reset import reset_all  # noqa: E402
+from tests.integration.common_utils.reset import reset_all_multitenant  # noqa: E402
+from tests.integration.common_utils.test_models import DATestAPIKey  # noqa: E402
+from tests.integration.common_utils.test_models import (  # noqa: E402
+    DATestImageGenerationConfig,
+)
+from tests.integration.common_utils.test_models import DATestLLMProvider  # noqa: E402
+from tests.integration.common_utils.test_models import DATestUser  # noqa: E402
+from tests.integration.common_utils.test_models import SimpleTestDocument  # noqa: E402
+from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
+
+BASIC_USER_NAME = "basic_user"
+
+DocumentBuilderType = Callable[[list[str]], list[SimpleTestDocument]]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _run_migrations() -> None:
+    # Alembic must run before SqlEngine.init_engine / app lifespan so the
+    # schema exists when setup_onyx() queries it. Mirrors the script's
+    # `alembic upgrade head` / `alembic -n schema_private upgrade head`
+    # branch on MULTI_TENANT.
+    from alembic import command
+    from alembic.config import Config
+
+    ini_path = os.path.join(BACKEND_DIR, "alembic.ini")
+    if MULTI_TENANT:
+        cfg = Config(ini_path, ini_section="schema_private")
+    else:
+        cfg = Config(ini_path)
+    # Alembic resolves `script_location = alembic` relative to CWD; pin it
+    # to BACKEND_DIR so tests work regardless of where pytest was invoked.
+    cfg.set_main_option(
+        "script_location",
+        os.path.join(BACKEND_DIR, cfg.get_main_option("script_location") or "alembic"),
+    )
+    command.upgrade(cfg, "head")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _setup_craft_templates(_run_migrations: None) -> None:  # noqa: ARG001
+    # The api_server's build session manager reads OUTPUTS_TEMPLATE_PATH /
+    # VENV_TEMPLATE_PATH at runtime; the templates have to exist on disk
+    # before any /build/sessions test runs. Gated on ENABLE_CRAFT to keep
+    # onyx-lite / multitenant suites fast.
+    if os.getenv("ENABLE_CRAFT", "false").lower() != "true":
+        return
+    subprocess.run(
+        ["bash", os.path.join(BACKEND_DIR, "scripts/setup_craft_templates.sh")],
+        check=True,
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
+    # web_search tests exercise OnyxWebCrawler's Playwright fallback. The
+    # devcontainer ships the apt deps; download the chromium binary here so
+    # the version tracks the lockfile's playwright-python. Playwright has no
+    # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
+    # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
+    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
+        return
+
+    machine = platform.machine().lower()
+    pw_arch = "x64" if machine in ("x86_64", "amd64") else "arm64"
+    env = os.environ.copy()
+    env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = f"ubuntu24.04-{pw_arch}"
+    subprocess.run(["playwright", "install", "chromium"], env=env, check=True)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_db(_run_migrations: None) -> None:  # noqa: ARG001
+    # Make sure that the db engine is initialized before any tests are run
+    SqlEngine.init_engine(
+        pool_size=10,
+        max_overflow=5,
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _configure_celery_eager() -> None:
+    # Replace the supervisord-managed celery worker set with in-thread eager
+    # execution. `.delay()` runs the task synchronously in the calling
+    # thread; chained dispatches (docfetching -> docprocessing) execute
+    # inline so the indexing pipeline still works end-to-end.
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_client(
+    initialize_db: None,  # noqa: ARG001
+    _configure_celery_eager: None,  # noqa: ARG001
+    _setup_craft_templates: None,  # noqa: ARG001
+    _install_playwright: None,  # noqa: ARG001
+) -> Generator[TestClient, None, None]:
+    # In-process api_server. Patch setup_prometheus_metrics to avoid
+    # "Duplicated timeseries" if get_application() is ever called more than
+    # once in the same process. Use TestClient as a context manager so the
+    # real lifespan runs (setup_onyx / file store init / pool metrics).
+    with patch("onyx.main.setup_prometheus_metrics"):
+        app = get_application()
+    with TestClient(app) as test_client:
+        http_client.set_test_client(test_client)
+        try:
+            yield test_client
+        finally:
+            http_client.set_test_client(None)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def seed_dev_license_for_session(initialize_db: None) -> None:  # noqa: ARG001
+    # ``reset_postgres`` re-seeds the dev license after every wipe, but tests
+    # that don't take the ``reset`` fixture would otherwise hit Business-tier
+    # endpoints (e.g. /admin/api-key) with no License row and 402. Seed once at
+    # session start; no-op when ONYX_DEV_LICENSE is unset. Skip in multi-tenant
+    # mode: License rows live in tenant schemas, and the public-schema session
+    # here would seed into the wrong place.
+    if MULTI_TENANT:
+        return
+    with get_session_with_current_tenant() as db_session:
+        _seed_dev_license_if_set(db_session)
 
 
 """NOTE: for some reason using this seems to lead to misc

@@ -1,7 +1,7 @@
 import os
 
 import pytest
-import requests
+from tests.integration.common_utils.http_client import client as requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

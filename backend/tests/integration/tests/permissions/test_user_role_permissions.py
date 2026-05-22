@@ -5,8 +5,7 @@ This file tests the ability of different user types to set the role of other use
 import os
 
 import pytest
-from requests.exceptions import HTTPError
-
+from tests.integration.common_utils.http_client import HTTPError
 from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager

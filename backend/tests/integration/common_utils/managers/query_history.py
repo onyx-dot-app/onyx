@@ -3,9 +3,8 @@ from datetime import datetime
 from urllib.parse import urlencode
 from uuid import UUID
 
-import requests
-from requests.models import CaseInsensitiveDict
-
+from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import CaseInsensitiveDict
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from onyx.configs.constants import QAFeedbackType

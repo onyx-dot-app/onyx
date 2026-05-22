@@ -1,7 +1,6 @@
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.models import UserRole
 from onyx.server.api_key.models import APIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL

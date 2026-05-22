@@ -6,8 +6,7 @@ the permissions of the curator manipulating connectors.
 import os
 
 import pytest
-from requests.exceptions import HTTPError
-
+from tests.integration.common_utils.http_client import HTTPError
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.connector import ConnectorManager

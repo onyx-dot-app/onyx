@@ -1,8 +1,7 @@
 import mimetypes
 from typing import Any
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager

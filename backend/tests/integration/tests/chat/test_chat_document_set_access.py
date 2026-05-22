@@ -14,8 +14,7 @@ import os
 from uuid import UUID
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL

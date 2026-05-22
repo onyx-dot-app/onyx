@@ -22,8 +22,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.build_session import BuildSessionManager

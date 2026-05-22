@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 
 import pytest
-import requests
+from tests.integration.common_utils.http_client import client as requests
 from pydantic import BaseModel
 from pydantic import ConfigDict
 

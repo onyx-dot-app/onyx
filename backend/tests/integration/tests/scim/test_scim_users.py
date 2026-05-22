@@ -26,8 +26,7 @@ from datetime import timezone
 
 import pytest
 import redis
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType

@@ -1,8 +1,7 @@
 import os
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL

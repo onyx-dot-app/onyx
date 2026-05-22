@@ -1,8 +1,7 @@
 from typing import Any
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL

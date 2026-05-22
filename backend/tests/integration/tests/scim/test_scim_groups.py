@@ -18,8 +18,7 @@ User lifecycle tests live in test_scim_users.py.
 """
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL

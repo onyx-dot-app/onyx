@@ -6,8 +6,7 @@ server reports vector_db_enabled=true (i.e. when Vespa is available).
 """
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager

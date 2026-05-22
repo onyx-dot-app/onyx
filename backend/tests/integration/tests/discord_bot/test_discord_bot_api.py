@@ -4,8 +4,7 @@ These tests hit actual API endpoints via HTTP requests.
 """
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.discord_bot import get_discord_service_api_key
 from onyx.db.discord_bot import get_or_create_discord_service_api_key
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

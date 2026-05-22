@@ -3,8 +3,7 @@ from datetime import datetime
 from http import HTTPStatus
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector

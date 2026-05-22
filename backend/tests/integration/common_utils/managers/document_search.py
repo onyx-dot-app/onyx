@@ -1,5 +1,4 @@
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from tests.integration.common_utils.constants import API_SERVER_URL

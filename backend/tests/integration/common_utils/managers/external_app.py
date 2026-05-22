@@ -1,7 +1,6 @@
 from typing import Any
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse

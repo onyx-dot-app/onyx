@@ -10,8 +10,7 @@ from uuid import UUID
 from zipfile import ZipFile
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from ee.onyx.db.usage_export import UsageReportMetadata
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.seeding.chat_history_seeding import seed_chat_history

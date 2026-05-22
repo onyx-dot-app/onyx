@@ -15,8 +15,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.pat import PATManager

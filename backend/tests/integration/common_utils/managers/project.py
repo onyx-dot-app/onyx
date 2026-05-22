@@ -1,7 +1,6 @@
 from typing import List
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot

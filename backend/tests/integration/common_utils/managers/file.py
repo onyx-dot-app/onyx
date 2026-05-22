@@ -5,8 +5,7 @@ from typing import IO
 from typing import List
 from typing import Tuple
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL

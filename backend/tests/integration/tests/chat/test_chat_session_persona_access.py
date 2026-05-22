@@ -8,8 +8,7 @@ import json
 import os
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager

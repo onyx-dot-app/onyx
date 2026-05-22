@@ -1,8 +1,7 @@
 from uuid import UUID
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL

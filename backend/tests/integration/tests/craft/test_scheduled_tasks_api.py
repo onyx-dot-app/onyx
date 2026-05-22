@@ -17,7 +17,7 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
-import requests
+from tests.integration.common_utils.http_client import client as requests
 from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant

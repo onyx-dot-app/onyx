@@ -3,8 +3,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import jwt
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot

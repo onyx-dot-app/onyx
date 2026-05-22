@@ -2,9 +2,8 @@ import uuid
 from typing import Any
 
 import pytest
-import requests
-from requests.models import Response
-
+from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import Response
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens

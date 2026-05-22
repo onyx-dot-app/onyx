@@ -54,8 +54,8 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
 # Install the apt packages Playwright needs to run headless Chromium for
 # the web-search open_url tool. The browser binary itself is downloaded
-# at container start by run-with-backend.sh, so the version always
-# matches the lockfile's playwright-python.
+# from the integration test conftest's _install_playwright fixture so
+# the version always matches the lockfile's playwright-python.
 #
 # Playwright doesn't ship Chromium builds for Ubuntu 26.04 yet, so spoof
 # the host platform to the binary-compatible Ubuntu 24.04 build. Arch

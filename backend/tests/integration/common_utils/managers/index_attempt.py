@@ -3,8 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 from urllib.parse import urlencode
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexModelStatus

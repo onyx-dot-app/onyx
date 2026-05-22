@@ -1,8 +1,7 @@
 import os
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 from tests.integration.common_utils.constants import API_SERVER_URL

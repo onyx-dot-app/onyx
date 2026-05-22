@@ -1,8 +1,7 @@
 import os
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest

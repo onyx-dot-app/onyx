@@ -15,8 +15,7 @@ until files reach COMPLETED before chatting.
 
 import time
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY

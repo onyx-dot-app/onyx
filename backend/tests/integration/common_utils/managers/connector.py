@@ -1,8 +1,7 @@
 from typing import Any
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import ConnectorUpdateRequest

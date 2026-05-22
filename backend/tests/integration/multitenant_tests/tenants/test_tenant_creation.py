@@ -1,8 +1,7 @@
 from http import HTTPStatus
 from uuid import uuid4
 
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole

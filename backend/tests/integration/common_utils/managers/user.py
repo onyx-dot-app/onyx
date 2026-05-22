@@ -3,9 +3,8 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 import pytest
-import requests
-from requests import HTTPError
-
+from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import HTTPError
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import ANONYMOUS_USER_UUID
@@ -85,25 +84,21 @@ class UserManager:
 
     @staticmethod
     def login_as_user(test_user: DATestUser) -> DATestUser:
-        data = urlencode(
-            {
-                "username": test_user.email,
-                "password": test_user.password,
-            }
-        )
+        # httpx encodes dict-shaped `data=` as form-urlencoded itself and
+        # sets the Content-Type header automatically — no need to urlencode
+        # by hand the way the old `requests`-based flow did.
         headers = test_user.headers.copy()
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        headers.pop("Content-Type", None)
 
         response = requests.post(
             url=f"{API_SERVER_URL}/auth/login",
-            data=data,
+            data={"username": test_user.email, "password": test_user.password},
             headers=headers,
         )
 
         response.raise_for_status()
 
-        cookies = response.cookies.get_dict()
-        session_cookie = cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+        session_cookie = response.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
 
         if not session_cookie:
             raise Exception("Failed to login")

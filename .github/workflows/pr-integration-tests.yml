@@ -398,7 +398,6 @@ jobs:
               -e POSTGRES_USE_NULL_POOL=true \
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
-              -e API_SERVER_HOST=127.0.0.1 \
               -e MODEL_SERVER_HOST=inference_model_server \
               -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
@@ -434,16 +433,14 @@ jobs:
               -e OUTPUTS_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs \
               -e VENV_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv \
               -e ONYX_DEV_LICENSE \
-              -e RUN_WITH_BACKEND_MODE=full \
               --entrypoint bash \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              tests/integration/scripts/run-with-backend.sh -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
+              -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down". The test-runner container's
-      # stdout (api_server + celery, routed via supervisord's
-      # log-redirect-handler) is captured directly in the workflow log
-      # for the "Run Integration Tests" step.
+      # stdout (in-process api_server logs from pytest) is captured
+      # directly in the workflow log for the "Run Integration Tests" step.
       - name: Dump all-container logs (optional)
         if: always()
         run: |
@@ -502,9 +499,9 @@ jobs:
           INTEGRATION_TESTS_MODE=true
           EOF
 
-      # The api_server runs inside the test-runner container (started by
-      # tests/integration/scripts/run-with-backend.sh); only Postgres is
-      # needed from compose for Onyx Lite.
+      # The api_server runs in-process inside pytest via FastAPI TestClient
+      # (see tests/integration/conftest.py); only Postgres is needed from
+      # compose for Onyx Lite.
       - name: Start Docker containers (onyx-lite)
         run: |
           cd deployment/docker_compose
@@ -539,7 +536,6 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e API_SERVER_HOST=127.0.0.1 \
               -e DISABLE_VECTOR_DB=true \
               -e FILE_STORE_BACKEND=postgres \
               -e CACHE_BACKEND=postgres \
@@ -547,10 +543,9 @@ jobs:
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              -e RUN_WITH_BACKEND_MODE=api_only \
               --entrypoint bash \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              tests/integration/scripts/run-with-backend.sh -v --tb=short -rs tests/integration/tests/no_vectordb
+              -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb"
 
       - name: Dump all-container logs (onyx-lite)
         if: always()
@@ -646,7 +641,6 @@ jobs:
             -e POSTGRES_USE_NULL_POOL=true \
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
-            -e API_SERVER_HOST=127.0.0.1 \
             -e MODEL_SERVER_HOST=inference_model_server \
             -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
             -e S3_ENDPOINT_URL=http://minio:9000 \
@@ -667,10 +661,9 @@ jobs:
             -e DEV_MODE=true \
             -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
             -e LICENSE_ENFORCEMENT_ENABLED=false \
-            -e RUN_WITH_BACKEND_MODE=full \
             --entrypoint bash \
             ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            tests/integration/scripts/run-with-backend.sh -v --tb=short -rs tests/integration/multitenant_tests
+            -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests"
 
       - name: Dump all-container logs (multi-tenant)
         if: always()

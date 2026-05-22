@@ -16,8 +16,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-import requests
-
+from tests.integration.common_utils.http_client import client as requests
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
