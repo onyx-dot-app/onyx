@@ -193,10 +193,10 @@ func ensureRemoteUser() {
 			setRemoteUserRoot("Rootless Docker detected")
 		}
 	case "darwin":
-		// Docker Desktop on macOS bind-mounts host paths through the Linux
-		// VM as root-owned (no host-UID mapping like native Linux Docker),
-		// so init-dev-user.sh's WS_UID=0 branch always fires and rejects
-		// the non-root `dev` user.
+		// Docker Desktop on macOS bind-mounts host paths through the Linux VM
+		// as root-owned (no host-UID mapping like native Linux Docker), so
+		// init-dev-user.sh's WS_UID=0 branch always fires and rejects the
+		// non-root `dev` user.
 		setRemoteUserRoot("Docker Desktop on macOS")
 	}
 }
