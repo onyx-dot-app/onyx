@@ -11,15 +11,14 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 |------|------|---------|-------------|
 | `variant` | `InputTypeInVariant` | `"primary"` | Visual state |
 | `prefixText` | `string` | — | Non-editable prefix rendered before the input (e.g. `"https://"`) |
-| `leftSearchIcon` | `boolean` | `false` | Show a search icon on the left |
-| `rightSection` | `ReactNode` | — | Custom content rendered to the right of the input (replaces the built-in clear button area) |
-| `showClearButton` | `boolean` | `true` | Show the clear (×) button when the field has a value |
+| `searchIcon` | `boolean` | `false` | Show a search icon on the left |
+| `rightChildren` | `ReactNode` | — | Custom content rendered to the right of the input; suppresses the built-in clear button |
+| `showClearButton` | `boolean` | `false` | Show the clear (×) button when the field has a value (ignored when `rightChildren` is set) |
 | `onClear` | `() => void` | — | Called when the clear button is clicked; omit to use built-in synthetic event |
 | `value` | `string` | — | Controlled value |
 | `onChange` | `ChangeEventHandler` | — | Change handler |
-| `readOnly` | `boolean` | `false` | Adds HTML `readOnly` without the `readOnly` variant styling |
 
-`InputTypeIn` also forwards all standard `<input>` attributes (except `disabled` — use `variant="disabled"` instead).
+`InputTypeIn` also forwards all standard `<input>` attributes (except `disabled` and `readOnly` — use `variant="disabled"` / `variant="readOnly"` instead).
 
 ## Variants
 
@@ -38,7 +37,7 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
 
 // Search
-<InputTypeIn leftSearchIcon placeholder="Search..." value={q} onChange={setQ} />
+<InputTypeIn searchIcon placeholder="Search..." value={q} onChange={(e) => setQ(e.target.value)} />
 
 // Error state
 <InputTypeIn variant="error" value={value} onChange={...} />
@@ -46,11 +45,10 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 // With prefix
 <InputTypeIn prefixText="https://" value={url} onChange={...} />
 
-// Custom right section (password reveal)
+// Custom right section (password reveal) — suppresses clear button automatically
 <InputTypeIn
   value={password}
   onChange={...}
-  showClearButton={false}
-  rightSection={<Button icon={SvgEye} onClick={toggle} prominence="internal" />}
+  rightChildren={<Button icon={SvgEye} onClick={toggle} prominence="internal" />}
 />
 ```

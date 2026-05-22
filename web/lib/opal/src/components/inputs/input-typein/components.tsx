@@ -81,7 +81,7 @@ export default function InputTypeIn({
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
       {searchIcon && (
-        <div className="px-1">
+        <div className="pl-[2px] pr-2">
           <SvgSearch className="w-4 h-4 stroke-text-02" />
         </div>
       )}
@@ -103,7 +103,7 @@ export default function InputTypeIn({
         {...props}
       />
 
-      {showClearButton && !disabled && !isReadOnly && (
+      {showClearButton && !rightChildren && !disabled && !isReadOnly && (
         <div className={cn(!value && "invisible")}>
           <Button
             icon={SvgX}
