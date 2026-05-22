@@ -23,6 +23,7 @@ on:
       - "backend/tests/external_dependency_unit/craft/test_skill_push.py"
       - "backend/tests/external_dependency_unit/craft/test_user_library_sync.py"
       - "backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py"
+      - "backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py"
       - "backend/tests/external_dependency_unit/craft/conftest.py"
       - ".github/workflows/pr-craft-k8s-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
@@ -303,7 +304,8 @@ jobs:
             backend/tests/external_dependency_unit/craft/test_idle_cleanup.py \
             backend/tests/external_dependency_unit/craft/test_skill_push.py \
             backend/tests/external_dependency_unit/craft/test_user_library_sync.py \
-            backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py
+            backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py \
+            backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py
 
       - name: Disk and docker status on failure
         if: failure()
