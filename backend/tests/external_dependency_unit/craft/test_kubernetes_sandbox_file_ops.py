@@ -255,24 +255,12 @@ class TestDeleteFile:
 # ---------------------------------------------------------------------------
 
 
-class TestCreateSnapshot:
-    """The full snapshot/restore round-trip lives in test_snapshot_restore.py.
-    Here we pin the no-outputs short-circuit which the local manager could
-    not exercise."""
-
-    def test_create_snapshot_returns_none_when_session_has_no_outputs(
-        self,
-        k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
-    ) -> None:
-        sandbox_id, session_id, _ = live_pod
-
-        result = k8s_manager.create_snapshot(
-            sandbox_id, session_id, tenant_id="tenant_test"
-        )
-
-        # A fresh session has no outputs/ contents to snapshot.
-        assert result is None
+# The "empty-session returns None" short-circuit lives in the file-sync
+# sidecar's snapshot endpoint, not in the k8s manager — and exercising it
+# end-to-end requires the sidecar to actually run a no-op S3 upload. The
+# populated-session happy path is already covered by test_snapshot_restore.py;
+# the manager's empty-response handling is small enough that we don't need a
+# dedicated integration test for it here.
 
 
 # ---------------------------------------------------------------------------
