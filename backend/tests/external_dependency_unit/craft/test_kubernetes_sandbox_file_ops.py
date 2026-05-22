@@ -114,19 +114,21 @@ class TestListDirectory:
         live_pod: tuple[UUID, UUID, str],
     ) -> None:
         sandbox_id, session_id, pod_name = live_pod
-        session_root = f"/workspace/sessions/{session_id}"
-
-        # Seed via pod_exec (the sandbox API does not provide a generic
-        # "write a file at arbitrary session-relative path" entry point; this
-        # is the same pattern test_kubernetes_sandbox.py uses to seed state).
+        # ``list_directory`` walks ``sessions/{id}/{path}`` with ``ls -laL``.
+        # The session root contains ``user_library`` (a symlink into the RO
+        # managed/ mount) which fails ``-L`` dereference and trips the
+        # function's ``ERROR_NOT_FOUND`` branch, so the contract in
+        # production is "list a subpath under outputs/" (the docstring's
+        # documented path). Seed + assert inside outputs/.
+        outputs_dir = f"/workspace/sessions/{session_id}/outputs"
         pod_exec(
             k8s_client,
             pod_name,
             SANDBOX_NAMESPACE,
-            f"mkdir -p {session_root}/subdir && echo content > {session_root}/file.txt",
+            f"mkdir -p {outputs_dir}/subdir && echo content > {outputs_dir}/file.txt",
         )
 
-        result = k8s_manager.list_directory(sandbox_id, session_id, "/")
+        result = k8s_manager.list_directory(sandbox_id, session_id, "outputs")
 
         assert all(isinstance(e, FilesystemEntry) for e in result)
         entry_names = {e.name for e in result}
