@@ -1,10 +1,11 @@
 from typing import Any
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser

@@ -1,6 +1,5 @@
 """Manager for Discord bot API integration tests."""
 
-from tests.integration.common_utils.http_client import client
 from onyx.db.discord_bot import create_channel_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import register_guild
@@ -9,6 +8,7 @@ from onyx.db.utils import DiscordChannelView
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestDiscordChannelConfig
 from tests.integration.common_utils.test_models import DATestDiscordGuildConfig
 from tests.integration.common_utils.test_models import DATestUser

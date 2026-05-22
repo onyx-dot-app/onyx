@@ -1,6 +1,6 @@
-from tests.integration.common_utils.http_client import client
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
+from tests.integration.common_utils.http_client import client
 
 
 def test_create_chat_session_and_send_messages() -> None:

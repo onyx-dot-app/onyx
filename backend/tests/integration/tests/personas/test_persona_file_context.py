@@ -15,10 +15,10 @@ until files reach COMPLETED before chatting.
 
 import time
 
-from tests.integration.common_utils.http_client import client
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager

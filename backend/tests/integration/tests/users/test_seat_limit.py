@@ -9,7 +9,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import redis
-from tests.integration.common_utils.http_client import client
+
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
@@ -19,6 +19,7 @@ from onyx.configs.app_configs import REDIS_PORT
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 
 # TenantRedis prefixes every key with "{tenant_id}:".

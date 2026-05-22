@@ -15,9 +15,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
-from tests.integration.common_utils.http_client import client
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser

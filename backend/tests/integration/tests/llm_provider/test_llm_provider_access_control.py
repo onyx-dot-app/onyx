@@ -1,7 +1,6 @@
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +22,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager

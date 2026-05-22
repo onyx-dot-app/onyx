@@ -2,8 +2,9 @@ import os
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser

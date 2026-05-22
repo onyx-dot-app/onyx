@@ -5,8 +5,6 @@ from typing import Literal
 from typing import TypedDict
 from uuid import UUID
 
-from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import Response
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileDescriptor
@@ -16,6 +14,8 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.http_client import Response
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser

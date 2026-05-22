@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager

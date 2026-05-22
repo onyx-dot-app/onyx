@@ -1,7 +1,7 @@
 """Integration tests for MCP Server auth delegated to API /me."""
 
-from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import MCP_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
 

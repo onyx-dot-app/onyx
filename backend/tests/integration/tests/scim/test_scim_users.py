@@ -26,7 +26,7 @@ from datetime import timezone
 
 import pytest
 import redis
-from tests.integration.common_utils.http_client import client
+
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
@@ -38,6 +38,7 @@ from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import build_email

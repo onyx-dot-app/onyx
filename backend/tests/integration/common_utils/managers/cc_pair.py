@@ -4,7 +4,7 @@ from typing import Any
 from uuid import uuid4
 
 import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
-from tests.integration.common_utils.http_client import client
+
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -17,6 +17,7 @@ from onyx.server.documents.models import DocumentSyncStatus
 from tests.integration.common_utils.config import api_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.test_models import DATestCCPair

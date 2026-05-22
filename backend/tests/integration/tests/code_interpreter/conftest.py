@@ -1,8 +1,9 @@
 from collections.abc import Generator
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 CODE_INTERPRETER_URL = f"{API_SERVER_URL}/admin/code-interpreter"

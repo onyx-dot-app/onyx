@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import register_guild
@@ -19,6 +19,7 @@ from onyx.server.manage.discord_bot.utils import generate_discord_registration_k
 from onyx.server.manage.discord_bot.utils import parse_discord_registration_key
 from onyx.server.manage.discord_bot.utils import REGISTRATION_KEY_PREFIX
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 

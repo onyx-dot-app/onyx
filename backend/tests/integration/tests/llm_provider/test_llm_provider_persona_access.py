@@ -5,9 +5,10 @@ Integration tests for LLM Provider persona access authorization.
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager

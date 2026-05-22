@@ -7,8 +7,9 @@ Uses module-scoped fixtures to reset DB and create users once per module for fas
 """
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.image_generation import (
     ImageGenerationConfigManager,
 )

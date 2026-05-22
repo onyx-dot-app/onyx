@@ -9,9 +9,9 @@ response body verbatim. This test pins the contract:
   match keeps working.
 """
 
-from tests.integration.common_utils.http_client import client
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 
 _BEDROCK_MODEL = "us.amazon.nova-2-lite-v1:0"

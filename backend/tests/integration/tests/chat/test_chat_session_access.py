@@ -1,11 +1,12 @@
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import HTTPError
+
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.http_client import HTTPError
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD

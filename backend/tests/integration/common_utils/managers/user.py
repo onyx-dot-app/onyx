@@ -3,8 +3,7 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import HTTPError
+
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import ANONYMOUS_USER_UUID
@@ -15,6 +14,8 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.http_client import HTTPError
 from tests.integration.common_utils.test_models import DATestUser
 
 DOMAIN = "example.com"

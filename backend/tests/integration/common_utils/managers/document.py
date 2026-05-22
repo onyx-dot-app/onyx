@@ -1,6 +1,5 @@
 from uuid import uuid4
 
-from tests.integration.common_utils.http_client import client
 from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +10,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser

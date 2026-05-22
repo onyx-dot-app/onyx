@@ -3,7 +3,6 @@ from datetime import datetime
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from tests.integration.common_utils.http_client import client
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexModelStatus
@@ -14,6 +13,7 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestIndexAttempt
 from tests.integration.common_utils.test_models import DATestUser
 

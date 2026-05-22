@@ -3,7 +3,7 @@ from datetime import datetime
 from http import HTTPStatus
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
@@ -18,6 +18,7 @@ from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 

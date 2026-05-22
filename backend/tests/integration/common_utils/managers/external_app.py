@@ -1,12 +1,12 @@
 from typing import Any
 
-from tests.integration.common_utils.http_client import client
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"

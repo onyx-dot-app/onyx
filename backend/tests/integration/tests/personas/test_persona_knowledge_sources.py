@@ -7,9 +7,9 @@ nodes, attached documents, and user files.  These tests verify that the
 field is populated correctly.
 """
 
-from tests.integration.common_utils.http_client import client
 from onyx.configs.constants import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_file_utils import create_test_text_file

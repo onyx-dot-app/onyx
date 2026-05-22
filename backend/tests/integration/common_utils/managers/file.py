@@ -5,10 +5,10 @@ from typing import IO
 from typing import List
 from typing import Tuple
 
-from tests.integration.common_utils.http_client import client
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 

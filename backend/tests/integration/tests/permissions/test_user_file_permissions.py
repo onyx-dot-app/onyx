@@ -16,7 +16,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client
+
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -29,6 +29,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
