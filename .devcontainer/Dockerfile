@@ -52,18 +52,20 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
-# Playwright doesn't ship Chromium builds for Ubuntu 26.04 yet; tell it
-# to use the Ubuntu 24.04 build instead (binary-compatible glibc).
-# Pinned both at image-build (install-deps below) and at runtime
-# (run-with-backend.sh's `playwright install chromium`).
-ENV PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-arm64
-
 # Install the apt packages Playwright needs to run headless Chromium for
 # the web-search open_url tool. The browser binary itself is downloaded
 # at container start by run-with-backend.sh, so the version always
 # matches the lockfile's playwright-python.
+#
+# Playwright doesn't ship Chromium builds for Ubuntu 26.04 yet, so spoof
+# the host platform to the binary-compatible Ubuntu 24.04 build. Arch
+# is detected from dpkg so both arm64 CI runners and x64 dev machines
+# work; we don't bake the override into ENV because that would leak
+# into interactive dev shells where it might mask real problems.
 RUN apt-get update \
-  && uvx --quiet --from playwright playwright install-deps chromium \
+  && PW_ARCH=$(case $(dpkg --print-architecture) in amd64) echo x64;; arm64) echo arm64;; esac) \
+  && PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-${PW_ARCH} \
+       uvx --quiet --from playwright playwright install-deps chromium \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python 3.11 via uv into a stable, image-level path so venvs

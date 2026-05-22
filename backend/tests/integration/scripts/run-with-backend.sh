@@ -36,8 +36,12 @@ if [[ "$MODE" != "api_only" ]]; then
     # The web_search tests exercise OnyxWebCrawler's Playwright fallback.
     # The devcontainer image ships the apt deps; download the browser
     # binary here so its version tracks the lockfile's playwright-python.
-    echo "==> Installing Playwright Chromium browser"
-    uv run --no-sync playwright install chromium
+    # Playwright has no ubuntu26.04 Chromium build yet — pin to the
+    # binary-compatible 24.04 build, matching the host's arch.
+    PW_ARCH=$(case $(dpkg --print-architecture) in amd64) echo x64;; arm64) echo arm64;; esac)
+    echo "==> Installing Playwright Chromium browser (ubuntu24.04-${PW_ARCH})"
+    PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-${PW_ARCH} \
+        uv run --no-sync playwright install chromium
 fi
 
 SUPERVISORD_PID=""
