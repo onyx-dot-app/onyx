@@ -14,6 +14,7 @@ from github import Github
 from github import RateLimitExceededException
 from github import Repository
 from github.GithubException import GithubException
+from github.GithubException import UnknownObjectException
 from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
@@ -46,6 +47,7 @@ from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -74,6 +76,23 @@ GITHUB_INDEXABLE_FILE_EXTENSIONS = {
     ".rst",
     ".txt",
 }
+# Common documentation files that conventionally have no extension. Matched
+# case-insensitively against the file's basename (stem before any extension).
+GITHUB_INDEXABLE_FILENAMES = {
+    "readme",
+    "license",
+    "licence",
+    "changelog",
+    "contributing",
+    "authors",
+    "notice",
+    "copying",
+    "install",
+    "maintainers",
+    "codeowners",
+    "security",
+    "support",
+}
 # Path segments whose presence anywhere in a file's path excludes it.
 GITHUB_PATH_DENYLIST = {
     ".git",
@@ -93,20 +112,27 @@ FILE_BATCH_SIZE = 100
 def _is_indexable_path(path: str, size: int | None) -> bool:
     """Pure predicate: should this repo file be indexed?
 
-    Filters on extension allowlist, max size, and a path-segment denylist.
+    Filters on a max size and path-segment denylist, then matches either a
+    document extension (.md, .txt, ...) or a conventional extensionless
+    document basename (README, LICENSE, ...).
     """
     if size is not None and size > GITHUB_MAX_FILE_SIZE_BYTES:
-        return False
-
-    _, extension = os.path.splitext(path)
-    if extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS:
         return False
 
     segments = set(path.split("/"))
     if segments & GITHUB_PATH_DENYLIST:
         return False
 
-    return True
+    basename = path.rsplit("/", 1)[-1]
+    _, extension = os.path.splitext(basename)
+    if extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return True
+
+    # Extensionless docs like README / LICENSE (basename has no extension).
+    if not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES:
+        return True
+
+    return False
 
 
 # Cases
@@ -258,6 +284,16 @@ def _get_batch_rate_limited(
             github_client,
             attempt_num + 1,
         )
+    except UnknownObjectException:
+        # 404 on the listing endpoint means the collection is unavailable for
+        # this repo (e.g. pull requests or issues are disabled on a mirror).
+        # Treat it as empty so the connector skips the stage instead of crashing.
+        logger.warning(
+            "Got 404 listing objects (page %s); treating as empty. "
+            "The pull requests or issues feature is likely disabled for this repo.",
+            page_num,
+        )
+        return
     except GithubException as e:
         if not (
             e.status == 422
@@ -691,10 +727,12 @@ class GithubConnector(
 
     def _list_indexable_files(
         self, repo: Repository.Repository, attempt_num: int = 0
-    ) -> list[str]:
+    ) -> tuple[list[str], bool]:
         """Resolve the repo's default-branch tree and return indexable file paths.
 
-        Returns paths sorted for stable checkpoint pagination.
+        Returns (sorted paths, truncated) where `truncated` is True when GitHub
+        capped the recursive tree (>100k entries or >7MB), meaning some files
+        could not be enumerated and will be missing from the index.
         """
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
             raise RuntimeError(
@@ -704,7 +742,8 @@ class GithubConnector(
         assert self.github_client is not None  # mypy
         try:
             git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
-            if git_tree.raw_data.get("truncated"):
+            truncated = bool(git_tree.raw_data.get("truncated"))
+            if truncated:
                 logger.error(
                     "Git tree for repo %s was truncated by GitHub; "
                     "some files will not be indexed",
@@ -717,7 +756,7 @@ class GithubConnector(
                 and _is_indexable_path(element.path, element.size)
             ]
             paths.sort()
-            return paths
+            return paths, truncated
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
             return self._list_indexable_files(repo, attempt_num + 1)
@@ -972,12 +1011,26 @@ class GithubConnector(
                     checkpoint.file_paths = []
                 else:
                     logger.info("Listing files for repo: %s", repo.name)
-                    checkpoint.file_paths = self._list_indexable_files(repo)
+                    paths, truncated = self._list_indexable_files(repo)
+                    checkpoint.file_paths = paths
                     logger.info(
                         "Found %s indexable files for repo: %s",
-                        len(checkpoint.file_paths),
+                        len(paths),
                         repo.name,
                     )
+                    # Surface truncation as a failure so the incomplete index is
+                    # visible in the connector UI, not just buried in logs.
+                    if truncated and not is_slim:
+                        yield ConnectorFailure(
+                            failed_entity=EntityFailure(
+                                entity_id=f"{repo.full_name}:files",
+                            ),
+                            failure_message=(
+                                f"GitHub truncated the file tree for "
+                                f"{repo.full_name}; some files could not be "
+                                f"enumerated and were not indexed."
+                            ),
+                        )
 
             file_paths = checkpoint.file_paths
             page = checkpoint.curr_page
