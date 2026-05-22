@@ -22,15 +22,11 @@ function findCss(dir) {
   return out;
 }
 
-const colorsCss = join(srcDir, "styles", "colors.css");
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
 const allCss = findCss(srcDir).sort();
-// colors.css is a standalone artifact (dist/colors.css) — exclude from the main bundle.
 // _reference.css and root.css have fixed positions in the bundle (first and second).
-const leafCss = allCss.filter(
-  (p) => p !== referenceCss && p !== rootCss && p !== colorsCss
-);
+const leafCss = allCss.filter((p) => p !== referenceCss && p !== rootCss);
 // _reference.css carries `@import "tailwindcss"` + `@config` and must come
 // first. root.css follows so design tokens are defined before any rule that
 // consumes them. The remaining files are concatenated alphabetically.
@@ -77,25 +73,8 @@ const parts = order.map((file) => {
 
 const bundled = parts.join("\n");
 writeFileSync(join(distDir, "styles.css"), bundled);
+writeFileSync(join(distDir, "root.css"), bundled);
 
 console.log(
-  `bundled ${order.length} css file(s) -> dist/styles.css (${bundled.length} bytes)`
+  `bundled ${order.length} css file(s) -> dist/styles.css + dist/root.css (${bundled.length} bytes)`
 );
-
-// colors.css is a standalone design-token file — copy it verbatim to dist/.
-// Consumers import it separately so they can override with their own theme.
-const colorsRaw = readFileSync(colorsCss, "utf8");
-writeFileSync(join(distDir, "colors.css"), colorsRaw);
-
-console.log(`copied colors.css -> dist/colors.css (${colorsRaw.length} bytes)`);
-
-// root.css = single-import entry point: _reference.css must be first so that
-// @import "tailwindcss" precedes all :root {} declarations (CSS requires @import
-// before any non-@charset/non-@layer rules). Colors are inserted after the
-// reference header; the rest of the bundle follows.
-const [refPart, ...remainingParts] = parts;
-const colorPart = `/* === colors.css === */\n${colorsRaw.trimEnd()}\n`;
-const rootBundled = [refPart, colorPart, ...remainingParts].join("\n");
-writeFileSync(join(distDir, "root.css"), rootBundled);
-
-console.log(`bundled root.css -> dist/root.css (${rootBundled.length} bytes)`);
