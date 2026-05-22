@@ -215,6 +215,12 @@ def _start_celery_workers(
     # config nor any monkey-patches from this conftest, so it dispatches via
     # the broker. Without real consumers, those tasks pile up forever and
     # every wait_for_indexing_completion / pruning / export test times out.
+    # Onyx-lite has no vector DB / indexing pipeline, so spawning the fleet
+    # there is pure overhead.
+    if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
+        yield None
+        return
+
     log_dir = os.path.join(BACKEND_DIR, "log")
     os.makedirs(log_dir, exist_ok=True)
 
