@@ -36,6 +36,7 @@ from onyx.db.notification import create_notification
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
+from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
@@ -49,7 +50,9 @@ PARSER_MAX_BODY_BYTES = 1_048_576
 
 
 class _Resolver(Protocol):
-    def resolve(self, src_ip: str) -> SessionContext | None: ...
+    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
+
+    def resolve_active_session(self, user_id: UUID, tenant_id: str) -> UUID | None: ...
 
 
 DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
@@ -59,6 +62,7 @@ CacheFactory = Callable[[str], CacheBackend]
 # 403 codes exposed to the sandbox-side caller. This is a separate
 # protocol from `OnyxError` — the sandbox sees only this enum.
 _CODE_UNIDENTIFIED_SANDBOX = "unidentified_sandbox"
+_CODE_NO_ACTIVE_SESSION = "no_active_session"
 _CODE_BODY_TOO_LARGE = "body_too_large"
 _CODE_USER_REJECTED = "user_rejected"
 _CODE_NOT_AUTHORIZED = "not_authorized"
@@ -162,15 +166,21 @@ class GateAddon:
     def _resolve_and_match(
         self, flow: http.HTTPFlow
     ) -> tuple[SessionContext, ActionMatch] | None:
-        """Identity + body-size + matcher dispatch.
+        """Identity → matcher → (only if gated) active-session lookup.
 
         Returns `(ctx, match)` to proceed. Two `None` shapes:
 
         * fail-closed — sets `flow.response` to a 403 before
-          returning (unidentified sandbox, oversize body).
+          returning (unidentified sandbox, oversize body, gated
+          request but no active session to route the card to).
         * fail-open — returns `None` without touching the response
           (matcher crash, non-matching request); mitmproxy then
           forwards the request unchanged.
+
+        Session liveness is intentionally checked LAST. Non-gated
+        traffic (npm install, apt, pip, etc.) is identified at the
+        pod level but doesn't need an active session — startup-time
+        and inter-session egress shouldn't depend on session state.
         """
         src_ip = self._extract_src_ip(flow)
         if src_ip is None:
@@ -178,7 +188,7 @@ class GateAddon:
             return None
 
         try:
-            ctx = self._identity.resolve(src_ip)
+            sandbox = self._identity.resolve_sandbox(src_ip)
         except Exception:
             # A DB blip can't be allowed to grant ungated egress.
             logger.exception(
@@ -188,7 +198,7 @@ class GateAddon:
             )
             flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
             return None
-        if ctx is None:
+        if sandbox is None:
             flow.response = _http_403(_CODE_UNIDENTIFIED_SANDBOX)
             return None
 
@@ -213,6 +223,34 @@ class GateAddon:
         if match is None:
             return None
 
+        # Gated — now we need a session to route the card to.
+        try:
+            session_id = self._identity.resolve_active_session(
+                sandbox.user_id, sandbox.tenant_id
+            )
+        except Exception:
+            logger.exception(
+                "gate.session_lookup_error sandbox_id=%s user_id=%s host=%s",
+                sandbox.sandbox_id,
+                sandbox.user_id,
+                flow.request.host,
+            )
+            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            return None
+        if session_id is None:
+            logger.info(
+                "gate.no_active_session sandbox_id=%s user_id=%s "
+                "tenant_id=%s action_type=%s host=%s",
+                sandbox.sandbox_id,
+                sandbox.user_id,
+                sandbox.tenant_id,
+                match.action_type,
+                flow.request.host,
+            )
+            flow.response = _http_403(_CODE_NO_ACTIVE_SESSION)
+            return None
+
+        ctx = sandbox.with_session(session_id)
         logger.info(
             "gate.match session_id=%s tenant_id=%s sandbox_id=%s "
             "action_type=%s host=%s",

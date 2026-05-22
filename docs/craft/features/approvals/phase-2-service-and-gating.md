@@ -30,11 +30,14 @@ deep-link to the same session.
 
 ## Phase 1 context
 
-- `SessionContext` shape: `session_id, user_id, sandbox_id, tenant_id, sandbox_name, sandbox_ip`. Phase 2 reads `session_id`, `user_id`, and `tenant_id`. The session owner (`user_id` on the parent `build_session`) is the only authorized decider.
+- Identity is two-phase. `ResolvedSandbox` (pod IP → `sandbox_id, user_id, tenant_id, sandbox_name, sandbox_ip`) is returned by `IdentityResolver.resolve_sandbox(src_ip)` and is sufficient to authorize egress. `SessionContext` adds `session_id`, built by `resolved.with_session(session_id)` after `IdentityResolver.resolve_active_session(user_id, tenant_id)` returns the most-recently-active `BuildSession`. The session owner (`user_id` on the parent `build_session`) is the only authorized decider.
 - Proxy `main()` already calls `SqlEngine.init_engine(pool_size=4, max_overflow=4)`. The gate addon reuses this engine via a per-tenant session factory.
 - Identity resolution is owned by the gate addon itself: every flow
-  goes through `self._identity.resolve(src_ip)`. The gate does not
-  read `flow.metadata` for session context.
+  starts with `self._identity.resolve_sandbox(src_ip)`. The gate does
+  not read `flow.metadata` for session context. Session lookup is
+  deferred until after the matcher confirms the request is gated, so
+  non-gated egress (npm install, apt update, etc.) doesn't depend on
+  having an active session.
 
 ## Module layout
 
@@ -637,27 +640,39 @@ class GateAddon:
                 self._terminalize_after_unhandled_error(approval_id, ctx.tenant_id)
 ```
 
-`_resolve_and_match` resolves identity, enforces the body-size cap,
-and dispatches to the matcher. Identity resolution is owned in-line
-by the gate — every flow calls `self._identity.resolve(src_ip)`
-directly. There is no `flow.metadata` fast path.
+`_resolve_and_match` is the entry funnel: identity → body-size cap →
+matcher → (only on gated requests) active-session lookup. Identity
+resolution is owned in-line by the gate — every flow calls
+`self._identity.resolve_sandbox(src_ip)` directly. There is no
+`flow.metadata` fast path.
+
+Phase ordering matters: the **active session is checked last**, only
+after the matcher has confirmed the request is gated. Non-gated
+traffic (npm install, apt update, pip, anything outside the matcher
+registry) is authorized purely by pod identity, so startup-time and
+inter-session egress flow even when the user has no ACTIVE session.
 
 **Fail-closed paths** set `flow.response` to a 403 and return `None`:
 
 - No source IP on `flow.client_conn.peername` → `unidentified_sandbox`.
-- `identity.resolve()` raises → log `gate.identity_error`,
+- `identity.resolve_sandbox()` raises → log `gate.identity_error`,
   `unidentified_sandbox`. A DB blip cannot grant ungated egress.
-- `identity.resolve()` returns `None` → `unidentified_sandbox`.
+- `identity.resolve_sandbox()` returns `None` → `unidentified_sandbox`.
 - `flow.request.raw_content is None` → `body_too_large`. Defensive
   against a future addon enabling `stream=True`; we don't enable
   streaming today.
 - `len(raw_content) > PARSER_MAX_BODY_BYTES` → `body_too_large`.
+- Gated request, but `identity.resolve_active_session()` returns
+  `None` (or raises) → log `gate.no_active_session` /
+  `gate.session_lookup_error`, `no_active_session`. We can't mint
+  an approval without a session to route the card to.
 
 **Fail-open paths** return `None` without touching `flow.response`
 (mitmproxy then forwards the request unchanged):
 
 - `matcher.match(...)` raises → log `gate.matcher_error`.
-- `matcher.match(...)` returns `None` — request isn't gated.
+- `matcher.match(...)` returns `None` — request isn't gated. Pod
+  identity has already been confirmed; no session lookup runs.
 
 `_persist_approval_row` commits the row, registers it for the drain,
 and pushes onto the session's announce list:
@@ -768,7 +783,7 @@ def _write_response_for_decision(
 
 **Sandbox-facing 403 enum.** The proxy's 403 body is a separate
 protocol from `OnyxError`. Locked enum:
-`unidentified_sandbox | body_too_large | user_rejected | not_authorized | internal_error`.
+`unidentified_sandbox | no_active_session | body_too_large | user_rejected | not_authorized | internal_error`.
 `policy_denied` is reserved for Phase 4. The body is
 `json.dumps({"error": code})` with `content-type: application/json`.
 Matcher exceptions do not produce 403s — they fail open per T2.6.

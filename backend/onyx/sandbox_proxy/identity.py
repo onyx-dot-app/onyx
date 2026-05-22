@@ -1,8 +1,19 @@
-"""Source-IP → BuildSession resolution for the egress proxy.
+"""Source-IP → sandbox identity (+ optional active session) resolution.
 
 The IP-to-sandbox step is backend-specific (`SandboxIPLookup`
-Protocol). Downstream resolution — sandbox → user → active session —
-is backend-agnostic and lives on `IdentityResolver`.
+Protocol). Downstream resolution lives on `IdentityResolver`, split
+into two phases:
+
+* `resolve_sandbox()` — pod IP → sandbox + user + tenant. Used for
+  every request to enforce "only known sandbox pods may egress".
+* `resolve_active_session()` — user → active `BuildSession`. Only
+  needed when a request is gated and we need somewhere to route the
+  approval card.
+
+Splitting the two lets non-gated traffic (npm install, apt update,
+etc.) flow whenever the pod is identified, even if the user has no
+ACTIVE session at that moment — startup-time and inter-session
+egress shouldn't depend on session liveness.
 """
 
 from collections.abc import Callable
@@ -25,6 +36,8 @@ logger = setup_logger()
 
 @dataclass(frozen=True)
 class SandboxIdentity:
+    """Pod-level identity. Available for any identified sandbox pod."""
+
     sandbox_id: UUID
     tenant_id: str
     sandbox_name: str
@@ -32,7 +45,40 @@ class SandboxIdentity:
 
 
 @dataclass(frozen=True)
+class ResolvedSandbox:
+    """Sandbox identity + the user that owns it.
+
+    Returned by `resolve_sandbox()`. Sufficient to authorize egress
+    and (when combined with `resolve_active_session()`) to mint an
+    approval row.
+    """
+
+    sandbox_id: UUID
+    user_id: UUID
+    tenant_id: str
+    sandbox_name: str
+    sandbox_ip: str
+
+    def with_session(self, session_id: UUID) -> "SessionContext":
+        return SessionContext(
+            session_id=session_id,
+            user_id=self.user_id,
+            sandbox_id=self.sandbox_id,
+            tenant_id=self.tenant_id,
+            sandbox_name=self.sandbox_name,
+            sandbox_ip=self.sandbox_ip,
+        )
+
+
+@dataclass(frozen=True)
 class SessionContext:
+    """Sandbox identity + active session id.
+
+    Built from `ResolvedSandbox.with_session(session_id)` once the gate
+    has confirmed both that the request is gated and that there's an
+    active session to route the approval card to.
+    """
+
     session_id: UUID
     user_id: UUID
     sandbox_id: UUID
@@ -79,7 +125,13 @@ class IdentityResolver:
             else _default_session_factory
         )
 
-    def resolve(self, src_ip: str) -> SessionContext | None:
+    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None:
+        """Pod IP → owning user + tenant. No session lookup.
+
+        Returns `None` for an unknown source IP or a sandbox row with
+        no owning user. Active-session liveness is deliberately not
+        checked here — gate the call site instead.
+        """
         identity = self._ip_lookup.lookup(src_ip)
         if identity is None:
             return None
@@ -89,18 +141,22 @@ class IdentityResolver:
             if user_id is None:
                 return None
 
-            session_id = self._fetch_active_session(db, user_id)
-            if session_id is None:
-                return None
-
-        return SessionContext(
-            session_id=session_id,
-            user_id=user_id,
+        return ResolvedSandbox(
             sandbox_id=identity.sandbox_id,
+            user_id=user_id,
             tenant_id=identity.tenant_id,
             sandbox_name=identity.sandbox_name,
             sandbox_ip=identity.sandbox_ip,
         )
+
+    def resolve_active_session(self, user_id: UUID, tenant_id: str) -> UUID | None:
+        """Most-recently-active `BuildSession` for the user, or None.
+
+        Called only on gated requests, where we need a session_id to
+        route the approval card.
+        """
+        with self._session_factory(tenant_id) as db:
+            return self._fetch_active_session(db, user_id)
 
     def _fetch_sandbox_user(self, db: Session, sandbox_id: UUID) -> UUID | None:
         stmt = select(Sandbox.user_id).where(Sandbox.id == sandbox_id)
