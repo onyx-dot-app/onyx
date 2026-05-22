@@ -56,6 +56,9 @@ function stripIntraPackageImports(source, filePath) {
   return source.replace(
     /@import\s+['"]([^'"]+)['"];\s*\n?/gm,
     (match, importPath) => {
+      // Only relative imports (starting with . or ..) can be intra-package.
+      // Bare specifiers like "tailwindcss" are external packages and must be kept.
+      if (!importPath.startsWith(".")) return match;
       const resolved = resolve(fileDir, importPath);
       return resolved.startsWith(srcDir + sep) ? "" : match;
     }
