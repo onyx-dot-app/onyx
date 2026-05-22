@@ -8,6 +8,7 @@ import pytest
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
@@ -26,7 +27,7 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> client.Response:
+) -> httpx.Response:
     return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},

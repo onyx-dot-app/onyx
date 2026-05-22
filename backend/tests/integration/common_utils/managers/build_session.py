@@ -15,6 +15,7 @@ from uuid import UUID
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -30,7 +31,7 @@ def _build_url(*parts: str) -> str:
     return f"{API_SERVER_URL}/build/" + "/".join(parts)
 
 
-def _parse_sse_lines(response: client.Response) -> Iterator[dict[str, Any]]:
+def _parse_sse_lines(response: httpx.Response) -> Iterator[dict[str, Any]]:
     """Yield decoded JSON payloads from an SSE stream.
 
     The send-message endpoint emits Server-Sent Events: ``data: {...}\\n\\n``.
@@ -143,12 +144,12 @@ class BuildSessionManager:
         # registered on the messages_router which mounts at /build (the
         # router itself declares the /sessions/... prefix).
         url = _build_url("sessions", str(session_id), "send-message")
-        with client.post(
+        with client.stream(
+            "POST",
             url,
             json={"content": content},
             headers=user.headers,
             cookies=user.cookies,
-            stream=True,
         ) as response:
             response.raise_for_status()
             yield from _parse_sse_lines(response)

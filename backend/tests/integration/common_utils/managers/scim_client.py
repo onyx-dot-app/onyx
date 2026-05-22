@@ -1,5 +1,6 @@
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+import httpx
 from tests.integration.common_utils.http_client import client
 
 
@@ -14,7 +15,7 @@ class ScimClient:
         }
 
     @staticmethod
-    def get(path: str, raw_token: str) -> client.Response:
+    def get(path: str, raw_token: str) -> httpx.Response:
         return client.get(
             f"{API_SERVER_URL}/scim/v2{path}",
             headers=ScimClient._headers(raw_token),
@@ -22,7 +23,7 @@ class ScimClient:
         )
 
     @staticmethod
-    def post(path: str, raw_token: str, json: dict) -> client.Response:
+    def post(path: str, raw_token: str, json: dict) -> httpx.Response:
         return client.post(
             f"{API_SERVER_URL}/scim/v2{path}",
             json=json,
@@ -31,7 +32,7 @@ class ScimClient:
         )
 
     @staticmethod
-    def put(path: str, raw_token: str, json: dict) -> client.Response:
+    def put(path: str, raw_token: str, json: dict) -> httpx.Response:
         return client.put(
             f"{API_SERVER_URL}/scim/v2{path}",
             json=json,
@@ -40,7 +41,7 @@ class ScimClient:
         )
 
     @staticmethod
-    def patch(path: str, raw_token: str, json: dict) -> client.Response:
+    def patch(path: str, raw_token: str, json: dict) -> httpx.Response:
         return client.patch(
             f"{API_SERVER_URL}/scim/v2{path}",
             json=json,
@@ -49,7 +50,7 @@ class ScimClient:
         )
 
     @staticmethod
-    def delete(path: str, raw_token: str) -> client.Response:
+    def delete(path: str, raw_token: str) -> httpx.Response:
         return client.delete(
             f"{API_SERVER_URL}/scim/v2{path}",
             headers=ScimClient._headers(raw_token),
@@ -57,7 +58,7 @@ class ScimClient:
         )
 
     @staticmethod
-    def get_no_auth(path: str) -> client.Response:
+    def get_no_auth(path: str) -> httpx.Response:
         return client.get(
             f"{API_SERVER_URL}/scim/v2{path}",
             headers=GENERAL_HEADERS,

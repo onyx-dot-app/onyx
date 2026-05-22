@@ -15,6 +15,7 @@ import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
@@ -44,7 +45,7 @@ def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
     try:
         for _ in BuildSessionManager.send_message(user, session_id, "hello"):
             break
-    except client.exceptions.ChunkedEncodingError:
+    except httpx.RemoteProtocolError:
         pass
 
 
@@ -235,7 +236,7 @@ def test_restore_session_returns_409_when_lock_held(
                 cookies=admin_user.cookies,
             )
             results.append(r.status_code)
-        except client.RequestException:
+        except httpx.RequestError:
             results.append(-1)
 
     threads = [threading.Thread(target=_restore) for _ in range(2)]

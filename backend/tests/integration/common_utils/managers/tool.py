@@ -1,4 +1,5 @@
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestTool
 from tests.integration.common_utils.test_models import DATestUser
@@ -41,7 +42,7 @@ class ToolManager:
         tool_ids: list[int],
         enabled: bool,
         user_performing_action: DATestUser,
-    ) -> client.Response:
+    ) -> httpx.Response:
         response = client.patch(
             url=f"{API_SERVER_URL}/admin/tool/status",
             headers=user_performing_action.headers,

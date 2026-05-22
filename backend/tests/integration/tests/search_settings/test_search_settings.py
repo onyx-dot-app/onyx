@@ -1,4 +1,5 @@
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
@@ -48,7 +49,7 @@ def _set_new_search_settings(
     current_settings: dict,
     enable_contextual_rag: bool = False,
     contextual_rag_model_configuration_id: int | None = None,
-) -> client.Response:
+) -> httpx.Response:
     """POST to set-new-search-settings, deriving the payload from current settings."""
     payload = {
         "model_name": current_settings["model_name"],

@@ -1,3 +1,4 @@
+import httpx
 import uuid
 from typing import Any
 
@@ -11,7 +12,6 @@ from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import Response
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -29,7 +29,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
 
 def assert_response_is_equivalent(
     admin_user: DATestUser,
-    response: Response,
+    response: httpx.Response,
     model_configurations: list[ModelConfigurationUpsertRequest],
     api_key: str | None = None,
 ) -> None:

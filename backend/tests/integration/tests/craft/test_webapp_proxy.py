@@ -25,6 +25,7 @@ import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -59,7 +60,7 @@ def _unauth_get(
     session_id: UUID,
     path: str = "",
     allow_redirects: bool = False,
-) -> client.Response:
+) -> httpx.Response:
     """GET the proxy URL with no auth headers/cookies."""
     return client.get(
         _webapp_url(session_id, path),
@@ -72,7 +73,7 @@ def _auth_get(
     session_id: UUID,
     path: str = "",
     allow_redirects: bool = False,
-) -> client.Response:
+) -> httpx.Response:
     """GET the proxy URL with ``user``'s auth headers/cookies."""
     return client.get(
         _webapp_url(session_id, path),

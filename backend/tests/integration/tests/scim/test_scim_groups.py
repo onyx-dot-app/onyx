@@ -23,6 +23,7 @@ from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
@@ -119,7 +120,7 @@ def _make_patch_request(operations: list[dict], idp_style: str = "okta") -> dict
     }
 
 
-def _create_scim_user(token: str, email: str, external_id: str) -> client.Response:
+def _create_scim_user(token: str, email: str, external_id: str) -> httpx.Response:
     return ScimClient.post(
         "/Users", token, json=_make_user_resource(email, external_id)
     )
@@ -130,7 +131,7 @@ def _create_scim_group(
     display_name: str,
     external_id: str | None = None,
     members: list[dict] | None = None,
-) -> client.Response:
+) -> httpx.Response:
     return ScimClient.post(
         "/Groups",
         token,

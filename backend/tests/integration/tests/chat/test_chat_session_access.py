@@ -5,8 +5,8 @@ import pytest
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+import httpx
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import HTTPError
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
@@ -26,7 +26,7 @@ def second_user(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
     # Ensure admin exists so this new user is created with BASIC role.
     try:
         return UserManager.create(name="second_basic_user")
-    except HTTPError as e:
+    except httpx.HTTPStatusError as e:
         response = e.response
         if response is None:
             raise
@@ -74,7 +74,7 @@ def _get_chat_session(
     user: DATestUser,
     is_shared: bool | None = None,
     include_deleted: bool | None = None,
-) -> client.Response:
+) -> httpx.Response:
     params: dict[str, str] = {}
     if is_shared is not None:
         params["is_shared"] = str(is_shared).lower()
@@ -91,7 +91,7 @@ def _get_chat_session(
 
 def _set_sharing_status(
     chat_session_id: str, sharing_status: str, user: DATestUser
-) -> client.Response:
+) -> httpx.Response:
     return client.patch(
         f"{API_SERVER_URL}/chat/chat-session/{chat_session_id}",
         json={"sharing_status": sharing_status},
@@ -185,7 +185,7 @@ def test_chat_session_not_found_returns_404(basic_user: DATestUser) -> None:
     assert response.status_code == 404
 
 
-def _stop_chat_session(chat_session_id: str, user: DATestUser) -> client.Response:
+def _stop_chat_session(chat_session_id: str, user: DATestUser) -> httpx.Response:
     return client.post(
         f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
         headers=user.headers,

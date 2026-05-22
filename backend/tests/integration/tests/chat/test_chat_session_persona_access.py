@@ -146,7 +146,12 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
         groups=[restricted_group.id],
     )
 
-    response = client.post(
+    # Streaming endpoint always returns 200 and emits an error packet inside the stream.
+    # The important property is that the unauthorized persona never produces a valid
+    # response — a packet containing an access-denied error is surfaced.
+    saw_access_error = False
+    with client.stream(
+        "POST",
         f"{API_SERVER_URL}/chat/send-chat-message",
         json={
             "message": "hello",
@@ -157,24 +162,18 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
             "stream": True,
         },
         headers=basic_user.headers,
-        stream=True,
-    )
-
-    # Streaming endpoint always returns 200 and emits an error packet inside the stream.
-    # The important property is that the unauthorized persona never produces a valid
-    # response — a packet containing an access-denied error is surfaced.
-    saw_access_error = False
-    for raw_line in response.iter_lines():
-        if not raw_line:
-            continue
-        try:
-            payload = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
-        err = payload.get("error")
-        if isinstance(err, str) and "persona" in err.lower():
-            saw_access_error = True
-            break
+    ) as response:
+        for raw_line in response.iter_lines():
+            if not raw_line:
+                continue
+            try:
+                payload = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            err = payload.get("error")
+            if isinstance(err, str) and "persona" in err.lower():
+                saw_access_error = True
+                break
 
     assert saw_access_error, (
         "Expected an access-denied error in the stream when sending a message "

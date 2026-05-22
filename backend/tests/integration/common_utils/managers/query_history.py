@@ -1,3 +1,4 @@
+import httpx
 import time
 from datetime import datetime
 from urllib.parse import urlencode
@@ -10,7 +11,6 @@ from onyx.db.enums import TaskStatus
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
-from tests.integration.common_utils.http_client import CaseInsensitiveDict
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -64,7 +64,7 @@ class QueryHistoryManager:
         user_performing_action: DATestUser,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
-    ) -> tuple[CaseInsensitiveDict[str], str]:
+    ) -> tuple[httpx.Headers, str]:
         query_params: dict[str, str | int] = {}
         if start_time:
             query_params["start"] = start_time.isoformat()

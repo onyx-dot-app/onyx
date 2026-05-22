@@ -8,6 +8,7 @@ from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -43,7 +44,7 @@ def _update_connector_files(
     file_ids_to_remove: list[str],
     new_file_name: str,
     new_file_content: bytes,
-) -> client.Response:
+) -> httpx.Response:
     headers = user_performing_action.headers.copy()
     headers.pop("Content-Type", None)
 
@@ -59,7 +60,7 @@ def _list_connector_files(
     *,
     connector_id: int,
     user_performing_action: DATestUser,
-) -> client.Response:
+) -> httpx.Response:
     return client.get(
         f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files",
         headers=user_performing_action.headers,

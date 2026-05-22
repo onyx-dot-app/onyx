@@ -20,6 +20,7 @@ import uuid
 import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -33,7 +34,7 @@ def _drain_packets(user: DATestUser, session_id: uuid.UUID) -> list[dict]:
     try:
         for packet in BuildSessionManager.send_message(user, session_id, "hello"):
             packets.append(packet)
-    except client.exceptions.ChunkedEncodingError:
+    except httpx.RemoteProtocolError:
         # Server closed the stream after emitting the terminal ErrorPacket;
         # whatever made it through is already in ``packets``.
         pass

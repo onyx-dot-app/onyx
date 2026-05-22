@@ -3,10 +3,10 @@ This file takes the happy path to adding a curator to a user group and then test
 the permissions of the curator manipulating credentials.
 """
 
+import httpx
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import HTTPError
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.user import DATestUser
@@ -58,7 +58,7 @@ def test_credential_permissions(reset: None) -> None:  # noqa: ARG001
     """Tests for things Curators should not be able to do"""
 
     # Curators should not be able to create a credential for a user group they are not a curator of
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         CredentialManager.create(
             name="invalid_credential_2",
             source=DocumentSource.CONFLUENCE,

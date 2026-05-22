@@ -1,3 +1,4 @@
+import httpx
 from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -15,7 +16,6 @@ from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import HTTPError
 from tests.integration.common_utils.test_models import DATestUser
 
 DOMAIN = "example.com"
@@ -143,7 +143,7 @@ class UserManager:
         )
 
         if user_to_verify.is_active is False:
-            with pytest.raises(HTTPError):
+            with pytest.raises(httpx.HTTPStatusError):
                 response.raise_for_status()
             return user_to_verify.role == target_role
         else:
@@ -193,7 +193,7 @@ class UserManager:
         )
 
         if target_status is False:
-            with pytest.raises(HTTPError):
+            with pytest.raises(httpx.HTTPStatusError):
                 response.raise_for_status()
         else:
             response.raise_for_status()

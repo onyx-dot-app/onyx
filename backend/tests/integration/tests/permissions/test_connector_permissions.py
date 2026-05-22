@@ -3,10 +3,10 @@ This file takes the happy path to adding a curator to a user group and then test
 the permissions of the curator manipulating connectors.
 """
 
+import httpx
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import HTTPError
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -60,7 +60,7 @@ def test_connector_permissions(reset: None) -> None:  # noqa: ARG001
 
     # Curators should not be able to create a connector for a
     # user group they are not a curator of
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         ConnectorManager.create(
             name="invalid_connector_2",
             source=DocumentSource.CONFLUENCE,
@@ -113,7 +113,7 @@ def test_connector_permissions(reset: None) -> None:  # noqa: ARG001
     assert all(conn.id != valid_connector.id for conn in all_connectors_after_delete)
 
     # Test that curator cannot create a connector for a group they are not a curator of
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         ConnectorManager.create(
             name="invalid_connector_3",
             source=DocumentSource.CONFLUENCE,

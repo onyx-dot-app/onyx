@@ -6,6 +6,7 @@ import pytest
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
@@ -80,7 +81,7 @@ def test_chat_retention(
             user_performing_action=admin_user,
         )
         session_deleted = len(chat_history) == 0
-    except client.exceptions.HTTPError as e:
+    except httpx.HTTPStatusError as e:
         if e.response.status_code in (404, 400):
             session_deleted = True
         else:

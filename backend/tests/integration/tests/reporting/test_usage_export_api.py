@@ -279,7 +279,6 @@ class TestUsageExportAPI:
         download_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/{report_name}",
             headers=admin_user.headers,
-            stream=True,
         )
         assert download_response.status_code == 200
         assert download_response.headers["Content-Type"] == "application/zip"

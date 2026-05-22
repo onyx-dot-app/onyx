@@ -1,3 +1,4 @@
+import httpx
 import json
 from typing import Any
 from typing import cast
@@ -15,7 +16,6 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.http_client import Response
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
@@ -123,15 +123,14 @@ class ChatSessionManager:
             llm_override=llm_override,
         )
 
-        response = client.post(
+        with client.stream(
+            "POST",
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
-            stream=True,
             cookies=user_performing_action.cookies,
-        )
-
-        streamed_response = ChatSessionManager.analyze_response(response)
+        ) as response:
+            streamed_response = ChatSessionManager.analyze_response(response)
 
         if not chat_session:
             return streamed_response
@@ -200,11 +199,11 @@ class ChatSessionManager:
 
         packets_received = 0
 
-        with client.post(
+        with client.stream(
+            "POST",
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
-            stream=True,
             cookies=user_performing_action.cookies,
         ) as response:
             for line in response.iter_lines():
@@ -218,7 +217,7 @@ class ChatSessionManager:
         return None
 
     @staticmethod
-    def analyze_response(response: Response) -> StreamedResponse:
+    def analyze_response(response: httpx.Response) -> StreamedResponse:
         response_data = cast(
             list[StreamPacketData],
             [

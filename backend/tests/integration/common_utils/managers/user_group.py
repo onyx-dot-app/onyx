@@ -4,6 +4,7 @@ from uuid import uuid4
 from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
@@ -121,7 +122,7 @@ class UserGroupManager:
         permission: str,
         enabled: bool,
         user_performing_action: DATestUser,
-    ) -> client.Response:
+    ) -> httpx.Response:
         response = client.put(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             json={"permission": permission, "enabled": enabled},

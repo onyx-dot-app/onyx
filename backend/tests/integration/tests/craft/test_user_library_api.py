@@ -17,6 +17,7 @@ from uuid import uuid4
 import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -38,7 +39,7 @@ def _upload(
     user: DATestUser,
     files: Iterable[tuple[str, bytes, str | None]],
     path: str = "/",
-) -> client.Response:
+) -> httpx.Response:
     multipart = [
         (
             "files",
@@ -60,7 +61,7 @@ def _upload_zip(
     zip_bytes: bytes,
     path: str = "/",
     filename: str = "bundle.zip",
-) -> client.Response:
+) -> httpx.Response:
     return client.post(
         _url("upload-zip"),
         files={"file": (filename, io.BytesIO(zip_bytes), "application/zip")},
@@ -82,7 +83,7 @@ def _tree(user: DATestUser) -> list[dict[str, Any]]:
     return body
 
 
-def _toggle(user: DATestUser, document_id: str, enabled: bool) -> client.Response:
+def _toggle(user: DATestUser, document_id: str, enabled: bool) -> httpx.Response:
     return client.patch(
         _url("files", document_id, "toggle"),
         params={"enabled": str(enabled).lower()},
@@ -91,7 +92,7 @@ def _toggle(user: DATestUser, document_id: str, enabled: bool) -> client.Respons
     )
 
 
-def _delete(user: DATestUser, document_id: str) -> client.Response:
+def _delete(user: DATestUser, document_id: str) -> httpx.Response:
     return client.delete(
         _url("files", document_id),
         headers=user.headers,

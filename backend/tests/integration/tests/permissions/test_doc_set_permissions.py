@@ -1,7 +1,7 @@
+import httpx
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import HTTPError
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -70,7 +70,7 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
     """Tests for things Curators/Admins should not be able to do"""
 
     # Test that curator cannot create a non-public document set for the group they don't curate
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.create(
             name="Invalid Document Set 1",
             is_public=False,
@@ -80,7 +80,7 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
         )
 
     # Test that curator cannot create a document set attached to both groups
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.create(
             name="Invalid Document Set 2",
             is_public=False,
@@ -90,7 +90,7 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
         )
 
     # Test that curator cannot create a document set with no groups
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.create(
             name="Invalid Document Set 3",
             is_public=False,
@@ -100,7 +100,7 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
         )
 
     # Test that curator cannot create a document set with no cc_pairs
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.create(
             name="Invalid Document Set 4",
             is_public=False,
@@ -110,7 +110,7 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
         )
 
     # Test that admin cannot create a document set with no cc_pairs
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.create(
             name="Invalid Document Set 4",
             is_public=False,
@@ -147,13 +147,13 @@ def test_doc_set_permissions_setup(reset: None) -> None:  # noqa: ARG001
     valid_doc_set.cc_pair_ids.append(private_cc_pair.id)
 
     # Confirm the curator can't add the private_cc_pair to the doc set
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.edit(
             document_set=valid_doc_set,
             user_performing_action=curator,
         )
     # Confirm the admin can't add the private_cc_pair to the doc set
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         DocumentSetManager.edit(
             document_set=valid_doc_set,
             user_performing_action=admin_user,

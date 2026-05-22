@@ -38,6 +38,7 @@ from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
@@ -162,7 +163,7 @@ def _create_scim_user(
     email: str,
     external_id: str,
     idp_style: str = "okta",
-) -> client.Response:
+) -> httpx.Response:
     return ScimClient.post(
         "/Users",
         token,

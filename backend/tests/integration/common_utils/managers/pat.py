@@ -1,6 +1,7 @@
 """Helper for managing Personal Access Tokens in integration tests."""
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestPAT
 from tests.integration.common_utils.test_models import DATestUser
@@ -71,7 +72,7 @@ class PATManager:
         response.raise_for_status()
 
     @staticmethod
-    def authenticate(token: str) -> client.Response:
+    def authenticate(token: str) -> httpx.Response:
         """Authenticate using a PAT token and get user info.
 
         Args:

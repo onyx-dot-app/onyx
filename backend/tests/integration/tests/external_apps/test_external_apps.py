@@ -5,6 +5,7 @@ import pytest
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
+import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -152,7 +153,7 @@ def test_basic_user_cannot_access_admin_routes(
     created = _create_test_app(admin_user)
 
     # POST (create) as basic user → forbidden
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.create(
             user_performing_action=basic_user,
             name="Sneaky App",
@@ -164,12 +165,12 @@ def test_basic_user_cannot_access_admin_routes(
     assert exc.value.response.status_code in (401, 403)
 
     # GET admin list as basic user → forbidden
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.list_admin(user_performing_action=basic_user)
     assert exc.value.response.status_code in (401, 403)
 
     # POST (update existing) as basic user → forbidden
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.update(
             user_performing_action=basic_user,
             app_id=created.id,
@@ -182,7 +183,7 @@ def test_basic_user_cannot_access_admin_routes(
     assert exc.value.response.status_code in (401, 403)
 
     # DELETE as basic user → forbidden
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.delete(user_performing_action=basic_user, app_id=created.id)
     assert exc.value.response.status_code in (401, 403)
 
@@ -432,7 +433,7 @@ def test_update_or_delete_nonexistent_app_returns_404(
     need a 404 to differentiate `id=stale` from `name=invalid`."""
     missing_id = 999_999
 
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.update(
             user_performing_action=admin_user,
             app_id=missing_id,
@@ -444,13 +445,13 @@ def test_update_or_delete_nonexistent_app_returns_404(
         )
     assert exc.value.response.status_code == 404
 
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.delete(user_performing_action=admin_user, app_id=missing_id)
     assert exc.value.response.status_code == 404
 
     # Posting credentials against a non-existent app must also 404 — the
     # check is in the same place as the admin flow for consistency.
-    with pytest.raises(client.exceptions.HTTPError) as exc:
+    with pytest.raises(httpx.HTTPStatusError) as exc:
         ExternalAppManager.upsert_user_credentials(
             user_performing_action=admin_user,
             app_id=missing_id,
