@@ -522,12 +522,19 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
         Args:
             audio_data: Raw audio bytes
-            audio_format: Audio format (e.g., "webm", "wav", "mp3")
+            audio_format: Audio format (e.g., "webm", "wav", "mp3", "pcm16")
 
         Returns:
             Transcribed text
         """
         client = self._get_client()
+
+        # OpenAI's /v1/audio/transcriptions endpoint does not accept raw PCM;
+        # wrap PCM16 in a WAV container (24kHz mono — matches the browser
+        # capture format used by the streaming WebSocket fallback).
+        if audio_format == "pcm16":
+            audio_data = _create_wav_header(len(audio_data)) + audio_data
+            audio_format = "wav"
 
         # Create a file-like object from the audio bytes
         audio_file = io.BytesIO(audio_data)
@@ -609,8 +616,12 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return OPENAI_TTS_MODELS.copy()
 
     def supports_streaming_stt(self) -> bool:
-        """OpenAI supports streaming via Realtime API for all STT models."""
-        return True
+        # OpenAI deprecated the Realtime Beta API shape we depend on
+        # (header `OpenAI-Beta: realtime=v1` + `transcription_session.update`),
+        # which now returns `beta_api_shape_disabled`. Route through the
+        # chunked HTTP path until the streaming transcriber is migrated to
+        # the GA Realtime API.
+        return False
 
     def supports_streaming_tts(self) -> bool:
         """OpenAI supports real-time streaming TTS via Realtime API."""
