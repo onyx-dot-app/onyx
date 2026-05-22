@@ -433,9 +433,8 @@ jobs:
               -e OUTPUTS_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs \
               -e VENV_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv \
               -e ONYX_DEV_LICENSE \
-              --entrypoint bash \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down". The test-runner container's
@@ -543,9 +542,8 @@ jobs:
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              --entrypoint bash \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb"
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump all-container logs (onyx-lite)
         if: always()
@@ -661,9 +659,8 @@ jobs:
             -e DEV_MODE=true \
             -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
             -e LICENSE_ENFORCEMENT_ENABLED=false \
-            --entrypoint bash \
             ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
-            -c "uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests"
+            uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)
         if: always()
