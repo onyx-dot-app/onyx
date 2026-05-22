@@ -243,6 +243,15 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include documents?",
+        label: "Include Documents?",
+        name: "include_files",
+        description:
+          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+        optional: true,
+      },
     ],
     advanced_values: [],
   },
@@ -1921,6 +1930,7 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+  include_files: boolean;
 }
 
 export interface GitlabConfig {

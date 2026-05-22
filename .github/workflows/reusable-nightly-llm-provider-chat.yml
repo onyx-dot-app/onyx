@@ -143,12 +143,12 @@ jobs:
           docker-username: ${{ env.DOCKER_USERNAME }}
           docker-token: ${{ env.DOCKER_TOKEN }}
 
-  build-integration-image:
+  build-devcontainer-image:
     runs-on:
       [
         runs-on,
         runner=2cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-build-integration-image",
+        "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
@@ -174,8 +174,8 @@ jobs:
             DOCKER_USERNAME, test/docker-username
             DOCKER_TOKEN, test/docker-token
 
-      - name: Build integration image
-        uses: ./.github/actions/build-integration-image
+      - name: Build devcontainer image
+        uses: ./.github/actions/build-devcontainer-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
           ref-name: ${{ github.ref_name }}
@@ -190,7 +190,7 @@ jobs:
       [
         build-backend-image,
         build-model-server-image,
-        build-integration-image,
+        build-devcontainer-image,
       ]
     strategy:
       fail-fast: false

@@ -1,7 +1,6 @@
-import requests
-
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -13,13 +12,13 @@ def _get_auth_headers(user: DATestUser) -> tuple[dict, dict]:
 
 
 def _get_me(headers: dict, cookies: dict) -> dict:
-    response = requests.get(f"{API_SERVER_URL}/me", headers=headers, cookies=cookies)
+    response = client.get(f"{API_SERVER_URL}/me", headers=headers, cookies=cookies)
     response.raise_for_status()
     return response.json()
 
 
 def _patch_personalization(headers: dict, cookies: dict, payload: dict) -> None:
-    response = requests.patch(
+    response = client.patch(
         f"{API_SERVER_URL}/user/personalization",
         json=payload,
         headers=headers,

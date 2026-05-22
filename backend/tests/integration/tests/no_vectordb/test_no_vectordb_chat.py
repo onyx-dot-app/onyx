@@ -11,10 +11,9 @@ Covers:
 import io
 import time
 
-import requests
-
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -79,7 +78,7 @@ def test_chat_with_small_project_file(
     )
 
     # Link the chat session to the project
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/user/projects/{project.id}/move_chat_session",
         json={"chat_session_id": str(chat_session.id)},
         headers=admin_user.headers,
@@ -207,7 +206,7 @@ def test_persona_rejects_document_sets_without_vector_db(
     admin_user: DATestUser,
 ) -> None:
     """Creating a persona with document_set_ids should fail with 400."""
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/persona",
         json=_base_persona_body(document_set_ids=[1]),
         headers=admin_user.headers,
@@ -221,7 +220,7 @@ def test_persona_rejects_document_ids_without_vector_db(
     admin_user: DATestUser,
 ) -> None:
     """Creating a persona with document_ids should fail with 400."""
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/persona",
         json=_base_persona_body(document_ids=["fake-doc-id"]),
         headers=admin_user.headers,

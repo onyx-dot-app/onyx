@@ -40,18 +40,25 @@ if [ ! -d "$VENV_TEMPLATE_PATH" ] && [ -f "$REQUIREMENTS_PATH" ]; then
     echo "  Python venv template created"
 fi
 
-# 2. Run npm install in web template
+# 2. Install web template deps (prefer npm in production; fall back to bun
+#    for environments like the CI devcontainer that ship bun instead of Node).
 if [ -d "$WEB_TEMPLATE_PATH" ]; then
-    if ! command -v npm >/dev/null 2>&1; then
-        echo "WARNING: npm is not available — skipping web template setup." >&2
+    if command -v npm >/dev/null 2>&1; then
+        WEB_INSTALL_CMD="npm install"
+    elif command -v bun >/dev/null 2>&1; then
+        WEB_INSTALL_CMD="bun install"
     else
+        WEB_INSTALL_CMD=""
+        echo "WARNING: neither npm nor bun available — skipping web template setup." >&2
+    fi
+    if [ -n "$WEB_INSTALL_CMD" ]; then
         # Always remove and reinstall to ensure correct architecture binaries
         if [ -d "${WEB_TEMPLATE_PATH}/node_modules" ]; then
             echo "  Removing existing node_modules..."
             rm -rf "${WEB_TEMPLATE_PATH}/node_modules"
         fi
-        echo "  Installing npm packages (this may take 1-2 minutes)..."
-        cd "$WEB_TEMPLATE_PATH" && npm install 2>&1 || { echo "ERROR: npm install failed" >&2; exit 1; }
+        echo "  Installing web template packages with '${WEB_INSTALL_CMD}' (this may take 1-2 minutes)..."
+        cd "$WEB_TEMPLATE_PATH" && $WEB_INSTALL_CMD 2>&1 || { echo "ERROR: ${WEB_INSTALL_CMD} failed" >&2; exit 1; }
         echo "  Web template dependencies installed"
     fi
 fi

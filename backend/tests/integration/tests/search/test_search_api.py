@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -26,8 +27,8 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> requests.Response:
-    return requests.post(
+) -> httpx.Response:
+    return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
@@ -182,7 +183,7 @@ def test_invalid_persona_returns_404(
 
 
 def test_unauthenticated_returns_401() -> None:
-    resp = requests.post(
+    resp = client.post(
         SEARCH_URL,
         json={"query": "test"},
     )

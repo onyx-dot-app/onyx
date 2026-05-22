@@ -1,12 +1,11 @@
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
 def _list_minimal_personas(user: DATestUser) -> list[dict]:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona",
         headers=user.headers,
         cookies=user.cookies,
@@ -18,7 +17,7 @@ def _list_minimal_personas(user: DATestUser) -> list[dict]:
 def _share_persona(
     persona_id: int, user_ids: list[str], acting_user: DATestUser
 ) -> None:
-    response = requests.patch(
+    response = client.patch(
         f"{API_SERVER_URL}/persona/{persona_id}/share",
         json={"user_ids": user_ids},
         headers=acting_user.headers,
