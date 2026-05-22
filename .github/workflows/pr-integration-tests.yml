@@ -247,14 +247,14 @@ jobs:
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
-  build-integration-image:
+  build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
         runner=2cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-build-integration-image",
+        "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
     timeout-minutes: 45
@@ -264,18 +264,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
-
-      # needed for pulling openapitools/openapi-generator-cli
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Format branch name for cache
         id: format-branch
@@ -291,28 +279,32 @@ jobs:
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
-      - name: Build and push integration test image with Docker Bake
-        env:
-          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
-          TAG: integration-test-${{ github.run_id }}
-          CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          docker buildx bake --push \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
-            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
-            integration
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Devcontainer Docker image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        with:
+          context: .devcontainer
+          file: .devcontainer/Dockerfile
+          push: true
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache
+            type=registry,ref=onyxdotapp/onyx-devcontainer:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   integration-tests:
     needs:
@@ -320,7 +312,7 @@ jobs:
         discover-test-dirs,
         build-backend-image,
         build-model-server-image,
-        build-integration-image,
+        build-devcontainer-image,
       ]
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
@@ -465,6 +457,11 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
@@ -483,7 +480,10 @@ jobs:
 
             docker run --rm --network onyx_default \
               --name test-runner \
+              -v ${{ github.workspace }}:/workspace \
+              -w /workspace/backend \
               $CLI_VOLUME \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -526,8 +526,8 @@ jobs:
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
-              /app/tests/integration/${{ matrix.test-dir.path }}
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down":
@@ -552,7 +552,7 @@ jobs:
       # ------------------------------------------------------------
 
   onyx-lite-tests:
-    needs: [build-backend-image, build-integration-image]
+    needs: [build-backend-image, build-devcontainer-image]
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
       contents: read
@@ -609,6 +609,11 @@ jobs:
             api_server
         id: start_docker_onyx_lite
 
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+
       - name: Run Onyx Lite Integration Tests
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
         with:
@@ -619,6 +624,9 @@ jobs:
             echo "Running onyx-lite integration tests..."
             docker run --rm --network onyx_default \
               --name test-runner \
+              -v ${{ github.workspace }}:/workspace \
+              -w /workspace/backend \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -631,8 +639,8 @@ jobs:
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
-              /app/tests/integration/tests/no_vectordb
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump API server logs (onyx-lite)
         if: always()
@@ -663,7 +671,7 @@ jobs:
 
   multitenant-tests:
     needs:
-      [build-backend-image, build-model-server-image, build-integration-image]
+      [build-backend-image, build-model-server-image, build-devcontainer-image]
     runs-on:
       [
         runs-on,
@@ -714,6 +722,11 @@ jobs:
             background
         id: start_docker_multi_tenant
 
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+
       - name: Run Multi-Tenant Integration Tests
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -722,6 +735,9 @@ jobs:
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
             --name test-runner \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace/backend \
+            -e INTEGRATION_TESTS_MODE=true \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
@@ -743,8 +759,8 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
-            ${ECR_CACHE}:integration-test-${RUN_ID} \
-            /app/tests/integration/multitenant_tests
+            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
+            uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump API server logs (multi-tenant)
         if: always()

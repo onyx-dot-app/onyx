@@ -2,26 +2,30 @@ FROM ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0a
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
+  ca-certificates \
+  cmake \
   curl \
   default-jre \
+  dnsmasq \
+  dnsutils \
   fd-find \
   fzf \
   git \
+  iproute2 \
+  ipset \
+  iptables \
   jq \
   less \
+  libxmlsec1-dev \
   make \
   neovim \
   openssh-client \
+  pkg-config \
+  postgresql-client \
   python3-venv \
   ripgrep \
   socat \
   sudo \
-  ca-certificates \
-  iptables \
-  ipset \
-  iproute2 \
-  dnsmasq \
-  dnsutils \
   unzip \
   wget \
   zsh \
@@ -36,12 +40,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # fd-find installs as fdfind on Debian/Ubuntu — symlink to fd
 RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 
-# Install uv (Python package manager)
+# Install uv (Python package manager). Python deps themselves are not
+# baked in — CI runs `uv sync` against the bind-mounted workspace, and
+# daily dev uses their own .venv. The apt block above includes the
+# system libraries `uv sync` needs to compile native extensions
+# (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Install bun (JavaScript package manager)
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
+
+# Install Python 3.11 via uv into a stable, image-level path so venvs
+# created in bind-mounted workspaces survive across `docker run`s.
+# Ubuntu 26.04's system Python is 3.14, but onnxruntime only ships
+# cp311–cp313 wheels; the repo pins 3.11 via .python-version.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv python install 3.11
 
 # Create non-root dev user with passwordless sudo
 RUN useradd -m -s /bin/zsh dev && \
@@ -52,6 +67,12 @@ ENV DEVCONTAINER=true
 
 RUN mkdir -p /workspace && \
   chown -R dev:dev /workspace
+
+# Mark /workspace as safe for git regardless of host/container UID mismatch.
+# Daily dev sidesteps "dubious ownership" via init-dev-user.sh (UID remap or
+# rootless-root). One-shot `docker run` uses (e.g. CI) skip postStartCommand
+# entirely, so we set this system-wide.
+RUN git config --system --add safe.directory /workspace
 
 WORKDIR /workspace
 
