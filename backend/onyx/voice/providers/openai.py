@@ -102,11 +102,16 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
         self._session = aiohttp.ClientSession()
 
-        # GA Realtime API: `?model=` query param replaces the Beta
-        # `?intent=transcription`, and the `OpenAI-Beta: realtime=v1` header
-        # is gone. Sending the Beta shape now returns `beta_api_shape_disabled`.
+        # GA Realtime API: connect to bare `/v1/realtime` with no query
+        # string. Speech-to-speech sessions use `?model=<realtime-model>`,
+        # but transcription-only sessions reject any `model` query
+        # parameter ("You must not provide a model parameter for
+        # transcription sessions"); the transcription model is configured
+        # in-band via `audio.input.transcription.model` below. The Beta
+        # `?intent=transcription` form returns `beta_api_shape_disabled`
+        # and the `OpenAI-Beta: realtime=v1` header is no longer required.
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
-        url = f"{ws_base}/v1/realtime?model={self.model}"
+        url = f"{ws_base}/v1/realtime"
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         try:
