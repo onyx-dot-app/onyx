@@ -1,42 +1,51 @@
 import React from "react";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { RedirectError } from "@/lib/fetcher";
 import AppHealthBanner from "./AppHealthBanner";
 
-const mockLogout = jest.fn();
-const mockUseSWR = jest.fn();
-const mockUseCurrentUser = jest.fn();
-const mockUsePathname = jest.fn();
+const mockLogout = mock();
+const mockUseSWR = mock();
+const mockUseCurrentUser = mock();
+const mockUsePathname = mock();
 
-jest.mock("swr", () => ({
+// Partial mock: keep the rest of `swr` intact, override only the default export.
+// Replaces jest.requireActual + jest.mock by importing the real module first,
+// then spreading it into the mock factory.
+const actualSWR = await import("swr");
+mock.module("swr", () => ({
   __esModule: true,
-  ...jest.requireActual("swr"),
+  ...actualSWR,
   default: (...args: unknown[]) => mockUseSWR(...args),
 }));
 
-jest.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   usePathname: () => mockUsePathname(),
   useRouter: () => ({
-    push: jest.fn(),
+    push: mock(),
   }),
 }));
 
-jest.mock("@/hooks/useCurrentUser", () => ({
+mock.module("@/hooks/useCurrentUser", () => ({
   useCurrentUser: () => mockUseCurrentUser(),
 }));
 
-jest.mock("@/lib/user", () => ({
+mock.module("@/lib/user", () => ({
   logout: (...args: unknown[]) => mockLogout(...args),
 }));
 
 describe("AppHealthBanner logout handling", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockLogout.mockReset();
+    mockUseSWR.mockReset();
+    mockUseCurrentUser.mockReset();
+    mockUsePathname.mockReset();
+
     mockLogout.mockResolvedValue(undefined);
     mockUseSWR.mockReturnValue({ error: undefined });
     mockUseCurrentUser.mockReturnValue({
       user: undefined,
-      mutateUser: jest.fn(),
+      mutateUser: mock(),
       userError: undefined,
     });
     mockUsePathname.mockReturnValue("/auth/login");
@@ -45,7 +54,7 @@ describe("AppHealthBanner logout handling", () => {
   it("does not show the logged-out modal or call logout on auth pages after a 403", async () => {
     mockUseCurrentUser.mockReturnValue({
       user: undefined,
-      mutateUser: jest.fn(),
+      mutateUser: mock(),
       userError: {
         status: 403,
       },
@@ -86,7 +95,7 @@ describe("AppHealthBanner logout handling", () => {
         id: "user-1",
         email: "a@example.com",
       },
-      mutateUser: jest.fn(),
+      mutateUser: mock(),
       userError: {
         status: 403,
       },

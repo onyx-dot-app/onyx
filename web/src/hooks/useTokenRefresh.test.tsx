@@ -1,3 +1,13 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  test,
+  type Mock,
+} from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { AuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
@@ -17,11 +27,17 @@ const baseAuthMetadata = (authType: AuthType): AuthTypeMetadata => ({
 const fakeUser = { id: "user-1" } as User;
 
 describe("useTokenRefresh", () => {
-  let fetchMock: jest.Mock;
+  let fetchMock: Mock<typeof fetch>;
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
+    originalFetch = global.fetch;
     fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     global.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
   });
 
   test("does not call /api/auth/refresh while auth type metadata is loading", () => {

@@ -1,7 +1,4 @@
-/**
- * @jest-environment jsdom
- */
-
+import { describe, expect, it } from "bun:test";
 import { getTextContent } from "@/lib/contentEditable";
 import {
   shouldCreatePasteTile,

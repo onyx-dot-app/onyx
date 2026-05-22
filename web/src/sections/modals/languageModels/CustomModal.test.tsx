@@ -5,6 +5,16 @@
  * This tests the full workflow: open modal → form fill → test config → save → set as default
  */
 
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import CustomModal from "@/sections/modals/languageModels/CustomModal";
@@ -18,22 +28,20 @@ const MOCK_CUSTOM_PROVIDER_OPTIONS = [
   { value: "cloudflare", label: "Cloudflare" },
   { value: "openai", label: "OpenAI" },
 ];
-jest.mock("swr", () => {
-  const actual = jest.requireActual("swr");
-  return {
-    ...actual,
-    useSWRConfig: () => ({ mutate: mockMutate }),
-    __esModule: true,
-    default: (key: string | null) => ({
-      data:
-        key === SWR_KEYS.customProviderNames
-          ? MOCK_CUSTOM_PROVIDER_OPTIONS
-          : undefined,
-      error: undefined,
-      isLoading: false,
-    }),
-  };
-});
+const actualSWR = await import("swr");
+mock.module("swr", () => ({
+  ...actualSWR,
+  useSWRConfig: () => ({ mutate: mockMutate }),
+  __esModule: true,
+  default: (key: string | null) => ({
+    data:
+      key === SWR_KEYS.customProviderNames
+        ? MOCK_CUSTOM_PROVIDER_OPTIONS
+        : undefined,
+    error: undefined,
+    isLoading: false,
+  }),
+}));
 
 // Mock toast
 jest.mock("@/hooks/useToast", () => {

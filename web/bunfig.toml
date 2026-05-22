@@ -1,7 +1,12 @@
 [test]
-# Bun reads tsconfig.json `paths` natively, so @/, @tests/, @opal/ all resolve without extra mapping.
+# Bun reads tsconfig.json `paths` natively, so @/, @tests/, @opal/ all resolve
+# without extra mapping (vs Jest's moduleNameMapper).
+#
+# preload runs once before any test module is evaluated. It registers happy-dom
+# globally and extends `expect` with @testing-library/jest-dom matchers, so DOM
+# tests can use `render()`, `screen`, and `.toBeInTheDocument()` like under Jest.
+preload = ["./tests/setup/bun.setup.ts"]
 
-# Match jest config's testPathIgnorePatterns.
-# DOM-dependent files (anything with @jest-environment jsdom or .test.tsx) are excluded here —
-# Bun's node-style runner has no built-in DOM. Those would need happy-dom via a preload script.
-root = "."
+# Playwright e2e tests have their own runner (`npx playwright test`) and live in
+# tests/e2e. Exclude them from `bun test` so they don't get loaded as unit tests.
+pathIgnorePatterns = ["**/tests/e2e/**"]

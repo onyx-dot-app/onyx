@@ -1,19 +1,28 @@
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import React, { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
 
-// Mock Radix Dialog portal to render inline for testing
-jest.mock("@radix-ui/react-dialog", () => {
-  const actual = jest.requireActual("@radix-ui/react-dialog");
-  return {
-    ...actual,
-    Portal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  };
-});
+// Partial-mock Radix Dialog so Portal renders inline; the rest is real.
+// Replaces jest.requireActual with a dynamic import spread into mock.module.
+const actualRadixDialog = await import("@radix-ui/react-dialog");
+mock.module("@radix-ui/react-dialog", () => ({
+  ...actualRadixDialog,
+  Portal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 // Mock scrollIntoView which is not available in jsdom
 Element.prototype.scrollIntoView = jest.fn();

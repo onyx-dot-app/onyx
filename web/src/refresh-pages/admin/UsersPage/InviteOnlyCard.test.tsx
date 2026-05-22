@@ -1,3 +1,13 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import React from "react";
 import { render, screen, waitFor, userEvent } from "@tests/setup/test-utils";
 import InviteOnlyCard from "./InviteOnlyCard";
@@ -13,24 +23,27 @@ const mockToastError = jest.fn();
 const mockMutate = jest.fn();
 const mockUpdateAdminSettings = jest.fn();
 
-jest.mock("@/providers/SettingsProvider", () => ({
+mock.module("@/providers/SettingsProvider", () => ({
   useSettingsContext: () => mockUseSettingsContext(),
 }));
 
-jest.mock("@/hooks/useToast", () => ({
+mock.module("@/hooks/useToast", () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
   },
 }));
 
-jest.mock("swr", () => ({
+// Partial swr mock: keep real exports and only override `mutate`.
+// jest.requireActual is replaced with a top-level dynamic import.
+const actualSWR = await import("swr");
+mock.module("swr", () => ({
   __esModule: true,
-  ...jest.requireActual("swr"),
+  ...actualSWR,
   mutate: (...args: unknown[]) => mockMutate(...args),
 }));
 
-jest.mock("@/lib/settings/svc", () => ({
+mock.module("@/lib/settings/svc", () => ({
   updateAdminSettings: (...args: unknown[]) => mockUpdateAdminSettings(...args),
 }));
 

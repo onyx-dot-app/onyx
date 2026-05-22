@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
 import useSWR from "swr";
 import {
   useSettings,
@@ -7,20 +8,20 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ApplicationStatus, QueryHistoryType } from "@/interfaces/settings";
 
-jest.mock("swr", () => ({
+mock.module("swr", () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: mock(),
 }));
 
-jest.mock("@/lib/fetcher", () => ({
-  errorHandlingFetcher: jest.fn(),
+mock.module("@/lib/fetcher", () => ({
+  errorHandlingFetcher: mock(),
 }));
 
-jest.mock("@/lib/constants", () => ({
+mock.module("@/lib/constants", () => ({
   EE_ENABLED: false,
 }));
 
-const mockUseSWR = useSWR as jest.MockedFunction<typeof useSWR>;
+const mockUseSWR = useSWR as unknown as Mock<typeof useSWR>;
 
 describe("useSettings", () => {
   beforeEach(() => {
@@ -32,7 +33,7 @@ describe("useSettings", () => {
       data: undefined,
       error: undefined,
       isLoading: true,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -75,7 +76,7 @@ describe("useSettings", () => {
       data: mockSettings,
       error: undefined,
       isLoading: false,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -91,7 +92,7 @@ describe("useSettings", () => {
       data: undefined,
       error: undefined,
       isLoading: true,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -120,7 +121,7 @@ describe("useEnterpriseSettings", () => {
       data: undefined,
       error: undefined,
       isLoading: false,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -140,7 +141,7 @@ describe("useEnterpriseSettings", () => {
       data: undefined,
       error: undefined,
       isLoading: true,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -158,7 +159,7 @@ describe("useEnterpriseSettings", () => {
       data: undefined,
       error: undefined,
       isLoading: true,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -188,7 +189,7 @@ describe("useEnterpriseSettings", () => {
       data: mockEnterprise,
       error: undefined,
       isLoading: false,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -209,7 +210,7 @@ describe("useCustomAnalyticsScript", () => {
       data: undefined,
       error: undefined,
       isLoading: false,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 
@@ -229,7 +230,7 @@ describe("useCustomAnalyticsScript", () => {
       data: script,
       error: undefined,
       isLoading: false,
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 

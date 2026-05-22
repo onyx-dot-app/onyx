@@ -1,3 +1,12 @@
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import React, { PropsWithChildren } from "react";
 import { act, renderHook } from "@testing-library/react";
 import {
@@ -12,24 +21,24 @@ const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
 const mockToastWarning = jest.fn();
 
-jest.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useSearchParams: () => ({
     get: () => null,
   }),
 }));
 
-jest.mock("@/hooks/appNavigation", () => ({
+mock.module("@/hooks/appNavigation", () => ({
   useAppRouter: () => jest.fn(),
 }));
 
-jest.mock("@/lib/hooks/useProjects", () => ({
+mock.module("@/lib/hooks/useProjects", () => ({
   useProjects: () => ({
     projects: [],
     refreshProjects: jest.fn().mockResolvedValue([]),
   }),
 }));
 
-jest.mock("@/hooks/useToast", () => ({
+mock.module("@/hooks/useToast", () => ({
   toast: {
     warning: (...args: unknown[]) => mockToastWarning(...args),
     error: jest.fn(),
@@ -37,27 +46,27 @@ jest.mock("@/hooks/useToast", () => ({
   },
 }));
 
-jest.mock("@/app/app/projects/projectsService", () => {
-  const actual = jest.requireActual("@/app/app/projects/projectsService");
-  return {
-    ...actual,
-    fetchProjects: jest.fn().mockResolvedValue([]),
-    createProject: jest.fn(),
-    uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
-    getRecentFiles: (...args: unknown[]) => mockGetRecentFiles(...args),
-    getFilesInProject: jest.fn().mockResolvedValue([]),
-    getProject: jest.fn(),
-    getProjectInstructions: jest.fn(),
-    upsertProjectInstructions: jest.fn(),
-    getProjectDetails: jest.fn(),
-    renameProject: jest.fn(),
-    deleteProject: jest.fn(),
-    deleteUserFile: jest.fn(),
-    getUserFileStatuses: jest.fn().mockResolvedValue([]),
-    unlinkFileFromProject: jest.fn(),
-    linkFileToProject: jest.fn(),
-  };
-});
+// Partial mock: keep the real projectsService exports and only override a few.
+// jest.requireActual is replaced with a top-level dynamic import spread into mock.module.
+const actualProjectsService = await import("@/app/app/projects/projectsService");
+mock.module("@/app/app/projects/projectsService", () => ({
+  ...actualProjectsService,
+  fetchProjects: jest.fn().mockResolvedValue([]),
+  createProject: jest.fn(),
+  uploadFiles: (...args: unknown[]) => mockUploadFiles(...args),
+  getRecentFiles: (...args: unknown[]) => mockGetRecentFiles(...args),
+  getFilesInProject: jest.fn().mockResolvedValue([]),
+  getProject: jest.fn(),
+  getProjectInstructions: jest.fn(),
+  upsertProjectInstructions: jest.fn(),
+  getProjectDetails: jest.fn(),
+  renameProject: jest.fn(),
+  deleteProject: jest.fn(),
+  deleteUserFile: jest.fn(),
+  getUserFileStatuses: jest.fn().mockResolvedValue([]),
+  unlinkFileFromProject: jest.fn(),
+  linkFileToProject: jest.fn(),
+}));
 
 const settingsValue: CombinedSettings = {
   settings: {

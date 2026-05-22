@@ -1,12 +1,23 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import InputComboBox from "./InputComboBox";
 
-// Mock createPortal for dropdown rendering
-jest.mock("react-dom", () => ({
-  ...jest.requireActual("react-dom"),
+// Mock createPortal so the dropdown renders inline; keep the rest of react-dom.
+// jest.requireActual is replaced with a top-level dynamic import.
+const actualReactDom = await import("react-dom");
+mock.module("react-dom", () => ({
+  ...actualReactDom,
   createPortal: (node: React.ReactNode) => node,
 }));
 

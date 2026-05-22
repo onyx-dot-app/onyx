@@ -1,3 +1,6 @@
+import { beforeEach, describe, expect, it, mock, type Mock } from "bun:test";
+
+type OpenMock = OpenMock;
 import { ValidSources } from "../types";
 import { OnyxDocument } from "./interfaces";
 import { openDocument } from "./utils";
@@ -22,17 +25,17 @@ function makeDocument(overrides: Partial<OnyxDocument>): OnyxDocument {
 }
 
 describe("openDocument", () => {
-  let windowOpen: jest.Mock;
+  let windowOpen: OpenMock;
 
   beforeEach(() => {
-    windowOpen = jest.fn();
-    (global as unknown as { window: { open: jest.Mock } }).window = {
+    windowOpen = mock();
+    (global as unknown as { window: { open: OpenMock } }).window = {
       open: windowOpen,
     };
   });
 
   it("opens the link in a new tab when one is present", () => {
-    const updatePresentingDocument = jest.fn();
+    const updatePresentingDocument = mock();
     const document = makeDocument({
       link: "https://example.com/doc.pdf",
       source_type: ValidSources.Web,
@@ -48,7 +51,7 @@ describe("openDocument", () => {
   });
 
   it("opens the in-app preview for connector File documents without a link", () => {
-    const updatePresentingDocument = jest.fn();
+    const updatePresentingDocument = mock();
     const document = makeDocument({
       link: "",
       source_type: ValidSources.File,
@@ -64,7 +67,7 @@ describe("openDocument", () => {
     // Regression test: prior to the fix, "Uploaded Files" citations
     // (source_type=user_file, link=null) silently no-op'd on click because
     // openDocument only matched ValidSources.File.
-    const updatePresentingDocument = jest.fn();
+    const updatePresentingDocument = mock();
     const document = makeDocument({
       link: "",
       source_type: ValidSources.UserFile,
@@ -77,7 +80,7 @@ describe("openDocument", () => {
   });
 
   it("does nothing for non-file sources without a link", () => {
-    const updatePresentingDocument = jest.fn();
+    const updatePresentingDocument = mock();
     const document = makeDocument({
       link: "",
       source_type: ValidSources.Web,

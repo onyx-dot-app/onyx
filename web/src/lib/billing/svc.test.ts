@@ -3,6 +3,16 @@
  */
 
 import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+  type Mock,
+} from "bun:test";
+import {
   createCheckoutSession,
   createCustomerPortalSession,
   updateSeatCount,
@@ -10,16 +20,15 @@ import {
   uploadLicense,
 } from "./svc";
 
-// Mock NEXT_PUBLIC_CLOUD_ENABLED
-jest.mock("@/lib/constants", () => ({
+mock.module("@/lib/constants", () => ({
   NEXT_PUBLIC_CLOUD_ENABLED: false,
 }));
 
 describe("billing actions", () => {
-  let fetchSpy: jest.SpyInstance;
+  let fetchSpy: Mock<typeof fetch>;
 
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, "fetch");
+    fetchSpy = spyOn(global, "fetch");
   });
 
   afterEach(() => {
@@ -47,8 +56,8 @@ describe("billing actions", () => {
         })
       );
 
-      const callArgs = fetchSpy.mock.calls[0];
-      const requestBody = JSON.parse(callArgs[1].body);
+      const callArgs = fetchSpy.mock.calls[0]!;
+      const requestBody = JSON.parse((callArgs[1] as RequestInit).body as string);
       expect(requestBody).toEqual({
         billing_period: "monthly",
         email: "test@example.com",
@@ -58,7 +67,6 @@ describe("billing actions", () => {
     });
 
     test("throws error on failed response", async () => {
-      // Mock POST /api/admin/billing/create-checkout-session (error)
       fetchSpy.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ detail: "Invalid request" }),
@@ -68,7 +76,6 @@ describe("billing actions", () => {
     });
 
     test("throws default error when no detail provided", async () => {
-      // Mock POST /api/admin/billing/create-checkout-session (error, no detail)
       fetchSpy.mockResolvedValueOnce({
         ok: false,
         json: async () => ({}),
@@ -82,7 +89,6 @@ describe("billing actions", () => {
 
   describe("createCustomerPortalSession", () => {
     test("calls correct endpoint and returns portal URL", async () => {
-      // Mock POST /api/admin/billing/create-customer-portal-session
       fetchSpy.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ url: "https://billing.stripe.com/portal123" }),
@@ -103,7 +109,6 @@ describe("billing actions", () => {
 
   describe("updateSeatCount", () => {
     test("calls correct endpoint with seat count", async () => {
-      // Mock POST /api/admin/billing/seats/update
       fetchSpy.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -121,8 +126,8 @@ describe("billing actions", () => {
         expect.objectContaining({ method: "POST" })
       );
 
-      const callArgs = fetchSpy.mock.calls[0];
-      const requestBody = JSON.parse(callArgs[1].body);
+      const callArgs = fetchSpy.mock.calls[0]!;
+      const requestBody = JSON.parse((callArgs[1] as RequestInit).body as string);
       expect(requestBody).toEqual({ new_seat_count: 10 });
 
       expect(result.current_seats).toBe(10);
@@ -131,7 +136,6 @@ describe("billing actions", () => {
 
   describe("refreshLicenseCache (self-hosted only)", () => {
     test("calls license refresh endpoint", async () => {
-      // Mock POST /api/license/refresh
       fetchSpy.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true, message: "Cache refreshed" }),
@@ -149,7 +153,6 @@ describe("billing actions", () => {
 
   describe("uploadLicense (self-hosted only)", () => {
     test("calls license upload endpoint with FormData", async () => {
-      // Mock POST /api/license/upload
       fetchSpy.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -169,9 +172,8 @@ describe("billing actions", () => {
         })
       );
 
-      // Verify FormData was used
-      const callArgs = fetchSpy.mock.calls[0];
-      expect(callArgs[1].body).toBeInstanceOf(FormData);
+      const callArgs = fetchSpy.mock.calls[0]!;
+      expect((callArgs[1] as RequestInit).body).toBeInstanceOf(FormData);
 
       expect(result).toEqual({
         success: true,
@@ -180,7 +182,6 @@ describe("billing actions", () => {
     });
 
     test("throws error on failed upload", async () => {
-      // Mock POST /api/license/upload (error)
       fetchSpy.mockResolvedValueOnce({
         ok: false,
         json: async () => ({ detail: "Invalid license signature" }),
@@ -193,28 +194,28 @@ describe("billing actions", () => {
   });
 });
 
+// Bun's mock.module replaces the module in the registry, and a subsequent
+// await import() returns a freshly-evaluated module that sees the new mock.
+// This replaces jest.resetModules() + jest.doMock(), which Bun has no direct
+// equivalent for. The downside: it leaves the mock applied for any later
+// tests in the same file, so this block lives at the end.
 describe("billing actions (cloud mode)", () => {
-  let fetchSpy: jest.SpyInstance;
+  let fetchSpy: Mock<typeof fetch>;
 
   beforeEach(() => {
-    fetchSpy = jest.spyOn(global, "fetch");
-    // Override to cloud mode
-    jest.resetModules();
-    jest.doMock("@/lib/constants", () => ({
+    fetchSpy = spyOn(global, "fetch");
+    mock.module("@/lib/constants", () => ({
       NEXT_PUBLIC_CLOUD_ENABLED: true,
     }));
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    jest.resetModules();
   });
 
   test("uses cloud endpoint for checkout session", async () => {
-    // Re-import with cloud mode
     const { createCheckoutSession: cloudCheckout } = await import("./svc");
 
-    // Mock POST /api/tenants/create-checkout-session
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ url: "https://checkout.stripe.com/cloud123" }),
@@ -229,7 +230,6 @@ describe("billing actions (cloud mode)", () => {
   });
 
   test("uploadLicense throws error in cloud mode", async () => {
-    // Re-import with cloud mode
     const { uploadLicense: cloudUploadLicense } = await import("./svc");
 
     await expect(cloudUploadLicense("test-key")).rejects.toThrow(

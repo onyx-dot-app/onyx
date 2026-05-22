@@ -1,17 +1,18 @@
+import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
 import useSWR from "swr";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
-jest.mock("swr", () => ({
+mock.module("swr", () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: mock(),
 }));
 
-jest.mock("@/lib/fetcher", () => ({
-  errorHandlingFetcher: jest.fn(),
+mock.module("@/lib/fetcher", () => ({
+  errorHandlingFetcher: mock(),
 }));
 
-const mockUseSWR = useSWR as jest.MockedFunction<typeof useSWR>;
+const mockUseSWR = useSWR as unknown as Mock<typeof useSWR>;
 
 describe("useLLMProviders", () => {
   beforeEach(() => {
@@ -19,7 +20,7 @@ describe("useLLMProviders", () => {
   });
 
   test("uses public providers endpoint when personaId is not provided", () => {
-    const mockMutate = jest.fn();
+    const mockMutate = mock();
     mockUseSWR.mockReturnValue({
       data: undefined,
       error: undefined,
@@ -42,7 +43,7 @@ describe("useLLMProviders", () => {
   });
 
   test("uses persona-specific providers endpoint when personaId is provided", () => {
-    const mockMutate = jest.fn();
+    const mockMutate = mock();
     const providers = [{ name: "Persona Provider" }];
     mockUseSWR.mockReturnValue({
       data: { providers, default_text: null, default_vision: null },
@@ -70,7 +71,7 @@ describe("useLLMProviders", () => {
     mockUseSWR.mockReturnValue({
       data: undefined,
       error: new Error("request failed"),
-      mutate: jest.fn(),
+      mutate: mock(),
       isValidating: false,
     } as any);
 

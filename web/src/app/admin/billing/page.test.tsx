@@ -6,9 +6,41 @@
  * from getting stranded when the Stripe webhook fires concurrently with
  * the browser redirect and the license isn't ready yet.
  */
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  test,
+} from "bun:test";
 import React from "react";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { act } from "@testing-library/react";
+
+// Bun's fake-timer API lacks runAllTimersAsync/advanceTimersByTimeAsync.
+// The retry chain is: claimLicense (rejected promise) -> .catch -> setTimeout
+// -> resolve -> next loop iteration. Each step is a microtask, so we must
+// flush microtasks BEFORE checking timer count: the first setTimeout isn't
+// scheduled until the first rejected promise's catch handler runs.
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+}
+
+async function runAllTimersAsync(): Promise<void> {
+  for (let i = 0; i < 30; i++) {
+    await flushMicrotasks();
+    if (jest.getTimerCount() === 0) return;
+    jest.runAllTimers();
+  }
+}
+
+async function advanceTimersByTimeAsync(ms: number): Promise<void> {
+  await flushMicrotasks();
+  jest.advanceTimersByTime(ms);
+  await flushMicrotasks();
+}
 
 // ---- Stable mock objects (must be named with mock* prefix for jest hoisting) ----
 // useRouter and useSearchParams must return the SAME reference each call, otherwise
@@ -69,10 +101,11 @@ jest.mock("./LicenseActivationCard", () => ({
   default: () => <div data-testid="license-activation-card" />,
 }));
 
+// jest.requireActual is replaced with a top-level dynamic import.
+const actualOpalComponents = await import("@opal/components");
 jest.mock("@opal/components", () => {
-  const actual = jest.requireActual("@opal/components");
   return {
-    ...actual,
+    ...actualOpalComponents,
     MessageCard: ({
       title,
       description,
@@ -155,7 +188,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     await waitFor(() => {
@@ -181,7 +214,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     await waitFor(() => {
@@ -206,7 +239,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     await waitFor(() => {
@@ -236,7 +269,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     await waitFor(() => {
@@ -253,7 +286,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(mockClaimLicense).not.toHaveBeenCalled();
@@ -272,7 +305,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     await waitFor(() => {
@@ -294,7 +327,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
@@ -325,7 +358,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
     render(<BillingPage />);
 
     await act(async () => {
-      await jest.runAllTimersAsync();
+      await runAllTimersAsync();
     });
 
     expect(screen.queryByTestId("activating-banner")).not.toBeInTheDocument();
@@ -351,7 +384,7 @@ describe("BillingPage — handleBillingReturn retry logic", () => {
 
     // Advance past one poll interval (15s)
     await act(async () => {
-      await jest.advanceTimersByTimeAsync(15_000);
+      await advanceTimersByTimeAsync(15_000);
     });
 
     expect(mockClaimLicense).toHaveBeenCalledWith(undefined);

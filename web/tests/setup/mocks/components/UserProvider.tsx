@@ -7,8 +7,8 @@
  * a simple useUser() hook with safe default values.
  *
  * Usage:
- * Automatically applied via jest.config.js moduleNameMapper.
- * Any component that imports from "@/components/user/UserProvider" will get this mock.
+ * Automatically applied via tests/setup/bun.setup.ts preload (mock.module).
+ * Any component that imports from "@/providers/UserProvider" will get this mock.
  *
  * To customize user values in a specific test:
  * You would need to either:
