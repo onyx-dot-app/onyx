@@ -438,6 +438,21 @@ class KubernetesSandboxManager(SandboxManager):
             value = os.environ.get(var)
             if value:
                 sidecar_env.append(client.V1EnvVar(name=var, value=value))
+
+        # s5cmd v2.3.0 reads S3_ENDPOINT_URL — it does NOT honor
+        # AWS_ENDPOINT_URL. Mirror AWS_ENDPOINT_URL into S3_ENDPOINT_URL
+        # so the snapshot daemon's `s5cmd pipe`/`cat` and the file-sync
+        # sidecar's `s5cmd sync` both hit MinIO in dev/CI.
+        #
+        # We do NOT forward the api_server's own S3_ENDPOINT_URL: in CI
+        # that points at a host-network MinIO (localhost:9004 from
+        # docker-compose) which is unreachable from inside the pod. The
+        # cluster-DNS-reachable endpoint is always in AWS_ENDPOINT_URL.
+        aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+        if aws_endpoint:
+            sidecar_env.append(
+                client.V1EnvVar(name="S3_ENDPOINT_URL", value=aws_endpoint)
+            )
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
@@ -1532,10 +1547,10 @@ echo "Session cleanup complete"
         llm_config: LLMProviderConfig,
         skills_section: str,
     ) -> None:
-        """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
+        """Download snapshot from S3 via s5cmd, extract, regenerate config, and start NextJS.
 
         Steps:
-        1. Download snapshot from S3 via aws s3 cp in the sandbox container
+        1. Download snapshot from S3 via s5cmd cat in the sandbox container
         2. Pipe directly to tar for extraction
         3. Regenerate configuration files (AGENTS.md, opencode.json)
         4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
