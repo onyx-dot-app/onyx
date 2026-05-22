@@ -68,7 +68,7 @@ SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # Run the conversion into a temp file so a failed run doesn't destroy an existing .tsx
 TMPFILE="${BASE_NAME}.tsx.tmp"
-if bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.js" > "$TMPFILE"; then
+if bunx @svgr/cli "$SVG_FILE" --typescript --svgo-config "$SVGO_CONFIG" --template "${SCRIPT_DIR}/icon-template.cjs" > "$TMPFILE"; then
   # Verify the temp file has content before replacing the destination
   if [ ! -s "$TMPFILE" ]; then
     rm -f "$TMPFILE"
