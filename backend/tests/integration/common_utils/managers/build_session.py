@@ -13,9 +13,10 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
+import httpx
+
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 

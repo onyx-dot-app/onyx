@@ -1,10 +1,11 @@
-import httpx
 import json
 from typing import Any
 from typing import cast
 from typing import Literal
 from typing import TypedDict
 from uuid import UUID
+
+import httpx
 
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc

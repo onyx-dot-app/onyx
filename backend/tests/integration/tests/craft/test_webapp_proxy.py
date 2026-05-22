@@ -21,11 +21,11 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager

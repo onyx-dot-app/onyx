@@ -1,8 +1,8 @@
-import httpx
 from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole

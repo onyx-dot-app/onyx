@@ -14,10 +14,10 @@ from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 

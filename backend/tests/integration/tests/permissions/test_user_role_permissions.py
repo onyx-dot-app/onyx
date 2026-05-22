@@ -2,10 +2,11 @@
 This file tests the ability of different user types to set the role of other users.
 """
 
-import httpx
 import os
 
+import httpx
 import pytest
+
 from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager

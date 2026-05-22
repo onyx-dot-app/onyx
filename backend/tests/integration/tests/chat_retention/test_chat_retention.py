@@ -1,13 +1,12 @@
 import os
 import time
 
+import httpx
 import pytest
 
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-import httpx
-from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.test_models import DATestLLMProvider

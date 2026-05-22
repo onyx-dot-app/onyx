@@ -1,11 +1,11 @@
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.user import build_email

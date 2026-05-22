@@ -2,13 +2,13 @@ import io
 import json
 import os
 
+import httpx
 import pytest
 
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager

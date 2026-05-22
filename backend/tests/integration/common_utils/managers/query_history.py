@@ -1,8 +1,9 @@
-import httpx
 import time
 from datetime import datetime
 from urllib.parse import urlencode
 from uuid import UUID
+
+import httpx
 
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot

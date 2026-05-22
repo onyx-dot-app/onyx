@@ -24,6 +24,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import httpx
 import pytest
 import redis
 
@@ -38,8 +39,6 @@ from onyx.db.enums import AccountType
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-import httpx
-from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import build_email

@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -26,7 +27,6 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 

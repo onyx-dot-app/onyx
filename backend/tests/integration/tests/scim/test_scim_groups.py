@@ -17,13 +17,13 @@ Auth tests live in test_scim_tokens.py.
 User lifecycle tests live in test_scim_users.py.
 """
 
+import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager

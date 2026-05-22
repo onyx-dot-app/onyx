@@ -5,10 +5,11 @@ This file tests the permissions for creating and editing personas for different 
 - Admins can edit all personas
 """
 
-import httpx
 import os
 
+import httpx
 import pytest
+
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import DATestUser
 from tests.integration.common_utils.managers.user import UserManager

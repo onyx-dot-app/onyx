@@ -1,7 +1,7 @@
-import httpx
 import uuid
 from typing import Any
 
+import httpx
 import pytest
 
 from onyx.llm.constants import LlmProviderNames

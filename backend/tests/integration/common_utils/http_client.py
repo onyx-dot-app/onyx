@@ -17,7 +17,6 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-
 _test_client: TestClient | None = None
 
 

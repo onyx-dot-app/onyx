@@ -11,11 +11,11 @@ import threading
 import uuid
 from typing import Any
 
+import httpx
 import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
-import httpx
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager

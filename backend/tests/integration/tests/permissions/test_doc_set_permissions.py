@@ -1,7 +1,8 @@
-import httpx
 import os
 
+import httpx
 import pytest
+
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

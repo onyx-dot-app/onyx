@@ -1,6 +1,7 @@
+import httpx
+
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-import httpx
 from tests.integration.common_utils.http_client import client
 
 
