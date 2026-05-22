@@ -239,7 +239,7 @@ jobs:
 
       - name: Create GitHub Release
         id: create-release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # zizmor: ignore[superfluous-actions] action emits release id consumed by downstream jobs
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # zizmor: ignore[superfluous-actions] action emits release id consumed by downstream jobs
         with:
           tag_name: ${{ steps.release-tag.outputs.tag }}
           name: ${{ steps.release-tag.outputs.tag }}
