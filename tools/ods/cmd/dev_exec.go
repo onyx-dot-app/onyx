@@ -12,7 +12,7 @@ func newDevExecCommand() *cobra.Command {
 All arguments are treated as positional (flags like -it are passed through).
 
 Examples:
-  ods dev exec npm test
+  ods dev exec bun test
   ods dev exec -- ls -la
   ods dev exec -it echo hello`,
 		Args:               cobra.MinimumNArgs(1),
