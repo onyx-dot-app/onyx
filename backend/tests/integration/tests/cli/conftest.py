@@ -17,7 +17,6 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import API_SERVER_HOST
 from tests.integration.common_utils.constants import API_SERVER_PORT
 
@@ -27,7 +26,7 @@ def _cli_uvicorn_server(_test_client: TestClient) -> Generator[None, None, None]
     # Reuse the FastAPI app the parent conftest already built (lifespan has
     # already run via the TestClient context manager). Disable uvicorn's
     # lifespan so we don't double-invoke setup_onyx / Prometheus init.
-    app = http_client._test_client.app  # type: ignore[union-attr]
+    app = _test_client.app
 
     config = uvicorn.Config(
         app,
