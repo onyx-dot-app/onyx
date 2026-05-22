@@ -2,12 +2,13 @@
 #
 # This overlay:
 #   1. Exposes service ports so they can be hit directly from the host.
-#   2. Bind-mounts ./backend into /app on the api_server,
-#      inference_model_server, and indexing_model_server containers and
-#      switches their uvicorn invocations to --reload, so backend and
-#      model-server code changes hot-reload without an image rebuild.
+#   2. Bind-mounts ./backend into /app on the api_server container and
+#      switches uvicorn to --reload, so backend code changes hot-reload
+#      without an image rebuild.
 #
 # NOT covered by hot reload in this overlay:
+#   - The `inference_model_server` and `indexing_model_server` containers
+#     still bake source into the image at build time.
 #   - The `background` (Celery / supervisord) service still bakes source
 #     into the image at build time. Code changes there require
 #     `docker compose up -d --build background`.
@@ -21,10 +22,10 @@
 #   export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 #   docker compose up -d --wait
 #
-# First-time note: if your existing onyx-backend / onyx-model-server
-# images predate the `watchfiles` dependency being added to the default
-# requirements, run a one-time `docker compose ... up -d --build` to
-# pick it up. After that, code changes do not require rebuilds.
+# First-time note: if your existing onyx-backend image predates the
+# `watchfiles` dependency being added to the default requirements, run
+# a one-time `docker compose ... up -d --build` to pick it up. After
+# that, code changes do not require rebuilds.
 
 services:
   api_server:
@@ -74,44 +75,6 @@ services:
   inference_model_server:
     ports:
       - "9000:9000"
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000
-        --reload
-        --reload-dir /app/model_server
-        --reload-dir /app/shared_configs
-        --reload-dir /app/onyx;
-      fi"
-    environment:
-      - PYTHONDONTWRITEBYTECODE=1
-    volumes:
-      # The HuggingFace model cache named volume from the base compose
-      # file (model_cache_huggingface:/app/.cache/huggingface/) keeps
-      # masking that subpath on top of this bind mount.
-      - ../../backend:/app
-
-  indexing_model_server:
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000
-        --reload
-        --reload-dir /app/model_server
-        --reload-dir /app/shared_configs
-        --reload-dir /app/onyx;
-      fi"
-    environment:
-      - PYTHONDONTWRITEBYTECODE=1
-    volumes:
-      # indexing_huggingface_model_cache:/app/.cache/huggingface/ from
-      # the base compose file masks the HF cache subpath on top of this
-      # bind mount.
-      - ../../backend:/app
 
   cache:
     ports:
