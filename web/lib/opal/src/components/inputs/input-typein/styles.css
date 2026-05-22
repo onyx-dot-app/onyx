@@ -62,6 +62,7 @@
 
 .opal-input-field {
   @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
+  font: inherit;
 }
 
 .opal-input[data-variant="primary"] .opal-input-field,
