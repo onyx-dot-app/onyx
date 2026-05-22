@@ -157,7 +157,7 @@ function MCPServerCard({
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -298,7 +298,7 @@ function NumericLimitField({
         onChange={(e) => setValue(e.target.value)}
         placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
-        rightSection={
+        rightChildren={
           (value || "") !== defaultValue ? (
             <Hoverable.Item group="numericLimit" variant="appear-on-hover">
               <Button

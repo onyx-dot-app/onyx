@@ -5,26 +5,20 @@ import "@opal/components/inputs/input-typein/styles.css";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
+import type { InputVariants } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type InputTypeInVariant =
-  | "primary"
-  | "internal"
-  | "error"
-  | "disabled"
-  | "readOnly";
-
 export interface InputTypeInProps extends Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "disabled"
 > {
-  variant?: InputTypeInVariant;
+  variant?: InputVariants;
   prefixText?: string;
-  leftSearchIcon?: boolean;
-  rightSection?: React.ReactNode;
+  searchIcon?: boolean;
+  rightChildren?: React.ReactNode;
   showClearButton?: boolean;
   onClear?: () => void;
 }
@@ -43,7 +37,7 @@ export interface InputTypeInProps extends Omit<
  * <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
  *
  * // With search icon
- * <InputTypeIn leftSearchIcon placeholder="Search..." value={q} onChange={...} />
+ * <InputTypeIn searchIcon placeholder="Search..." value={q} onChange={...} />
  *
  * // Error state
  * <InputTypeIn variant="error" value={value} onChange={...} />
@@ -51,11 +45,11 @@ export interface InputTypeInProps extends Omit<
  * // Read-only
  * <InputTypeIn variant="readOnly" value="Cannot edit" />
  *
- * // With custom right section (e.g. password reveal)
+ * // With custom right content (e.g. password reveal)
  * <InputTypeIn
  *   value={password}
  *   onChange={...}
- *   rightSection={<Button icon={SvgEye} onClick={toggle} />}
+ *   rightChildren={<Button icon={SvgEye} onClick={toggle} />}
  * />
  * ```
  */
@@ -63,8 +57,8 @@ function InputTypeInInner(
   {
     variant = "primary",
     prefixText,
-    leftSearchIcon,
-    rightSection,
+    searchIcon,
+    rightChildren,
     showClearButton = true,
     onClear,
     className,
@@ -111,7 +105,7 @@ function InputTypeInInner(
       className={cn("opal-input", className)}
       onClick={() => localInputRef.current?.focus()}
     >
-      {leftSearchIcon && (
+      {searchIcon && (
         <div className="pr-2 pl-1">
           <div className="pl-1">
             <SvgSearch className="w-4 h-4 stroke-text-02" />
@@ -151,7 +145,7 @@ function InputTypeInInner(
         </div>
       )}
 
-      {rightSection}
+      {rightChildren}
     </div>
   );
 }

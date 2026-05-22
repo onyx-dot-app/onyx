@@ -69,7 +69,7 @@ export default function UserSkillsPage() {
           placeholder="Search skills..."
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          leftSearchIcon
+          searchIcon
         />
       </SettingsLayouts.Header>
 

@@ -117,7 +117,7 @@ export default function AgentsNavigationPage() {
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                leftSearchIcon
+                searchIcon
               />
             </div>
             <div className="flex-1">

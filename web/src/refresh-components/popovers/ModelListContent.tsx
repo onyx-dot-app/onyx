@@ -140,7 +140,7 @@ export default function ModelListContent({
   return (
     <Section gap={0.5}>
       <InputTypeIn
-        leftSearchIcon
+        searchIcon
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}

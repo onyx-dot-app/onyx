@@ -1481,7 +1481,7 @@ function AccountsAccessSettings() {
                         placeholder="Search..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        leftSearchIcon
+                        searchIcon
                         variant="internal"
                       />
                     )}

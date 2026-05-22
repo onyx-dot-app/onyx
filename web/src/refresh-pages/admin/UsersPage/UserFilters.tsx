@@ -224,7 +224,7 @@ export default function UserFilters({
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
               placeholder="Search groups..."
-              leftSearchIcon
+              searchIcon
               variant="internal"
             />
             <LineItem

@@ -86,7 +86,7 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        leftSearchIcon
+        searchIcon
         placeholder={placeholder}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}

@@ -273,7 +273,7 @@ export function ModelAccessField() {
               onValueChange={handleSelect}
               options={availableOptions}
               strict
-              leftSearchIcon
+              searchIcon
             />
 
             <Card background="heavy" border="none" padding="sm">

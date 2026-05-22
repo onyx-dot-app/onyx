@@ -269,7 +269,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               <Popover.Content align="start" width="lg">
                 <PopoverMenu>
                   <InputTypeIn
-                    leftSearchIcon
+                    searchIcon
                     placeholder="Filter tags..."
                     value={tagQuery}
                     onChange={(e) => setTagQuery(e.target.value)}

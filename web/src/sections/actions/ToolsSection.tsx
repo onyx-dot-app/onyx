@@ -32,7 +32,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
             aria-label="Search tools"
             value={searchQuery}
             onChange={handleSearchChange}
-            leftSearchIcon
+            searchIcon
             showClearButton
             className="w-full"
           />

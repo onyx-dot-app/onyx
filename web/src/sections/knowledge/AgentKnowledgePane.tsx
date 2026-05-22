@@ -200,7 +200,7 @@ function KnowledgeTable<T>({
         {onSearchChange !== undefined && (
           <GeneralLayouts.Section height="auto">
             <InputTypeIn
-              leftSearchIcon
+              searchIcon
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder={searchPlaceholder}

@@ -207,7 +207,7 @@ export default function ShareChatSessionModal({
               aria-label="share-modal-link-input"
               readOnly
               value={shareLink}
-              rightSection={
+              rightChildren={
                 <CopyIconButton
                   getCopyText={() => shareLink}
                   tooltip="Copy link"

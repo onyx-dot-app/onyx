@@ -198,7 +198,7 @@ export default function EditUserModal({
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search groups to join..."
-                      leftSearchIcon
+                      searchIcon
                     />
                   </div>
                 </Popover.Trigger>

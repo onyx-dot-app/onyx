@@ -122,7 +122,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
           placeholder={spec ? String(spec.default_timeout_seconds) : undefined}
           variant={isSubmitting ? "disabled" : undefined}
           showClearButton={false}
-          rightSection={
+          rightChildren={
             spec?.default_timeout_seconds !== undefined &&
             values.timeout_seconds !== String(spec.default_timeout_seconds) ? (
               <Button

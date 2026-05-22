@@ -123,7 +123,7 @@ export default function CustomSkillsTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder="Search skills..."
-        leftSearchIcon
+        searchIcon
       />
       <Table
         data={skills}

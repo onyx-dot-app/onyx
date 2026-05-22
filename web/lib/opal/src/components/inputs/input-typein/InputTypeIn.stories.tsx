@@ -35,7 +35,7 @@ export const WithPrefix: Story = {
 
 export const WithSearchIcon: Story = {
   args: {
-    leftSearchIcon: true,
+    searchIcon: true,
     placeholder: "Search...",
   },
 };

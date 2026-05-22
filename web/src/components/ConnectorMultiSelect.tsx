@@ -123,7 +123,7 @@ export const ConnectorMultiSelect = ({
       <div className="relative">
         <InputTypeIn
           ref={inputRef}
-          leftSearchIcon
+          searchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
           variant={isInputDisabled ? "disabled" : undefined}

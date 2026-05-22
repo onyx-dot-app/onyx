@@ -598,7 +598,7 @@ export default function HooksPage() {
                   placeholder="Search hooks..."
                   value={search}
                   variant="internal"
-                  leftSearchIcon
+                  searchIcon
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

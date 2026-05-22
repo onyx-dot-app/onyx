@@ -254,7 +254,7 @@ function AdminSidebarInner() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            leftSearchIcon
+            searchIcon
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}

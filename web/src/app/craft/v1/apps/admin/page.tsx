@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Divider, Text } from "@opal/components";

@@ -30,7 +30,7 @@ import { InputTypeIn, type InputTypeInProps } from "@opal/components";
  */
 export interface InputSearchProps extends Omit<
   InputTypeInProps,
-  "variant" | "leftSearchIcon"
+  "variant" | "searchIcon"
 > {
   /**
    * Ref to the underlying input element.
@@ -52,7 +52,7 @@ export default function InputSearch({
     <InputTypeIn
       ref={ref}
       variant={disabled ? "disabled" : "internal"}
-      leftSearchIcon
+      searchIcon
       className={cn(
         "[&_input]:font-main-ui-muted [&_input]:text-text-02 [&_input]:placeholder:text-text-02",
         !disabled && [

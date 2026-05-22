@@ -376,7 +376,7 @@ function MCPServerCard({
             <InputTypeIn
               placeholder="Search tools..."
               variant="internal"
-              leftSearchIcon
+              searchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />

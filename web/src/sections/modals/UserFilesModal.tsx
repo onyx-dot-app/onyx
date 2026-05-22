@@ -184,7 +184,7 @@ export default function UserFilesModal({
                 placeholder="Search files..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                leftSearchIcon
+                searchIcon
                 autoComplete="off"
                 tabIndex={0}
                 onFocus={(e) => {

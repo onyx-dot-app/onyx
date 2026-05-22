@@ -1313,7 +1313,7 @@ export default function IndexSettingsPage() {
                                     <InputTypeIn
                                       placeholder="Search models..."
                                       variant="internal"
-                                      leftSearchIcon
+                                      searchIcon
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />

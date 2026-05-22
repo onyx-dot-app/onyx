@@ -151,7 +151,7 @@ export default function AgentsTable() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search agents..."
-          leftSearchIcon
+          searchIcon
         />
         <Section gap={0.25} flexDirection="row" justifyContent="start">
           {filterBar}

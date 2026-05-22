@@ -8,7 +8,7 @@ import { SvgPaperclip } from "@opal/icons";
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,
-  "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
+  "type" | "rightChildren" | "value" | "onChange" | "readOnly" | "onClear"
 > {
   /**
    * Whether the input is disabled.
@@ -123,7 +123,7 @@ export default function InputFile({
     onValueSet?.(pastedText, "paste");
   }
 
-  const rightSection = (
+  const rightChildren = (
     <Button
       disabled={isNonEditable}
       icon={SvgPaperclip}
@@ -157,7 +157,7 @@ export default function InputFile({
         onPaste={handlePaste}
         onClear={handleClear}
         readOnly={isFileMode || isReadOnly}
-        rightSection={rightSection}
+        rightChildren={rightChildren}
       />
     </>
   );

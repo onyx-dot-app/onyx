@@ -53,7 +53,7 @@
  *   options={modelOptions}
  *   placeholder="Select model"
  *   isError={!!error}
- *   rightSection={<RefreshButton />}
+ *   rightChildren={<RefreshButton />}
  * />
  * ```
  *
@@ -127,8 +127,8 @@ const InputComboBox = ({
   isError: externalIsError,
   onValidationError,
   name,
-  leftSearchIcon = false,
-  rightSection,
+  searchIcon = false,
+  rightChildren,
   separatorLabel = "Other options",
   createPrefix,
   showOtherOptions = false,
@@ -384,11 +384,11 @@ const InputComboBox = ({
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           variant={disabled ? "disabled" : !isValid ? "error" : undefined}
-          leftSearchIcon={leftSearchIcon}
+          searchIcon={searchIcon}
           showClearButton={false}
-          rightSection={
+          rightChildren={
             <>
-              {rightSection && (
+              {rightChildren && (
                 <div
                   className="flex items-center"
                   onPointerDown={(e) => {
@@ -398,7 +398,7 @@ const InputComboBox = ({
                     e.stopPropagation();
                   }}
                 >
-                  {rightSection}
+                  {rightChildren}
                 </div>
               )}
               {hasOptions && (

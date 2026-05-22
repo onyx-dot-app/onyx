@@ -276,7 +276,7 @@ export default function MemoriesModal({
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              leftSearchIcon
+              searchIcon
               showClearButton={false}
               className="w-full bg-transparent! border-transparent! [:hover,:active,:focus,:focus-within]:bg-background-neutral-00! [:hover]:border-border-01! [:focus,:focus-within]:shadow-none!"
             />

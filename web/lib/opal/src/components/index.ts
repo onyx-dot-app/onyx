@@ -131,7 +131,6 @@ export {
 export {
   InputTypeIn,
   type InputTypeInProps,
-  type InputTypeInVariant,
 } from "@opal/components/inputs/input-typein/components";
 
 /* Spacer */

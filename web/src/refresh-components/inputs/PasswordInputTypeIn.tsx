@@ -119,7 +119,7 @@ export function computeMaskedInputChange(
 
 export interface PasswordInputTypeInProps extends Omit<
   InputTypeInProps,
-  "type" | "rightSection" | "leftSearchIcon" | "variant"
+  "type" | "rightChildren" | "searchIcon" | "variant"
 > {
   /**
    * Ref to the input element.
@@ -300,7 +300,7 @@ export default function PasswordInputTypeIn({
         showClearButton={showClearButton}
         autoComplete="off"
         data-ph-no-capture
-        rightSection={
+        rightChildren={
           showToggleButton ? (
             <Button
               disabled={disabled || effectiveNonRevealable}
