@@ -192,7 +192,7 @@ def test_set_sharing_scope_changes_webapp_visibility(
         webapp_url,
         headers=basic_user.headers,
         cookies=basic_user.cookies,
-        allow_redirects=False,
+        follow_redirects=False,
     )
     assert private_response.status_code == 404
 
@@ -206,7 +206,7 @@ def test_set_sharing_scope_changes_webapp_visibility(
         webapp_url,
         headers=basic_user.headers,
         cookies=basic_user.cookies,
-        allow_redirects=False,
+        follow_redirects=False,
     )
     assert public_response.status_code in (200, 502, 503, 504)
     assert "text/html" in public_response.headers.get("content-type", "").lower()
