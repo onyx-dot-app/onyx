@@ -68,7 +68,7 @@ class BuildSessionManager:
             headers=user.headers,
             cookies=user.cookies,
         )
-        if pre.ok:
+        if not pre.is_error:
             client.delete(
                 f"{_sessions_url()}/{pre.json()['id']}",
                 headers=user.headers,

@@ -22,7 +22,7 @@ def _server_has_vector_db_disabled() -> bool:
             f"{API_SERVER_URL}/settings",
             headers=GENERAL_HEADERS,
         )
-        if resp.ok:
+        if not resp.is_error:
             return resp.json().get("vector_db_enabled") is False
     except Exception:
         pass

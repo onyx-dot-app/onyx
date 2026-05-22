@@ -127,7 +127,7 @@ class TestGuildDataIsolation:
         if response1.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
 
-        assert response1.ok, f"Failed to create guild in tenant 1: {response1.text}"
+        assert not response1.is_error, f"Failed to create guild in tenant 1: {response1.text}"
         guild1_data = response1.json()
         guild1_id = guild1_data["id"]
 
@@ -137,7 +137,7 @@ class TestGuildDataIsolation:
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
             )
-            assert list_response1.ok
+            assert not list_response1.is_error
             tenant1_guilds = list_response1.json()
             tenant1_guild_ids = [g["id"] for g in tenant1_guilds]
             assert guild1_id in tenant1_guild_ids
@@ -147,7 +147,7 @@ class TestGuildDataIsolation:
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
             )
-            assert list_response2.ok
+            assert not list_response2.is_error
             tenant2_guilds = list_response2.json()
             tenant2_guild_ids = [g["id"] for g in tenant2_guilds]
             assert guild1_id not in tenant2_guild_ids
@@ -185,7 +185,7 @@ class TestGuildDataIsolation:
         )
         if response1.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
-        assert response1.ok, f"Failed to create guild in tenant 1: {response1.text}"
+        assert not response1.is_error, f"Failed to create guild in tenant 1: {response1.text}"
         guild1_data = response1.json()
         guild1_id = guild1_data["id"]
         registration_key1 = guild1_data["registration_key"]
@@ -199,7 +199,7 @@ class TestGuildDataIsolation:
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user2.headers,
         )
-        assert response2.ok, f"Failed to create guild in tenant 2: {response2.text}"
+        assert not response2.is_error, f"Failed to create guild in tenant 2: {response2.text}"
         guild2_data = response2.json()
         guild2_id = guild2_data["id"]
         registration_key2 = guild2_data["registration_key"]
@@ -247,7 +247,7 @@ class TestGuildDataIsolation:
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
             )
-            assert list_response1.ok
+            assert not list_response1.is_error
             tenant1_guilds = list_response1.json()
 
             # Tenant 1 should see exactly 1 guild
@@ -283,7 +283,7 @@ class TestGuildDataIsolation:
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
             )
-            assert list_response2.ok
+            assert not list_response2.is_error
             tenant2_guilds = list_response2.json()
 
             # Tenant 2 should see exactly 1 guild

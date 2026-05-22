@@ -34,7 +34,7 @@ def _poll_file_status(
             f"{API_SERVER_URL}/user/projects/file/{file_id}",
             headers=user.headers,
         )
-        if resp.ok:
+        if not resp.is_error:
             status = resp.json().get("status")
             if status == target_status.value:
                 return
@@ -104,7 +104,7 @@ def test_file_upload_process_delete_lifecycle(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )
-    assert delete_resp.ok, (
+    assert not delete_resp.is_error, (
         f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
     )
     body = delete_resp.json()
@@ -144,7 +144,7 @@ def test_delete_blocked_while_associated(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )
-    assert delete_resp.ok
+    assert not delete_resp.is_error
     body = delete_resp.json()
     assert body["has_associations"] is True, "Should report existing associations"
     assert project.name in body["project_names"]
