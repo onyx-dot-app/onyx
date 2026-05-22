@@ -77,5 +77,6 @@
 }
 
 .opal-input-field::placeholder {
+  @apply font-main-ui-muted;
   color: var(--text-02);
 }
