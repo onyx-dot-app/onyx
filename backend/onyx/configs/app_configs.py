@@ -899,7 +899,7 @@ CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
 # triggered by the watchdog/heartbeat, usage-limit overflow, inconsistent
 # attempt state, or completion-monitor exceptions — those signal that the
 # worker itself or the tenant's quota is broken, not connector data errors.
-PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "").lower() == "true"
+PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "true").lower() == "true"
 # When swapping to a new embedding model, a secondary index is created in the background, to conserve
 # resources, we pause updates on the primary index by default while the secondary index is created
 DISABLE_INDEX_UPDATE_ON_SWAP = (
