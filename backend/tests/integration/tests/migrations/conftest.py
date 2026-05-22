@@ -19,6 +19,23 @@ from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+# Override the parent integration conftest's autouse session fixtures.
+# Migration tests only need Postgres (provided by the workflow) and the
+# pytest-alembic fixtures below — they must NOT pre-migrate the schema
+# (would break pytest-alembic's test_upgrade) and must NOT start the
+# FastAPI app (its lifespan calls setup_onyx() which requires Vespa, and
+# the database-tests workflow doesn't start Vespa).
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _run_migrations() -> None:
+    return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_client() -> Generator[None, None, None]:
+    yield None
+
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
