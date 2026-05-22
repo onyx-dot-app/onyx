@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 import subprocess
 from collections.abc import Callable
 from collections.abc import Generator
@@ -138,6 +139,9 @@ def _install_playwright(_run_migrations: None) -> None:  # noqa: ARG001
     # ubuntu26.04 build yet, so pin to the binary-compatible 24.04 build.
     # Skipped in onyx-lite (no web_search) and where Playwright isn't on PATH.
     if os.getenv("DISABLE_VECTOR_DB", "false").lower() == "true":
+        return
+
+    if shutil.which("playwright") is None:
         return
 
     machine = platform.machine().lower()
