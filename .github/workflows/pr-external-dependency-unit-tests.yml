@@ -24,10 +24,6 @@ permissions:
   contents: read
 
 env:
-  # Craft K8s tests gate on SANDBOX_BACKEND=kubernetes; this lane has no kind
-  # cluster, so we set the docker backend explicitly to make sure those tests
-  # skip rather than try to load kubeconfig (configs.py now defaults to
-  # kubernetes, so the default would otherwise be wrong here).
   SANDBOX_BACKEND: "docker"
 
   # AWS credentials for S3-specific test

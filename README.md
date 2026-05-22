@@ -116,5 +116,3 @@ Join our open source community on **[Discord](https://discord.gg/TDJ59cGV2X)**!
 ## 💡 Contributing
 
 Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
-
-Craft (Build) requires a local kind cluster. From a clean checkout: `make craft-up`. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
