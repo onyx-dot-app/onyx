@@ -17,7 +17,7 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
-import requests
+import httpx
 from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -27,6 +27,7 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 # ---------------------------------------------------------------------------
@@ -51,7 +52,7 @@ def _create_task(
     timezone: str = "UTC",
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
-) -> requests.Response:
+) -> httpx.Response:
     body: dict[str, Any] = {
         "name": name or f"task-{uuid4().hex[:8]}",
         "prompt": prompt,
@@ -61,7 +62,7 @@ def _create_task(
         "status": status.value,
         "run_immediately": run_immediately,
     }
-    return requests.post(
+    return client.post(
         _url(),
         json=body,
         headers=user.headers,
@@ -71,8 +72,8 @@ def _create_task(
 
 def _patch_task(
     user: DATestUser, task_id: UUID, body: dict[str, Any]
-) -> requests.Response:
-    return requests.patch(
+) -> httpx.Response:
+    return client.patch(
         _url(str(task_id)),
         json=body,
         headers=user.headers,
@@ -80,16 +81,16 @@ def _patch_task(
     )
 
 
-def _delete_task(user: DATestUser, task_id: UUID) -> requests.Response:
-    return requests.delete(
+def _delete_task(user: DATestUser, task_id: UUID) -> httpx.Response:
+    return client.delete(
         _url(str(task_id)),
         headers=user.headers,
         cookies=user.cookies,
     )
 
 
-def _run_now(user: DATestUser, task_id: UUID) -> requests.Response:
-    return requests.post(
+def _run_now(user: DATestUser, task_id: UUID) -> httpx.Response:
+    return client.post(
         _url(str(task_id), "run-now"),
         headers=user.headers,
         cookies=user.cookies,
@@ -102,13 +103,13 @@ def _list_runs(
     *,
     cursor: str | None = None,
     limit: int | None = None,
-) -> requests.Response:
+) -> httpx.Response:
     params: dict[str, Any] = {}
     if cursor is not None:
         params["cursor"] = cursor
     if limit is not None:
         params["limit"] = limit
-    return requests.get(
+    return client.get(
         _url(str(task_id), "runs"),
         params=params or None,
         headers=user.headers,

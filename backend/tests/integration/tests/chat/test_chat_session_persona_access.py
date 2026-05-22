@@ -8,9 +8,9 @@ import json
 import os
 
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -54,7 +54,7 @@ def test_create_chat_session_with_unauthorized_persona_returns_403(
         groups=[restricted_group.id],
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": restricted_persona.id, "description": "Attempted bypass"},
         headers=basic_user.headers,
@@ -82,7 +82,7 @@ def test_create_chat_session_with_authorized_persona_succeeds(
         groups=[allowed_group.id],
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": allowed_persona.id, "description": "Authorized"},
         headers=basic_user.headers,
@@ -104,7 +104,7 @@ def test_create_chat_session_with_public_persona_succeeds(
         is_public=True,
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": public_persona.id, "description": "Public access"},
         headers=basic_user.headers,
@@ -118,7 +118,7 @@ def test_create_chat_session_with_default_persona_succeeds(
 ) -> None:
     _, basic_user = admin_and_basic_user
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": 0, "description": "Default persona"},
         headers=basic_user.headers,
@@ -146,7 +146,12 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
         groups=[restricted_group.id],
     )
 
-    response = requests.post(
+    # Streaming endpoint always returns 200 and emits an error packet inside the stream.
+    # The important property is that the unauthorized persona never produces a valid
+    # response — a packet containing an access-denied error is surfaced.
+    saw_access_error = False
+    with client.stream(
+        "POST",
         f"{API_SERVER_URL}/chat/send-chat-message",
         json={
             "message": "hello",
@@ -157,24 +162,18 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
             "stream": True,
         },
         headers=basic_user.headers,
-        stream=True,
-    )
-
-    # Streaming endpoint always returns 200 and emits an error packet inside the stream.
-    # The important property is that the unauthorized persona never produces a valid
-    # response — a packet containing an access-denied error is surfaced.
-    saw_access_error = False
-    for raw_line in response.iter_lines():
-        if not raw_line:
-            continue
-        try:
-            payload = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
-        err = payload.get("error")
-        if isinstance(err, str) and "persona" in err.lower():
-            saw_access_error = True
-            break
+    ) as response:
+        for raw_line in response.iter_lines():
+            if not raw_line:
+                continue
+            try:
+                payload = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            err = payload.get("error")
+            if isinstance(err, str) and "persona" in err.lower():
+                saw_access_error = True
+                break
 
     assert saw_access_error, (
         "Expected an access-denied error in the stream when sending a message "

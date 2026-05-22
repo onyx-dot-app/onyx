@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import uuid
 
+import httpx
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
@@ -33,7 +34,7 @@ def _drain_packets(user: DATestUser, session_id: uuid.UUID) -> list[dict]:
     try:
         for packet in BuildSessionManager.send_message(user, session_id, "hello"):
             packets.append(packet)
-    except requests.exceptions.ChunkedEncodingError:
+    except httpx.RemoteProtocolError:
         # Server closed the stream after emitting the terminal ErrorPacket;
         # whatever made it through is already in ``packets``.
         pass
@@ -59,7 +60,7 @@ def test_sandbox_not_running_emits_error_packet_and_closes(
     session_id = uuid.UUID(body["id"])
 
     # Force the sandbox out of RUNNING. Reset transitions it to TERMINATED.
-    reset_response = requests.post(
+    reset_response = client.post(
         f"{API_SERVER_URL}/build/sandbox/reset",
         headers=admin_user.headers,
         cookies=admin_user.cookies,

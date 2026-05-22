@@ -1,6 +1,5 @@
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestSettings
@@ -18,7 +17,7 @@ def test_me_endpoint_returns_anonymous_user_when_enabled(
         user_performing_action=admin_user,
     )
 
-    response = requests.get(f"{API_SERVER_URL}/me")
+    response = client.get(f"{API_SERVER_URL}/me")
 
     assert response.status_code == 200
     data = response.json()
@@ -38,7 +37,7 @@ def test_me_endpoint_returns_403_when_anonymous_disabled(
         user_performing_action=admin_user,
     )
 
-    response = requests.get(f"{API_SERVER_URL}/me")
+    response = client.get(f"{API_SERVER_URL}/me")
 
     # 403 is returned when user is not authenticated
     assert response.status_code == 403
@@ -50,7 +49,7 @@ def test_me_endpoint_returns_authenticated_user_info(
     """Authenticated /me returns the actual user's info."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/me",
         headers=admin_user.headers,
     )
@@ -75,7 +74,7 @@ def test_anonymous_user_can_access_persona_when_enabled(
 
     anon_user = UserManager.get_anonymous_user()
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona",
         headers=anon_user.headers,
     )
@@ -95,7 +94,7 @@ def test_anonymous_user_denied_persona_when_disabled(
 
     anon_user = UserManager.get_anonymous_user()
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona",
         headers=anon_user.headers,
     )

@@ -1,13 +1,12 @@
 from typing import Any
 
-import requests
-
 from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"
@@ -89,7 +88,7 @@ class ExternalAppManager:
             organization_credentials=organization_credentials,
             enabled=enabled,
         )
-        response = requests.post(
+        response = client.post(
             f"{_BUILD_PREFIX}/admin/apps",
             json=body.model_dump(mode="json"),
             headers=user_performing_action.headers,
@@ -102,7 +101,7 @@ class ExternalAppManager:
     def list_admin(
         user_performing_action: DATestUser,
     ) -> list[ExternalAppAdminResponse]:
-        response = requests.get(
+        response = client.get(
             f"{_BUILD_PREFIX}/admin/apps",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -112,7 +111,7 @@ class ExternalAppManager:
 
     @staticmethod
     def delete(user_performing_action: DATestUser, app_id: int) -> None:
-        response = requests.delete(
+        response = client.delete(
             f"{_BUILD_PREFIX}/admin/apps/{app_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -123,7 +122,7 @@ class ExternalAppManager:
     def list_for_user(
         user_performing_action: DATestUser,
     ) -> list[ExternalAppUserResponse]:
-        response = requests.get(
+        response = client.get(
             f"{_BUILD_PREFIX}/apps",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -150,7 +149,7 @@ class ExternalAppManager:
         credentials: dict[str, Any],
     ) -> None:
         body = UpsertUserCredentialsRequest(user_credentials=credentials)
-        response = requests.post(
+        response = client.post(
             f"{_BUILD_PREFIX}/apps/{app_id}/credentials",
             json=body.model_dump(mode="json"),
             headers=user_performing_action.headers,

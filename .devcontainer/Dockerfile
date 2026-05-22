@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ripgrep \
   socat \
   sudo \
+  supervisor \
   unzip \
   wget \
   zsh \
@@ -50,6 +51,22 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # Install bun (JavaScript package manager)
 COPY --from=oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
+
+# Install the apt packages Playwright needs to run headless Chromium for
+# the web-search open_url tool. The browser binary itself is downloaded
+# from the integration test conftest's _install_playwright fixture so
+# the version always matches the lockfile's playwright-python.
+#
+# Playwright doesn't ship Chromium builds for Ubuntu 26.04 yet, so spoof
+# the host platform to the binary-compatible Ubuntu 24.04 build. Arch
+# is detected from dpkg so both arm64 CI runners and x64 dev machines
+# work; we don't bake the override into ENV because that would leak
+# into interactive dev shells where it might mask real problems.
+RUN apt-get update \
+  && PW_ARCH=$(case $(dpkg --print-architecture) in amd64) echo x64;; arm64) echo arm64;; esac) \
+  && PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-${PW_ARCH} \
+       uvx --quiet --from playwright playwright install-deps chromium \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python 3.11 via uv into a stable, image-level path so venvs
 # created in bind-mounted workspaces survive across `docker run`s.
@@ -79,6 +96,11 @@ WORKDIR /workspace
 # Install Claude Code
 ARG CLAUDE_CODE_VERSION=latest
 RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# Install opencode CLI for Craft agent functionality. Bun runs it directly,
+# so we don't need a separate Node.js install.
+ARG OPENCODE_VERSION=latest
+RUN BUN_INSTALL=/usr/local bun install -g opencode-ai@${OPENCODE_VERSION}
 
 # Configure zsh — source the repo-local zshrc so shell customization
 # doesn't require an image rebuild.

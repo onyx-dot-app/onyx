@@ -1,8 +1,9 @@
 """Helper for managing Personal Access Tokens in integration tests."""
 
-import requests
+import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestPAT
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -26,7 +27,7 @@ class PATManager:
         Returns:
             DATestPAT with PAT data including the raw token
         """
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/pats",
             json={"name": name, "expiration_days": expiration_days},
             headers=user_performing_action.headers,
@@ -46,7 +47,7 @@ class PATManager:
         Returns:
             List of DATestPAT (without raw tokens)
         """
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/pats",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -63,7 +64,7 @@ class PATManager:
             token_id: ID of the token to revoke
             user_performing_action: User revoking the token
         """
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/user/pats/{token_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -72,7 +73,7 @@ class PATManager:
         response.raise_for_status()
 
     @staticmethod
-    def authenticate(token: str) -> requests.Response:
+    def authenticate(token: str) -> httpx.Response:
         """Authenticate using a PAT token and get user info.
 
         Args:
@@ -81,7 +82,7 @@ class PATManager:
         Returns:
             Response from /me endpoint
         """
-        return requests.get(
+        return client.get(
             f"{API_SERVER_URL}/me",
             headers={"Authorization": f"Bearer {token}"},
             timeout=60,

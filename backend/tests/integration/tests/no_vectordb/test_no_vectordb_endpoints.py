@@ -5,9 +5,8 @@ Non-dependent endpoints (settings, document sets, chat, etc.) should work
 normally.
 """
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 # ------------------------------------------------------------------
@@ -27,7 +26,7 @@ def _headers(user: DATestUser) -> dict[str, str]:
 def test_admin_search_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/admin/search",
         json={"query": "test", "filters": {}},
         headers=_headers(admin_user),
@@ -38,7 +37,7 @@ def test_admin_search_returns_501(
 def test_document_size_info_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/document/document-size-info",
         params={"document_id": "fake-doc"},
         headers=_headers(admin_user),
@@ -49,7 +48,7 @@ def test_document_size_info_returns_501(
 def test_document_chunk_info_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/document/chunk-info",
         params={"document_id": "fake-doc"},
         headers=_headers(admin_user),
@@ -60,7 +59,7 @@ def test_document_chunk_info_returns_501(
 def test_set_new_search_settings_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/search-settings/set-new-search-settings",
         json={},
         headers=_headers(admin_user),
@@ -71,7 +70,7 @@ def test_set_new_search_settings_returns_501(
 def test_cancel_new_embedding_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/search-settings/cancel-new-embedding",
         headers=_headers(admin_user),
     )
@@ -82,7 +81,7 @@ def test_connector_router_returns_501(
     admin_user: DATestUser,
 ) -> None:
     """The entire /manage router is gated — any connector endpoint should 501."""
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/manage/connector",
         headers=_headers(admin_user),
     )
@@ -92,7 +91,7 @@ def test_connector_router_returns_501(
 def test_ingestion_post_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.post(
+    resp = client.post(
         f"{API_SERVER_URL}/onyx-api/ingestion",
         json={"document": {}},
         headers=_headers(admin_user),
@@ -103,7 +102,7 @@ def test_ingestion_post_returns_501(
 def test_ingestion_delete_returns_501(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.delete(
+    resp = client.delete(
         f"{API_SERVER_URL}/onyx-api/ingestion/fake-doc-id",
         headers=_headers(admin_user),
     )
@@ -118,7 +117,7 @@ def test_ingestion_delete_returns_501(
 def test_settings_endpoint_works(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/settings",
         headers=_headers(admin_user),
     )
@@ -130,7 +129,7 @@ def test_settings_endpoint_works(
 def test_document_set_list_works(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/manage/document-set",
         headers=_headers(admin_user),
     )
@@ -140,7 +139,7 @@ def test_document_set_list_works(
 def test_persona_list_works(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/admin/persona",
         headers=_headers(admin_user),
     )
@@ -150,7 +149,7 @@ def test_persona_list_works(
 def test_tool_list_works(
     admin_user: DATestUser,
 ) -> None:
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/tool",
         headers=_headers(admin_user),
     )

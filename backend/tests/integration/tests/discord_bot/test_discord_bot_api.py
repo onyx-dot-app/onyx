@@ -1,10 +1,10 @@
 """Integration tests for Discord bot API endpoints.
 
-These tests hit actual API endpoints via HTTP requests.
+These tests hit actual API endpoints via HTTP client.
 """
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.discord_bot import get_discord_service_api_key
 from onyx.db.discord_bot import get_or_create_discord_service_api_key
@@ -55,7 +55,7 @@ class TestBotConfigEndpoints:
         )
 
         # Try to create another - should fail
-        with pytest.raises(requests.HTTPError) as exc_info:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
             DiscordBotManager.create_bot_config(
                 bot_token="token2",
                 user_performing_action=admin_user,
@@ -89,7 +89,7 @@ class TestBotConfigEndpoints:
         DiscordBotManager.delete_bot_config_if_exists(admin_user)
 
         # Try to delete - should fail
-        with pytest.raises(requests.HTTPError) as exc_info:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
             DiscordBotManager.delete_bot_config(admin_user)
 
         assert exc_info.value.response.status_code == 404
@@ -177,7 +177,7 @@ class TestGuildConfigEndpoints:
 
     def test_delete_guild_config_not_found(self, admin_user: DATestUser) -> None:
         """DELETE /guilds/{config_id} returns 404 for non-existent guild."""
-        with pytest.raises(requests.HTTPError) as exc_info:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
             DiscordBotManager.delete_guild(999999, admin_user)
 
         assert exc_info.value.response.status_code == 404
@@ -363,7 +363,7 @@ class TestChannelConfigEndpoints:
             guild_name="Test Guild",
         )
 
-        with pytest.raises(requests.HTTPError) as exc_info:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
             DiscordBotManager.update_channel(
                 guild.id,
                 999999,

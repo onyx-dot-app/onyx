@@ -3,9 +3,8 @@ import os
 from typing import Any
 from uuid import uuid4
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestImageGenerationConfig
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -39,7 +38,7 @@ class ImageGenerationConfigManager:
         """Create a new image generation config with new credentials."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/image-generation/config",
             json={
                 "image_provider_id": image_provider_id,
@@ -80,7 +79,7 @@ class ImageGenerationConfigManager:
         """Create a new image generation config by cloning from an existing LLM provider."""
         image_provider_id = image_provider_id or f"test-provider-{uuid4()}"
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/image-generation/config",
             json={
                 "image_provider_id": image_provider_id,
@@ -110,7 +109,7 @@ class ImageGenerationConfigManager:
         user_performing_action: DATestUser,
     ) -> list[DATestImageGenerationConfig]:
         """Get all image generation configs."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/image-generation/config",
             headers=user_performing_action.headers,
         )
@@ -123,7 +122,7 @@ class ImageGenerationConfigManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Get credentials for an image generation config."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/credentials",
             headers=user_performing_action.headers,
         )
@@ -161,12 +160,12 @@ class ImageGenerationConfigManager:
                 f"Got: source_llm_provider_id={source_llm_provider_id}, provider={provider}, api_key={'***' if api_key else None}"
             )
 
-        response = requests.put(
+        response = client.put(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             json=payload,
             headers=user_performing_action.headers,
         )
-        if not response.ok:
+        if response.is_error:
             print(f"Update failed with status {response.status_code}: {response.text}")
         response.raise_for_status()
         data = response.json()
@@ -186,7 +185,7 @@ class ImageGenerationConfigManager:
         user_performing_action: DATestUser,
     ) -> None:
         """Delete an image generation config."""
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
             headers=user_performing_action.headers,
         )
@@ -198,7 +197,7 @@ class ImageGenerationConfigManager:
         user_performing_action: DATestUser,
     ) -> None:
         """Set an image generation config as the default."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
             headers=user_performing_action.headers,
         )
