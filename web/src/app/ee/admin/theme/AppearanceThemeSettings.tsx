@@ -1,7 +1,7 @@
 "use client";
 
 import { FormField } from "@/refresh-components/form/FormField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Tabs from "@/refresh-components/Tabs";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";

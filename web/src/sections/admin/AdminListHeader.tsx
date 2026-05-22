@@ -3,7 +3,7 @@
 import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 
 interface AdminListHeaderProps {
   /** Whether items exist — controls search bar vs empty-state card. */

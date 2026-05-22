@@ -21,7 +21,7 @@ import { Section } from "@/layouts/general-layouts";
 import { Popover, PopoverMenu } from "@opal/components";
 import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
 import { FilterButton } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";

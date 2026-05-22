@@ -8,7 +8,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
 

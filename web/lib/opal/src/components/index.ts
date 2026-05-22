@@ -126,3 +126,13 @@ export {
   PopoverMenu,
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
+
+/* InputTypeIn */
+export {
+  InputTypeIn,
+  type InputTypeInProps,
+  type InputTypeInVariant,
+} from "@opal/components/inputs/input-typein/components";
+
+/* Spacer */
+export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

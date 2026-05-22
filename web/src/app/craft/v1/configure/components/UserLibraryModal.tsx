@@ -27,7 +27,7 @@ import {
   SvgFolderPlus,
 } from "@opal/icons";
 import Switch from "@/refresh-components/inputs/Switch";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import IconButton from "@/refresh-components/buttons/IconButton";

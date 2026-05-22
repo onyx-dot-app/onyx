@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { SvgPaperclip } from "@opal/icons";

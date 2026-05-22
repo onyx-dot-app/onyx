@@ -3,7 +3,7 @@
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";

@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import Text from "@/refresh-components/texts/Text";

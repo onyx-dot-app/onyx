@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@opal/utils";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 
 /**
  * InputSearch Component

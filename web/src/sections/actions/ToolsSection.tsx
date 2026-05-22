@@ -3,7 +3,7 @@
 import React from "react";
 import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { SvgFold } from "@opal/icons";
 interface ToolsSectionProps {
   onFold?: () => void;

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useMemo } from "react";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/providers/ProjectsContext";
 import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
 import Text from "@/refresh-components/texts/Text";

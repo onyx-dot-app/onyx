@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import InputTypeIn from "./InputTypeIn";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { InputTypeIn } from "@opal/components/inputs/input-typein/components";
 
 const meta: Meta<typeof InputTypeIn> = {
-  title: "refresh-components/inputs/InputTypeIn",
+  title: "opal/components/InputTypeIn",
   component: InputTypeIn,
   tags: ["autodocs"],
   decorators: [
@@ -67,5 +67,12 @@ export const ReadOnly: Story = {
   args: {
     variant: "readOnly",
     value: "Read-only value",
+  },
+};
+
+export const Internal: Story = {
+  args: {
+    variant: "internal",
+    placeholder: "Inside a container...",
   },
 };

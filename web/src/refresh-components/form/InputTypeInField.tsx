@@ -1,9 +1,7 @@
 "use client";
 
 import { useField } from "formik";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
 export interface InputTypeInFieldProps extends Omit<

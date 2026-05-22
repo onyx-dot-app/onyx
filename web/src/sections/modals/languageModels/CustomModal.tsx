@@ -25,7 +25,7 @@ import KeyValueInput, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";

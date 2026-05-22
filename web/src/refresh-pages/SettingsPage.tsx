@@ -23,7 +23,7 @@ import {
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";

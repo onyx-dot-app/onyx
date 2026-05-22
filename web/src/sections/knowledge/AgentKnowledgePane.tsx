@@ -17,7 +17,7 @@ import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Switch from "@/refresh-components/inputs/Switch";
 import { Checkbox } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import {
   SvgPlusCircle,
   SvgArrowUpRight,
@@ -32,7 +32,7 @@ import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
 import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
