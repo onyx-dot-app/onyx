@@ -3,8 +3,6 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
-
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -14,7 +12,6 @@ from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import DocumentSyncStatus
-from tests.integration.common_utils.config import api_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
 from tests.integration.common_utils.http_client import client
@@ -34,22 +31,20 @@ def _cc_pair_creator(
 ) -> DATestCCPair:
     name = f"{name}-cc-pair" if name else f"test-cc-pair-{uuid4()}"
 
-    with api.ApiClient(api_config) as api_client:
-        api_instance = api.DefaultApi(api_client)
-        connector_credential_pair_metadata = api.ConnectorCredentialPairMetadata(
-            name=name, access_type=access_type, groups=groups or []
-        )
-        api_response: api.StatusResponseInt = (
-            api_instance.associate_credential_to_connector(
-                connector_id,
-                credential_id,
-                connector_credential_pair_metadata,
-                _headers=user_performing_action.headers,
-            )
-        )
+    response = client.put(
+        f"{API_SERVER_URL}/manage/connector/{connector_id}/credential/{credential_id}",
+        json={
+            "name": name,
+            "access_type": access_type.value,
+            "groups": groups or [],
+        },
+        headers=user_performing_action.headers,
+    )
+    response.raise_for_status()
+    payload = response.json()
 
     return DATestCCPair(
-        id=int(api_response.data),
+        id=int(payload["data"]),
         name=name,
         connector_id=connector_id,
         credential_id=credential_id,
