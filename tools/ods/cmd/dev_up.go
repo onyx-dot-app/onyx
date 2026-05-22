@@ -158,10 +158,10 @@ func sshAgentMount() (string, bool) {
 		return "", false
 	}
 
-	// On macOS, SSH_AUTH_SOCK is a launchd socket (/var/run/com.apple.launchd.*/Listeners)
-	// that Docker Desktop's path translation into its Linux VM handles unreliably.
-	// Use Docker Desktop's purpose-built ssh-agent forwarding path instead — it lives
-	// inside the VM and is wired by Docker Desktop directly to the host's ssh-agent.
+	// On macOS, SSH_AUTH_SOCK is a launchd socket (/var/run/com.apple.launchd.*/Listeners) that
+	// Docker Desktop's path translation into its Linux VM handles unreliably. Use Docker Desktop's
+	// purpose-built ssh-agent forwarding path instead — it lives inside the VM and is wired by
+	// Docker Desktop directly to the host's ssh-agent.
 	if runtime.GOOS == "darwin" {
 		const dockerDesktopSSHSock = "/run/host-services/ssh-auth.sock"
 		mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", dockerDesktopSSHSock)
