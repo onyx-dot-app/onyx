@@ -319,7 +319,7 @@ class PersonaManager:
             f"{API_SERVER_URL}/persona/{persona.id}",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
 
 class PersonaLabelManager:
@@ -375,7 +375,7 @@ class PersonaLabelManager:
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def verify(

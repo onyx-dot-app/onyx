@@ -165,7 +165,7 @@ class ImageGenerationConfigManager:
             json=payload,
             headers=user_performing_action.headers,
         )
-        if not response.ok:
+        if response.is_error:
             print(f"Update failed with status {response.status_code}: {response.text}")
         response.raise_for_status()
         data = response.json()

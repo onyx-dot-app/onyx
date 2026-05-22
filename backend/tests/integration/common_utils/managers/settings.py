@@ -21,7 +21,7 @@ class SettingsManager:
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             return (
                 {},
                 f"Failed to get settings - {response.json().get('detail', 'Unknown error')}",
@@ -44,7 +44,7 @@ class SettingsManager:
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             return (
                 {},
                 f"Failed to update settings - {response.json().get('detail', 'Unknown error')}",

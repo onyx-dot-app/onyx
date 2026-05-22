@@ -34,7 +34,7 @@ class FileManager:
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             try:
                 detail = response.json().get("detail", response.text)
             except Exception:
@@ -100,7 +100,7 @@ class FileManager:
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             try:
                 error_detail = response.json().get("detail", "Unknown error")
             except Exception:

@@ -73,7 +73,7 @@ class ProjectManager:
         )
         if response.status_code == 404:
             return True
-        if not response.ok:
+        if response.is_error:
             return False
         files = [UserFileSnapshot.model_validate(obj) for obj in response.json()]
         return len(files) == 0
@@ -90,7 +90,7 @@ class ProjectManager:
         )
         if response.status_code == 404:
             return True
-        if not response.ok:
+        if response.is_error:
             return False
         try:
             project = UserProjectSnapshot.model_validate(response.json())

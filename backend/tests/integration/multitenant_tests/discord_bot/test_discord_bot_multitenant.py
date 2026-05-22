@@ -362,7 +362,7 @@ class TestGuildAccessIsolation:
         )
         if response.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
-        assert response.ok
+        assert not response.is_error
         guild1_id = response.json()["id"]
 
         try:

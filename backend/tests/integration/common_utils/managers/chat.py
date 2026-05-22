@@ -410,7 +410,7 @@ class ChatSessionManager:
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def soft_delete(
@@ -428,7 +428,7 @@ class ChatSessionManager:
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def hard_delete(
@@ -444,7 +444,7 @@ class ChatSessionManager:
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def verify_deleted(
