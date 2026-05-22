@@ -253,7 +253,11 @@ jobs:
         run: |
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
-          kubectl apply -n "${HELM_RELEASE_NAMESPACE}" -f /tmp/manifests/sandbox.yaml
+          # Pin context ns so objects without metadata.namespace fall back
+          # here; objects with explicit ns (proxy RBAC in onyx-sandboxes)
+          # land where they declare. Passing -n would conflict with those.
+          kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
+          kubectl apply -f /tmp/manifests/sandbox.yaml
           kubectl -n onyx-sandboxes apply -f - <<'EOF'
           apiVersion: v1
           kind: ServiceAccount
