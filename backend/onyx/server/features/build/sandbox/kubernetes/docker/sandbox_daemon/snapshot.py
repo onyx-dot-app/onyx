@@ -81,14 +81,37 @@ def create_snapshot(
     # node_modules + .next are excluded; restore_snapshot rebuilds them.
     # Including them would also break post-restore dedup since extracted
     # files get fresh inodes.
+    #
+    # Don't use `set -eo pipefail` for the pipeline — pipefail tears the
+    # streams down before tar / s5cmd can flush diagnostics, so a failure
+    # surfaces as exit-1-with-no-output. Inspect PIPESTATUS explicitly
+    # instead and echo what each side returned before erroring out.
     script = f"""
-set -eo pipefail
+set -eu
 cd {safe_session_path}
 dirs="outputs"
-[ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
-[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
+if [ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ]; then
+    dirs="$dirs attachments"
+fi
+if [ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ]; then
+    dirs="$dirs .opencode-data"
+fi
+
+set +e
 tar --exclude='outputs/web/node_modules' --exclude='outputs/web/.next' \\
-    -czf - $dirs | s5cmd pipe {safe_s3_uri}
+    -czf - $dirs | s5cmd --log info pipe {safe_s3_uri}
+tar_ec=${{PIPESTATUS[0]}}
+s5_ec=${{PIPESTATUS[1]}}
+set -e
+
+if [ "$tar_ec" -ne 0 ] || [ "$s5_ec" -ne 0 ]; then
+    echo "snapshot pipeline failed: tar=$tar_ec s5cmd=$s5_ec" >&2
+    echo "  S3_ENDPOINT_URL=${{S3_ENDPOINT_URL:-<unset>}}" >&2
+    echo "  AWS_ENDPOINT_URL=${{AWS_ENDPOINT_URL:-<unset>}}" >&2
+    echo "  AWS_REGION=${{AWS_REGION:-<unset>}}" >&2
+    echo "  s3_uri={safe_s3_uri}" >&2
+    exit 1
+fi
 """
 
     _run(script)
