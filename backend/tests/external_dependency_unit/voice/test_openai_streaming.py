@@ -2,9 +2,11 @@
 
 These tests guard the handshake and audio-format details that broke when
 OpenAI deprecated the Realtime Beta API shape. They exercise the real
-endpoint with the OPENAI_API_KEY from the environment.
+endpoint and are skipped via `@pytest.mark.secrets(TestSecret.OPENAI_API_KEY)`
+when the key is absent.
 
-Tests are marked `nightly` and skipped when `OPENAI_API_KEY` is absent.
+Each test makes a single short API call (~1-3s of audio), so they're
+cheap enough to run on every PR rather than gating behind `nightly`.
 """
 
 import asyncio
@@ -17,8 +19,6 @@ from onyx.voice.providers.openai import OPENAI_REALTIME_STT_MODEL
 from onyx.voice.providers.openai import OpenAIStreamingTranscriber
 from onyx.voice.providers.openai import OpenAIVoiceProvider
 from tests.utils.secret_names import TestSecret
-
-pytestmark = pytest.mark.nightly
 
 # 24kHz mono PCM16, matching the format Onyx's voice WebSocket emits from
 # the browser. Generated programmatically so the test has no audio fixture
