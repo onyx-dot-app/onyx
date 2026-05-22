@@ -38,4 +38,7 @@ jobs:
 
       - name: Run Bun tests
         working-directory: ./web
-        run: bun run test:ci --coverage
+        # Coverage disabled in CI: bun 1.3.14's coverage reporter crashes after
+        # the table is printed but before the test summary, returning exit 1
+        # even when 559/559 tests pass. Local `bun test --coverage` works.
+        run: bun run test:ci
