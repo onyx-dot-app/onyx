@@ -221,11 +221,7 @@ class ChatSessionManager:
     def analyze_response(response: httpx.Response) -> StreamedResponse:
         response_data = cast(
             list[StreamPacketData],
-            [
-                json.loads(line)
-                for line in response.iter_lines()
-                if line
-            ],
+            [json.loads(line) for line in response.iter_lines() if line],
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
         tool_call_debug: list[ToolCallDebug] = []
