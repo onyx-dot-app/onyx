@@ -14,7 +14,11 @@ _BUILD_PREFIX = f"{API_SERVER_URL}/build"
 
 
 class ExternalAppManager:
-    """HTTP wrapper around the External Apps router."""
+    """HTTP wrapper around the External Apps router.
+
+    Returns the route's own Pydantic response models so tests get
+    attribute access (`app.credential_keys`) instead of dict lookups.
+    """
 
     @staticmethod
     def create(
@@ -131,6 +135,7 @@ class ExternalAppManager:
     def get_for_user(
         user_performing_action: DATestUser, app_id: int
     ) -> ExternalAppUserResponse:
+        """Convenience: list and find by id. Raises KeyError if not visible."""
         for app in ExternalAppManager.list_for_user(user_performing_action):
             if app.id == app_id:
                 return app

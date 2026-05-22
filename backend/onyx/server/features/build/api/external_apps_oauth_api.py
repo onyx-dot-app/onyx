@@ -21,7 +21,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import upsert_external_app_user_credential__no_commit
+from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -226,13 +226,12 @@ def handle_external_app_oauth_callback(
 
     stored_credentials = provider.extract_credentials(response_data)
 
-    upsert_external_app_user_credential__no_commit(
+    upsert_external_app_user_credential(
         db_session,
         external_app_id=app.id,
         user_id=user.id,
         user_credentials=stored_credentials,
     )
-    db_session.commit()
 
     # One-shot — prevent replay.
     r.delete(redis_key)

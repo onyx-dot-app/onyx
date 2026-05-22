@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import create_external_app__no_commit
+from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_external_app_credentials
-from onyx.db.external_app import upsert_external_app_user_credential__no_commit
+from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -52,7 +52,7 @@ def _create_app(
     enabled: bool = True,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
 ) -> ExternalApp:
-    return create_external_app__no_commit(
+    return create_external_app(
         db_session,
         slug=f"test-{uuid.uuid4().hex[:12]}",
         name=name,
@@ -83,7 +83,7 @@ def _store_user_creds(
     user_id: UUID,
     creds: dict[str, Any],
 ) -> None:
-    upsert_external_app_user_credential__no_commit(
+    upsert_external_app_user_credential(
         db_session,
         external_app_id=app_id,
         user_id=user_id,

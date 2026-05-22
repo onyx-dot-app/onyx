@@ -92,8 +92,10 @@ def get_user_credentials_by_app_id(
     db_session: Session,
     user_id: UUID,
 ) -> dict[int, ExternalAppUserCredential]:
-    """Map of external_app_id → credential row for the user. Apps the
-    user hasn't configured are absent from the mapping."""
+    """Return mapping from external_app_id -> the user's credential row.
+
+    Apps the user has never configured are simply absent from the mapping.
+    """
     stmt = select(ExternalAppUserCredential).where(
         ExternalAppUserCredential.user_id == user_id
     )
@@ -176,7 +178,6 @@ def update_external_app(
 
     Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
     """
-    _validate_upstream_url_patterns(upstream_url_patterns)
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(

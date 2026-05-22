@@ -352,6 +352,8 @@ class UpsertExternalAppRequest(BaseModel):
 
 
 class ExternalAppAdminResponse(BaseModel):
+    """Admin-facing view of an external app (includes org credentials)."""
+
     id: int
     name: str
     description: str
@@ -363,6 +365,8 @@ class ExternalAppAdminResponse(BaseModel):
 
 
 class UpsertUserCredentialsRequest(BaseModel):
+    """User-supplied credentials for a specific external app."""
+
     user_credentials: dict[str, Any]
 
 
