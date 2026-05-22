@@ -383,6 +383,7 @@ jobs:
 
             docker run --rm --network onyx_default \
               --name test-runner \
+              --env-file deployment/docker_compose/.env \
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
@@ -648,6 +649,10 @@ jobs:
             -e API_SERVER_HOST=127.0.0.1 \
             -e MODEL_SERVER_HOST=inference_model_server \
             -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e S3_ENDPOINT_URL=http://minio:9000 \
+            -e S3_AWS_ACCESS_KEY_ID=minioadmin \
+            -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
+            -e S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
