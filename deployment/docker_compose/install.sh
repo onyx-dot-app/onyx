@@ -209,6 +209,30 @@ detect_compose_cmd() {
 }
 detect_compose_cmd || true
 
+# --- Docker daemon access detection ---
+# On Linux, a non-root user can only talk to /var/run/docker.sock when they're
+# in the "docker" group. Group membership doesn't apply to the current shell,
+# so when we add the user to the group mid-script we instead prefix subsequent
+# docker commands with sudo to finish this run. Future runs (after the user
+# logs out and back in) won't need it. DOCKER_SUDO is "" or "sudo".
+DOCKER_SUDO=""
+refresh_docker_sudo() {
+    DOCKER_SUDO=""
+    if ! command -v docker &> /dev/null; then
+        return
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+        return
+    fi
+    if docker info &> /dev/null; then
+        return
+    fi
+    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        DOCKER_SUDO="sudo"
+    fi
+}
+refresh_docker_sudo
+
 # Ensures a required file is present. With --local, verifies the file exists on
 # disk. Otherwise, downloads it from the given URL. Returns 0 on success, 1 on
 # failure (caller should handle the exit).
@@ -342,7 +366,7 @@ if [ "$SHUTDOWN_MODE" = true ]; then
 
             # Stop containers (without removing them)
             build_compose_file_args true
-            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
+            if (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -395,7 +419,7 @@ if [ "$DELETE_DATA_MODE" = true ]; then
 
             # Stop and remove containers with volumes
             build_compose_file_args true
-            if (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
+            if (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -534,25 +558,18 @@ if command -v docker &> /dev/null \
     fi
 fi
 
-# On Linux, ensure the current user can talk to the Docker daemon without
-# sudo.  If necessary, add them to the "docker" group and re-exec the
-# script under that group so the rest of the install proceeds normally.
-if command -v docker &> /dev/null \
-    && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; } \
-    && [[ "$(id -u)" -ne 0 ]] \
-    && ! docker info &> /dev/null; then
-    if [[ "${_ONYX_REEXEC:-}" = "1" ]]; then
-        print_error "Cannot connect to Docker after group re-exec."
-        print_info "Log out and back in, then run the script again."
-        exit 1
-    fi
+# On Linux, ensure docker commands can talk to the daemon. If the current user
+# isn't in the "docker" group, add them (so future shells are set up) and use
+# sudo for the rest of this run — the new group membership doesn't apply until
+# they log out and back in.
+refresh_docker_sudo
+if [[ -n "$DOCKER_SUDO" ]]; then
     if ! getent group docker &> /dev/null; then
         sudo groupadd docker
     fi
-    print_info "Adding $USER to the docker group..."
+    print_info "Adding $USER to the docker group (effective on next login)..."
     sudo usermod -aG docker "$USER"
-    print_info "Re-launching with docker group active..."
-    exec sg docker -c "_ONYX_REEXEC=1 bash $(printf '%q ' "$0" "$@")"
+    print_info "Using sudo for docker commands in this run."
 fi
 
 # ASCII Art Banner
@@ -661,7 +678,7 @@ version_compare() {
 }
 
 # Check Docker daemon
-if ! docker info &> /dev/null; then
+if ! $DOCKER_SUDO docker info &> /dev/null; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         print_info "Docker daemon is not running. Starting Docker Desktop..."
         open -a Docker
@@ -902,7 +919,7 @@ ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
     build_compose_file_args true
-    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
     if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
         print_error "Onyx services are currently running!"
         echo ""
@@ -1075,8 +1092,8 @@ else
         # Pre-create the dedicated sandbox bridge. docker-compose references
         # it as external=true so it must exist before `compose up`.
         SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
-        if ! docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
-            if docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ! $DOCKER_SUDO docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+            if $DOCKER_SUDO docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
                 print_success "Created sandbox bridge network: $SANDBOX_NET"
             else
                 print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
@@ -1237,7 +1254,7 @@ print_info "Downloading Docker images (this may take a while)..."
 # substitution prefers shell env over .env, so without this an exported
 # IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
 build_compose_file_args
-if (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
+if (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
@@ -1262,18 +1279,18 @@ echo ""
 UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
+    (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
 if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
     echo ""
     print_info "Current container status:"
-    (cd "${INSTALL_ROOT}/deployment" && IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
+    (cd "${INSTALL_ROOT}/deployment" && $DOCKER_SUDO HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
     echo ""
     print_info "Check the logs of any unhealthy service:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
     exit 1
@@ -1291,7 +1308,7 @@ else
     echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     print_info "Services may still be initializing. Check status with:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && ${DOCKER_SUDO:+sudo }$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
