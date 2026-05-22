@@ -251,8 +251,31 @@ def _start_celery_workers(
         )
         processes.append((app_name, proc))
 
+    # Celery beat fires the periodic scans (check-for-vespa-sync,
+    # check-for-pruning, check-for-connector-deletion, ...) that user
+    # group sync / pruning / deletion tests poll on. Without beat the
+    # tests time out after 300s.
+    beat_log_path = os.path.join(log_dir, "celery_beat_debug.log")
+    beat_log_file = open(beat_log_path, "ab")
+    log_handles.append(beat_log_file)
+    beat_proc = subprocess.Popen(
+        [
+            "celery",
+            "-A",
+            "onyx.background.celery.versioned_apps.beat",
+            "beat",
+            "--loglevel=info",
+        ],
+        cwd=BACKEND_DIR,
+        stdout=beat_log_file,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    processes.append(("beat", beat_proc))
+
     try:
-        _wait_for_celery_workers(expected=len(processes))
+        # Beat doesn't respond to inspect().ping(); only count workers.
+        _wait_for_celery_workers(expected=len(_CELERY_WORKER_PROGRAMS))
         yield None
     finally:
         import signal
