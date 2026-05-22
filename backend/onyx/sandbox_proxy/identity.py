@@ -33,6 +33,8 @@ logger = setup_logger()
 
 @dataclass(frozen=True)
 class SandboxIdentity:
+    """Pod-level identity. Available for any identified sandbox pod."""
+
     sandbox_id: UUID
     tenant_id: str
     sandbox_name: str
