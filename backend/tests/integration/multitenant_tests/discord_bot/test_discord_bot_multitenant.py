@@ -127,7 +127,9 @@ class TestGuildDataIsolation:
         if response1.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
 
-        assert not response1.is_error, f"Failed to create guild in tenant 1: {response1.text}"
+        assert not response1.is_error, (
+            f"Failed to create guild in tenant 1: {response1.text}"
+        )
         guild1_data = response1.json()
         guild1_id = guild1_data["id"]
 
@@ -185,7 +187,9 @@ class TestGuildDataIsolation:
         )
         if response1.status_code == 404:
             pytest.skip("Discord bot feature not enabled")
-        assert not response1.is_error, f"Failed to create guild in tenant 1: {response1.text}"
+        assert not response1.is_error, (
+            f"Failed to create guild in tenant 1: {response1.text}"
+        )
         guild1_data = response1.json()
         guild1_id = guild1_data["id"]
         registration_key1 = guild1_data["registration_key"]
@@ -199,7 +203,9 @@ class TestGuildDataIsolation:
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user2.headers,
         )
-        assert not response2.is_error, f"Failed to create guild in tenant 2: {response2.text}"
+        assert not response2.is_error, (
+            f"Failed to create guild in tenant 2: {response2.text}"
+        )
         guild2_data = response2.json()
         guild2_id = guild2_data["id"]
         registration_key2 = guild2_data["registration_key"]
