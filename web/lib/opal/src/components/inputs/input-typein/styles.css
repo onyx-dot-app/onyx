@@ -76,5 +76,10 @@
 }
 
 .opal-input[data-variant="primary"] .opal-input-field::placeholder {
-  @apply font-secondary-body text-text-02;
+  font-family: var(--font-hanken-grotesk);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0px;
+  color: var(--text-02);
 }
