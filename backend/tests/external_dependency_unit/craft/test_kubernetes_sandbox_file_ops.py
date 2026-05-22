@@ -428,7 +428,10 @@ class TestGetUploadStats:
         )
 
         assert file_count == 0
-        assert total_size == 0
+        # ``du -sb`` (the impl) counts the attachments directory's own inode
+        # — typically 4 KiB on ext4 / overlayfs. Allow the empty-dir overhead;
+        # we just care that no user data is present, which file_count pins.
+        assert total_size < 16 * 1024
 
     def test_get_upload_stats_with_files(
         self,
