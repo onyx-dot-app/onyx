@@ -430,6 +430,8 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
               -e ENABLE_CRAFT=true \
+              -e OUTPUTS_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs \
+              -e VENV_TEMPLATE_PATH=/workspace/backend/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv \
               -e ONYX_DEV_LICENSE \
               -e RUN_WITH_BACKEND_MODE=full \
               --entrypoint bash \
