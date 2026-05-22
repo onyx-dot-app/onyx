@@ -6,7 +6,12 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
-  {{- if .Values.postgresql.enabled }}
+  {{- /* See postgres-cluster.yaml for the cluster.enabled gate rationale. */}}
+  {{- $pgClusterEnabled := .Values.postgresql.enabled }}
+  {{- if and (hasKey .Values.postgresql "cluster") (hasKey (default dict .Values.postgresql.cluster) "enabled") }}
+  {{-   $pgClusterEnabled = .Values.postgresql.cluster.enabled }}
+  {{- end }}
+  {{- if $pgClusterEnabled }}
   POSTGRES_HOST: {{ .Release.Name }}-pg-rw
   {{- end }}
   {{- if .Values.opensearch.enabled }}

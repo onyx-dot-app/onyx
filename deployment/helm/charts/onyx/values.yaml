@@ -995,6 +995,12 @@ celery_worker_docfetching:
 
 redis:
   enabled: true
+  # Gates the redis-operator subchart. Default tracks `redis.enabled` for
+  # back-compat. Set to false to skip operator install (e.g., when the
+  # operator is pre-installed cluster-wide). The `redis` subchart that
+  # renders the Redis CR is gated separately on `redis.enabled`.
+  operator:
+    enabled: true
   redisStandalone:
     image: quay.io/opstree/redis
     tag: v7.0.15

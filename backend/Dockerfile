@@ -165,6 +165,11 @@ COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervis
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
 COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
 COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
+# Dev hot-reload wrappers — referenced by chart `command:` overrides under
+# the Tilt local-dev workflow. See docs/dev/craft-tilt-dev.md. Inert in
+# prod images (no chart consumer references them).
+COPY --chown=onyx:onyx ./scripts/dev_celery_reload.py /app/scripts/dev_celery_reload.py
+COPY --chown=onyx:onyx ./scripts/dev_sandbox_proxy_reload.py /app/scripts/dev_sandbox_proxy_reload.py
 RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 
 # Put logo in assets

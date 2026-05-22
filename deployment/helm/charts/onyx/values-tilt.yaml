@@ -1,0 +1,116 @@
+# Onyx Tilt local-dev overlay.
+#
+# Layers on top of values-localdev.yaml. While values-localdev.yaml scales app
+# pods (webserver, celery_*) to 0 because the legacy workflow runs them
+# locally via Telepresence intercept, the Tilt path runs everything
+# in-cluster. This overlay re-enables those services and adjusts settings for
+# the Tilt + k3d local-registry workflow.
+#
+# Apply with:
+#   tilt up
+# which renders the chart via:
+#   helm ... -f values-localdev.yaml -f values-tilt.yaml
+
+global:
+  # Tilt builds and pushes onyxdotapp/onyx-backend to localhost:5001 on each
+  # source change; pods pull from that registry. IfNotPresent so Tilt's
+  # content-hash-tagged images stick after pull.
+  pullPolicy: IfNotPresent
+
+# ---- Postgres / CNPG ----
+#
+# The CNPG operator is pre-installed by k3d-up.sh (separate Helm release in
+# cnpg-system namespace) so its mutating webhook is ready before our app
+# chart's Cluster CR is applied — avoiding the standard "webhook has no
+# endpoints" race during a single combined helm install. Disable the CNPG
+# subchart here; keep the Cluster CR rendering via the explicit
+# `cluster.enabled` gate.
+
+postgresql:
+  enabled: false
+  cluster:
+    enabled: true
+
+# ---- Redis / opstree operator ----
+#
+# Same pattern as CNPG: the redis-operator's reconcile loop has a startup
+# window where applying the Redis CR right after creating the operator
+# Deployment fails to materialize (helm install --wait then hangs until
+# timeout). Pre-install the operator separately in k3d-up.sh; here we
+# disable the operator subchart but keep the `redis` subchart that
+# renders the Redis CR.
+
+redis:
+  operator:
+    enabled: false
+
+# ---- Dev credentials ----
+#
+# Tilt drives chart rendering via `helm template`, which has no cluster access
+# and cannot use the chart's `lookup` path that reuses an existing Secret.
+# Hardcoded values here let the chart render. The cluster is localhost-only
+# and these credentials never leave the laptop, so committing them is fine.
+
+auth:
+  opensearch:
+    values:
+      opensearch_admin_password: "Aa1!onyx-craft-localdev-opensearch"
+
+# ---- App pods (all in-cluster under Tilt) ----
+
+api:
+  replicaCount: 1
+
+webserver:
+  replicaCount: 1
+
+celery_beat:
+  replicaCount: 1
+
+celery_worker_primary:
+  replicaCount: 1
+
+celery_worker_light:
+  replicaCount: 1
+
+celery_worker_heavy:
+  replicaCount: 1
+
+celery_worker_docfetching:
+  replicaCount: 1
+
+celery_worker_docprocessing:
+  replicaCount: 1
+
+celery_worker_monitoring:
+  replicaCount: 1
+
+celery_worker_user_file_processing:
+  replicaCount: 1
+
+celery_worker_scheduled_tasks:
+  replicaCount: 1
+
+sandboxProxy:
+  replicaCount: 1
+  # Hot-reload: watchfiles wraps the real entrypoint and re-execs on
+  # source changes Tilt sync()s into the pod.
+  command:
+    - python
+    - /app/scripts/dev_sandbox_proxy_reload.py
+
+# ---- Ingress ----
+#
+# The webserver runs the production Next.js build, which does not proxy
+# /api/* to api_server — nginx is expected to do that. Enable ingress with
+# onyx.localhost as the host (RFC 6761 resolves *.localhost to 127.0.0.1
+# automatically, no DNS setup). Tilt port-forwards ingress-nginx so the
+# browser hits the same nginx that a prod deployment uses.
+
+ingress:
+  enabled: true
+  className: nginx
+  api:
+    host: onyx.localhost
+  webserver:
+    host: onyx.localhost
