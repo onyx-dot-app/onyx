@@ -50,7 +50,9 @@ from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import ADMIN_USER_NAME  # noqa: E402
 from tests.integration.common_utils.constants import GENERAL_HEADERS  # noqa: E402
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
-from tests.integration.common_utils.managers.document import DocumentManager  # noqa: E402
+from tests.integration.common_utils.managers.document import (
+    DocumentManager,  # noqa: E402
+)
 from tests.integration.common_utils.managers.image_generation import (  # noqa: E402
     ImageGenerationConfigManager,
 )
