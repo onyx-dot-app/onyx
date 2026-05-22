@@ -26,18 +26,24 @@ class SnapshotError(RuntimeError):
 
 
 def _run(script: str) -> None:
-    """Run a shell script with stderr captured into the raised error."""
+    """Run a shell script with stderr merged into stdout for the error.
+
+    We deliberately merge stderr into stdout (rather than capturing them
+    separately) so a failure anywhere in a `tar | s5cmd` pipeline always
+    surfaces *something* in the SnapshotError — `set -o pipefail` can
+    otherwise tear the stream down before stderr buffers flush, leaving
+    a useless "no output" diagnostic.
+    """
     try:
         subprocess.run(
             ["/bin/bash", "-c", script],
             check=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or "").strip()
-        stdout = (e.stdout or "").strip()
-        detail = stderr or stdout or "no output"
+        detail = (e.stdout or "").strip() or "no output"
         raise SnapshotError(f"exit {e.returncode}: {detail}") from e
 
 

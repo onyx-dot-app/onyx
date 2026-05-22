@@ -434,10 +434,27 @@ class KubernetesSandboxManager(SandboxManager):
             "AWS_REGION",
             "AWS_DEFAULT_REGION",
             "AWS_ENDPOINT_URL",
+            # s5cmd v2.3.0 reads S3_ENDPOINT_URL specifically — it does not
+            # honor AWS_ENDPOINT_URL. Forward it explicitly so the snapshot
+            # daemon's `s5cmd pipe`/`cat` and the file-sync sidecar's
+            # `s5cmd sync` both hit MinIO in dev/CI rather than silently
+            # falling back to the public AWS endpoint.
+            "S3_ENDPOINT_URL",
         ):
             value = os.environ.get(var)
             if value:
                 sidecar_env.append(client.V1EnvVar(name=var, value=value))
+
+        # Backfill S3_ENDPOINT_URL from AWS_ENDPOINT_URL when only the AWS
+        # form is set in the api_server env (the common case — every other
+        # AWS-style tool reads AWS_ENDPOINT_URL). Keeps CI / local-dev config
+        # to a single env var even though s5cmd's flag name differs.
+        forwarded_names = {e.name for e in sidecar_env}
+        aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+        if aws_endpoint and "S3_ENDPOINT_URL" not in forwarded_names:
+            sidecar_env.append(
+                client.V1EnvVar(name="S3_ENDPOINT_URL", value=aws_endpoint)
+            )
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
