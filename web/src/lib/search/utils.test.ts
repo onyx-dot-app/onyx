@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock, type Mock } from "bun:test";
 
-type OpenMock = OpenMock;
+type OpenMock = Mock<(...args: unknown[]) => unknown>;
 import { ValidSources } from "../types";
 import { OnyxDocument } from "./interfaces";
 import { openDocument } from "./utils";

@@ -13,6 +13,7 @@ import {
   expect,
   it,
   jest,
+  mock,
   test,
 } from "bun:test";
 import React from "react";
@@ -58,12 +59,12 @@ const mockRefreshLicense = jest.fn() as jest.Mock;
 
 // ---- Mocks ----
 
-jest.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useRouter: () => mockRouter,
   useSearchParams: () => mockSearchParams,
 }));
 
-jest.mock("@/layouts/settings-layouts", () => ({
+mock.module("@/layouts/settings-layouts", () => ({
   Root: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="settings-root">{children}</div>
   ),
@@ -73,37 +74,37 @@ jest.mock("@/layouts/settings-layouts", () => ({
   ),
 }));
 
-jest.mock("@/layouts/general-layouts", () => ({
+mock.module("@/layouts/general-layouts", () => ({
   Section: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
 }));
 
-jest.mock("@opal/icons", () => ({
+mock.module("@opal/icons", () => ({
   SvgArrowUpCircle: () => <svg />,
   SvgWallet: () => <svg />,
 }));
 
-jest.mock("./PlansView", () => ({
+mock.module("./PlansView", () => ({
   __esModule: true,
   default: () => <div data-testid="plans-view" />,
 }));
-jest.mock("./CheckoutView", () => ({
+mock.module("./CheckoutView", () => ({
   __esModule: true,
   default: () => <div data-testid="checkout-view" />,
 }));
-jest.mock("./BillingDetailsView", () => ({
+mock.module("./BillingDetailsView", () => ({
   __esModule: true,
   default: () => <div data-testid="billing-details-view" />,
 }));
-jest.mock("./LicenseActivationCard", () => ({
+mock.module("./LicenseActivationCard", () => ({
   __esModule: true,
   default: () => <div data-testid="license-activation-card" />,
 }));
 
 // jest.requireActual is replaced with a top-level dynamic import.
 const actualOpalComponents = await import("@opal/components");
-jest.mock("@opal/components", () => {
+mock.module("@opal/components", () => {
   return {
     ...actualOpalComponents,
     MessageCard: ({
@@ -130,14 +131,14 @@ jest.mock("@opal/components", () => {
   };
 });
 
-jest.mock("@/lib/billing", () => ({
+mock.module("@/lib/billing", () => ({
   useBillingInformation: jest.fn(),
   useLicense: jest.fn(),
   hasActiveSubscription: jest.fn().mockReturnValue(false),
   claimLicense: (...args: unknown[]) => mockClaimLicense(...args),
 }));
 
-jest.mock("@/lib/constants", () => ({
+mock.module("@/lib/constants", () => ({
   NEXT_PUBLIC_CLOUD_ENABLED: false,
 }));
 

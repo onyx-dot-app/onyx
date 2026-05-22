@@ -40,7 +40,9 @@ describe("billing actions", () => {
       // Mock POST /api/admin/billing/create-checkout-session
       fetchSpy.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ url: "https://checkout.stripe.com/session123" }),
+        json: async () => ({
+          stripe_checkout_url: "https://checkout.stripe.com/session123",
+        }),
       } as Response);
 
       const result = await createCheckoutSession({
@@ -57,13 +59,17 @@ describe("billing actions", () => {
       );
 
       const callArgs = fetchSpy.mock.calls[0]!;
-      const requestBody = JSON.parse((callArgs[1] as RequestInit).body as string);
+      const requestBody = JSON.parse(
+        (callArgs[1] as RequestInit).body as string
+      );
       expect(requestBody).toEqual({
         billing_period: "monthly",
         email: "test@example.com",
       });
 
-      expect(result).toEqual({ url: "https://checkout.stripe.com/session123" });
+      expect(result).toEqual({
+        stripe_checkout_url: "https://checkout.stripe.com/session123",
+      });
     });
 
     test("throws error on failed response", async () => {
@@ -91,7 +97,9 @@ describe("billing actions", () => {
     test("calls correct endpoint and returns portal URL", async () => {
       fetchSpy.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ url: "https://billing.stripe.com/portal123" }),
+        json: async () => ({
+          stripe_customer_portal_url: "https://billing.stripe.com/portal123",
+        }),
       } as Response);
 
       const result = await createCustomerPortalSession({
@@ -103,7 +111,9 @@ describe("billing actions", () => {
         expect.objectContaining({ method: "POST" })
       );
 
-      expect(result).toEqual({ url: "https://billing.stripe.com/portal123" });
+      expect(result).toEqual({
+        stripe_customer_portal_url: "https://billing.stripe.com/portal123",
+      });
     });
   });
 
@@ -127,7 +137,9 @@ describe("billing actions", () => {
       );
 
       const callArgs = fetchSpy.mock.calls[0]!;
-      const requestBody = JSON.parse((callArgs[1] as RequestInit).body as string);
+      const requestBody = JSON.parse(
+        (callArgs[1] as RequestInit).body as string
+      );
       expect(requestBody).toEqual({ new_seat_count: 10 });
 
       expect(result.current_seats).toBe(10);

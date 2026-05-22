@@ -1,20 +1,20 @@
-import { describe, expect, it, jest, test } from "bun:test";
+import { describe, expect, it, jest, mock, test } from "bun:test";
 import React, { useEffect } from "react";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import ShareAgentModal, { ShareAgentModalProps } from "./ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
-jest.mock("@/hooks/useShareableUsers", () => ({
+mock.module("@/hooks/useShareableUsers", () => ({
   __esModule: true,
   default: jest.fn(() => ({ data: [] })),
 }));
 
-jest.mock("@/hooks/useShareableGroups", () => ({
+mock.module("@/hooks/useShareableGroups", () => ({
   __esModule: true,
   default: jest.fn(() => ({ data: [] })),
 }));
 
-jest.mock("@/lib/agents/hooks", () => ({
+mock.module("@/lib/agents/hooks", () => ({
   useAgent: jest.fn(() => ({ agent: null })),
   useLabels: jest.fn(() => ({
     labels: [],

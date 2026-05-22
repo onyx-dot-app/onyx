@@ -27,7 +27,7 @@ const baseAuthMetadata = (authType: AuthType): AuthTypeMetadata => ({
 const fakeUser = { id: "user-1" } as User;
 
 describe("useTokenRefresh", () => {
-  let fetchMock: Mock<typeof fetch>;
+  let fetchMock: Mock<(...args: any[]) => any>;
   let originalFetch: typeof fetch;
 
   beforeEach(() => {
@@ -97,7 +97,7 @@ describe("useTokenRefresh", () => {
   });
 
   test("does not loop when /api/auth/refresh returns 404 and parent re-renders", async () => {
-    fetchMock.mockResolvedValue({ ok: false, status: 404 });
+    fetchMock.mockResolvedValue({ ok: false, status: 404 } as Response);
     const onRefreshFail = jest.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(

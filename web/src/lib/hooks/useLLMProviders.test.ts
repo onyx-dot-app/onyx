@@ -62,7 +62,7 @@ describe("useLLMProviders", () => {
         dedupingInterval: 60000,
       })
     );
-    expect(result.llmProviders).toBe(providers);
+    expect(result.llmProviders).toBe(providers as any);
     expect(result.isLoading).toBe(false);
     expect(result.refetch).toBe(mockMutate);
   });

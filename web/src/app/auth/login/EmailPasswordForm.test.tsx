@@ -4,12 +4,22 @@
  * Tests the complete user journey for logging in.
  * This tests the full workflow: form → validation → API call → redirect
  */
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+  mock,
+  test,
+} from "bun:test";
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
 import EmailPasswordForm from "./EmailPasswordForm";
 
 // Mock next/navigation (not used by this component, but required by dependencies)
-jest.mock("next/navigation", () => ({
+mock.module("next/navigation", () => ({
   useRouter: () => ({
     push: jest.fn(),
     refresh: jest.fn(),
@@ -17,7 +27,7 @@ jest.mock("next/navigation", () => ({
 }));
 
 describe("Email/Password Login Workflow", () => {
-  let fetchSpy: jest.SpyInstance;
+  let fetchSpy: ReturnType<typeof jest.spyOn>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -106,7 +116,7 @@ describe("Email/Password Login Workflow", () => {
 });
 
 describe("Email/Password Signup Workflow", () => {
-  let fetchSpy: jest.SpyInstance;
+  let fetchSpy: ReturnType<typeof jest.spyOn>;
 
   beforeEach(() => {
     jest.clearAllMocks();

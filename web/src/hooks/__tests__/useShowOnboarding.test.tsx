@@ -5,6 +5,7 @@ import {
   expect,
   it,
   jest,
+  mock,
   test,
 } from "bun:test";
 import React from "react";
@@ -13,7 +14,7 @@ import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import { OnboardingStep } from "@/interfaces/onboarding";
 
 // Mock underlying dependencies used by the inlined useOnboardingState
-jest.mock("@/providers/UserProvider", () => ({
+mock.module("@/providers/UserProvider", () => ({
   useUser: () => ({
     user: null,
     refreshUser: jest.fn(),
@@ -28,17 +29,17 @@ const mockProviderStatus = {
   refreshProviderInfo: jest.fn(),
 };
 
-jest.mock("@/components/chat/ProviderContext", () => ({
+mock.module("@/components/chat/ProviderContext", () => ({
   useProviderStatus: () => mockProviderStatus,
 }));
 
-jest.mock("@/hooks/useLanguageModels", () => ({
+mock.module("@/hooks/useLanguageModels", () => ({
   useLLMProviders: () => ({
     refetch: jest.fn(),
   }),
 }));
 
-jest.mock("@/lib/userSettings", () => ({
+mock.module("@/lib/userSettings", () => ({
   updateUserPersonalization: jest.fn(),
 }));
 

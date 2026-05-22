@@ -1,12 +1,4 @@
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-  mock,
-  test,
-} from "bun:test";
+import { beforeEach, describe, expect, it, jest, mock, test } from "bun:test";
 import React, { PropsWithChildren } from "react";
 import { act, renderHook } from "@testing-library/react";
 import {
@@ -48,7 +40,8 @@ mock.module("@/hooks/useToast", () => ({
 
 // Partial mock: keep the real projectsService exports and only override a few.
 // jest.requireActual is replaced with a top-level dynamic import spread into mock.module.
-const actualProjectsService = await import("@/app/app/projects/projectsService");
+const actualProjectsService =
+  await import("@/app/app/projects/projectsService");
 mock.module("@/app/app/projects/projectsService", () => ({
   ...actualProjectsService,
   fetchProjects: jest.fn().mockResolvedValue([]),
@@ -116,7 +109,7 @@ describe("ProjectsContext beginUpload size precheck", () => {
     });
 
     expect(mockUploadFiles).toHaveBeenCalledTimes(1);
-    const [uploadedFiles] = mockUploadFiles.mock.calls[0];
+    const [uploadedFiles] = mockUploadFiles.mock.calls[0]!;
     expect((uploadedFiles as File[]).map((f) => f.name)).toEqual(["small.txt"]);
     expect(optimisticFiles.map((f) => f.name)).toEqual(["small.txt"]);
     expect(mockToastWarning).toHaveBeenCalledTimes(1);
@@ -134,7 +127,7 @@ describe("ProjectsContext beginUpload size precheck", () => {
     });
 
     expect(mockUploadFiles).toHaveBeenCalledTimes(1);
-    const [uploadedFiles] = mockUploadFiles.mock.calls[0];
+    const [uploadedFiles] = mockUploadFiles.mock.calls[0]!;
     expect((uploadedFiles as File[]).map((f) => f.name)).toEqual([
       "first.txt",
       "second.txt",

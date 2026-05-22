@@ -44,7 +44,7 @@ mock.module("swr", () => ({
 }));
 
 // Mock toast
-jest.mock("@/hooks/useToast", () => {
+mock.module("@/hooks/useToast", () => {
   const success = jest.fn();
   const error = jest.fn();
   const toastFn = Object.assign(jest.fn(), {
@@ -69,12 +69,12 @@ jest.mock("@/hooks/useToast", () => {
 // Mock useTierAtLeast — return false so the test exercises the
 // non-paid-tier code path, matching the prior usePaidEnterpriseFeaturesEnabled
 // mock behavior.
-jest.mock("@/hooks/useTierAtLeast", () => ({
+mock.module("@/hooks/useTierAtLeast", () => ({
   useTierAtLeast: () => false,
 }));
 
 describe("Custom LLM Provider Configuration Workflow", () => {
-  let fetchSpy: jest.SpyInstance;
+  let fetchSpy: ReturnType<typeof jest.spyOn>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -230,8 +230,8 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify create API was NOT called
     expect(
-      fetchSpy.mock.calls.find((call) =>
-        call[0].includes("/api/admin/llm/provider")
+      fetchSpy.mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes("/api/admin/llm/provider")
       )
     ).toBeUndefined();
   });
@@ -394,9 +394,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     });
 
     const updateCall = fetchSpy.mock.calls.find(
-      (call) =>
+      (call: unknown[]) =>
         call[0] === "/api/admin/llm/provider" &&
-        call[1]?.method?.toUpperCase() === "PUT"
+        (call[1] as RequestInit)?.method?.toUpperCase() === "PUT"
     );
     expect(updateCall).toBeDefined();
 
@@ -452,15 +452,15 @@ describe("Custom LLM Provider Configuration Workflow", () => {
     // Verify set as default API was called with correct endpoint and body
     await waitFor(() => {
       const defaultCall = fetchSpy.mock.calls.find(
-        ([url]) => url === "/api/admin/llm/default"
+        ([url]: [string, RequestInit]) => url === "/api/admin/llm/default"
       );
       expect(defaultCall).toBeDefined();
 
-      const [, options] = defaultCall!;
+      const [, options] = defaultCall! as [string, RequestInit];
       expect(options.method).toBe("POST");
       expect(options.headers).toEqual({ "Content-Type": "application/json" });
 
-      const body = JSON.parse(options.body);
+      const body = JSON.parse(options.body as string);
       expect(body.provider_id).toBe(5);
       expect(body).toHaveProperty("model_name");
     });
@@ -562,12 +562,14 @@ describe("Custom LLM Provider Configuration Workflow", () => {
 
     // Verify the custom config was included in the request
     await waitFor(() => {
-      const createCall = fetchSpy.mock.calls.find((call) =>
-        call[0].includes("/api/admin/llm/provider")
+      const createCall = fetchSpy.mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes("/api/admin/llm/provider")
       );
       expect(createCall).toBeDefined();
 
-      const requestBody = JSON.parse(createCall![1].body);
+      const requestBody = JSON.parse(
+        (createCall![1] as RequestInit).body as string
+      );
       expect(requestBody.custom_config).toEqual({
         CLOUDFLARE_ACCOUNT_ID: "my-account-id-123",
       });

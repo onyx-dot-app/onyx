@@ -4,6 +4,7 @@
  * Tests the React hook that wraps packet processing functions with React state
  * management, memoization, and callbacks. Uses @testing-library/react's renderHook.
  */
+import { describe, expect, it, jest, mock, test } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import {
   Packet,
@@ -20,7 +21,7 @@ import {
 } from "./__tests__/testHelpers";
 
 // Mock the transformers module
-jest.mock("../transformers", () => ({
+mock.module("../transformers", () => ({
   transformPacketGroups: jest.fn((groups) =>
     groups.map(
       (g: { turn_index: number; tab_index: number; packets: Packet[] }) => ({

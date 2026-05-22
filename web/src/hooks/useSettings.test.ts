@@ -195,7 +195,7 @@ describe("useEnterpriseSettings", () => {
 
     const result = useEnterpriseSettings(true);
 
-    expect(result.enterpriseSettings).toBe(mockEnterprise);
+    expect(result.enterpriseSettings).toBe(mockEnterprise as any);
     expect(result.isLoading).toBe(false);
   });
 });
