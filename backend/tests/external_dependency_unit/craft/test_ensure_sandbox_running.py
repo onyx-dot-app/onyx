@@ -250,16 +250,23 @@ class TestEnsureSandboxRunning:
         # Sleep-hook simulates the "other" provisioner finishing: flip
         # the DB row to RUNNING AND actually call the real provision so
         # the subsequent health_check sees a live pod/dir.
+        #
+        # Set the flag *before* calling _provision_real. The k8s manager
+        # polls for pod readiness via ``time.sleep`` inside ``provision``,
+        # and ``monkeypatch.setattr`` on ``time.sleep`` rebinds the
+        # shared module attribute, so the inner sleep calls re-enter
+        # this hook. Without the early flip, those re-entries would
+        # recursively call ``_provision_real`` and blow the stack.
         flipped: list[bool] = [False]
 
         def _flipping_sleep(_seconds: float) -> None:
             if not flipped[0]:
+                flipped[0] = True
                 _provision_real(mgr, existing, test_user.id)
                 update_sandbox_status__no_commit(
                     db_session, existing.id, SandboxStatus.RUNNING
                 )
                 db_session.commit()
-                flipped[0] = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.manager.time.sleep",
