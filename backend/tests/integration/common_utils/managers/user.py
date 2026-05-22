@@ -108,6 +108,14 @@ class UserManager:
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}
 
+        # TestClient shares a single cookie jar across the whole session.
+        # Without this, the most recently logged-in user's auth cookie would
+        # leak into subsequent requests made with explicit per-user headers
+        # (e.g. API-key auth), making cookie-based auth always win over the
+        # Bearer header. Clear the jar so each request authenticates via
+        # whatever `headers=...` the caller passes.
+        client.cookies.clear()
+
         # Get user role from /me endpoint
         me_response = client.get(
             url=f"{API_SERVER_URL}/me",
