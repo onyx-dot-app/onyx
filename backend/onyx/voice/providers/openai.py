@@ -1,10 +1,10 @@
 """OpenAI voice provider for STT and TTS.
 
 OpenAI supports:
-- **STT**: Whisper (batch transcription via REST) and Realtime API (streaming
-  transcription via WebSocket with server-side VAD). Audio is sent as base64-encoded
-  PCM16 at 24kHz mono. The Realtime API returns transcript deltas and completed
-  transcription events per VAD-detected utterance.
+- **STT**: Whisper (batch transcription via REST). Streaming transcription via
+  the Realtime API is currently disabled (`supports_streaming_stt()` returns
+  `False`) pending migration to the GA Realtime API; `OpenAIStreamingTranscriber`
+  remains in this file for the upcoming migration but is unreachable today.
 - **TTS**: HTTP streaming endpoint that returns audio chunks progressively.
   Supported models: tts-1 (standard) and tts-1-hd (high quality).
 
@@ -292,7 +292,9 @@ OPENAI_VOICES = [
     {"id": "shimmer", "name": "Shimmer"},
 ]
 
-# OpenAI available STT models (all support streaming via Realtime API)
+# OpenAI available STT models. All use the chunked HTTP transcription endpoint
+# today; Realtime streaming is disabled until the GA migration lands (see
+# `supports_streaming_stt()`).
 OPENAI_STT_MODELS = [
     {"id": "whisper-1", "name": "Whisper v1"},
     {"id": "gpt-4o-transcribe", "name": "GPT-4o Transcribe"},
