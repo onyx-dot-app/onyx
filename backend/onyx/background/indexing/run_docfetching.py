@@ -789,6 +789,7 @@ def connector_document_extraction(
 
                 batch_num += 1
                 total_doc_batches_queued += 1
+                document_count += len(doc_batch_cleaned)
 
                 logger.info(
                     "Queued document processing batch: batch_num=%s docs=%s attempt=%s",
