@@ -35,6 +35,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import InputType
 from onyx.connectors.models import TextSection
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import IndexingStatus
@@ -143,6 +144,11 @@ def _seed_attempt(db_session: Session) -> tuple[int, int, int]:
 
     Returns (cc_pair_id, search_settings_id, index_attempt_id)."""
     cc_pair = make_cc_pair(db_session)
+    # `make_cc_pair` defaults the connector's input_type to LOAD_STATE, but our
+    # mock implements CheckpointedConnector — which the factory only accepts
+    # under POLL. Override before the entrypoint runs.
+    cc_pair.connector.input_type = InputType.POLL
+    db_session.commit()
 
     search_settings = SearchSettings(
         model_name="test-model",
