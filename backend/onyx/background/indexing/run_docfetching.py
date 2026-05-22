@@ -952,13 +952,23 @@ def connector_document_extraction(
                     )
                     # Set total_batches so check_indexing_completion can resolve
                     # the attempt. Without this the attempt would hang in
-                    # IN_PROGRESS forever.
-                    IndexingCoordination.set_total_batches(
-                        db_session=db_session_temp,
-                        index_attempt_id=index_attempt_id,
-                        total_batches=batch_num,
-                    )
-                    return
+                    # IN_PROGRESS forever. If this DB write fails we have no
+                    # way to land COMPLETED_WITH_ERRORS cleanly — fall through
+                    # to mark_attempt_failed below as a safety net.
+                    try:
+                        IndexingCoordination.set_total_batches(
+                            db_session=db_session_temp,
+                            index_attempt_id=index_attempt_id,
+                            total_batches=batch_num,
+                        )
+                        return
+                    except Exception:
+                        logger.exception(
+                            "Failed to set total_batches during persistent "
+                            "indexing recovery for attempt %s; falling back "
+                            "to mark_attempt_failed",
+                            index_attempt_id,
+                        )
 
                 mark_attempt_failed(
                     index_attempt_id,
