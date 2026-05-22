@@ -96,10 +96,10 @@ jobs:
       - name: Discover test directories
         id: set-matrix
         run: |
-          # ``craft`` excluded: needs sandbox infra this lane doesn't set up.
-          # Coverage lives in pr-craft-k8s-tests.yml + external_dependency_unit.
-          # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)          
+          # Find all leaf-level directories in both test directories.
+          # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
+          # coverage lives in pr-craft-k8s-tests.yml + external_dependency_unit.
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info

@@ -102,7 +102,7 @@ def _provision_real(
             api_key="test-key",
             api_base=None,
         ),
-        onyx_pat=None,
+        onyx_pat="ci-test-pat",
     )
 
 
