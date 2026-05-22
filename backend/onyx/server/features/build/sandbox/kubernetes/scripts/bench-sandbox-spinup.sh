@@ -129,7 +129,7 @@ run_scenario() {
   n=$(printf '%s\n' "$sorted" | wc -l | tr -d ' ')
   local min median max
   min=$(printf '%s\n' "$sorted" | sed -n 1p)
-  median=$(printf '%s\n' "$sorted" | sed -n "$(( (n / 2) + 1 ))p")
+  median=$(printf '%s\n' "$sorted" | sed -n "$(( (n + 1) / 2 ))p")
   max=$(printf '%s\n' "$sorted" | sed -n "${n}p")
   printf "    min=%s ms  median=%s ms  max=%s ms\n" "$min" "$median" "$max"
 }
