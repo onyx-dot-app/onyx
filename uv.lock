@@ -4583,6 +4583,9 @@ model-server = [
     { name = "torch" },
     { name = "transformers" },
 ]
+zizmor = [
+    { name = "zizmor" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -4755,6 +4758,7 @@ model-server = [
     { name = "torch", specifier = "==2.9.1" },
     { name = "transformers", specifier = "==5.5.4" },
 ]
+zizmor = [{ name = "zizmor", specifier = "==1.25.2" }]
 
 [[package]]
 name = "onyx-devtools"

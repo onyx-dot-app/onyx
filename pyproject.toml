@@ -174,8 +174,12 @@ dev = [
     "types-requests==2.32.0.20250328",
     "types-retry==0.9.9.3",
     "types-setuptools==68.0.0.3",
-    "zizmor==1.25.2",
+    { include-group = "zizmor" },
 ]
+
+# Isolated group so CI can `uv sync --only-group zizmor` without pulling
+# the rest of the dev toolchain.
+zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
