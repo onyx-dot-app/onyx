@@ -8,8 +8,7 @@ import {
   ExternalAppAdminResponse,
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
-
-const API_BASE = "/api/build";
+import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 
 async function readErrorDetail(
   res: Response,
@@ -33,7 +32,7 @@ interface UpsertExternalAppBody {
 export async function upsertExternalApp(
   body: UpsertExternalAppBody
 ): Promise<ExternalAppAdminResponse> {
-  const res = await fetch(`${API_BASE}/admin/apps`, {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -62,7 +61,7 @@ export async function setExternalAppEnabled(
 }
 
 export async function deleteExternalApp(id: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/admin/apps/${id}`, {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/${id}`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -77,7 +76,9 @@ interface OAuthStartResponse {
 export async function startExternalAppOAuth(
   externalAppId: number
 ): Promise<OAuthStartResponse> {
-  const res = await fetch(`${API_BASE}/apps/${externalAppId}/oauth/start`);
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start`
+  );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to start OAuth"));
   }
@@ -88,7 +89,7 @@ export async function completeExternalAppOAuthCallback(
   code: string,
   state: string
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/apps/oauth/callback`, {
+  const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, state }),
@@ -102,11 +103,14 @@ export async function upsertUserCredentials(
   externalAppId: number,
   userCredentials: Record<string, unknown>
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/apps/${externalAppId}/credentials`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_credentials: userCredentials }),
-  });
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_credentials: userCredentials }),
+    }
+  );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to save credentials"));
   }
