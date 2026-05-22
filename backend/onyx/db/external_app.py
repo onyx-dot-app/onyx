@@ -52,12 +52,14 @@ def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
 ) -> bool:
-    """True iff the user has supplied every credential key the app's
+    """True iff the user has supplied every credential parameter the app's
     ``auth_template`` references that the org has not pre-filled. An
     app with no user-required keys (everything covered by
     ``organization_credentials``) is considered authenticated for every
     user, no credential row needed."""
-    required = [k for k in app.auth_template if k not in app.organization_credentials]
+    required = required_user_credential_keys(
+        app.auth_template, app.organization_credentials
+    )
     if not required:
         return True
     if user_cred is None:
