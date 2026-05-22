@@ -222,7 +222,7 @@ class ChatSessionManager:
         response_data = cast(
             list[StreamPacketData],
             [
-                json.loads(line.decode("utf-8"))
+                json.loads(line)
                 for line in response.iter_lines()
                 if line
             ],
