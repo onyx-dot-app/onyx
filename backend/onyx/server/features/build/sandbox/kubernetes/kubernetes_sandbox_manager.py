@@ -48,6 +48,7 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID
 from uuid import uuid4
 
@@ -147,10 +148,25 @@ _PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
 _PROXY_ALIAS = "sandbox-proxy"
 
 
+_PROXY_DNS_RETRY_ATTEMPTS = 5
+_PROXY_DNS_RETRY_BACKOFF_S = 0.5
+
+
 def _resolve_proxy_ip() -> str:
     if not SANDBOX_PROXY_HOST:
         raise RuntimeError("_resolve_proxy_ip called without SANDBOX_PROXY_HOST")
-    return socket.gethostbyname(SANDBOX_PROXY_HOST)
+    last_err: OSError | None = None
+    for attempt in range(_PROXY_DNS_RETRY_ATTEMPTS):
+        try:
+            return socket.gethostbyname(SANDBOX_PROXY_HOST)
+        except OSError as e:
+            last_err = e
+            if attempt < _PROXY_DNS_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_DNS_RETRY_BACKOFF_S * (2**attempt))
+    raise RuntimeError(
+        f"failed to resolve SANDBOX_PROXY_HOST={SANDBOX_PROXY_HOST!r} "
+        f"after {_PROXY_DNS_RETRY_ATTEMPTS} attempts: {last_err}"
+    )
 
 
 def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
@@ -178,8 +194,6 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
 def _compute_no_proxy_list() -> str:
     entries = ["127.0.0.1", "localhost"]
     if SANDBOX_API_SERVER_URL:
-        from urllib.parse import urlparse
-
         parsed = urlparse(SANDBOX_API_SERVER_URL)
         if parsed.hostname:
             entries.append(parsed.hostname)
@@ -510,9 +524,14 @@ class KubernetesSandboxManager(SandboxManager):
         # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
         # local-dev / CI where IRSA isn't available and an S3-compatible
         # service (e.g. minio) is reachable in-cluster.
+        #
+        # Proxy env + CA bundle: firewall-init's iptables lockdown is
+        # pod-wide, so the sidecar's `aws s3 cp` must also route through
+        # the proxy. Unmatched routes fail open.
         _, push_public_key_b64 = _get_push_key_pair()
         sidecar_env = [
             client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+            *_proxy_main_container_env_vars(),
         ]
         for var in (
             "AWS_ACCESS_KEY_ID",
@@ -541,6 +560,17 @@ class KubernetesSandboxManager(SandboxManager):
                     name="workspace", mount_path="/workspace/sessions"
                 ),
                 client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
+                *(
+                    [
+                        client.V1VolumeMount(
+                            name=_PROXY_CA_BUNDLE_VOLUME,
+                            mount_path=_PROXY_CA_BUNDLE_DIR,
+                            read_only=True,
+                        )
+                    ]
+                    if SANDBOX_PROXY_HOST
+                    else []
+                ),
             ],
             resources=client.V1ResourceRequirements(
                 requests={"cpu": "100m", "memory": "256Mi"},
