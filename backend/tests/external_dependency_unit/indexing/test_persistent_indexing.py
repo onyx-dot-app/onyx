@@ -43,6 +43,7 @@ from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors
 from onyx.db.models import IndexAttempt
+from onyx.db.models import IndexAttemptError
 from onyx.db.models import SearchSettings
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
@@ -181,6 +182,10 @@ def _seed_attempt(db_session: Session) -> tuple[int, int, int]:
 def _teardown_attempt(
     db_session: Session, cc_pair_id: int, search_settings_id: int, attempt_id: int
 ) -> None:
+    # IndexAttemptError FKs index_attempt; drop child rows first.
+    db_session.query(IndexAttemptError).filter(
+        IndexAttemptError.index_attempt_id == attempt_id
+    ).delete(synchronize_session="fetch")
     db_session.query(IndexAttempt).filter(IndexAttempt.id == attempt_id).delete(
         synchronize_session="fetch"
     )
