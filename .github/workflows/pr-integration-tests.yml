@@ -654,6 +654,7 @@ jobs:
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
             -e S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e OPENAI_DEFAULT_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e SLACK_BOT_TOKEN_TEST_SPACE=${SLACK_BOT_TOKEN_TEST_SPACE} \
@@ -664,6 +665,8 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
+            -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+            -e LICENSE_ENFORCEMENT_ENABLED=false \
             -e RUN_WITH_BACKEND_MODE=full \
             --entrypoint bash \
             ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
