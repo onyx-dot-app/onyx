@@ -8,7 +8,7 @@ import { SvgPaperclip } from "@opal/icons";
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,
-  "type" | "rightChildren" | "value" | "onChange" | "readOnly" | "onClear"
+  "type" | "rightChildren" | "value" | "onChange" | "readOnly" | "clearButton"
 > {
   /**
    * Whether the input is disabled.
@@ -161,7 +161,6 @@ export default function InputFile({
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
-        onClear={handleClear}
         rightChildren={rightChildren}
       />
     </>

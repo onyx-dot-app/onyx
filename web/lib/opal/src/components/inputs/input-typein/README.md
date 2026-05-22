@@ -13,8 +13,7 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 | `prefixText` | `string` | — | Non-editable prefix rendered before the input (e.g. `"https://"`) |
 | `searchIcon` | `boolean` | `false` | Show a search icon on the left |
 | `rightChildren` | `ReactNode` | — | Custom content rendered to the right of the input; suppresses the built-in clear button |
-| `showClearButton` | `boolean` | `false` | Show the clear (×) button when the field has a value (ignored when `rightChildren` is set) |
-| `onClear` | `() => void` | — | Called when the clear button is clicked; omit to use built-in synthetic event |
+| `clearButton` | `boolean` | `false` | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |
 | `value` | `string` | — | Controlled value |
 | `onChange` | `ChangeEventHandler` | — | Change handler |
 

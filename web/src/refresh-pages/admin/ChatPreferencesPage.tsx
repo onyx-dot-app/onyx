@@ -292,7 +292,6 @@ function NumericLimitField({
     <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
-        showClearButton={false}
         pattern="[0-9]*"
         value={value}
         onChange={(e) => setValue(e.target.value)}

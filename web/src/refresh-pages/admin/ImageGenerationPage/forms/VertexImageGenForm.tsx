@@ -91,7 +91,6 @@ function VertexFormFields(
                 setValue={(value) => helper.setValue(value)}
                 error={apiStatus === "error"}
                 onBlur={field.onBlur}
-                showClearButton={true}
                 disabled={disabled}
                 accept="application/json"
                 placeholder="Upload or paste your credentials"
@@ -142,7 +141,6 @@ function VertexFormFields(
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
                 placeholder="global"
-                showClearButton={false}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

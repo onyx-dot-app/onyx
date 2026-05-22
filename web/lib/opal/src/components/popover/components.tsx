@@ -3,8 +3,7 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
-import { Separator } from "@opal/components/separator/components";
-import { ShadowDiv } from "@opal/components/shadow-div/components";
+import { ShadowDiv, Divider } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import { Section } from "@opal/layouts/general/components";
 
@@ -165,8 +164,8 @@ const Popover = Object.assign(PopoverRoot, {
 // Common Layouts
 // ============================================================================
 
-function SeparatorHelper() {
-  return <Separator className="py-0 px-2" />;
+function DividerHelper() {
+  return <Divider paddingPerpendicular="fit" />;
 }
 
 /**
@@ -238,7 +237,7 @@ function PopoverMenu({
               <></>
             ) : child === null ? (
               // Render `null`s as divider lines
-              <SeparatorHelper />
+              <DividerHelper />
             ) : (
               child
             )}
@@ -247,7 +246,7 @@ function PopoverMenu({
       </ShadowDiv>
       {footer && (
         <>
-          <SeparatorHelper />
+          <DividerHelper />
           {footer}
         </>
       )}

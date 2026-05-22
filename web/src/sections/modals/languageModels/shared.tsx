@@ -636,7 +636,6 @@ export function ModelSelectionField({
                     }
                   }
                 }}
-                showClearButton={false}
               />
             </div>
             <Button

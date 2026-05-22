@@ -478,7 +478,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_id}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -508,7 +507,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_secret}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -616,7 +614,6 @@ export default function MCPAuthenticationModal({
                                   value={values.api_token}
                                   onChange={handleChange}
                                   placeholder="Shared API key for your organization"
-                                  showClearButton={false}
                                 />
                               </FormField.Control>
                               <FormField.Description>

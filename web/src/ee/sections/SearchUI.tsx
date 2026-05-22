@@ -273,7 +273,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                     placeholder="Filter tags..."
                     value={tagQuery}
                     onChange={(e) => setTagQuery(e.target.value)}
-                    onClear={() => setTagQuery("")}
+                    clearButton
                     variant="internal"
                   />
                   {filteredTags.map((tag) => {

@@ -97,12 +97,7 @@ export default function ApiKeyFormModal({
                   <FormikField<string>
                     name="name"
                     render={(field, helper) => (
-                      <InputTypeIn
-                        {...field}
-                        placeholder="Enter a name"
-                        onClear={() => helper.setValue("")}
-                        showClearButton={false}
-                      />
+                      <InputTypeIn {...field} placeholder="Enter a name" />
                     )}
                   />
                 </InputVertical>

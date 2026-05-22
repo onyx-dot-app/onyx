@@ -90,7 +90,6 @@ export default function AdminListHeader({
         placeholder={placeholder}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
-        showClearButton={false}
       />
       {actionButton}
     </div>

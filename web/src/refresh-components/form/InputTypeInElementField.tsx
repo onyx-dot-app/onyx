@@ -9,7 +9,7 @@ import { Section } from "@/layouts/general-layouts";
 
 export interface InputTypeInElementFieldProps extends Omit<
   InputTypeInProps,
-  "value" | "onClear"
+  "value"
 > {
   name: string;
   onRemove?: () => void;
@@ -48,7 +48,6 @@ export default function InputTypeInElementField({
               ? "error"
               : inputProps.variant
         }
-        showClearButton={false}
       />
       <Button
         disabled={!onRemove || isEmpty}

@@ -33,7 +33,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
             value={searchQuery}
             onChange={handleSearchChange}
             searchIcon
-            showClearButton
+            clearButton
           />
         </div>
 

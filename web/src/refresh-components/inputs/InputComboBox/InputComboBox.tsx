@@ -385,7 +385,6 @@ const InputComboBox = ({
           onKeyDown={handleKeyDown}
           variant={disabled ? "disabled" : !isValid ? "error" : undefined}
           searchIcon={searchIcon}
-          showClearButton={false}
           rightChildren={
             <>
               {rightChildren && (

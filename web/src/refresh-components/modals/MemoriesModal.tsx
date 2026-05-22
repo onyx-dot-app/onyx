@@ -277,7 +277,6 @@ export default function MemoriesModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               searchIcon
-              showClearButton={false}
             />
             <Button
               disabled={!canAddMemory}

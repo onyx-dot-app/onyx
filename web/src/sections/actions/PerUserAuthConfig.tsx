@@ -179,7 +179,6 @@ export function PerUserAuthConfig({
                           updateUserCredential(field, e.target.value)
                         }
                         placeholder={`Enter ${field.replace(/_/g, " ")}`}
-                        showClearButton={false}
                       />
                     </FormField.Control>
                   </FormField>

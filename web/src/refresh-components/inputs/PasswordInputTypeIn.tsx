@@ -164,7 +164,7 @@ export default function PasswordInputTypeIn({
   onBlur,
   disabled,
   error,
-  showClearButton = false,
+  clearButton = false,
   ...props
 }: PasswordInputTypeInProps) {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
@@ -297,7 +297,7 @@ export default function PasswordInputTypeIn({
         onSelect={captureSelection}
         onKeyDown={captureSelection}
         variant={disabled ? "disabled" : error ? "error" : undefined}
-        showClearButton={showClearButton}
+        clearButton={clearButton}
         autoComplete="off"
         data-ph-no-capture
         rightChildren={

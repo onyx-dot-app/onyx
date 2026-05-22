@@ -498,7 +498,6 @@ function CommandMenuHeader({
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
           autoFocus
-          showClearButton={false}
         />
       </div>
     </div>

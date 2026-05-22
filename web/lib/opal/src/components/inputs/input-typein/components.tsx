@@ -15,8 +15,8 @@ export interface InputTypeInProps extends WithoutStyles<
   prefixText?: string;
   searchIcon?: boolean;
   rightChildren?: React.ReactNode;
-  showClearButton?: boolean;
-  onClear?: () => void;
+  /** Show the clear (×) button when the field has a value. */
+  clearButton?: boolean;
 }
 
 /**
@@ -37,7 +37,10 @@ export interface InputTypeInProps extends WithoutStyles<
  * // Read-only
  * <InputTypeIn variant="readOnly" value="Cannot edit" />
  *
- * // With custom right content (e.g. password reveal)
+ * // With clear button
+ * <InputTypeIn clearButton value={q} onChange={...} />
+ *
+ * // With custom right content (e.g. password reveal) — suppresses clear button
  * <InputTypeIn
  *   value={password}
  *   onChange={...}
@@ -51,8 +54,7 @@ export default function InputTypeIn({
   prefixText,
   searchIcon,
   rightChildren,
-  showClearButton = false,
-  onClear,
+  clearButton = false,
   value,
   onChange,
   ...props
@@ -61,10 +63,6 @@ export default function InputTypeIn({
   const isReadOnly = variant === "readOnly";
 
   const handleClear = useCallback(() => {
-    if (onClear) {
-      onClear();
-      return;
-    }
     onChange?.({
       target: { value: "" },
       currentTarget: { value: "" },
@@ -72,7 +70,7 @@ export default function InputTypeIn({
       bubbles: true,
       cancelable: true,
     } as React.ChangeEvent<HTMLInputElement>);
-  }, [onClear, onChange]);
+  }, [onChange]);
 
   return (
     <div
@@ -81,7 +79,7 @@ export default function InputTypeIn({
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
       {searchIcon && (
-        <div className="pl-[2px] pr-2">
+        <div className="px-1">
           <SvgSearch className="w-4 h-4 stroke-text-02" />
         </div>
       )}
@@ -103,7 +101,7 @@ export default function InputTypeIn({
         {...props}
       />
 
-      {showClearButton && !rightChildren && !disabled && !isReadOnly && (
+      {clearButton && !rightChildren && !disabled && !isReadOnly && (
         <div className={cn(!value && "invisible")}>
           <Button
             icon={SvgX}

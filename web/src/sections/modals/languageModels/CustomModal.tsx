@@ -71,13 +71,11 @@ function ModelConfigurationItem({
         placeholder="Model name"
         value={model.name}
         onChange={(e) => onChange({ ...model, name: e.target.value })}
-        showClearButton={false}
       />
       <InputTypeIn
         placeholder="Display name"
         value={model.display_name}
         onChange={(e) => onChange({ ...model, display_name: e.target.value })}
-        showClearButton={false}
       />
       <InputSelect
         value={model.supports_image_input ? "text-image" : "text-only"}
@@ -101,7 +99,6 @@ function ModelConfigurationItem({
               e.target.value === "" ? null : Number(e.target.value),
           })
         }
-        showClearButton={false}
         type="number"
       />
       <Button

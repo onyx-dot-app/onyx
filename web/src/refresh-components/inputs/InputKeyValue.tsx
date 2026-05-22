@@ -126,7 +126,6 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, key: e.target.value })}
           aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
           aria-invalid={!!error?.key}
-          showClearButton={false}
         />
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
@@ -137,7 +136,6 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, value: e.target.value })}
           aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
           aria-invalid={!!error?.value}
-          showClearButton={false}
         />
         {error?.value && <InputErrorText>{error.value}</InputErrorText>}
       </div>
