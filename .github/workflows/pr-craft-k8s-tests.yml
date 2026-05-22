@@ -56,6 +56,15 @@ env:
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
   SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
+  # CI runs on a 4 vCPU runner, and tests like test_skill_push provision
+  # up to 4 sandbox pods concurrently (pool + 3 cohort). With prod-default
+  # requests of 1 CPU/pod, the 4th pod stays Pending and trips the 60s
+  # readiness ceiling. Override to tiny requests so kind's scheduler can
+  # fit all four — kind isn't enforcing fairness here, just placement.
+  SANDBOX_POD_CPU_REQUEST: "100m"
+  SANDBOX_POD_MEMORY_REQUEST: "256Mi"
+  SANDBOX_POD_CPU_LIMIT: "2000m"
+  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
   # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
   # tests never call back to it, so the URL doesn't need to resolve.
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"

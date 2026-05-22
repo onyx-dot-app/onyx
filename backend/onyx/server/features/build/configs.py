@@ -129,6 +129,16 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 # Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
 
+# Per-pod resource requests/limits. Defaults match production sizing for
+# real bun/npm/python workloads. CI overrides these in kind clusters where
+# the runner only has 4 vCPU and we provision 4+ sandbox pods concurrently;
+# k8s scheduler honors requests, so the production defaults would prevent
+# all-but-one pod from being scheduled at the same time.
+SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")
+SANDBOX_POD_MEMORY_REQUEST = os.environ.get("SANDBOX_POD_MEMORY_REQUEST", "2Gi")
+SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
+SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
+
 # ============================================================================
 # Docker Sandbox Configuration
 # Only used when SANDBOX_BACKEND = "docker" (self-hosted docker-compose)

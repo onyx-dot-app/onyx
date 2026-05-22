@@ -69,6 +69,10 @@ from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
+from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
+from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
+from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.acp.base import ACPEvent
@@ -397,8 +401,14 @@ class KubernetesSandboxManager(SandboxManager):
                 ),
             ],
             resources=client.V1ResourceRequirements(
-                requests={"cpu": "1000m", "memory": "2Gi"},
-                limits={"cpu": "2000m", "memory": "10Gi"},
+                requests={
+                    "cpu": SANDBOX_POD_CPU_REQUEST,
+                    "memory": SANDBOX_POD_MEMORY_REQUEST,
+                },
+                limits={
+                    "cpu": SANDBOX_POD_CPU_LIMIT,
+                    "memory": SANDBOX_POD_MEMORY_LIMIT,
+                },
             ),
             security_context=client.V1SecurityContext(
                 allow_privilege_escalation=False,
