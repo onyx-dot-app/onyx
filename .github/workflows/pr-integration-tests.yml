@@ -398,6 +398,8 @@ jobs:
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e API_SERVER_HOST=127.0.0.1 \
+              -e MODEL_SERVER_HOST=inference_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -535,6 +537,10 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e API_SERVER_HOST=127.0.0.1 \
+              -e DISABLE_VECTOR_DB=true \
+              -e FILE_STORE_BACKEND=postgres \
+              -e CACHE_BACKEND=postgres \
+              -e AUTH_BACKEND=postgres \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
@@ -638,6 +644,8 @@ jobs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=127.0.0.1 \
+            -e MODEL_SERVER_HOST=inference_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
