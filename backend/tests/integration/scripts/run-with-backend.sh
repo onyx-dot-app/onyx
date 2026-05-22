@@ -54,7 +54,12 @@ cleanup() {
         wait "$UVICORN_PID" 2>/dev/null || true
     fi
     if [[ -n "$SUPERVISORD_PID" ]] && kill -0 "$SUPERVISORD_PID" 2>/dev/null; then
+        # Belt-and-braces: supervisorctl shutdown is the clean path, but if the
+        # socket never came up (e.g. we hit `exit 1` from the socket-wait loop
+        # below) it'll fail silently and `wait` would block until the runner
+        # timeout. Send SIGTERM as a fallback so `wait` always returns.
         uv run --no-sync supervisorctl -c "$SUPERVISORD_CONF" shutdown >/dev/null 2>&1 || true
+        kill "$SUPERVISORD_PID" 2>/dev/null || true
         wait "$SUPERVISORD_PID" 2>/dev/null || true
     fi
     exit "$exit_code"

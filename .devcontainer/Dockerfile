@@ -99,7 +99,8 @@ RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_COD
 
 # Install opencode CLI for Craft agent functionality. Bun runs it directly,
 # so we don't need a separate Node.js install.
-RUN BUN_INSTALL=/usr/local bun install -g opencode-ai
+ARG OPENCODE_VERSION=latest
+RUN BUN_INSTALL=/usr/local bun install -g opencode-ai@${OPENCODE_VERSION}
 
 # Configure zsh — source the repo-local zshrc so shell customization
 # doesn't require an image rebuild.
