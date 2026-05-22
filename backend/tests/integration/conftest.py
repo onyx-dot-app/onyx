@@ -213,7 +213,7 @@ def _configure_celery_eager() -> None:
             return _real_send_task(name, args=args, kwargs=kwargs, **options)
         return task.apply_async(args=args or (), kwargs=kwargs or {}, **options)
 
-    celery_app.send_task = _eager_send_task  # type: ignore[method-assign]
+    celery_app.send_task = _eager_send_task  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
 
 
 @pytest.fixture(scope="session", autouse=True)
