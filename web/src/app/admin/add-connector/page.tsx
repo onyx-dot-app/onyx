@@ -261,7 +261,6 @@ export default function Page() {
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
           onKeyDown={handleKeyPress}
-          className="w-96 flex-none"
         />
 
         {dedupedPopular.length > 0 && (

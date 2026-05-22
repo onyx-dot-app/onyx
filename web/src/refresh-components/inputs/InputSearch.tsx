@@ -45,7 +45,6 @@ export interface InputSearchProps extends Omit<
 export default function InputSearch({
   ref,
   disabled,
-  className,
   ...props
 }: InputSearchProps) {
   return (
@@ -53,17 +52,6 @@ export default function InputSearch({
       ref={ref}
       variant={disabled ? "disabled" : "internal"}
       searchIcon
-      className={cn(
-        "[&_input]:font-main-ui-muted [&_input]:text-text-02 [&_input]:placeholder:text-text-02",
-        !disabled && [
-          "border border-transparent",
-          "hover:border-border-03",
-          "active:border-border-05",
-          "focus-within:shadow-[0px_0px_0px_2px_var(--background-tint-04)]",
-          "focus-within:hover:border-border-03",
-        ],
-        className
-      )}
       {...props}
     />
   );

@@ -34,7 +34,6 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
             onChange={handleSearchChange}
             searchIcon
             showClearButton
-            className="w-full"
           />
         </div>
 

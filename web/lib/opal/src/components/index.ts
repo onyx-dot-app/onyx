@@ -129,7 +129,7 @@ export {
 
 /* InputTypeIn */
 export {
-  InputTypeIn,
+  default as InputTypeIn,
   type InputTypeInProps,
 } from "@opal/components/inputs/input-typein/components";
 

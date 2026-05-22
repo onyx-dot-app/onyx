@@ -205,7 +205,7 @@ export default function ShareChatSessionModal({
           {isShared && (
             <InputTypeIn
               aria-label="share-modal-link-input"
-              readOnly
+              variant="readOnly"
               value={shareLink}
               rightChildren={
                 <CopyIconButton

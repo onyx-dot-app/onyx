@@ -40,7 +40,6 @@ export default function InputFile({
   error,
   variant,
   placeholder,
-  className,
   ...rest
 }: InputFileProps) {
   const [displayValue, setDisplayValue] = useState<string>("");
@@ -149,14 +148,20 @@ export default function InputFile({
       />
       <InputTypeIn
         {...rest}
-        className={className}
         placeholder={placeholder}
-        variant={isDisabled ? "disabled" : error ? "error" : variant}
+        variant={
+          isDisabled
+            ? "disabled"
+            : error
+              ? "error"
+              : isFileMode || isReadOnly
+                ? "readOnly"
+                : variant
+        }
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
         onClear={handleClear}
-        readOnly={isFileMode || isReadOnly}
         rightChildren={rightChildren}
       />
     </>

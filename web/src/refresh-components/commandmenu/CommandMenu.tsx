@@ -498,7 +498,6 @@ function CommandMenuHeader({
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
           autoFocus
-          className="w-full bg-transparent! border-transparent! [:hover,:active,:focus,:focus-within]:bg-background-neutral-00! [:hover]:border-border-01! [:focus,:focus-within]:shadow-none!"
           showClearButton={false}
         />
       </div>

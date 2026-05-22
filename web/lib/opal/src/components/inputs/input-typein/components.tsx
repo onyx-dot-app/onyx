@@ -1,20 +1,16 @@
 "use client";
 
-import * as React from "react";
 import "@opal/components/inputs/input-typein/styles.css";
+import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
-import type { InputVariants } from "@opal/types";
+import type { InputVariants, WithoutStyles } from "@opal/types";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface InputTypeInProps extends Omit<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  "disabled"
+export interface InputTypeInProps extends WithoutStyles<
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, "disabled" | "readOnly">
 > {
+  ref?: React.Ref<HTMLInputElement>;
   variant?: InputVariants;
   prefixText?: string;
   searchIcon?: boolean;
@@ -22,10 +18,6 @@ export interface InputTypeInProps extends Omit<
   showClearButton?: boolean;
   onClear?: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// InputTypeIn
-// ---------------------------------------------------------------------------
 
 /**
  * A styled text input with support for a search icon, prefix text,
@@ -53,39 +45,22 @@ export interface InputTypeInProps extends Omit<
  * />
  * ```
  */
-function InputTypeInInner(
-  {
-    variant = "primary",
-    prefixText,
-    searchIcon,
-    rightChildren,
-    showClearButton = true,
-    onClear,
-    className,
-    value,
-    onChange,
-    readOnly,
-    ...props
-  }: InputTypeInProps,
-  ref: React.ForwardedRef<HTMLInputElement>
-) {
-  const localInputRef = React.useRef<HTMLInputElement | null>(null);
+export default function InputTypeIn({
+  ref,
+  variant = "primary",
+  prefixText,
+  searchIcon,
+  rightChildren,
+  showClearButton = false,
+  onClear,
+  value,
+  onChange,
+  ...props
+}: InputTypeInProps) {
   const disabled = variant === "disabled";
-  const isReadOnly = variant === "readOnly" || readOnly;
+  const isReadOnly = variant === "readOnly";
 
-  const setInputRef = React.useCallback(
-    (node: HTMLInputElement | null) => {
-      localInputRef.current = node;
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        (ref as React.MutableRefObject<HTMLInputElement | null>).current = node;
-      }
-    },
-    [ref]
-  );
-
-  const handleClear = React.useCallback(() => {
+  const handleClear = useCallback(() => {
     if (onClear) {
       onClear();
       return;
@@ -102,14 +77,12 @@ function InputTypeInInner(
   return (
     <div
       data-variant={variant}
-      className={cn("opal-input", className)}
-      onClick={() => localInputRef.current?.focus()}
+      className="opal-input"
+      onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
     >
       {searchIcon && (
-        <div className="pr-2 pl-1">
-          <div className="pl-1">
-            <SvgSearch className="w-4 h-4 stroke-text-02" />
-          </div>
+        <div className="px-1">
+          <SvgSearch className="w-4 h-4 stroke-text-02" />
         </div>
       )}
 
@@ -120,7 +93,7 @@ function InputTypeInInner(
       )}
 
       <input
-        ref={setInputRef}
+        ref={ref}
         type="text"
         disabled={disabled}
         readOnly={isReadOnly}
@@ -141,6 +114,7 @@ function InputTypeInInner(
             }}
             type="button"
             prominence="internal"
+            size="sm"
           />
         </div>
       )}
@@ -149,8 +123,3 @@ function InputTypeInInner(
     </div>
   );
 }
-
-const InputTypeIn = React.forwardRef(InputTypeInInner);
-InputTypeIn.displayName = "InputTypeIn";
-export { InputTypeIn };
-export default InputTypeIn;

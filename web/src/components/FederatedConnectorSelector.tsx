@@ -155,11 +155,6 @@ export const FederatedConnectorSelector = ({
               setOpen(true);
             }
           }}
-          className={
-            allConnectorsSelected
-              ? "rounded-12 bg-background-neutral-01"
-              : "rounded-12"
-          }
         />
 
         {open && !allConnectorsSelected && (

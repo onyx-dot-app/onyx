@@ -258,6 +258,7 @@ function AdminSidebarInner() {
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            showClearButton
           />
         )}
       </SidebarLayouts.Header>

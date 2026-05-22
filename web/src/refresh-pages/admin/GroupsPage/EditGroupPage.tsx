@@ -388,7 +388,6 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         : "Search members..."
                     }
                     searchIcon
-                    className="flex-1"
                   />
                   {isAddingMembers ? (
                     <Button

@@ -115,7 +115,6 @@ export default function NonAdminStep() {
                       handleSave();
                     }
                   }}
-                  className="w-[26%] min-w-40"
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
                   Save

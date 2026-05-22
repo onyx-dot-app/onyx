@@ -137,7 +137,6 @@ export const ConnectorMultiSelect = ({
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="rounded-12"
         />
 
         {open && (
