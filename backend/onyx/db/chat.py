@@ -608,6 +608,7 @@ def reserve_message_id(
     chat_session_id: UUID,
     parent_message: int,
     message_type: MessageType = MessageType.ASSISTANT,
+    model_display_name: str | None = None,
 ) -> ChatMessage:
     # Create an temporary holding chat message to the updated and saved at the end
     empty_message = ChatMessage(
@@ -617,6 +618,7 @@ def reserve_message_id(
         message="Response was terminated prior to completion, try regenerating.",
         token_count=15,
         message_type=message_type,
+        model_display_name=model_display_name,
     )
 
     # Add the empty message to the session
