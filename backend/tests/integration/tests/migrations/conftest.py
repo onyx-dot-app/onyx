@@ -41,6 +41,11 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _start_celery_workers() -> Generator[None, None, None]:
+    yield None
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _test_client() -> Generator[None, None, None]:
     yield None
 

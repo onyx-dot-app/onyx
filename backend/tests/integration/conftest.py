@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from collections.abc import Generator
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -159,67 +160,119 @@ def initialize_db(_run_migrations: None) -> None:  # noqa: ARG001
     )
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _configure_celery_eager() -> None:
-    # Replace the supervisord-managed celery worker set with in-thread eager
-    # execution. `.delay()` runs the task synchronously in the calling
-    # thread; chained dispatches (docfetching -> docprocessing) execute
-    # inline so the indexing pipeline still works end-to-end.
-    celery_app.conf.task_always_eager = True
-    celery_app.conf.task_eager_propagates = True
+_CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
+    # (versioned_app, queues) — mirrors backend/supervisord.conf.
+    ("primary", "celery"),
+    (
+        "light",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
+        "checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
+    ),
+    (
+        "heavy",
+        "connector_pruning,connector_doc_permissions_sync,"
+        "connector_external_group_sync,csv_generation,sandbox",
+    ),
+    ("docprocessing", "docprocessing"),
+    (
+        "user_file_processing",
+        "user_file_processing,user_file_project_sync,user_file_delete",
+    ),
+    ("scheduled_tasks", "scheduled_tasks"),
+    ("docfetching", "connector_doc_fetching"),
+    ("monitoring", "monitoring"),
+]
 
-    # Import the task modules so @shared_task registers task functions on
-    # this client celery_app (it has no autodiscover_tasks of its own —
-    # registration happens via the @shared_task side-effect on import).
-    # The list mirrors the union of autodiscover_tasks() calls across the
-    # primary / light / heavy / docfetching / docprocessing / monitoring /
-    # user_file_processing worker apps.
-    import importlib
 
-    task_modules = [
-        "onyx.background.celery.tasks.connector_deletion.tasks",
-        "onyx.background.celery.tasks.docfetching.tasks",
-        "onyx.background.celery.tasks.docprocessing.tasks",
-        "onyx.background.celery.tasks.docprocessing.targeted_reindex_task",
-        "onyx.background.celery.tasks.evals.tasks",
-        "onyx.background.celery.tasks.hierarchyfetching.tasks",
-        "onyx.background.celery.tasks.llm_model_update.tasks",
-        "onyx.background.celery.tasks.monitoring.tasks",
-        "onyx.background.celery.tasks.pruning.tasks",
-        "onyx.background.celery.tasks.scheduled_tasks.tasks",
-        "onyx.background.celery.tasks.shared.tasks",
-        "onyx.background.celery.tasks.user_file_processing.tasks",
-        "onyx.background.celery.tasks.vespa.tasks",
-        "onyx.background.celery.tasks.vespa.document_sync",
-    ]
-    for module in task_modules:
+def _wait_for_celery_workers(expected: int, timeout: float = 90.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    last_count = 0
+    while time.monotonic() < deadline:
         try:
-            importlib.import_module(module)
-        except ImportError:
-            # Not every module exists in every build (EE-only, OS-only).
-            pass
+            replies = celery_app.control.inspect(timeout=2).ping() or {}
+        except Exception:
+            replies = {}
+        last_count = len(replies)
+        if last_count >= expected:
+            return
+        time.sleep(1)
+    raise RuntimeError(
+        f"Only {last_count}/{expected} celery workers responded within {timeout}s"
+    )
 
-    # Celery's `send_task` always dispatches through the broker — it ignores
-    # `task_always_eager` (the framework prints AlwaysEagerIgnored). Production
-    # code uses `client_app.send_task(name, ...)` to fan out work; without a
-    # worker consuming the broker queue the tasks just pile up in Redis and
-    # tests time out waiting for results. Re-route `send_task` through
-    # `apply_async` so eager mode actually runs the task inline.
-    _real_send_task = celery_app.send_task
 
-    def _eager_send_task(name, args=None, kwargs=None, **options):  # type: ignore[no-untyped-def]
-        task = celery_app.tasks.get(name)
-        if task is None:
-            return _real_send_task(name, args=args, kwargs=kwargs, **options)
-        return task.apply_async(args=args or (), kwargs=kwargs or {}, **options)
+@pytest.fixture(scope="session", autouse=True)
+def _start_celery_workers(
+    _run_migrations: None,  # noqa: ARG001
+    initialize_db: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    # Spawn the same celery worker fleet supervisord used to run. We need
+    # real workers (not eager mode) because the indexing pipeline uses
+    # `SimpleJobClient`, which spawns docfetching in a fresh `spawn`-context
+    # Python process. That subprocess inherits neither in-memory celery
+    # config nor any monkey-patches from this conftest, so it dispatches via
+    # the broker. Without real consumers, those tasks pile up forever and
+    # every wait_for_indexing_completion / pruning / export test times out.
+    log_dir = os.path.join(BACKEND_DIR, "log")
+    os.makedirs(log_dir, exist_ok=True)
 
-    celery_app.send_task = _eager_send_task  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    processes: list[tuple[str, subprocess.Popen[bytes]]] = []
+    log_handles: list[Any] = []
+    for app_name, queues in _CELERY_WORKER_PROGRAMS:
+        log_path = os.path.join(log_dir, f"celery_worker_{app_name}_debug.log")
+        log_file = open(log_path, "ab")
+        log_handles.append(log_file)
+        cmd = [
+            "celery",
+            "-A",
+            f"onyx.background.celery.versioned_apps.{app_name}",
+            "worker",
+            f"--hostname={app_name}@%n",
+            "-Q",
+            queues,
+            "--pool=threads",
+        ]
+        # start_new_session=True puts the worker in its own process group so
+        # we can kill the whole tree on teardown (celery spawns helper procs).
+        proc = subprocess.Popen(
+            cmd,
+            cwd=BACKEND_DIR,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        processes.append((app_name, proc))
+
+    try:
+        _wait_for_celery_workers(expected=len(processes))
+        yield None
+    finally:
+        import signal
+
+        for _, proc in processes:
+            if proc.poll() is None:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        for _, proc in processes:
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        for log_file in log_handles:
+            log_file.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_client(
     initialize_db: None,  # noqa: ARG001
-    _configure_celery_eager: None,  # noqa: ARG001
+    _start_celery_workers: None,  # noqa: ARG001
     _setup_craft_templates: None,  # noqa: ARG001
     _install_playwright: None,  # noqa: ARG001
 ) -> Generator[TestClient, None, None]:
