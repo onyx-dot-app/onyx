@@ -6,7 +6,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from sqlalchemy import select
 
 from onyx.auth.schemas import UserRole
@@ -117,7 +117,7 @@ def test_bundle_missing_skill_md(admin_user: DATestUser) -> None:
         zf.writestr("readme.txt", "no skill.md here")
     bad_bundle = buf.getvalue()
 
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(
             admin_user, slug=f"bad-bundle-{uuid4().hex[:6]}", bundle_bytes=bad_bundle
         )
@@ -131,7 +131,7 @@ def test_bundle_with_template_rejected(admin_user: DATestUser) -> None:
         zf.writestr("SKILL.md.template", "should not be here")
     bad_bundle = buf.getvalue()
 
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(
             admin_user,
             slug=f"template-bundle-{uuid4().hex[:6]}",
@@ -165,14 +165,14 @@ def test_missing_frontmatter_rejected(admin_user: DATestUser) -> None:
         zf.writestr("SKILL.md", "no frontmatter at all\n")
     bad_bundle = buf.getvalue()
 
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(admin_user, slug="no-fm", bundle_bytes=bad_bundle)
     assert exc_info.value.response.status_code == 400
 
 
 def test_bad_filename_rejected(admin_user: DATestUser) -> None:
     bundle = build_minimal_bundle("placeholder")
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(
             admin_user,
             slug="placeholder",
@@ -216,14 +216,14 @@ def test_create_skill_201_persists_row_grants_bundle(
 
 
 def test_create_skill_rejects_invalid_slug(admin_user: DATestUser) -> None:
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(admin_user, slug="Invalid_Slug")
     assert exc_info.value.response.status_code == 400
 
 
 def test_create_skill_rejects_reserved_slug(admin_user: DATestUser) -> None:
     reserved = "company-search"
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(admin_user, slug=reserved)
     response = exc_info.value.response
     assert response.status_code == 400
@@ -237,14 +237,14 @@ def test_create_skill_rejects_reserved_slug(admin_user: DATestUser) -> None:
 def test_create_skill_409_on_duplicate_slug(admin_user: DATestUser) -> None:
     slug = f"dup-409-{uuid4().hex[:8]}"
     SkillManager.create_custom(admin_user, slug=slug)
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(admin_user, slug=slug)
     assert exc_info.value.response.status_code == 409
 
 
 def test_create_skill_400_on_invalid_bundle_zip(admin_user: DATestUser) -> None:
     corrupt = b"this is not a zip file at all"
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(
             admin_user,
             slug=f"corrupt-{uuid4().hex[:8]}",
@@ -273,7 +273,7 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
         zf.writestr("big.bin", oversized_payload)
     big_bundle = buf.getvalue()
 
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(
             admin_user,
             slug=f"too-big-{uuid4().hex[:8]}",
@@ -312,7 +312,7 @@ def test_create_skill_failure_cleans_up_orphan_blob(
     # Second create — bundle is fine, but the DB insert fails on the
     # unique-slug check after the blob has already been written. The except
     # branch should delete the just-written blob before re-raising.
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(admin_user, slug=slug)
     assert exc_info.value.response.status_code == 409
 
@@ -357,7 +357,7 @@ def test_replace_grants_400_on_unknown_group_id(admin_user: DATestUser) -> None:
         admin_user, slug=f"unknown-grp-{uuid4().hex[:8]}", is_public=False
     )
 
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.replace_grants(skill, [10_000_000], admin_user)
 
     response = exc_info.value.response
@@ -376,7 +376,7 @@ def test_replace_grants_400_on_unknown_group_id(admin_user: DATestUser) -> None:
 
 def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
     bogus_id = uuid4()
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/admin/skills/custom/{bogus_id}",
         headers=admin_user.headers,
     )
@@ -389,13 +389,13 @@ def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
 
 
 def test_non_admin_returns_403_on_post(basic_user: DATestUser) -> None:
-    with pytest.raises(requests.HTTPError) as exc_info:
+    with pytest.raises(client.HTTPError) as exc_info:
         SkillManager.create_custom(basic_user, slug=f"forbid-{uuid4().hex[:6]}")
     assert exc_info.value.response.status_code == 403
 
 
 def test_non_admin_returns_403_on_admin_list(basic_user: DATestUser) -> None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/skills",
         headers=basic_user.headers,
     )

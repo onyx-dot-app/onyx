@@ -9,7 +9,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import redis
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
@@ -69,7 +69,7 @@ def test_registration_blocked_when_seats_full(
     _seed_license(r, seats=1)
 
     try:
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/auth/register",
             json={
                 "email": "blocked@example.com",
@@ -97,7 +97,7 @@ def test_invite_blocked_when_seats_full(reset: None) -> None:  # noqa: ARG001
     _seed_license(r, seats=1)
 
     try:
-        response = requests.put(
+        response = client.put(
             url=f"{API_SERVER_URL}/manage/admin/users",
             json={"emails": ["newuser@example.com"]},
             headers=admin_user.headers,
@@ -130,7 +130,7 @@ def test_reactivation_blocked_when_seats_full(
     _seed_license(r, seats=1)
 
     try:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
             json={"user_email": basic_user.email},
             headers=admin_user.headers,

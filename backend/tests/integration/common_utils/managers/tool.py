@@ -1,4 +1,4 @@
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestTool
 from tests.integration.common_utils.test_models import DATestUser
@@ -9,7 +9,7 @@ class ToolManager:
     def list_tools(
         user_performing_action: DATestUser,
     ) -> list[DATestTool]:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/tool",
             headers=user_performing_action.headers,
         )
@@ -41,8 +41,8 @@ class ToolManager:
         tool_ids: list[int],
         enabled: bool,
         user_performing_action: DATestUser,
-    ) -> requests.Response:
-        response = requests.patch(
+    ) -> client.Response:
+        response = client.patch(
             url=f"{API_SERVER_URL}/admin/tool/status",
             headers=user_performing_action.headers,
             json={"tool_ids": tool_ids, "enabled": enabled},

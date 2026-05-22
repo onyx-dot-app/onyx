@@ -5,7 +5,7 @@ from typing import Literal
 from typing import TypedDict
 from uuid import UUID
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.http_client import Response
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -82,7 +82,7 @@ class ChatSessionManager:
             description=description,
             project_id=project_id,
         )
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
             headers=user_performing_action.headers,
@@ -123,7 +123,7 @@ class ChatSessionManager:
             llm_override=llm_override,
         )
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
@@ -200,7 +200,7 @@ class ChatSessionManager:
 
         packets_received = 0
 
-        with requests.post(
+        with client.post(
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
@@ -357,7 +357,7 @@ class ChatSessionManager:
         chat_session: DATestChatSession,
         user_performing_action: DATestUser,
     ) -> list[DATestChatMessage]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
@@ -383,7 +383,7 @@ class ChatSessionManager:
         feedback_text: str | None = None,
         predefined_feedback: str | None = None,
     ) -> None:
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/chat/create-chat-message-feedback",
             json={
                 "chat_message_id": message_id,
@@ -406,7 +406,7 @@ class ChatSessionManager:
 
         Returns True if deletion was successful, False otherwise.
         """
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
@@ -424,7 +424,7 @@ class ChatSessionManager:
         """
         # Since there's no direct API for soft delete, we'll use a query parameter approach
         # or make a direct call with hard_delete=False parameter via a new endpoint
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
             headers=user_performing_action.headers,
         )
@@ -440,7 +440,7 @@ class ChatSessionManager:
 
         Returns True if deletion was successful, False otherwise.
         """
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
             headers=user_performing_action.headers,
         )
@@ -456,7 +456,7 @@ class ChatSessionManager:
 
         Returns True if the chat session is confirmed deleted, False if it still exists.
         """
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
@@ -474,7 +474,7 @@ class ChatSessionManager:
         Returns True if the chat session is soft deleted, False otherwise.
         """
         # Try to get the chat session with include_deleted=true
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
         )
@@ -496,7 +496,7 @@ class ChatSessionManager:
         Returns True if the chat session is hard deleted, False otherwise.
         """
         # Try to get the chat session with include_deleted=true
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
         )

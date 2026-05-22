@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -466,7 +466,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     )
 
     # Non-admin user calls the /llm/provider endpoint
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=basic_user.headers,
     )
@@ -481,7 +481,7 @@ def test_list_llm_provider_basics_excludes_non_public_unrestricted(
     assert non_public_provider.name not in provider_names
 
     # Admin user should see both providers
-    admin_response = requests.get(
+    admin_response = client.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=admin_user.headers,
     )
@@ -529,7 +529,7 @@ def test_provider_delete_clears_persona_references(
     )
 
     # Verify the persona now falls back to default (default_model_configuration_id cleared)
-    persona_response = requests.get(
+    persona_response = client.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
     )

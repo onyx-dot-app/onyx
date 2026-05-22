@@ -3,7 +3,7 @@ from datetime import datetime
 from urllib.parse import urlencode
 from uuid import UUID
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.http_client import CaseInsensitiveDict
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
@@ -36,7 +36,7 @@ class QueryHistoryManager:
         if end_time:
             query_params["end_time"] = end_time.isoformat()
 
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
         )
@@ -52,7 +52,7 @@ class QueryHistoryManager:
         chat_session_id: UUID | str,
         user_performing_action: DATestUser,
     ) -> ChatSessionSnapshot:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history/{chat_session_id}",
             headers=user_performing_action.headers,
         )
@@ -71,7 +71,7 @@ class QueryHistoryManager:
         if end_time:
             query_params["end"] = end_time.isoformat()
 
-        start_response = requests.post(
+        start_response = client.post(
             url=f"{API_SERVER_URL}/admin/query-history/start-export?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
         )
@@ -80,7 +80,7 @@ class QueryHistoryManager:
 
         deadline = time.time() + MAX_DELAY
         while time.time() < deadline:
-            status_response = requests.get(
+            status_response = client.get(
                 url=f"{API_SERVER_URL}/admin/query-history/export-status",
                 params={"request_id": request_id},
                 headers=user_performing_action.headers,
@@ -97,7 +97,7 @@ class QueryHistoryManager:
                 f"Query history export not completed within {MAX_DELAY} seconds"
             )
 
-        download_response = requests.get(
+        download_response = client.get(
             url=f"{API_SERVER_URL}/admin/query-history/download",
             params={"request_id": request_id},
             headers=user_performing_action.headers,

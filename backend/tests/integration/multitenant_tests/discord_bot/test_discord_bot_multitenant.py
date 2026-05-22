@@ -1,14 +1,14 @@
 """Multi-tenant isolation tests for Discord bot.
 
 These tests ensure tenant isolation and prevent data leakage between tenants.
-Tests follow the multi-tenant integration test pattern using API requests.
+Tests follow the multi-tenant integration test pattern using API client.
 """
 
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_guild_config_by_registration_key
 from onyx.db.discord_bot import register_guild
@@ -117,7 +117,7 @@ class TestGuildDataIsolation:
         assert UserManager.is_role(admin_user2, UserRole.ADMIN)
 
         # Create a guild registration key in tenant 1
-        response1 = requests.post(
+        response1 = client.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
         )
@@ -132,7 +132,7 @@ class TestGuildDataIsolation:
 
         try:
             # List guilds from tenant 1 - should see the guild
-            list_response1 = requests.get(
+            list_response1 = client.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
             )
@@ -142,7 +142,7 @@ class TestGuildDataIsolation:
             assert guild1_id in tenant1_guild_ids
 
             # List guilds from tenant 2 - should NOT see tenant 1's guild
-            list_response2 = requests.get(
+            list_response2 = client.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
             )
@@ -153,7 +153,7 @@ class TestGuildDataIsolation:
 
         finally:
             # Cleanup - delete guild from tenant 1
-            requests.delete(
+            client.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
             )
@@ -178,7 +178,7 @@ class TestGuildDataIsolation:
         )
 
         # Create 1 guild in tenant 1
-        response1 = requests.post(
+        response1 = client.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
         )
@@ -194,7 +194,7 @@ class TestGuildDataIsolation:
         )
 
         # Create 1 guild in tenant 2
-        response2 = requests.post(
+        response2 = client.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user2.headers,
         )
@@ -242,7 +242,7 @@ class TestGuildDataIsolation:
 
         try:
             # Verify tenant 1 sees only their guild
-            list_response1 = requests.get(
+            list_response1 = client.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user1.headers,
             )
@@ -278,7 +278,7 @@ class TestGuildDataIsolation:
             )
 
             # Verify tenant 2 sees only their guild
-            list_response2 = requests.get(
+            list_response2 = client.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
                 headers=admin_user2.headers,
             )
@@ -323,11 +323,11 @@ class TestGuildDataIsolation:
 
         finally:
             # Cleanup
-            requests.delete(
+            client.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
             )
-            requests.delete(
+            client.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild2_id}",
                 headers=admin_user2.headers,
             )
@@ -355,7 +355,7 @@ class TestGuildAccessIsolation:
         )
 
         # Create a guild in tenant 1
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/discord-bot/guilds",
             headers=admin_user1.headers,
         )
@@ -366,7 +366,7 @@ class TestGuildAccessIsolation:
 
         try:
             # Tenant 2 tries to get the guild - should fail (404 or 403)
-            get_response = requests.get(
+            get_response = client.get(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user2.headers,
             )
@@ -377,7 +377,7 @@ class TestGuildAccessIsolation:
             ], f"Expected 403 or 404, got {get_response.status_code}"
 
             # Tenant 2 tries to delete the guild - should fail
-            delete_response = requests.delete(
+            delete_response = client.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user2.headers,
             )
@@ -385,7 +385,7 @@ class TestGuildAccessIsolation:
 
         finally:
             # Cleanup - delete from tenant 1
-            requests.delete(
+            client.delete(
                 f"{API_SERVER_URL}/manage/admin/discord-bot/guilds/{guild1_id}",
                 headers=admin_user1.headers,
             )

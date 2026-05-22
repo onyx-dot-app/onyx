@@ -16,7 +16,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -156,7 +156,7 @@ def test_public_assistant_attached_file_downloadable_by_non_owner(
     storage_file_id = user_file_setup.user1_file_descriptor["id"]
     user_file_id = user_file_setup.user1_file_id
 
-    owner_response = requests.get(
+    owner_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=user_file_setup.user1_file_owner.headers,
     )
@@ -164,7 +164,7 @@ def test_public_assistant_attached_file_downloadable_by_non_owner(
     assert owner_response.content, "Owner should receive the file contents"
 
     for file_id in (storage_file_id, user_file_id):
-        non_owner_response = requests.get(
+        non_owner_response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user_file_setup.user2_non_owner.headers,
         )
@@ -207,7 +207,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
         user_performing_action=admin_user,
     )
 
-    owner_response = requests.get(
+    owner_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=file_owner.headers,
     )
@@ -215,7 +215,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
     assert owner_response.content, "Owner should receive the file contents"
 
     for file_id in (storage_file_id, user_file_id):
-        shared_response = requests.get(
+        shared_response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=shared_user.headers,
         )
@@ -226,7 +226,7 @@ def test_private_persona_attached_file_downloadable_by_shared_user(
         )
         assert shared_response.content == owner_response.content
 
-        outsider_response = requests.get(
+        outsider_response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=outsider.headers,
         )
@@ -259,14 +259,14 @@ def test_cannot_download_unattached_file_via_chat_file_endpoint(
     user_file_id = file_descriptors[0].get("user_file_id")
     assert user_file_id is not None
 
-    owner_response = requests.get(
+    owner_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=owner.headers,
     )
     assert owner_response.status_code == 200
 
     for file_id in (storage_file_id, user_file_id):
-        intruder_response = requests.get(
+        intruder_response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=intruder.headers,
         )
@@ -362,7 +362,7 @@ def test_owner_can_download_image_gen_file(
     """The chat session owner must be able to fetch an image-gen file_id stored
     on `ToolCall.generated_images`. Pre-fix, this returned 404 — that 404 is
     the exact regression these tests pin."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.owner.headers,
     )
@@ -381,7 +381,7 @@ def test_non_owner_cannot_download_image_gen_file_in_private_session(
 ) -> None:
     """A non-owner must not be able to read an image-gen file in a PRIVATE
     session — the new branch should not over-grant access."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
     )
@@ -406,7 +406,7 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
         chat_session.shared_status = ChatSessionSharedStatus.PUBLIC
         db_session.commit()
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
     )
@@ -482,7 +482,7 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
     )
 
     for user in (admin_user, basic_user):
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/file/{storage_id}",
             headers=user.headers,
         )
@@ -519,7 +519,7 @@ def test_connector_file_denied_for_users_without_access(
         file_origin=file_origin,
     )
 
-    basic_response = requests.get(
+    basic_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_id}",
         headers=basic_user.headers,
     )
@@ -608,7 +608,7 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
     _save_non_tabular_file_bytes(file_id, file_origin)
 
     for user in (admin_user, basic_user):
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user.headers,
         )
@@ -644,7 +644,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     )
     _save_non_tabular_file_bytes(file_id, file_origin)
 
-    basic_response = requests.get(
+    basic_response = client.get(
         f"{API_SERVER_URL}/chat/file/{file_id}",
         headers=basic_user.headers,
     )

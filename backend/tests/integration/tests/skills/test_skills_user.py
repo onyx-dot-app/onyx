@@ -15,7 +15,7 @@ import os
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -118,7 +118,7 @@ def test_get_skill_by_slug_404_when_not_visible(
     slug = f"hidden-slug-{uuid4().hex[:6]}"
     SkillManager.create_custom(admin_user, slug=slug, is_public=False)
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/skills/{slug}",
         headers=basic_user.headers,
     )
@@ -134,7 +134,7 @@ def test_get_skill_by_id_404_when_not_visible(
     skill = SkillManager.create_custom(admin_user, slug=slug, is_public=False)
     assert skill.id is not None
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/skills/{skill.id}",
         headers=basic_user.headers,
     )
@@ -147,7 +147,7 @@ def test_non_admin_cannot_delete_skill(
 ) -> None:
     """Regular users get 403 when deleting via the admin route."""
     skill = SkillManager.create_custom(admin_user, slug=f"no-del-{uuid4().hex[:6]}")
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
         headers=basic_user.headers,
     )

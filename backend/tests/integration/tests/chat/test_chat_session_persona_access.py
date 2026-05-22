@@ -8,7 +8,7 @@ import json
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -53,7 +53,7 @@ def test_create_chat_session_with_unauthorized_persona_returns_403(
         groups=[restricted_group.id],
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": restricted_persona.id, "description": "Attempted bypass"},
         headers=basic_user.headers,
@@ -81,7 +81,7 @@ def test_create_chat_session_with_authorized_persona_succeeds(
         groups=[allowed_group.id],
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": allowed_persona.id, "description": "Authorized"},
         headers=basic_user.headers,
@@ -103,7 +103,7 @@ def test_create_chat_session_with_public_persona_succeeds(
         is_public=True,
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": public_persona.id, "description": "Public access"},
         headers=basic_user.headers,
@@ -117,7 +117,7 @@ def test_create_chat_session_with_default_persona_succeeds(
 ) -> None:
     _, basic_user = admin_and_basic_user
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/create-chat-session",
         json={"persona_id": 0, "description": "Default persona"},
         headers=basic_user.headers,
@@ -145,7 +145,7 @@ def test_send_chat_message_with_unauthorized_persona_in_session_info_is_blocked(
         groups=[restricted_group.id],
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/chat/send-chat-message",
         json={
             "message": "hello",

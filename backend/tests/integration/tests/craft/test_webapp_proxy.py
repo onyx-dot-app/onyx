@@ -22,7 +22,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -58,9 +58,9 @@ def _unauth_get(
     session_id: UUID,
     path: str = "",
     allow_redirects: bool = False,
-) -> requests.Response:
+) -> client.Response:
     """GET the proxy URL with no auth headers/cookies."""
-    return requests.get(
+    return client.get(
         _webapp_url(session_id, path),
         allow_redirects=allow_redirects,
     )
@@ -71,9 +71,9 @@ def _auth_get(
     session_id: UUID,
     path: str = "",
     allow_redirects: bool = False,
-) -> requests.Response:
+) -> client.Response:
     """GET the proxy URL with ``user``'s auth headers/cookies."""
-    return requests.get(
+    return client.get(
         _webapp_url(session_id, path),
         headers=user.headers,
         cookies=user.cookies,
@@ -123,7 +123,7 @@ def test_proxy_allows_org_user_when_public_org(
     session_id = UUID(session["id"])
     _set_scope(admin_user, session_id, SharingScope.PUBLIC_ORG)
 
-    response = requests.get(
+    response = client.get(
         _webapp_url(session_id),
         headers=basic_user.headers,
         cookies=basic_user.cookies,
@@ -154,7 +154,7 @@ def test_proxy_blocks_other_tenant_when_public_org(
     _set_scope(admin_user, session_id, SharingScope.PUBLIC_ORG)
 
     # Forged cookie: present but not a valid session for any user.
-    response = requests.get(
+    response = client.get(
         _webapp_url(session_id),
         cookies={"fastapiusersauth": "not-a-real-token"},
         allow_redirects=False,
@@ -298,7 +298,7 @@ def test_webapp_download_route_not_shadowed_by_catchall(
     session = _create_session(admin_user)
     session_id = UUID(session["id"])
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}/webapp-download",
         headers=admin_user.headers,
         cookies=admin_user.cookies,

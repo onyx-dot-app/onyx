@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -25,8 +25,8 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> requests.Response:
-    return requests.post(
+) -> client.Response:
+    return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
@@ -181,7 +181,7 @@ def test_invalid_persona_returns_404(
 
 
 def test_unauthenticated_returns_401() -> None:
-    resp = requests.post(
+    resp = client.post(
         SEARCH_URL,
         json={"query": "test"},
     )

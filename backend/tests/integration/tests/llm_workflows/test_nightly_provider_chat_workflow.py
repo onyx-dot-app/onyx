@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
@@ -301,7 +301,7 @@ def _create_provider_payload(
 def _ensure_provider_is_default(
     provider_id: int, model_name: str, admin_user: DATestUser
 ) -> None:
-    list_response = requests.get(
+    list_response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -388,7 +388,7 @@ def _create_and_test_provider_for_model(
         custom_config=config.custom_config,
     )
 
-    test_response = requests.post(
+    test_response = client.post(
         f"{API_SERVER_URL}/admin/llm/test",
         headers=admin_user.headers,
         json=provider_payload,
@@ -398,7 +398,7 @@ def _create_and_test_provider_for_model(
         f"model={model_name}: {test_response.status_code} {test_response.text}"
     )
 
-    create_response = requests.put(
+    create_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=provider_payload,
@@ -410,7 +410,7 @@ def _create_and_test_provider_for_model(
     provider_id = create_response.json()["id"]
 
     try:
-        set_default_response = requests.post(
+        set_default_response = client.post(
             f"{API_SERVER_URL}/admin/llm/default",
             headers=admin_user.headers,
             json={"provider_id": provider_id, "model_name": model_name},
@@ -431,7 +431,7 @@ def _create_and_test_provider_for_model(
             model_name=model_name,
         )
     finally:
-        requests.delete(
+        client.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
             headers=admin_user.headers,
         )

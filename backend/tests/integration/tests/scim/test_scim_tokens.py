@@ -12,7 +12,7 @@ Covers the admin token API and SCIM bearer-token authentication:
 
 import time
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
@@ -93,7 +93,7 @@ def test_non_admin_cannot_create_token(
     """Non-admin users get 403 when trying to create a SCIM token."""
     basic_user = UserManager.create(name="scim_basic_user")
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         json={"name": "Should Fail"},
         headers=basic_user.headers,
@@ -108,7 +108,7 @@ def test_non_admin_cannot_get_token(
     """Non-admin users get 403 when trying to retrieve SCIM token metadata."""
     basic_user = UserManager.create(name="scim_basic_user2")
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         headers=basic_user.headers,
         timeout=60,
@@ -123,7 +123,7 @@ def test_no_active_token_returns_null(new_admin_user: DATestUser) -> None:
     active = ScimTokenManager.get_active(user_performing_action=new_admin_user)
     assert active is None
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         headers=new_admin_user.headers,
         timeout=60,

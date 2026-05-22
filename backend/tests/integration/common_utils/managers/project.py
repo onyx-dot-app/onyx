@@ -1,6 +1,6 @@
 from typing import List
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.server.features.projects.models import CategorizedFilesSnapshot
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.features.projects.models import UserProjectSnapshot
@@ -15,7 +15,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> UserProjectSnapshot:
         """Create a new project via API."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/projects/create",
             params={"name": name},
             headers=user_performing_action.headers,
@@ -28,7 +28,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> List[UserProjectSnapshot]:
         """Get all projects for a user via API."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers,
         )
@@ -41,7 +41,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Delete a project via API."""
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/user/projects/{project_id}",
             headers=user_performing_action.headers,
         )
@@ -53,7 +53,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Verify that a project has been deleted by ensuring it's not in list."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/projects",
             headers=user_performing_action.headers,
         )
@@ -67,7 +67,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Verify that all files have been unlinked from the project via API."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
             headers=user_performing_action.headers,
         )
@@ -84,7 +84,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Verify that all chat sessions have been unlinked from the project via API."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/projects/{project_id}",
             headers=user_performing_action.headers,
         )
@@ -122,7 +122,7 @@ class ProjectManager:
         headers = dict(user_performing_action.headers or {})
         headers.pop("Content-Type", None)
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/projects/file/upload",
             data=data,
             files=files_payload,
@@ -137,7 +137,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> List[UserFileSnapshot]:
         """Get all files associated with a project via API."""
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/user/projects/files/{project_id}",
             headers=user_performing_action.headers,
         )
@@ -153,7 +153,7 @@ class ProjectManager:
         user_performing_action: DATestUser,
     ) -> str:
         """Set project instructions via API."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/projects/{project_id}/instructions",
             json={"instructions": instructions},
             headers=user_performing_action.headers,

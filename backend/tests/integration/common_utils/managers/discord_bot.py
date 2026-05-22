@@ -1,6 +1,6 @@
 """Manager for Discord bot API integration tests."""
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.db.discord_bot import create_channel_config
 from onyx.db.discord_bot import create_guild_config
 from onyx.db.discord_bot import register_guild
@@ -26,7 +26,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Get Discord bot config."""
-        response = requests.get(
+        response = client.get(
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -40,7 +40,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Create Discord bot config."""
-        response = requests.post(
+        response = client.post(
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -54,7 +54,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Delete Discord bot config."""
-        response = requests.delete(
+        response = client.delete(
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -69,7 +69,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> list[dict]:
         """List all guild configs."""
-        response = requests.get(
+        response = client.get(
             url=f"{DISCORD_BOT_API_URL}/guilds",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -82,7 +82,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> DATestDiscordGuildConfig:
         """Create a new guild config with registration key."""
-        response = requests.post(
+        response = client.post(
             url=f"{DISCORD_BOT_API_URL}/guilds",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -100,7 +100,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Get a specific guild config."""
-        response = requests.get(
+        response = client.get(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -129,7 +129,7 @@ class DiscordBotManager:
             ),
         }
 
-        response = requests.patch(
+        response = client.patch(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -144,7 +144,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict:
         """Delete a guild config."""
-        response = requests.delete(
+        response = client.delete(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -160,7 +160,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> list[DATestDiscordChannelConfig]:
         """List all channel configs for a guild."""
-        response = requests.get(
+        response = client.get(
             url=f"{DISCORD_BOT_API_URL}/guilds/{guild_config_id}/channels",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -190,7 +190,7 @@ class DiscordBotManager:
             "persona_override_id": persona_override_id,
         }
 
-        response = requests.patch(
+        response = client.patch(
             url=f"{DISCORD_BOT_API_URL}/guilds/{guild_config_id}/channels/{channel_config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -230,7 +230,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> dict | None:
         """Get a guild config, returning None if not found."""
-        response = requests.get(
+        response = client.get(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -246,7 +246,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Delete a guild config if it exists. Returns True if deleted."""
-        response = requests.delete(
+        response = client.delete(
             url=f"{DISCORD_BOT_API_URL}/guilds/{config_id}",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,
@@ -261,7 +261,7 @@ class DiscordBotManager:
         user_performing_action: DATestUser,
     ) -> bool:
         """Delete bot config if it exists. Returns True if deleted."""
-        response = requests.delete(
+        response = client.delete(
             url=f"{DISCORD_BOT_API_URL}/config",
             headers=user_performing_action.headers,
             cookies=user_performing_action.cookies,

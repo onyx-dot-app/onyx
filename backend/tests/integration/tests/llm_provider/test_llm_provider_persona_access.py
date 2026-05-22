@@ -5,7 +5,7 @@ Integration tests for LLM Provider persona access authorization.
 import os
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -60,7 +60,7 @@ def test_unauthorized_persona_access_returns_403(
     )
 
     # Try to query providers for the restricted persona as basic_user
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/{restricted_persona.id}/providers",
         headers=basic_user.headers,
     )
@@ -98,7 +98,7 @@ def test_authorized_persona_access_returns_filtered_providers(
     )
 
     # Query providers for the accessible persona as basic_user
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/{accessible_persona.id}/providers",
         headers=basic_user.headers,
     )
@@ -131,7 +131,7 @@ def test_persona_id_zero_applies_rbac(
     )
 
     # Query providers with persona_id=0 as basic_user
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/0/providers",
         headers=basic_user.headers,
     )
@@ -173,7 +173,7 @@ def test_admin_can_query_any_persona(
     )
 
     # Query providers for the restricted persona as admin_user
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/{restricted_persona.id}/providers",
         headers=admin_user.headers,
     )
@@ -214,7 +214,7 @@ def test_public_persona_accessible_to_all(
     )
 
     # Query providers for the public persona as basic_user
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/{public_persona.id}/providers",
         headers=basic_user.headers,
     )
@@ -236,7 +236,7 @@ def test_nonexistent_persona_returns_404(
     admin_user, basic_user, group1_id, group2_id = users_and_groups
 
     # Query providers for a nonexistent persona
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/persona/99999/providers",
         headers=basic_user.headers,
     )

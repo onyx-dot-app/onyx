@@ -1,4 +1,4 @@
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
@@ -8,7 +8,7 @@ SEARCH_SETTINGS_URL = f"{API_SERVER_URL}/search-settings"
 
 
 def _get_current_search_settings(user: DATestUser) -> dict:
-    response = requests.get(
+    response = client.get(
         f"{SEARCH_SETTINGS_URL}/get-current-search-settings",
         headers=user.headers,
     )
@@ -17,7 +17,7 @@ def _get_current_search_settings(user: DATestUser) -> dict:
 
 
 def _get_all_search_settings(user: DATestUser) -> dict:
-    response = requests.get(
+    response = client.get(
         f"{SEARCH_SETTINGS_URL}/get-all-search-settings",
         headers=user.headers,
     )
@@ -26,7 +26,7 @@ def _get_all_search_settings(user: DATestUser) -> dict:
 
 
 def _get_secondary_search_settings(user: DATestUser) -> dict | None:
-    response = requests.get(
+    response = client.get(
         f"{SEARCH_SETTINGS_URL}/get-secondary-search-settings",
         headers=user.headers,
     )
@@ -35,7 +35,7 @@ def _get_secondary_search_settings(user: DATestUser) -> dict | None:
 
 
 def _update_inference_settings(user: DATestUser, settings: dict) -> None:
-    response = requests.post(
+    response = client.post(
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
         json=settings,
         headers=user.headers,
@@ -48,7 +48,7 @@ def _set_new_search_settings(
     current_settings: dict,
     enable_contextual_rag: bool = False,
     contextual_rag_model_configuration_id: int | None = None,
-) -> requests.Response:
+) -> client.Response:
     """POST to set-new-search-settings, deriving the payload from current settings."""
     payload = {
         "model_name": current_settings["model_name"],
@@ -64,7 +64,7 @@ def _set_new_search_settings(
         "enable_contextual_rag": enable_contextual_rag,
         "contextual_rag_model_configuration_id": contextual_rag_model_configuration_id,
     }
-    return requests.post(
+    return client.post(
         f"{SEARCH_SETTINGS_URL}/set-new-search-settings",
         json=payload,
         headers=user.headers,
@@ -72,7 +72,7 @@ def _set_new_search_settings(
 
 
 def _cancel_new_embedding(user: DATestUser) -> None:
-    response = requests.post(
+    response = client.post(
         f"{SEARCH_SETTINGS_URL}/cancel-new-embedding",
         headers=user.headers,
     )
@@ -251,7 +251,7 @@ def test_update_contextual_rag_nonexistent_model_configuration(
     settings["enable_contextual_rag"] = True
     settings["contextual_rag_model_configuration_id"] = 999999
 
-    response = requests.post(
+    response = client.post(
         f"{SEARCH_SETTINGS_URL}/update-inference-settings",
         json=settings,
         headers=admin_user.headers,

@@ -1,13 +1,12 @@
-"""TestClient-backed HTTP client shim with a ``requests``-style surface.
+"""TestClient-backed HTTP client shim.
 
-Integration tests use ``client.get/post/put/patch/delete/request(url, ...)``
-exactly like the top-level functions of the ``requests`` module. Under the
-hood every call goes through a FastAPI ``TestClient`` (an ``httpx.Client``)
-that drives the ASGI app in-process — no uvicorn, no socket.
+Integration tests call ``client.get/post/put/patch/delete/request(url, ...)``,
+backed by a FastAPI ``TestClient`` (an ``httpx.Client``) that drives the
+ASGI app in-process — no uvicorn, no socket.
 
-The returned ``httpx.Response`` is API-compatible with ``requests.Response``
-for ``.status_code``, ``.json()``, ``.headers``, ``.cookies``,
-``.iter_lines()``, ``.raise_for_status()``, ``.content``, and ``.text``.
+The returned ``httpx.Response`` exposes the attributes tests rely on:
+``.status_code``, ``.json()``, ``.headers``, ``.cookies``,
+``.iter_lines()``, ``.raise_for_status()``, ``.content``, ``.text``.
 
 The active ``TestClient`` is owned by a session-scoped fixture in the
 integration ``conftest.py`` which calls :func:`set_test_client` on startup
@@ -21,10 +20,9 @@ from typing import Any
 import httpx
 from fastapi.testclient import TestClient
 
-# Re-exports so call sites can replace `from requests import HTTPError` /
-# `from requests.models import Response, CaseInsensitiveDict` with this
-# module without dragging the `requests` package into the test process.
+# Re-exports for callers that want the exception/response types directly.
 HTTPError = httpx.HTTPStatusError
+RequestException = httpx.RequestError
 Response = httpx.Response
 CaseInsensitiveDict = httpx.Headers
 
@@ -48,23 +46,19 @@ def _require_client() -> TestClient:
 
 class _Exceptions:
     HTTPError = httpx.HTTPStatusError
-    # ChunkedEncodingError is raised by `requests` when a streamed body's
-    # chunked-transfer framing is malformed. TestClient/httpx surfaces the
-    # equivalent as RemoteProtocolError.
+    RequestException = httpx.RequestError
+    # `requests` raises ChunkedEncodingError when a streamed body's
+    # chunked-transfer framing is malformed; httpx surfaces the equivalent
+    # as RemoteProtocolError.
     ChunkedEncodingError = httpx.RemoteProtocolError
 
 
 class _Client:
-    """`requests`-shaped surface backed by the active TestClient.
-
-    Also re-exposes the few module-level names that test code accesses via
-    `requests.X` so a `from ... import client as requests` rename suffices
-    in call sites — no separate edits needed for type annotations or
-    `pytest.raises(requests.HTTPError)`.
-    """
+    """Thin HTTP surface backed by the active TestClient."""
 
     Response = httpx.Response
     HTTPError = httpx.HTTPStatusError
+    RequestException = httpx.RequestError
     exceptions = _Exceptions
 
     def request(self, method: str, url: str, **kwargs: Any) -> Any:

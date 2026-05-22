@@ -6,7 +6,7 @@ server reports vector_db_enabled=true (i.e. when Vespa is available).
 """
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -17,7 +17,7 @@ from tests.integration.common_utils.test_models import DATestUser
 def _server_has_vector_db_disabled() -> bool:
     """Query the running server to check whether DISABLE_VECTOR_DB is set."""
     try:
-        resp = requests.get(
+        resp = client.get(
             f"{API_SERVER_URL}/settings",
             headers=GENERAL_HEADERS,
         )

@@ -5,7 +5,7 @@ from typing import IO
 from typing import List
 from typing import Tuple
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -28,7 +28,7 @@ class FileManager:
                 mime_type = "application/octet-stream"
             files_param.append(("files", (filename, file_obj, mime_type)))
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/projects/file/upload",
             files=files_param,
             headers=headers,
@@ -63,7 +63,7 @@ class FileManager:
         file_id: str,
         user_performing_action: DATestUser,
     ) -> bytes:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user_performing_action.headers,
         )
@@ -94,7 +94,7 @@ class FileManager:
             del headers["Content-Type"]
 
         # Make the request
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/connector/file/upload",
             files=files,
             headers=headers,

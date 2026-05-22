@@ -3,7 +3,7 @@ from datetime import datetime
 from http import HTTPStatus
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
@@ -64,7 +64,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
@@ -74,7 +74,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
     )
 
     # Check KG
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
@@ -93,7 +93,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
 
     # Disable KG
     req3 = DisableKGConfigRequest().model_dump()
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req3,
@@ -103,7 +103,7 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
     )
 
     # Check KG
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
@@ -132,7 +132,7 @@ def test_kg_enable_with_missing_fields_should_fail() -> None:
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res = requests.put(
+    res = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req,
@@ -152,7 +152,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
@@ -162,7 +162,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
     )
 
     # Get old entity types
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
@@ -185,7 +185,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
             active=False,
         ).model_dump(),
     ]
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
@@ -204,7 +204,7 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         assert connector.kg_processing_enabled
 
     # Check entity types looks correct
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
@@ -247,7 +247,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
@@ -257,7 +257,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
     )
 
     # Get old entity types
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
@@ -269,7 +269,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
     req3 = [
         EntityType(name="NON-EXISTENT", description="Test.", active=False).model_dump(),
     ]
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
@@ -279,7 +279,7 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
     )
 
     # Get entity types after the update attempt
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )

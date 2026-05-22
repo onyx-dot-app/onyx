@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.http_client import HTTPError
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
@@ -61,7 +61,7 @@ class UserManager:
             "username": email,
             "password": password,
         }
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/auth/register",
             json=body,
             headers=GENERAL_HEADERS,
@@ -90,7 +90,7 @@ class UserManager:
         headers = test_user.headers.copy()
         headers.pop("Content-Type", None)
 
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/auth/login",
             data={"username": test_user.email, "password": test_user.password},
             headers=headers,
@@ -108,7 +108,7 @@ class UserManager:
         test_user.cookies = {"fastapiusersauth": session_cookie}
 
         # Get user role from /me endpoint
-        me_response = requests.get(
+        me_response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=test_user.headers,
             cookies=test_user.cookies,
@@ -123,7 +123,7 @@ class UserManager:
 
     @staticmethod
     def get_permissions(user: DATestUser) -> list[str]:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me/permissions",
             headers=user.headers,
         )
@@ -135,7 +135,7 @@ class UserManager:
         user_to_verify: DATestUser,
         target_role: UserRole,
     ) -> bool:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
             cookies=user_to_verify.cookies,
@@ -162,7 +162,7 @@ class UserManager:
         user_performing_action: DATestUser,
         explicit_override: bool = False,
     ) -> DATestUser:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
             json={
                 "user_email": user_to_set.email,
@@ -186,7 +186,7 @@ class UserManager:
     # TODO: Add a way to check invited status
     @staticmethod
     def is_status(user_to_verify: DATestUser, target_status: bool) -> bool:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
         )
@@ -213,7 +213,7 @@ class UserManager:
             url_substring = "activate"
         elif target_status is False:
             url_substring = "deactivate"
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",  # ty: ignore[possibly-unresolved-reference]
             json={"user_email": user_to_set.email},
             headers=user_performing_action.headers,
@@ -268,7 +268,7 @@ class UserManager:
         if is_active_filter is not None:
             query_params["is_active"] = is_active_filter
 
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
         )
@@ -291,7 +291,7 @@ class UserManager:
             user_to_invite_email: Email of the user to invite
             user_performing_action: User with admin permissions performing the invitation
         """
-        response = requests.put(
+        response = client.put(
             url=f"{API_SERVER_URL}/manage/admin/users",
             headers=user_performing_action.headers,
             json={"emails": [user_to_invite_email]},
@@ -306,7 +306,7 @@ class UserManager:
             tenant_id: ID of the tenant/organization to accept invitation for
             user_performing_action: User accepting the invitation
         """
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/tenants/users/invite/accept",
             headers=user_performing_action.headers,
             json={"tenant_id": tenant_id},
@@ -325,7 +325,7 @@ class UserManager:
         Returns:
             List of invited user snapshots
         """
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users/invited",
             headers=user_performing_action.headers,
         )
@@ -340,7 +340,7 @@ class UserManager:
         Args:
             user_performing_action: User performing the action
         """
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_performing_action.headers,
         )

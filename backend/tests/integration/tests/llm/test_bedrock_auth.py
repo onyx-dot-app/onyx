@@ -9,7 +9,7 @@ response body verbatim. This test pins the contract:
   match keeps working.
 """
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
@@ -22,7 +22,7 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/test",
         headers=admin_user.headers,
         json={

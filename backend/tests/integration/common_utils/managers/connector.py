@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import uuid4
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import ConnectorUpdateRequest
@@ -46,7 +46,7 @@ class ConnectorManager:
             refresh_freq=refresh_freq,
         )
 
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/manage/admin/connector",
             json=connector_update_request.model_dump(),
             headers=user_performing_action.headers,
@@ -69,7 +69,7 @@ class ConnectorManager:
         connector: DATestConnector,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             json=connector.model_dump(exclude={"id"}),
             headers=user_performing_action.headers,
@@ -81,7 +81,7 @@ class ConnectorManager:
         connector: DATestConnector,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             headers=user_performing_action.headers,
         )
@@ -91,7 +91,7 @@ class ConnectorManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[DATestConnector]:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/connector",
             headers=user_performing_action.headers,
         )
@@ -112,7 +112,7 @@ class ConnectorManager:
         connector_id: int,
         user_performing_action: DATestUser,
     ) -> DATestConnector:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/connector/{connector_id}",
             headers=user_performing_action.headers,
         )

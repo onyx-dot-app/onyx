@@ -3,7 +3,7 @@ import json
 import zipfile
 from uuid import uuid4
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
@@ -54,7 +54,7 @@ class SkillManager:
         headers = dict(user_performing_action.headers)
         headers.pop("Content-Type", None)
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/skills/custom",
             data={
                 "is_public": str(is_public).lower(),
@@ -87,7 +87,7 @@ class SkillManager:
         user_performing_action: DATestUser,
         **fields: object,
     ) -> DATestSkill:
-        response = requests.patch(
+        response = client.patch(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
             json=fields,
             headers=user_performing_action.headers,
@@ -113,7 +113,7 @@ class SkillManager:
         headers = dict(user_performing_action.headers)
         headers.pop("Content-Type", None)
 
-        response = requests.put(
+        response = client.put(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/bundle",
             files={
                 "bundle": (
@@ -142,7 +142,7 @@ class SkillManager:
         group_ids: list[int],
         user_performing_action: DATestUser,
     ) -> DATestSkill:
-        response = requests.put(
+        response = client.put(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/grants",
             json={"group_ids": group_ids},
             headers=user_performing_action.headers,
@@ -164,7 +164,7 @@ class SkillManager:
         skill: DATestSkill,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
             headers=user_performing_action.headers,
         )
@@ -174,7 +174,7 @@ class SkillManager:
     def list_all(
         user_performing_action: DATestUser,
     ) -> dict:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/skills",
             headers=user_performing_action.headers,
         )
@@ -185,7 +185,7 @@ class SkillManager:
     def list_for_user(
         user_performing_action: DATestUser,
     ) -> dict:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/skills",
             headers=user_performing_action.headers,
         )

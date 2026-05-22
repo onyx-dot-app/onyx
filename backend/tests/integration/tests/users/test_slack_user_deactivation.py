@@ -11,7 +11,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import redis
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
@@ -113,7 +113,7 @@ def test_slack_user_reactivation_blocked_by_seat_limit(
     _seed_license(r, seats=1)
 
     try:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
             json={"user_email": slack_user.email},
             headers=admin_user.headers,

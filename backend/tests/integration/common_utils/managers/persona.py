@@ -1,7 +1,7 @@
 from uuid import UUID
 from uuid import uuid4
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -53,7 +53,7 @@ class PersonaManager:
             is_featured=featured,
         )
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/persona",
             json=persona_creation_request.model_dump(mode="json"),
             headers=user_performing_action.headers,
@@ -117,7 +117,7 @@ class PersonaManager:
             is_featured=featured if featured is not None else persona.is_featured,
         )
 
-        response = requests.patch(
+        response = client.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
             json=persona_update_request.model_dump(mode="json"),
             headers=user_performing_action.headers,
@@ -148,7 +148,7 @@ class PersonaManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[FullPersonaSnapshot]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/persona",
             headers=user_performing_action.headers,
         )
@@ -160,7 +160,7 @@ class PersonaManager:
         persona_id: int,
         user_performing_action: DATestUser,
     ) -> list[FullPersonaSnapshot]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
             headers=user_performing_action.headers,
         )
@@ -315,7 +315,7 @@ class PersonaManager:
         persona: DATestPersona,
         user_performing_action: DATestUser,
     ) -> bool:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/persona/{persona.id}",
             headers=user_performing_action.headers,
         )
@@ -328,7 +328,7 @@ class PersonaLabelManager:
         label: DATestPersonaLabel,
         user_performing_action: DATestUser,
     ) -> DATestPersonaLabel:
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/persona/labels",
             json={
                 "name": label.name,
@@ -344,7 +344,7 @@ class PersonaLabelManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[DATestPersonaLabel]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/persona/labels",
             headers=user_performing_action.headers,
         )
@@ -356,7 +356,7 @@ class PersonaLabelManager:
         label: DATestPersonaLabel,
         user_performing_action: DATestUser,
     ) -> DATestPersonaLabel:
-        response = requests.patch(
+        response = client.patch(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
             json={
                 "label_name": label.name,
@@ -371,7 +371,7 @@ class PersonaLabelManager:
         label: DATestPersonaLabel,
         user_performing_action: DATestUser,
     ) -> bool:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
             headers=user_performing_action.headers,
         )

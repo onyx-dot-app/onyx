@@ -1,4 +1,4 @@
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
 from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -15,7 +15,7 @@ def _get_agents_paginated(
     include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents, with status code."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}{AGENTS_RESOURCE}",
         params={
             "page_num": page_num,
@@ -39,7 +39,7 @@ def _get_agents_admin_paginated(
     include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents (admin endpoint) with status code."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}{ADMIN_AGENTS_RESOURCE}",
         params={
             "page_num": page_num,

@@ -15,7 +15,7 @@ until files reach COMPLETED before chatting.
 
 import time
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
@@ -43,7 +43,7 @@ def _poll_file_statuses(
     """Block until all files reach the target status or timeout expires."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/user/projects/file/statuses",
             json={"file_ids": user_file_ids},
             headers=user.headers,

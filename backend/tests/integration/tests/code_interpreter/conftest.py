@@ -1,7 +1,7 @@
 from collections.abc import Generator
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -14,7 +14,7 @@ def preserve_code_interpreter_state(
 ) -> Generator[None, None, None]:
     """Capture the code interpreter enabled state before a test and restore it
     afterwards, so that tests that toggle the setting cannot leak state."""
-    response = requests.get(
+    response = client.get(
         CODE_INTERPRETER_URL,
         headers=admin_user.headers,
     )
@@ -23,7 +23,7 @@ def preserve_code_interpreter_state(
 
     yield
 
-    restore = requests.put(
+    restore = client.put(
         CODE_INTERPRETER_URL,
         json={"enabled": initial_enabled},
         headers=admin_user.headers,

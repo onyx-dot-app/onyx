@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.http_client import HTTPError
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -73,14 +73,14 @@ def _get_chat_session(
     user: DATestUser,
     is_shared: bool | None = None,
     include_deleted: bool | None = None,
-) -> requests.Response:
+) -> client.Response:
     params: dict[str, str] = {}
     if is_shared is not None:
         params["is_shared"] = str(is_shared).lower()
     if include_deleted is not None:
         params["include_deleted"] = str(include_deleted).lower()
 
-    return requests.get(
+    return client.get(
         f"{API_SERVER_URL}/chat/get-chat-session/{chat_session_id}",
         params=params,
         headers=user.headers,
@@ -90,8 +90,8 @@ def _get_chat_session(
 
 def _set_sharing_status(
     chat_session_id: str, sharing_status: str, user: DATestUser
-) -> requests.Response:
-    return requests.patch(
+) -> client.Response:
+    return client.patch(
         f"{API_SERVER_URL}/chat/chat-session/{chat_session_id}",
         json={"sharing_status": sharing_status},
         headers=user.headers,
@@ -184,8 +184,8 @@ def test_chat_session_not_found_returns_404(basic_user: DATestUser) -> None:
     assert response.status_code == 404
 
 
-def _stop_chat_session(chat_session_id: str, user: DATestUser) -> requests.Response:
-    return requests.post(
+def _stop_chat_session(chat_session_id: str, user: DATestUser) -> client.Response:
+    return client.post(
         f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
         headers=user.headers,
         cookies=user.cookies,

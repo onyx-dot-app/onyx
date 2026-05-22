@@ -3,7 +3,7 @@ from datetime import timedelta
 from datetime import timezone
 
 import jwt
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
@@ -27,7 +27,7 @@ class TenantManager:
     def get_all_users(
         user_performing_action: DATestUser,
     ) -> AllUsersResponse:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users",
             headers=user_performing_action.headers,
         )

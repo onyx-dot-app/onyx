@@ -14,7 +14,7 @@ import os
 from uuid import UUID
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -66,8 +66,8 @@ def _send_message_with_document_set_filter(
     chat_session_id: UUID,
     document_set_names: list[str],
     forced_tool_id: int,
-) -> requests.Response:
-    return requests.post(
+) -> client.Response:
+    return client.post(
         f"{API_SERVER_URL}/chat/send-chat-message",
         json={
             "message": "hello",
@@ -83,7 +83,7 @@ def _send_message_with_document_set_filter(
     )
 
 
-def _stream_contains_error(response: requests.Response, needle: str) -> bool:
+def _stream_contains_error(response: client.Response, needle: str) -> bool:
     needle_lower = needle.lower()
     for raw_line in response.iter_lines():
         if not raw_line:

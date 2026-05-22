@@ -11,7 +11,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -74,7 +74,7 @@ def test_list_directory_rejects_path_traversal(admin_user: DATestUser) -> None:
     entries. An explicit 403 is also acceptable.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _files_url(session_id),
         params={"path": "../etc"},
         headers=admin_user.headers,
@@ -95,7 +95,7 @@ def test_list_directory_returns_200_for_missing_dir(admin_user: DATestUser) -> N
     empty ``DirectoryListing`` (200).
     """
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _files_url(session_id),
         params={"path": "definitely-not-a-real-subdir"},
         headers=admin_user.headers,
@@ -119,7 +119,7 @@ def test_list_directory_returns_empty_when_workspace_missing(
     # Empty path = workspace root. A freshly-created session may not have its
     # workspace loaded into the sandbox yet; either way the endpoint must not
     # 404 on a path that's not a traversal attempt.
-    response = requests.get(
+    response = client.get(
         _files_url(session_id),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -144,7 +144,7 @@ def test_read_file_rejects_path_traversal(admin_user: DATestUser) -> None:
     as no file content escapes the sandbox.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _artifact_url(session_id, "..%2Fetc%2Fpasswd"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -166,7 +166,7 @@ def test_delete_file_rejects_path_traversal(admin_user: DATestUser) -> None:
     long as 204 (success) is NOT returned.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.delete(
+    response = client.delete(
         _delete_file_url(session_id, "attachments/../../etc/passwd"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -181,7 +181,7 @@ def test_delete_file_rejects_url_encoded_traversal(admin_user: DATestUser) -> No
     sandbox manager's ``..`` regex fires and the API maps the error to 403.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.delete(
+    response = client.delete(
         _delete_file_url(session_id, "attachments/%2e%2e/etc/passwd"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -206,7 +206,7 @@ def test_delete_file_rejects_shell_metachars(
     # Embed the metacharacter into an otherwise innocuous path. URL-encode so
     # that special chars (e.g. ``;``, ``&``, ``$``) survive routing intact.
     encoded = quote(f"attachments/foo{metachar}bar.txt", safe="/")
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/build/sessions/{session_id}/files/{encoded}",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -223,7 +223,7 @@ def test_delete_file_rejects_null_byte(admin_user: DATestUser) -> None:
     session_id = _create_session_id(admin_user)
     # ``%00`` is the URL-encoded NUL byte. requests will pass it through
     # raw so the server sees the actual byte.
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/build/sessions/{session_id}/files/attachments/foo%00bar.txt",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -243,7 +243,7 @@ def test_download_artifact_rejects_path_traversal(admin_user: DATestUser) -> Non
     — both prevent escape; only a 2xx with external content would be a bug.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _artifact_url(session_id, "..%2F..%2Fetc%2Fpasswd"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -254,7 +254,7 @@ def test_download_artifact_rejects_path_traversal(admin_user: DATestUser) -> Non
 def test_download_artifact_hides_opencode_json(admin_user: DATestUser) -> None:
     """Direct download of ``opencode.json`` returns 404 even if the file exists."""
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _artifact_url(session_id, "opencode.json"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -307,7 +307,7 @@ def test_cross_user_file_access_returns_404(
     """User A asking for User B's session via any file-op endpoint sees 404."""
     foreign_session_id = _create_session_id(basic_user)
 
-    response = requests.get(
+    response = client.get(
         _files_url(foreign_session_id),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -330,7 +330,7 @@ def test_download_directory_zip_respects_traversal_rules(
     the manager catches the ``ValueError`` and returns ``None`` -> 404.
     """
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _download_directory_url(session_id, "..%2Fetc"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -346,7 +346,7 @@ def test_download_directory_zip_respects_traversal_rules(
 def test_pptx_preview_rejects_non_pptx(admin_user: DATestUser) -> None:
     """pptx-preview returns 400 for a .docx file."""
     session_id = _create_session_id(admin_user)
-    response = requests.get(
+    response = client.get(
         _pptx_preview_url(session_id, "outputs/report.docx"),
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -360,7 +360,7 @@ def test_export_docx_rejects_non_md(admin_user: DATestUser) -> None:
     # Seed an actual .txt file so the endpoint reaches the extension check
     # rather than short-circuiting on "file not found".
     seed_path = _seed_file(admin_user, session_id, name="notes.txt")
-    response = requests.get(
+    response = client.get(
         _export_docx_url(session_id, seed_path),
         headers=admin_user.headers,
         cookies=admin_user.cookies,

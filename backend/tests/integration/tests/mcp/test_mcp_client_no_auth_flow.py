@@ -7,7 +7,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
@@ -88,7 +88,7 @@ def test_mcp_client_no_auth_flow(
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     # Step a) Create a no-auth MCP server via the admin API
-    create_response = requests.post(
+    create_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/servers/create",
         json={
             "name": "integration-mcp-no-auth",
@@ -105,7 +105,7 @@ def test_mcp_client_no_auth_flow(
     server_id = create_response.json()["server_id"]
 
     # Step b) list the server's tools
-    tools_response = requests.get(
+    tools_response = client.get(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -115,7 +115,7 @@ def test_mcp_client_no_auth_flow(
     assert len(tool_entries) == 101
 
     # Update server status to CONNECTED
-    status_response = requests.patch(
+    status_response = client.patch(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/status",
         params={"status": "CONNECTED"},
         headers=admin_user.headers,
@@ -123,7 +123,7 @@ def test_mcp_client_no_auth_flow(
     )
     status_response.raise_for_status()
 
-    tools_response = requests.get(
+    tools_response = client.get(
         f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -142,7 +142,7 @@ def test_mcp_client_no_auth_flow(
         tool_ids=[tool_id],
         user_performing_action=admin_user,
     )
-    persona_tools_response = requests.get(
+    persona_tools_response = client.get(
         f"{API_SERVER_URL}/persona",
         headers=basic_user.headers,
         cookies=basic_user.cookies,

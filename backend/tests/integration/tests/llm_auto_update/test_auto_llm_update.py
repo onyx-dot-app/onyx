@@ -15,7 +15,7 @@ at the configured interval.
 import time
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -52,7 +52,7 @@ def _create_provider_with_api(
         "api_key_changed": True,
     }
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         json=llm_provider_data,
         headers=admin_user.headers,
@@ -63,7 +63,7 @@ def _create_provider_with_api(
 
 def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict:
     """Get a provider by ID via the API."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -76,7 +76,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: int) -> dict:
 
 def get_auto_config(admin_user: DATestUser) -> dict | None:
     """Get the current auto config from the API."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/auto-config",
         headers=admin_user.headers,
     )

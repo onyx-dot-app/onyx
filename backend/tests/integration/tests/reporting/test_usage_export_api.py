@@ -10,7 +10,7 @@ from uuid import UUID
 from zipfile import ZipFile
 
 import pytest
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from ee.onyx.db.usage_export import UsageReportMetadata
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
@@ -37,7 +37,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial list of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -46,7 +46,7 @@ class TestUsageExportAPI:
         initial_count = len(initial_reports)
 
         # Test generating a report without date filters (all time)
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -59,7 +59,7 @@ class TestUsageExportAPI:
         current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
-            check_response = requests.get(
+            check_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -94,7 +94,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial list of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -106,7 +106,7 @@ class TestUsageExportAPI:
         period_to = datetime.now(tz=timezone.utc)
         period_from = period_to - timedelta(days=30)
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={
                 "period_from": period_from.isoformat(),
@@ -122,7 +122,7 @@ class TestUsageExportAPI:
         current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
-            check_response = requests.get(
+            check_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -150,7 +150,7 @@ class TestUsageExportAPI:
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Test with invalid date format
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={
                 "period_from": "not-a-date",
@@ -174,7 +174,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial count
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -182,7 +182,7 @@ class TestUsageExportAPI:
         initial_count = len(initial_response.json())
 
         # Generate a report
-        generate_response = requests.post(
+        generate_response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -195,7 +195,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            response = requests.get(
+            response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -238,14 +238,14 @@ class TestUsageExportAPI:
         )
 
         # Get initial reports count
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
         assert initial_response.status_code == 200
         initial_count = len(initial_response.json())
 
-        generate_response = requests.post(
+        generate_response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -258,7 +258,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            list_response = requests.get(
+            list_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -275,7 +275,7 @@ class TestUsageExportAPI:
         report_name = reports[0]["report_name"]
 
         # Download the report
-        download_response = requests.get(
+        download_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/{report_name}",
             headers=admin_user.headers,
             stream=True,
@@ -347,7 +347,7 @@ class TestUsageExportAPI:
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report that doesn't exist
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/nonexistent_report.zip",
             headers=admin_user.headers,
         )
@@ -358,7 +358,7 @@ class TestUsageExportAPI:
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to generate a report as non-admin
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=basic_user.headers,
@@ -370,7 +370,7 @@ class TestUsageExportAPI:
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to fetch reports as non-admin
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=basic_user.headers,
         )
@@ -381,7 +381,7 @@ class TestUsageExportAPI:
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report as non-admin
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/some_report.zip",
             headers=basic_user.headers,
         )
@@ -401,7 +401,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial count of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -411,7 +411,7 @@ class TestUsageExportAPI:
         # Generate multiple reports concurrently
         num_reports = 3
         for i in range(num_reports):
-            response = requests.post(
+            response = client.post(
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},
                 headers=admin_user.headers,
@@ -424,7 +424,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            response = requests.get(
+            response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )

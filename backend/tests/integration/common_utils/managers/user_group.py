@@ -1,7 +1,7 @@
 import time
 from uuid import uuid4
 
-from tests.integration.common_utils.http_client import client as requests
+from tests.integration.common_utils.http_client import client
 from ee.onyx.server.user_group.models import UserGroup
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
@@ -24,7 +24,7 @@ class UserGroupManager:
             "user_ids": user_ids or [],
             "cc_pair_ids": cc_pair_ids or [],
         }
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/user-group",
             json=request,
             headers=user_performing_action.headers,
@@ -43,7 +43,7 @@ class UserGroupManager:
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.patch(
+        response = client.patch(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             json=user_group.model_dump(),
             headers=user_performing_action.headers,
@@ -55,7 +55,7 @@ class UserGroupManager:
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}",
             headers=user_performing_action.headers,
         )
@@ -71,7 +71,7 @@ class UserGroupManager:
             "user_ids": user_ids,
         }
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
             json=request,
             headers=user_performing_action.headers,
@@ -96,7 +96,7 @@ class UserGroupManager:
             "user_id": user_to_set_as_curator.id,
             "is_curator": is_curator,
         }
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/user-group/{test_user_group.id}/set-curator",
             json=set_curator_request,
             headers=user_performing_action.headers,
@@ -108,7 +108,7 @@ class UserGroupManager:
         user_group: DATestUserGroup,
         user_performing_action: DATestUser,
     ) -> list[str]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             headers=user_performing_action.headers,
         )
@@ -121,8 +121,8 @@ class UserGroupManager:
         permission: str,
         enabled: bool,
         user_performing_action: DATestUser,
-    ) -> requests.Response:
-        response = requests.put(
+    ) -> client.Response:
+        response = client.put(
             f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/permissions",
             json={"permission": permission, "enabled": enabled},
             headers=user_performing_action.headers,
@@ -137,7 +137,7 @@ class UserGroupManager:
         params: dict[str, str] = {}
         if include_default:
             params["include_default"] = "true"
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/admin/user-group",
             headers=user_performing_action.headers,
             params=params,
