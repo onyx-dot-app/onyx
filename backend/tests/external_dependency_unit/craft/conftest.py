@@ -441,14 +441,13 @@ class SandboxHandle:
         self._db_session.commit()
         self._db_session.refresh(sandbox_row)
 
-        self.manager.provision(
+        _provision_with_retry(
+            self.manager,
             sandbox_id=sandbox_row.id,
             user_id=user.id,
             tenant_id=TEST_TENANT_ID,
             llm_config=self._llm_config,
-            onyx_pat="ci-test-pat",
         )
-        _wait_until_healthy(self.manager, sandbox_row.id)
         self._register_extra(sandbox_row.id)
 
         if status != SandboxStatus.RUNNING:
@@ -474,6 +473,53 @@ def _wait_until_healthy(
             return
         time.sleep(2)
     raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
+
+
+def _provision_with_retry(
+    manager: KubernetesSandboxManager,
+    *,
+    sandbox_id: UUID,
+    user_id: UUID,
+    tenant_id: str,
+    llm_config: LLMProviderConfig,
+    onyx_pat: str | None = "ci-test-pat",
+) -> SandboxInfo:
+    """Provision + wait-healthy with a one-shot retry on flake.
+
+    kind under load occasionally times out the manager's
+    ``_wait_for_pod_ready`` (cluster scheduling pressure, transient
+    image-pull retries). When that happens we terminate the half-baked
+    pod and try once more — fresh scheduling usually succeeds. Real
+    deterministic failures still raise on the second try.
+    """
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            info = manager.provision(
+                sandbox_id=sandbox_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                llm_config=llm_config,
+                onyx_pat=onyx_pat,
+            )
+            _wait_until_healthy(manager, sandbox_id)
+            return info
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt == 0:
+                # Tear down the half-baked pod before retrying so the
+                # second attempt starts from a clean slate.
+                try:
+                    manager.terminate(sandbox_id)
+                except Exception:
+                    pass
+                continue
+            raise
+    # Unreachable — the loop either returns or raises — but type-checkers
+    # complain without an explicit terminator.
+    raise RuntimeError(
+        f"provision retry exhausted for {sandbox_id}: {last_err}"
+    ) from last_err
 
 
 # ---------------------------------------------------------------------------
@@ -590,17 +636,16 @@ def _pool_pod(
         )
         session.commit()
 
-    # Provision the pod once.
-    pool_info = manager.provision(
+    # Provision the pod once, with a one-shot retry on flake.
+    pool_info = _provision_with_retry(
+        manager,
         sandbox_id=pool_sandbox_id,
         user_id=pool_user_id,
         tenant_id=TEST_TENANT_ID,
         llm_config=default_llm_config(
             api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
         ),
-        onyx_pat="ci-test-pat",
     )
-    _wait_until_healthy(manager, pool_sandbox_id)
     pod_name = manager._get_pod_name(pool_sandbox_id)
 
     try:
@@ -1199,6 +1244,43 @@ def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
 
 
 @pytest.fixture(scope="function")
+def pool_session(
+    _pool_pod: _PoolPod,
+) -> tuple[UUID, UUID, str]:
+    """Fresh session on the module pool pod — drop-in for ``live_pod``.
+
+    Same return shape as ``live_pod`` (``sandbox_id, session_id,
+    pod_name``) but reuses the module-scoped pool pod instead of
+    provisioning + tearing down a fresh one per test. Saves ~14s of pod
+    startup per test.
+
+    Per call: wipes mutable trees on the pool pod
+    (``/workspace/managed/skills``, ``/workspace/managed/user_library``,
+    ``/workspace/sessions``) via :func:`_cleanup_pool_workspace`, then
+    sets up a fresh session workspace with a new ``session_id``. The
+    returned ``sandbox_id`` is the pool pod's stable ID.
+
+    Use this for any test that needs a sandbox pod + a session and does
+    NOT terminate / restart / re-provision the pod itself. Tests that
+    assert on pod lifecycle (terminate cleanup, restart count, IRSA
+    env, RO mount) must keep using ``live_pod`` so they don't break
+    state for subsequent tests in the module.
+    """
+    _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
+    session_id = uuid4()
+    _pool_pod.manager.setup_session_workspace(
+        sandbox_id=_pool_pod.sandbox_id,
+        session_id=session_id,
+        llm_config=default_llm_config(
+            api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
+        ),
+        nextjs_port=None,
+        skills_section="No skills available.",
+    )
+    return _pool_pod.sandbox_id, session_id, _pool_pod.pod_name
+
+
+@pytest.fixture(scope="function")
 def live_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
@@ -1209,6 +1291,10 @@ def live_pod(
     health via a 15-attempt poll on ``manager.health_check``; if the pod
     never becomes healthy the fixture raises ``RuntimeError`` so the test
     fails fast rather than running against a half-baked sandbox.
+
+    Prefer ``pool_session`` for tests that just need a sandbox + session
+    and don't mutate pod-level state; this fixture exists for tests that
+    require their own pod (lifecycle assertions, terminate, etc.).
     """
     sandbox_id = uuid4()
     session_id = uuid4()
@@ -1216,21 +1302,14 @@ def live_pod(
         api_key=os.environ.get("OPENAI_API_KEY", "test-key"),
     )
 
-    info = k8s_manager.provision(
+    info = _provision_with_retry(
+        k8s_manager,
         sandbox_id=sandbox_id,
         user_id=_K8S_TEST_USER_ID,
         tenant_id=TEST_TENANT_ID,
         llm_config=llm_config,
-        onyx_pat="ci-test-pat",
     )
     assert info.status == SandboxStatus.RUNNING
-
-    for _ in range(15):
-        if k8s_manager.health_check(sandbox_id, timeout=5.0):
-            break
-        time.sleep(2)
-    else:
-        raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
 
     k8s_manager.setup_session_workspace(
         sandbox_id=sandbox_id,
