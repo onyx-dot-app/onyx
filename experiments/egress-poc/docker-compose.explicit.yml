@@ -1,0 +1,41 @@
+# Overlay: sandbox-explicit container. Uses HTTPS_PROXY env vars to steer
+# traffic to the proxy. Joined to sandbox-explicit-net (internal: true) so
+# bypass attempts hit L1 (no route) instead of leaking.
+
+services:
+  sandbox-explicit:
+    image: egress-poc/sandbox:latest
+    container_name: egress-poc-sandbox-explicit
+    entrypoint: ["/usr/local/bin/entrypoint-explicit.sh"]
+    environment:
+      SESSION_TOKEN: poc-session-token-explicit
+      HTTPS_PROXY: "http://session:poc-session-token-explicit@proxy:8444"
+      HTTP_PROXY: "http://session:poc-session-token-explicit@proxy:8444"
+      https_proxy: "http://session:poc-session-token-explicit@proxy:8444"
+      http_proxy: "http://session:poc-session-token-explicit@proxy:8444"
+      NO_PROXY: "localhost,127.0.0.1"
+      no_proxy: "localhost,127.0.0.1"
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/onyx-ca.crt
+      SSL_CERT_FILE: /etc/ssl/certs/onyx-ca.crt
+      CURL_CA_BUNDLE: /etc/ssl/certs/onyx-ca.crt
+      GIT_SSL_CAINFO: /etc/ssl/certs/onyx-ca.crt
+      AWS_CA_BUNDLE: /etc/ssl/certs/onyx-ca.crt
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/onyx-ca.crt
+    cap_drop:
+      - ALL
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    # Mock destinations resolve to TEST-NET-3 (RFC 5737) so any direct-connect
+    # attempt fails at routing on the internal network. In explicit mode the
+    # sandbox never resolves these — the proxy does — but `--noproxy '*'`
+    # demos rely on resolution succeeding before routing fails.
+    extra_hosts:
+      - "api.allowed.example=198.51.100.1"
+      - "api.denied.example=198.51.100.2"
+      - "api.unregistered.example=198.51.100.3"
+    depends_on:
+      proxy:
+        condition: service_started
+    networks:
+      - sandbox-explicit-net

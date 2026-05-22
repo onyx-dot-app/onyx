@@ -1,0 +1,57 @@
+# Overlay: sandbox-transparent + iptables-init. The init container shares
+# the sandbox's network namespace, installs DNAT REDIRECT + REJECT rules,
+# and exits. The sandbox container has no proxy env vars and no NET_ADMIN —
+# it cannot modify or read the rules from inside.
+
+services:
+  sandbox-transparent:
+    image: egress-poc/sandbox:latest
+    container_name: egress-poc-sandbox-transparent
+    entrypoint: ["/usr/local/bin/entrypoint-transparent.sh"]
+    environment:
+      LOG_LEVEL: INFO
+    volumes:
+      - sandbox-transparent-state:/state
+    cap_drop:
+      - ALL
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    # Mock destinations resolve to TEST-NET-3 (RFC 5737). In transparent mode
+    # the workload still needs DNS to succeed before iptables DNAT can fire;
+    # the resolved IP is irrelevant because OUTPUT chain DNAT rewrites dest.
+    extra_hosts:
+      - "api.allowed.example=198.51.100.1"
+      - "api.denied.example=198.51.100.2"
+      - "api.unregistered.example=198.51.100.3"
+    depends_on:
+      proxy:
+        condition: service_started
+    networks:
+      sandbox-transparent-net:
+        ipv4_address: 172.30.0.20
+
+  iptables-init:
+    build:
+      context: ./iptables-init
+    image: egress-poc/iptables-init:latest
+    container_name: egress-poc-iptables-init
+    # Share the sandbox-transparent container's network namespace so
+    # iptables rules applied here govern its egress.
+    network_mode: "service:sandbox-transparent"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      PROXY_IP: "172.30.0.10"
+      PROXY_HTTP_PORT: "8081"
+      PROXY_HTTPS_PORT: "8443"
+    volumes:
+      - sandbox-transparent-state:/state
+    restart: "no"
+    depends_on:
+      sandbox-transparent:
+        condition: service_started
+
+volumes:
+  sandbox-transparent-state:
+    name: egress-poc-sandbox-transparent-state

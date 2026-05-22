@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upstream
+  namespace: egress-poc
+  labels:
+    app: upstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upstream
+  template:
+    metadata:
+      labels:
+        app: upstream
+    spec:
+      containers:
+        - name: upstream
+          image: egress-poc/upstream:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: upstream
+  namespace: egress-poc
+spec:
+  selector:
+    app: upstream
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

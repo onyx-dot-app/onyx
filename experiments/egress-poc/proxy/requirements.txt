@@ -1,0 +1,4 @@
+mitmproxy>=10,<11
+httpx==0.27.2
+cryptography==43.0.3
+cachetools==5.5.0
