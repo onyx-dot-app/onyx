@@ -51,7 +51,7 @@ from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import detect_encoding
+from onyx.file_processing.extract_file_text import file_io_to_text
 from onyx.file_processing.extract_file_text import is_text_file
 from onyx.utils.logger import setup_logger
 
@@ -489,11 +489,7 @@ def _decode_file_content(raw: bytes) -> str | None:
     buf = BytesIO(raw)
     if not is_text_file(buf):
         return None
-    encoding = detect_encoding(buf)
-    try:
-        return raw.decode(encoding)
-    except (UnicodeDecodeError, LookupError):
-        return None
+    return file_io_to_text(buf)
 
 
 def _convert_file_to_document(
@@ -784,6 +780,98 @@ class GithubConnector(
             sleep_after_rate_limit_exception(self.github_client)
             return self._fetch_file_content(repo, path, attempt_num + 1)
 
+    def _fetch_repo_files(
+        self,
+        repo: Repository.Repository,
+        checkpoint: GithubConnectorCheckpoint,
+        start: datetime | None,
+        is_slim: bool,
+        repo_external_access: ExternalAccess | None,
+    ) -> Generator[Document | ConnectorFailure, None, bool]:
+        """Emit one batch of indexable documents for `repo`, advancing the checkpoint.
+
+        On first entry for a repo (file_paths is None) it resolves and caches the
+        filtered file list, applying the pushed_at gate and surfacing tree
+        truncation as a failure. Returns True if more file batches remain (the
+        caller should return the checkpoint to resume), False once drained.
+        """
+        if checkpoint.file_paths is None:
+            pushed_at = (
+                repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
+            )
+            if start is not None and pushed_at is not None and pushed_at < start:
+                # Nothing changed in this repo since the last poll — skip.
+                logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
+                checkpoint.file_paths = []
+            else:
+                logger.info("Listing files for repo: %s", repo.name)
+                paths, truncated = self._list_indexable_files(repo)
+                checkpoint.file_paths = paths
+                logger.info(
+                    "Found %s indexable files for repo: %s", len(paths), repo.name
+                )
+                # Surface truncation as a failure so the incomplete index is
+                # visible in the connector UI, not just buried in logs.
+                if truncated and not is_slim:
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(
+                            entity_id=f"{repo.full_name}:files",
+                        ),
+                        failure_message=(
+                            f"GitHub truncated the file tree for "
+                            f"{repo.full_name}; some files could not be "
+                            f"enumerated and were not indexed."
+                        ),
+                    )
+
+        file_paths = checkpoint.file_paths
+        page = checkpoint.curr_page
+        batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
+        checkpoint.curr_page += 1
+
+        for path in batch:
+            html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
+            if is_slim:
+                yield Document(
+                    id=html_url,
+                    sections=[],
+                    external_access=repo_external_access,
+                    source=DocumentSource.GITHUB,
+                    semantic_identifier="",
+                    metadata={},
+                )
+                continue
+            try:
+                raw = self._fetch_file_content(repo, path)
+                content_text = _decode_file_content(raw)
+                if content_text is None:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=html_url,
+                            document_link=html_url,
+                        ),
+                        failure_message=f"Skipping non-text/undecodable file: {path}",
+                    )
+                    continue
+                yield _convert_file_to_document(
+                    repo, path, content_text, repo_external_access
+                )
+            except Exception as e:
+                error_msg = f"Error converting file {path} to document: {e}"
+                logger.exception(error_msg)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=html_url,
+                        document_link=html_url,
+                    ),
+                    failure_message=error_msg,
+                    exception=e,
+                )
+                continue
+
+        # True if more file batches remain for this repo.
+        return (page + 1) * FILE_BATCH_SIZE < len(file_paths)
+
     def _fetch_from_github(
         self,
         checkpoint: GithubConnectorCheckpoint,
@@ -997,90 +1085,11 @@ class GithubConnector(
             checkpoint.stage = GithubConnectorStage.FILES
 
         if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
-            if checkpoint.file_paths is None:
-                pushed_at = (
-                    repo.pushed_at.replace(tzinfo=timezone.utc)
-                    if repo.pushed_at
-                    else None
-                )
-                if start is not None and pushed_at is not None and pushed_at < start:
-                    # Nothing changed in this repo since the last poll — skip.
-                    logger.info(
-                        "Skipping files for repo %s (pushed_at < start)", repo.name
-                    )
-                    checkpoint.file_paths = []
-                else:
-                    logger.info("Listing files for repo: %s", repo.name)
-                    paths, truncated = self._list_indexable_files(repo)
-                    checkpoint.file_paths = paths
-                    logger.info(
-                        "Found %s indexable files for repo: %s",
-                        len(paths),
-                        repo.name,
-                    )
-                    # Surface truncation as a failure so the incomplete index is
-                    # visible in the connector UI, not just buried in logs.
-                    if truncated and not is_slim:
-                        yield ConnectorFailure(
-                            failed_entity=EntityFailure(
-                                entity_id=f"{repo.full_name}:files",
-                            ),
-                            failure_message=(
-                                f"GitHub truncated the file tree for "
-                                f"{repo.full_name}; some files could not be "
-                                f"enumerated and were not indexed."
-                            ),
-                        )
-
-            file_paths = checkpoint.file_paths
-            page = checkpoint.curr_page
-            batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
-            checkpoint.curr_page += 1
-
-            for path in batch:
-                html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
-                if is_slim:
-                    yield Document(
-                        id=html_url,
-                        sections=[],
-                        external_access=repo_external_access,
-                        source=DocumentSource.GITHUB,
-                        semantic_identifier="",
-                        metadata={},
-                    )
-                    continue
-                try:
-                    raw = self._fetch_file_content(repo, path)
-                    content_text = _decode_file_content(raw)
-                    if content_text is None:
-                        yield ConnectorFailure(
-                            failed_document=DocumentFailure(
-                                document_id=html_url,
-                                document_link=html_url,
-                            ),
-                            failure_message=(
-                                f"Skipping non-text/undecodable file: {path}"
-                            ),
-                        )
-                        continue
-                    yield _convert_file_to_document(
-                        repo, path, content_text, repo_external_access
-                    )
-                except Exception as e:
-                    error_msg = f"Error converting file {path} to document: {e}"
-                    logger.exception(error_msg)
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=html_url,
-                            document_link=html_url,
-                        ),
-                        failure_message=error_msg,
-                        exception=e,
-                    )
-                    continue
-
+            has_more_file_batches = yield from self._fetch_repo_files(
+                repo, checkpoint, start, is_slim, repo_external_access
+            )
             # More file batches remain for this repo — checkpoint and resume.
-            if (page + 1) * FILE_BATCH_SIZE < len(file_paths):
+            if has_more_file_batches:
                 return checkpoint
 
         # files complete (or disabled) -> fall through to next repo
