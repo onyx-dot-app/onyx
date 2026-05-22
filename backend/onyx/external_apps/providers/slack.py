@@ -6,10 +6,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuth
 from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import StandardFlatRefresh
 
 
-class SlackOAuth(OAuth, StandardFlatRefresh):
+class SlackOAuth(OAuth):
     app_type = ExternalAppType.SLACK
     app_name = "Slack"
     authorize_url = "https://slack.com/oauth/v2/authorize"
@@ -37,7 +36,7 @@ class SlackOAuth(OAuth, StandardFlatRefresh):
             key="client_id",
             label="Client ID",
             description=(
-                "Found under your Slack app's Basic Information → " "App Credentials."
+                "Found under your Slack app's Basic Information → App Credentials."
             ),
         ),
         OrgCredentialField(

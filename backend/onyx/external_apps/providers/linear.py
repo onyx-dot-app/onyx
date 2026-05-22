@@ -6,10 +6,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuth
 from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import StandardFlatRefresh
 
 
-class LinearOAuth(OAuth, StandardFlatRefresh):
+class LinearOAuth(OAuth):
     app_type = ExternalAppType.LINEAR
     app_name = "Linear"
     authorize_url = "https://linear.app/oauth/authorize"
@@ -24,8 +23,7 @@ class LinearOAuth(OAuth, StandardFlatRefresh):
     }
 
     description = (
-        "Read and create issues, projects, and comments in Linear on the "
-        "user's behalf."
+        "Read and create issues, projects, and comments in Linear on the user's behalf."
     )
     upstream_url_patterns = ["https://api\\.linear\\.app/.*"]
     auth_template = {"Authorization": "Bearer {access_token}"}
@@ -34,7 +32,7 @@ class LinearOAuth(OAuth, StandardFlatRefresh):
             key="client_id",
             label="Client ID",
             description=(
-                "Found in Linear → Settings → API → OAuth applications → " "your app."
+                "Found in Linear → Settings → API → OAuth applications → your app."
             ),
         ),
         OrgCredentialField(

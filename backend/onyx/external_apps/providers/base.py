@@ -51,36 +51,3 @@ class OAuth(ABC):
 
     @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]: ...
-
-
-class Refresh(ABC):
-    """Refresh-token grant. Mixin onto `OAuth` when the provider
-    issues refresh tokens; the refresh adapter checks
-    `isinstance(provider, Refresh)` before attempting refresh."""
-
-    @abstractmethod
-    def extract_refresh_credentials(
-        self, response_data: dict[str, Any]
-    ) -> dict[str, Any]: ...
-
-
-class StandardFlatRefresh(Refresh):
-    """Refresh parser for providers with the OAuth 2.0 standard flat
-    response shape (Google, Linear, Slack-on-refresh)."""
-
-    def extract_refresh_credentials(
-        self, response_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        creds: dict[str, Any] = {}
-        if response_data.get("access_token"):
-            creds["access_token"] = response_data["access_token"]
-        if response_data.get("expires_in"):
-            creds["expires_in"] = response_data["expires_in"]
-        # Only set when present — caller's merge preserves the
-        # existing refresh_token for providers like Google that
-        # don't rotate.
-        if response_data.get("refresh_token"):
-            creds["refresh_token"] = response_data["refresh_token"]
-        if response_data.get("scope"):
-            creds["scope"] = response_data["scope"]
-        return creds

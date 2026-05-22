@@ -4,8 +4,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuth
 from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import Refresh
-from onyx.external_apps.providers.base import StandardFlatRefresh
 from onyx.external_apps.providers.google_calendar import GoogleCalendarOAuth
 from onyx.external_apps.providers.linear import LinearOAuth
 from onyx.external_apps.providers.slack import SlackOAuth
@@ -94,8 +92,6 @@ def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescripto
 
 __all__ = [
     "OAuth",
-    "Refresh",
-    "StandardFlatRefresh",
     "SlackOAuth",
     "GoogleCalendarOAuth",
     "LinearOAuth",

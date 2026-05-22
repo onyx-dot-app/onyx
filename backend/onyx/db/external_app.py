@@ -2,9 +2,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_
 from sqlalchemy import select
-from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -12,11 +10,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers import get_provider_for_app
-from onyx.external_apps.refresh import refresh_oauth_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -261,185 +256,3 @@ def upsert_external_app_user_credential(
     cred = db_session.scalars(stmt).one()
     db_session.commit()
     return cred
-
-
-def get_external_app_credentials(
-    db_session: Session,
-    user_id: UUID,
-    url: str,
-) -> dict[str, Any] | None:
-    """Resolve the auth headers/params to inject on an outbound URL.
-
-    Returns the matched app's `auth_template` with every `{placeholder}`
-    substituted from the union of `organization_credentials` and the
-    user's stored credentials. The egress proxy uses this to decide
-    which auth headers/params to inject into an outbound request.
-
-    Returns None when any of:
-    - no enabled app's `upstream_url_patterns` fully match the URL
-    - the auth template fails to resolve — missing placeholder
-      (user-missing or app-misconfigured), malformed brace, bad format
-      spec, etc. Fail closed rather than inject a partially-templated
-      header.
-
-    `re.fullmatch` is used (not `re.search`/`re.match`) so a pattern like
-    `https://api\\.example\\.com/.*` does not accidentally match
-    `https://api.example.com.evil.com/foo`.
-
-    Returns None if no enabled app matches, the user has no creds,
-    a required placeholder is unfilled, or the template references
-    something nothing provides.
-    """
-    # One round trip: every enabled app + the caller's credential row
-    # if any. Regex matching stays in Python because Postgres regex
-    # (POSIX) and Python regex (PCRE-ish) diverge on common features.
-    stmt = (
-        select(ExternalApp, ExternalAppUserCredential)
-        .join(Skill, Skill.id == ExternalApp.skill_id)
-        .outerjoin(
-            ExternalAppUserCredential,
-            and_(
-                ExternalAppUserCredential.external_app_id == ExternalApp.id,
-                ExternalAppUserCredential.user_id == user_id,
-            ),
-        )
-        .where(Skill.enabled.is_(True))
-        .order_by(ExternalApp.id)
-    )
-
-    for app, user_cred in db_session.execute(stmt).all():
-        for pattern in app.upstream_url_patterns:
-            if re.fullmatch(pattern, url):
-                return _resolve_credentials(app, user_cred)
-    return None
-
-
-def _resolve_credentials(
-    app: ExternalApp,
-    user_cred: ExternalAppUserCredential | None,
-) -> dict[str, Any] | None:
-    """Substitute org + user credentials into the app's auth_template.
-
-    Returns None on any template-resolution failure — missing
-    placeholder, malformed brace, bad format spec, positional reference
-    against a mapping, etc. Fail closed rather than inject a
-    partially-templated header. Output keys in `auth_template` are
-    independent of placeholder names: a template
-    `{"Authorization": "Bearer {access_token}"}` requires the credential
-    key `access_token`, not `Authorization`.
-    """
-    stored_user_creds: dict[str, Any] = (
-        user_cred.user_credentials if user_cred is not None else {}
-    )
-
-    combined_creds: dict[str, Any] = {
-        **app.organization_credentials,
-        **stored_user_creds,
-    }
-
-    resolved: dict[str, Any] = {}
-    for key, value in app.auth_template.items():
-        if isinstance(value, str):
-            try:
-                resolved[key] = value.format_map(combined_creds)
-            except (LookupError, ValueError, AttributeError, TypeError):
-                return None
-        else:
-            resolved[key] = value
-    return resolved
-
-
-def _find_enabled_app_for_url(db_session: Session, url: str) -> ExternalApp | None:
-    stmt = (
-        select(ExternalApp)
-        .join(Skill, Skill.id == ExternalApp.skill_id)
-        .where(Skill.enabled.is_(True))
-        .options(selectinload(ExternalApp.skill))
-        .order_by(ExternalApp.id)
-    )
-    for app in db_session.scalars(stmt).all():
-        for pattern in app.upstream_url_patterns:
-            if re.fullmatch(pattern, url):
-                return app
-    return None
-
-
-def _acquire_refresh_lock(db_session: Session, app_id: int, user_id: UUID) -> None:
-    """Postgres advisory lock on (app_id, user_id) — serializes
-    concurrent refreshes for the same user+app so one caller doesn't
-    invalidate another's refresh_token on rotating providers."""
-    # UUID → int4 by taking 4 bytes. Collisions across unrelated users
-    # only cause harmless serialization, never correctness issues.
-    user_key = int.from_bytes(user_id.bytes[:4], "big") % (2**31 - 1)
-    db_session.execute(
-        text("SELECT pg_advisory_xact_lock(:k1, :k2)"),
-        {"k1": app_id, "k2": user_key},
-    )
-
-
-def refresh_credentials(
-    db_session: Session,
-    user_id: UUID,
-    url: str,
-) -> dict[str, Any] | None:
-    """Refresh OAuth tokens for the app matching `url`.
-
-    Returns the new templated auth dict (same shape as
-    `get_external_app_credentials`), or None if refresh isn't
-    possible — caller treats None as "user must re-authenticate."
-    """
-    matched_app = _find_enabled_app_for_url(db_session, url)
-    if matched_app is None:
-        return None
-
-    provider = get_provider_for_app(matched_app)
-    if provider is None:
-        logger.warning(
-            "refresh_credentials called for app '%s' which is not a "
-            "built-in OAuth provider",
-            matched_app.skill.name,
-        )
-        return None
-
-    # Lock first, re-read inside — picks up a sibling caller's
-    # freshly-written tokens instead of redeeming a now-invalidated
-    # refresh_token.
-    _acquire_refresh_lock(db_session, matched_app.id, user_id)
-
-    user_cred = db_session.scalar(
-        select(ExternalAppUserCredential).where(
-            ExternalAppUserCredential.external_app_id == matched_app.id,
-            ExternalAppUserCredential.user_id == user_id,
-        )
-    )
-    if user_cred is None:
-        return None
-
-    refresh_token = user_cred.user_credentials.get("refresh_token")
-    if not refresh_token:
-        return None
-
-    client_id = matched_app.organization_credentials.get("client_id")
-    client_secret = matched_app.organization_credentials.get("client_secret")
-    if not client_id or not client_secret:
-        logger.warning(
-            "Cannot refresh %s tokens: org_credentials missing client_id/client_secret",
-            matched_app.skill.name,
-        )
-        return None
-
-    # Network call inside the lock — refresh is rare per token
-    # lifetime, so the held lock cost is negligible.
-    refreshed = refresh_oauth_tokens(provider, client_id, client_secret, refresh_token)
-    if refreshed is None:
-        return None
-
-    # Merge: Google's refresh response omits refresh_token (no
-    # rotation), so the old value survives; Slack/Linear rotate and
-    # the new value overwrites.
-    merged = {**user_cred.user_credentials, **refreshed}
-    user_cred.user_credentials = merged
-    db_session.flush()
-    db_session.commit()
-
-    return _resolve_credentials(matched_app, user_cred)
