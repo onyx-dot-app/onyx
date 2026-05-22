@@ -41,22 +41,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _fresh_session(
-    k8s_manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-) -> UUID:
-    """Set up a fresh session workspace on the live pod and return its id."""
-    session_id = uuid4()
-    k8s_manager.setup_session_workspace(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        llm_config=default_llm_config(),
-        nextjs_port=None,
-        skills_section="No skills available.",
-    )
-    return session_id
-
-
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
@@ -66,9 +50,9 @@ class TestHealthCheck:
     def test_health_check_returns_true_for_provisioned_sandbox(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, _, _ = live_pod
+        sandbox_id, _, _ = pool_session
         assert k8s_manager.health_check(sandbox_id, timeout=10.0) is True
 
     def test_health_check_returns_false_after_terminate(
@@ -111,9 +95,9 @@ class TestListDirectory:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, pod_name = live_pod
+        sandbox_id, session_id, pod_name = pool_session
         # ``list_directory`` walks ``sessions/{id}/{path}`` with ``ls -laL``.
         # The session root contains ``user_library`` (a symlink into the RO
         # managed/ mount) which fails ``-L`` dereference and trips the
@@ -146,9 +130,9 @@ class TestReadFile:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, pod_name = live_pod
+        sandbox_id, session_id, pod_name = pool_session
         outputs_dir = f"/workspace/sessions/{session_id}/outputs"
         pod_exec(
             k8s_client,
@@ -163,13 +147,13 @@ class TestReadFile:
     def test_read_file_strips_path_traversal_components(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
         """``read_file`` silently strips ``..`` components — a relative path
         of ``../../etc/passwd`` collapses to ``etc/passwd`` inside the
         session root, which does not exist.
         """
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         with pytest.raises(ValueError, match="File not found"):
             k8s_manager.read_file(sandbox_id, session_id, "../../etc/passwd")
@@ -184,9 +168,9 @@ class TestDeleteFile:
     def test_delete_file_removes_file(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
         # Round-trip via upload (the only public API to create a file the
         # delete path is allowed to target).
         k8s_manager.upload_file(sandbox_id, session_id, "test.txt", b"content")
@@ -201,9 +185,9 @@ class TestDeleteFile:
     def test_delete_file_returns_false_for_missing(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         result = k8s_manager.delete_file(
             sandbox_id, session_id, "attachments/nonexistent.txt"
@@ -213,9 +197,9 @@ class TestDeleteFile:
     def test_delete_file_rejects_path_traversal(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         with pytest.raises(ValueError, match="path traversal"):
             k8s_manager.delete_file(sandbox_id, session_id, "../../../etc/passwd")
@@ -223,14 +207,14 @@ class TestDeleteFile:
     def test_delete_file_rejects_null_byte(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
         """Null bytes must be rejected — pinned previously by
         ``test_path_sanitization.test_sanitize_path_passes_null_byte_through``
         (the local manager's per-endpoint layer caught them). The k8s
         manager rejects them in ``delete_file`` directly.
         """
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         with pytest.raises(ValueError):
             k8s_manager.delete_file(
@@ -240,9 +224,9 @@ class TestDeleteFile:
     def test_delete_file_rejects_shell_metacharacters(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         with pytest.raises(ValueError):
             k8s_manager.delete_file(
@@ -264,9 +248,9 @@ class TestCreateSnapshot:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, pod_name = live_pod
+        sandbox_id, session_id, pod_name = pool_session
 
         # ``setup_session_workspace`` populates outputs/web/ with the Next.js
         # scaffold, so a freshly-set-up session is never literally empty.
@@ -329,9 +313,9 @@ class TestUploadFile:
     def test_upload_file_creates_file(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
         content = b"Hello, World!"
 
         result = k8s_manager.upload_file(sandbox_id, session_id, "test.txt", content)
@@ -345,9 +329,9 @@ class TestUploadFile:
     def test_upload_file_handles_collision(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, session_id, _ = live_pod
+        sandbox_id, session_id, _ = pool_session
 
         k8s_manager.upload_file(sandbox_id, session_id, "collide.txt", b"first")
         result = k8s_manager.upload_file(
@@ -368,20 +352,15 @@ class TestUploadFile:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
         """First upload injects the attachments section into AGENTS.md;
         subsequent uploads don't duplicate it. Pins
         ``_ensure_agents_md_attachments_section``.
         """
-        sandbox_id, session_id, pod_name = live_pod
+        sandbox_id, session_id, pod_name = pool_session
         agents_md_path = f"/workspace/sessions/{session_id}/AGENTS.md"
         section_marker = "## Attachments (PRIORITY)"
-
-        # Use a fresh session so the precondition (no marker yet) holds even
-        # if some earlier test polluted the live_pod session.
-        fresh_session_id = _fresh_session(k8s_manager, sandbox_id)
-        agents_md_path = f"/workspace/sessions/{fresh_session_id}/AGENTS.md"
 
         before = pod_exec(
             k8s_client, pod_name, SANDBOX_NAMESPACE, f"cat {agents_md_path}"
@@ -390,7 +369,7 @@ class TestUploadFile:
             "precondition: AGENTS.md should not yet contain the attachments section"
         )
 
-        k8s_manager.upload_file(sandbox_id, fresh_session_id, "first.txt", b"hello")
+        k8s_manager.upload_file(sandbox_id, session_id, "first.txt", b"hello")
         after_first = pod_exec(
             k8s_client, pod_name, SANDBOX_NAMESPACE, f"cat {agents_md_path}"
         )
@@ -398,7 +377,7 @@ class TestUploadFile:
             "first upload must inject the attachments section into AGENTS.md"
         )
 
-        k8s_manager.upload_file(sandbox_id, fresh_session_id, "second.txt", b"world")
+        k8s_manager.upload_file(sandbox_id, session_id, "second.txt", b"world")
         after_second = pod_exec(
             k8s_client, pod_name, SANDBOX_NAMESPACE, f"cat {agents_md_path}"
         )
@@ -417,15 +396,11 @@ class TestGetUploadStats:
     def test_get_upload_stats_empty(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, _, _ = live_pod
-        # Use a fresh session so prior uploads don't pollute the count.
-        fresh_session_id = _fresh_session(k8s_manager, sandbox_id)
+        sandbox_id, session_id, _ = pool_session
 
-        file_count, total_size = k8s_manager.get_upload_stats(
-            sandbox_id, fresh_session_id
-        )
+        file_count, total_size = k8s_manager.get_upload_stats(sandbox_id, session_id)
 
         assert file_count == 0
         # ``du -sb`` (the impl) counts the attachments directory's own inode
@@ -436,21 +411,14 @@ class TestGetUploadStats:
     def test_get_upload_stats_with_files(
         self,
         k8s_manager: KubernetesSandboxManager,
-        live_pod: tuple[UUID, UUID, str],
+        pool_session: tuple[UUID, UUID, str],
     ) -> None:
-        sandbox_id, _, _ = live_pod
-        fresh_session_id = _fresh_session(k8s_manager, sandbox_id)
+        sandbox_id, session_id, _ = pool_session
 
-        k8s_manager.upload_file(
-            sandbox_id, fresh_session_id, "file1.txt", b"hello"
-        )  # 5 bytes
-        k8s_manager.upload_file(
-            sandbox_id, fresh_session_id, "file2.txt", b"world!"
-        )  # 6 bytes
+        k8s_manager.upload_file(sandbox_id, session_id, "file1.txt", b"hello")  # 5
+        k8s_manager.upload_file(sandbox_id, session_id, "file2.txt", b"world!")  # 6
 
-        file_count, total_size = k8s_manager.get_upload_stats(
-            sandbox_id, fresh_session_id
-        )
+        file_count, total_size = k8s_manager.get_upload_stats(sandbox_id, session_id)
 
         assert file_count == 2
         # du -sb reports the byte total of all files including any directory
