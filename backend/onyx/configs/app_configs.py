@@ -904,7 +904,7 @@ CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
 # itself: those still mark the attempt FAILED, because we have no entity
 # context to isolate the failing item and silently advancing would risk
 # skipping source data. Operators must triage those by fixing the connector.
-PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "").lower() == "true"
+PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "true").lower() == "true"
 # When swapping to a new embedding model, a secondary index is created in the background, to conserve
 # resources, we pause updates on the primary index by default while the secondary index is created
 DISABLE_INDEX_UPDATE_ON_SWAP = (
