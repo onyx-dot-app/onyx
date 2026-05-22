@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from uuid import UUID
 
@@ -11,18 +12,49 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
+    placeholders: set[str] = set()
+    for value in auth_template.values():
+        if isinstance(value, str):
+            placeholders.update(_PLACEHOLDER_RE.findall(value))
+    return placeholders
+
+
+def required_user_credential_keys(
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+) -> list[str]:
+    """Credential parameter names the user must supply, derived from
+    `{placeholder}` references in `auth_template` values minus what
+    `organization_credentials` pre-fills. Returned sorted.
+
+    Looks at template *values*, not keys — keys are header names,
+    placeholders inside the values are the credential parameter names.
+    """
+    return sorted(
+        _placeholders_in_template(auth_template) - organization_credentials.keys()
+    )
 
 
 def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
 ) -> bool:
-    """True iff the user has supplied every credential key the app's
+    """True iff the user has supplied every credential parameter the app's
     ``auth_template`` references that the org has not pre-filled. An
     app with no user-required keys (everything covered by
     ``organization_credentials``) is considered authenticated for every
     user, no credential row needed."""
-    required = [k for k in app.auth_template if k not in app.organization_credentials]
+    required = required_user_credential_keys(
+        app.auth_template, app.organization_credentials
+    )
     if not required:
         return True
     if user_cred is None:

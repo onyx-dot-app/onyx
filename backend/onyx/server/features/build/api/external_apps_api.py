@@ -6,16 +6,21 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_user_credentials_by_app_id
+from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
+from onyx.external_apps.providers import fetch_available_built_in_apps
+from onyx.external_apps.providers import fetch_built_in_app
+from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
@@ -48,11 +53,9 @@ def _to_user_response(
     those same keys (stale keys from prior templates are filtered out so
     the frontend never renders a field that's no longer relevant).
     """
-    required_keys = [
-        key
-        for key in app.auth_template.keys()
-        if key not in app.organization_credentials
-    ]
+    required_keys = required_user_credential_keys(
+        app.auth_template, app.organization_credentials
+    )
     stored = user_cred.user_credentials if user_cred is not None else {}
     credential_values = {key: stored[key] for key in required_keys if key in stored}
     authenticated = all(key in credential_values for key in required_keys)
@@ -129,6 +132,22 @@ def list_external_apps_admin(
     """List all external apps with admin-only fields (org credentials, auth template)."""
     apps = get_external_apps(db_session=db_session)
     return [_to_admin_response(app) for app in apps]
+
+
+@router.get("/admin/apps/built-in/options")
+def list_built_in_external_apps(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[BuiltInExternalAppDescriptor]:
+    """Backend-defined presets for the admin "Configure" UI."""
+    return fetch_available_built_in_apps()
+
+
+@router.get("/admin/apps/built-in/options/{app_type}")
+def get_built_in_external_app(
+    app_type: ExternalAppType,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> BuiltInExternalAppDescriptor:
+    return fetch_built_in_app(app_type)
 
 
 @router.delete("/admin/apps/{external_app_id}")
