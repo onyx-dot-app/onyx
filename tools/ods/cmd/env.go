@@ -57,17 +57,18 @@ func getHostPort(container string, containerPort int) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("docker port %s %d: %w", container, containerPort, err)
 	}
-	result := strings.TrimSpace(string(out))
-	if result == "" {
+	// Dual-stack hosts return two lines (e.g., "0.0.0.0:5432\n[::]:5432").
+	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+	if line == "" {
 		return 0, fmt.Errorf("port %d not exposed on %s", containerPort, container)
 	}
-	parts := strings.Split(result, ":")
+	parts := strings.Split(line, ":")
 	if len(parts) < 2 {
-		return 0, fmt.Errorf("unexpected docker port output: %s", result)
+		return 0, fmt.Errorf("unexpected docker port output: %s", line)
 	}
 	port, err := strconv.Atoi(parts[len(parts)-1])
 	if err != nil {
-		return 0, fmt.Errorf("invalid port number in docker port output: %s", result)
+		return 0, fmt.Errorf("invalid port number in docker port output: %s", line)
 	}
 	return port, nil
 }

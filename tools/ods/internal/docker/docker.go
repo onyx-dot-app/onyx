@@ -151,14 +151,13 @@ func GetExposedPort(container string, containerPort string) string {
 		return ""
 	}
 
-	// Output format: "0.0.0.0:5432" or ":::5432"
-	result := strings.TrimSpace(string(output))
-	if result == "" {
+	// Dual-stack hosts return two lines (e.g., "0.0.0.0:5432\n[::]:5432").
+	line := strings.SplitN(strings.TrimSpace(string(output)), "\n", 2)[0]
+	if line == "" {
 		return ""
 	}
 
-	// Extract just the port number from "0.0.0.0:5432"
-	parts := strings.Split(result, ":")
+	parts := strings.Split(line, ":")
 	if len(parts) >= 2 {
 		return parts[len(parts)-1]
 	}
