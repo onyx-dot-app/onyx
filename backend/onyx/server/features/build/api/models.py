@@ -431,3 +431,15 @@ class BuiltInExternalAppDescriptor(BaseModel):
     auth_template: dict[str, str]
     required_org_credential_fields: list[OrgCredentialFieldDescriptor]
     setup_instructions: str
+
+
+class SubagentDescriptor(BaseModel):
+    """Child opencode session under a parent build session. Pod-ephemeral
+    — no ``BuildSession`` row of its own."""
+
+    opencode_session_id: str
+    parent_opencode_session_id: str
+
+
+class SubagentListResponse(BaseModel):
+    children: list[SubagentDescriptor]

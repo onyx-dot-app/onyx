@@ -1,5 +1,6 @@
 """API endpoints for Build Mode session management."""
 
+from collections.abc import Generator
 from datetime import datetime
 from uuid import UUID
 
@@ -38,6 +39,8 @@ from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
 from onyx.server.features.build.api.models import SetSessionSharingRequest
 from onyx.server.features.build.api.models import SetSessionSharingResponse
+from onyx.server.features.build.api.models import SubagentDescriptor
+from onyx.server.features.build.api.models import SubagentListResponse
 from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
@@ -970,4 +973,107 @@ def get_session_scheduled_run_context(
         task_id=str(context["task_id"]),
         task_name=context["task_name"],
         started_at=context["started_at"],
+    )
+
+
+# =============================================================================
+# Subagent (child opencode session) endpoints
+# =============================================================================
+#
+# Child opencode sessions are pod-ephemeral — not persisted as
+# ``BuildSession`` rows. The bus tracks them in-memory; if the api_server
+# replica restarted recently the list may be empty until new children
+# are observed.
+
+
+@router.get("/{session_id}/subagents")
+def list_session_subagents(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SubagentListResponse:
+    build_session = get_build_session(session_id, user.id, db_session)
+    if build_session is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "session")
+    parent_opencode_id = build_session.opencode_session_id
+    if not parent_opencode_id:
+        return SubagentListResponse(children=[])
+
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is None or not sandbox.status.is_active():
+        return SubagentListResponse(children=[])
+
+    sandbox_manager = get_sandbox_manager()
+    child_ids = sandbox_manager.list_subagents(sandbox.id, parent_opencode_id)
+    return SubagentListResponse(
+        children=[
+            SubagentDescriptor(
+                opencode_session_id=child_id,
+                parent_opencode_session_id=parent_opencode_id,
+            )
+            for child_id in child_ids
+        ]
+    )
+
+
+@router.get("/{session_id}/subagents/{child_opencode_id}/events")
+def stream_subagent_events(
+    session_id: UUID,
+    child_opencode_id: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """SSE stream of one subagent's events. Caller closes the request
+    when done; no built-in terminator.
+
+    ``child_opencode_id`` must be a child of the build session's
+    opencode session — otherwise any fabricated id would register a
+    long-lived empty-queue subscriber and leak until pod terminate.
+    """
+    from fastapi.responses import StreamingResponse
+
+    from onyx.server.features.build.sandbox.base import SSEKeepalive
+    from onyx.server.features.build.session.manager import SessionManager
+
+    build_session = get_build_session(session_id, user.id, db_session)
+    if build_session is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "session")
+    parent_opencode_id = build_session.opencode_session_id
+    if not parent_opencode_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "session has no opencode session")
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is None or not sandbox.status.is_active():
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "sandbox")
+
+    sandbox_manager = get_sandbox_manager()
+    sandbox_id = sandbox.id
+
+    children = sandbox_manager.list_subagents(sandbox_id, parent_opencode_id)
+    if child_opencode_id not in children:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "subagent not registered under this session",
+        )
+
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for event in sandbox_manager.subscribe_to_opencode_session(
+                sandbox_id, child_opencode_id
+            ):
+                if isinstance(event, SSEKeepalive):
+                    yield ": keepalive\n\n"
+                    continue
+                event_type = SessionManager._get_event_type(event)
+                yield SessionManager._serialize_acp_event(event, event_type)
+        except GeneratorExit:
+            return
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
