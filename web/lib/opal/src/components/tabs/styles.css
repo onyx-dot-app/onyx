@@ -28,7 +28,7 @@
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
 .opal-tabs-trigger {
-  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer;
+  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer transition-all duration-200 ease-out;
 }
 
 .opal-tabs-trigger[data-variant="contained"] {
@@ -91,6 +91,6 @@
 }
 
 .opal-tabs-pill-indicator {
-  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03;
+  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03 transition-all duration-200 ease-out;
   height: 2px;
 }
