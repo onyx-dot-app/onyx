@@ -105,6 +105,8 @@ def create_external_app(
     db_session: Session,
     name: str,
     description: str,
+    bundle_file_id: str,
+    bundle_sha256: str,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
