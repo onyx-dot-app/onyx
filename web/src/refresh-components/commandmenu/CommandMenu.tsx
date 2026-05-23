@@ -493,6 +493,7 @@ function CommandMenuHeader({
       {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
+          variant="internal"
           placeholder={placeholder}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}

@@ -297,7 +297,7 @@ export default function PasswordInputTypeIn({
         onSelect={captureSelection}
         onKeyDown={captureSelection}
         variant={disabled ? "disabled" : error ? "error" : undefined}
-        clearButton={clearButton}
+        clearButton={showToggleButton ? false : clearButton}
         autoComplete="off"
         data-ph-no-capture
         rightChildren={

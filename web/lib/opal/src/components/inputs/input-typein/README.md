@@ -9,7 +9,7 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `variant` | `InputTypeInVariant` | `"primary"` | Visual state |
+| `variant` | `InputVariants` | `"primary"` | Visual state |
 | `prefixText` | `string` | — | Non-editable prefix rendered before the input (e.g. `"https://"`) |
 | `searchIcon` | `boolean` | `false` | Show a search icon on the left |
 | `rightChildren` | `ReactNode` | — | Custom content rendered to the right of the input; suppresses the built-in clear button |

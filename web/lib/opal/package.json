@@ -58,6 +58,7 @@
       "import": "./dist/utils.js"
     },
     "./root.css": "./dist/root.css",
+    "./styles.css": "./dist/styles.css",
     "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {

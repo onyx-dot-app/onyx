@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
-import { SvgPaperclip } from "@opal/icons";
+import { SvgPaperclip, SvgX } from "@opal/icons";
 
 export interface InputFileProps extends Omit<
   InputTypeInProps,
@@ -122,7 +122,16 @@ export default function InputFile({
     onValueSet?.(pastedText, "paste");
   }
 
-  const rightChildren = (
+  const rightChildren = isFileMode ? (
+    <Button
+      icon={SvgX}
+      onClick={noProp(handleClear)}
+      type="button"
+      prominence="tertiary"
+      size="sm"
+      aria-label="Clear file"
+    />
+  ) : (
     <Button
       disabled={isNonEditable}
       icon={SvgPaperclip}

@@ -57,6 +57,7 @@ export default function InputTypeIn({
   clearButton = false,
   value,
   onChange,
+  name,
   ...props
 }: InputTypeInProps) {
   const disabled = variant === "disabled";
@@ -64,13 +65,13 @@ export default function InputTypeIn({
 
   const handleClear = useCallback(() => {
     onChange?.({
-      target: { value: "" },
-      currentTarget: { value: "" },
+      target: { value: "", name: name ?? "" },
+      currentTarget: { value: "", name: name ?? "" },
       type: "change",
       bubbles: true,
       cancelable: true,
     } as React.ChangeEvent<HTMLInputElement>);
-  }, [onChange]);
+  }, [onChange, name]);
 
   return (
     <div
@@ -93,6 +94,7 @@ export default function InputTypeIn({
       <input
         ref={ref}
         type="text"
+        name={name}
         disabled={disabled}
         readOnly={isReadOnly}
         value={value}
@@ -102,7 +104,7 @@ export default function InputTypeIn({
       />
 
       {clearButton && !rightChildren && !disabled && !isReadOnly && (
-        <div className={cn(!value && "invisible")}>
+        <div className={cn(value === "" && "invisible")}>
           <Button
             icon={SvgX}
             disabled={disabled}

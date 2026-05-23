@@ -42,7 +42,7 @@ export const WithSearchIcon: Story = {
 
 export const WithClearButton: Story = {
   args: {
-    showClearButton: true,
+    clearButton: true,
     value: "Some text to clear",
     onChange: () => {},
   },
