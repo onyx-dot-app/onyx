@@ -46,6 +46,7 @@ import tarfile
 import threading
 import time
 from collections.abc import Generator
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
@@ -68,11 +69,24 @@ from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
+from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
+from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
+from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
 from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotCreateRequest,
+)
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotCreateResponse,
+)
+from onyx.server.features.build.sandbox.kubernetes.docker.sandbox_daemon.models import (
+    SnapshotRestoreRequest,
 )
 from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
     ACPExecClient,
@@ -93,14 +107,6 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -114,13 +120,23 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # SANDBOX_NEXTJS_PORT_END range, with one port per session.
 AGENT_PORT = 8081
 PUSH_DAEMON_PORT = 8731
-POD_READY_TIMEOUT_SECONDS = 120
-POD_READY_POLL_INTERVAL_SECONDS = 2
+POD_READY_TIMEOUT_SECONDS = 60
+# Progressive poll cadence: short intervals up front (pods usually become
+# Ready in 12–18s, so we want to catch the transition quickly), then back
+# off so a stuck pod doesn't hammer the API server. Each tuple is
+# (count, interval_seconds). Sum of count × interval must stay ≤
+# POD_READY_TIMEOUT_SECONDS.
+POD_READY_POLL_SCHEDULE: tuple[tuple[int, float], ...] = (
+    (6, 0.5),  # 0–3s
+    (5, 1.0),  # 3–8s
+    (26, 2.0),  # 8–60s
+)
 
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be gone
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
 
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
@@ -152,11 +168,16 @@ def _get_push_key_pair() -> tuple[Ed25519PrivateKey, str]:
     return _push_private_key, _push_public_key_b64
 
 
-def _sign_push_request(mount_path: str, sha256_hex: str) -> tuple[str, str]:
-    """Sign a push request and return (signature_b64, timestamp)."""
+def _sign_sidecar_request(path: str, sha256_hex: str) -> tuple[str, str]:
+    """Sign a sidecar request and return (signature_b64, timestamp).
+
+    Signs {timestamp}|{path}|{sha256_hex} with the Ed25519 private key.
+    Used for both push (path=mount_path, sha256_hex=bundle SHA)
+    and snapshot endpoints (path=endpoint_path, sha256_hex=body SHA).
+    """
     priv_key, _ = _get_push_key_pair()
     ts = str(int(time.time()))
-    message = f"{ts}|{mount_path}|{sha256_hex}".encode()
+    message = f"{ts}|{path}|{sha256_hex}".encode()
     sig = priv_key.sign(message)
     return base64.b64encode(sig).decode(), ts
 
@@ -195,28 +216,27 @@ def _build_nextjs_start_script(
     Args:
         session_path: Path to the session directory (should be shell-safe)
         nextjs_port: Port number for the NextJS dev server
-        check_node_modules: If True, check for node_modules and run npm install if missing
+        check_node_modules: If True, check for node_modules and run bun install if missing
 
     Returns:
         Shell script string to start the NextJS server
     """
-    npm_install_check = ""
+    install_check = ""
     if check_node_modules:
-        npm_install_check = """
-# Check if npm dependencies are installed
+        install_check = f"""
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 fi
 """
 
     return f"""
 set -e
 cd {session_path}/outputs/web
-{npm_install_check}
-# Start npm run dev in background
+{install_check}
 echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
+nohup bun run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -324,7 +344,6 @@ class KubernetesSandboxManager(SandboxManager):
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        include_org_info: bool = False,
     ) -> str:
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
@@ -336,7 +355,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=disabled_tools,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=include_org_info,
         )
 
     def _create_sandbox_pod(
@@ -354,55 +372,44 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Main sandbox container
-        # Note: Container ports are informational only in K8s. Each session's Next.js
-        # server binds to its allocated port from the SANDBOX_NEXTJS_PORT_START-END range.
-        # We declare all ports for documentation, tooling, and network policies.
-        container_ports = [
+        # Sandbox container — runs the agent. No IRSA (skip-containers annotation
+        # on the SA strips AWS env vars and the projected token from this container).
+        sandbox_ports = [
             client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
-            client.V1ContainerPort(name="push-daemon", container_port=PUSH_DAEMON_PORT),
         ]
-        # Add ports for session Next.js servers (one port per potential session)
         for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-            container_ports.append(
-                client.V1ContainerPort(
-                    name=f"nextjs-{port}",
-                    container_port=port,
-                )
+            sandbox_ports.append(
+                client.V1ContainerPort(name=f"nextjs-{port}", container_port=port)
             )
-
-        _, push_public_key_b64 = _get_push_key_pair()
-        sandbox_env_vars = [
-            client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
-            client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
-            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
-        ]
 
         sandbox_container = client.V1Container(
             name="sandbox",
             image=self._image,
             image_pull_policy="IfNotPresent",
-            ports=container_ports,
-            env=sandbox_env_vars,
+            command=["/workspace/entrypoint.sh"],
+            ports=sandbox_ports,
+            env=[
+                client.V1EnvVar(name="ONYX_PAT", value=onyx_pat),
+                client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
+            ],
             volume_mounts=[
                 client.V1VolumeMount(
                     name="workspace", mount_path="/workspace/sessions"
                 ),
+                client.V1VolumeMount(
+                    name="managed", mount_path="/workspace/managed", read_only=True
+                ),
             ],
             resources=client.V1ResourceRequirements(
-                requests={"cpu": "1000m", "memory": "2Gi"},
-                limits={"cpu": "2000m", "memory": "10Gi"},
+                requests={
+                    "cpu": SANDBOX_POD_CPU_REQUEST,
+                    "memory": SANDBOX_POD_MEMORY_REQUEST,
+                },
+                limits={
+                    "cpu": SANDBOX_POD_CPU_LIMIT,
+                    "memory": SANDBOX_POD_MEMORY_LIMIT,
+                },
             ),
-            # TODO: Re-enable probes when sandbox container runs actual services.
-            # Note: Next.js ports are now per-session (dynamic), so container-level
-            # probes would need to check the agent port or use a different approach.
-            # liveness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
-            #     initial_delay_seconds=30,
-            #     period_seconds=30,
-            #     timeout_seconds=5,
-            #     failure_threshold=3,
-            # ),
             security_context=client.V1SecurityContext(
                 allow_privilege_escalation=False,
                 read_only_root_filesystem=False,
@@ -411,18 +418,95 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         )
 
-        # Volumes - workspace holds sessions/ directory with per-session outputs
+        # Sidecar container — runs the push daemon + snapshot API on port 8731.
+        # Receives IRSA credentials for S3 access in prod; falls back to
+        # forwarded AWS_* / AWS_ENDPOINT_URL from the api_server env in
+        # local-dev / CI where IRSA isn't available and an S3-compatible
+        # service (e.g. minio) is reachable in-cluster.
+        _, push_public_key_b64 = _get_push_key_pair()
+        sidecar_env = [
+            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+        ]
+        for var in (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "AWS_ENDPOINT_URL",
+        ):
+            value = os.environ.get(var)
+            if value:
+                sidecar_env.append(client.V1EnvVar(name=var, value=value))
+
+        # s5cmd v2.3.0 reads S3_ENDPOINT_URL — it does NOT honor
+        # AWS_ENDPOINT_URL. Mirror AWS_ENDPOINT_URL into S3_ENDPOINT_URL
+        # so the snapshot daemon's `s5cmd pipe`/`cat` and the file-sync
+        # sidecar's `s5cmd sync` both hit MinIO in dev/CI.
+        #
+        # We do NOT forward the api_server's own S3_ENDPOINT_URL: in CI
+        # that points at a host-network MinIO (localhost:9004 from
+        # docker-compose) which is unreachable from inside the pod. The
+        # cluster-DNS-reachable endpoint is always in AWS_ENDPOINT_URL.
+        aws_endpoint = os.environ.get("AWS_ENDPOINT_URL")
+        if aws_endpoint:
+            sidecar_env.append(
+                client.V1EnvVar(name="S3_ENDPOINT_URL", value=aws_endpoint)
+            )
+        sidecar_container = client.V1Container(
+            name="sidecar",
+            image=self._image,
+            image_pull_policy="IfNotPresent",
+            command=["/workspace/sidecar-entrypoint.sh"],
+            ports=[
+                client.V1ContainerPort(
+                    name="push-daemon", container_port=PUSH_DAEMON_PORT
+                ),
+            ],
+            env=sidecar_env,
+            volume_mounts=[
+                client.V1VolumeMount(
+                    name="workspace", mount_path="/workspace/sessions"
+                ),
+                client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
+            ],
+            resources=client.V1ResourceRequirements(
+                requests={"cpu": "100m", "memory": "256Mi"},
+                limits={"cpu": "500m", "memory": "512Mi"},
+            ),
+            security_context=client.V1SecurityContext(
+                allow_privilege_escalation=False,
+                read_only_root_filesystem=False,
+                privileged=False,
+                capabilities=client.V1Capabilities(drop=["ALL"]),
+            ),
+            liveness_probe=client.V1Probe(
+                http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
+                initial_delay_seconds=5,
+                period_seconds=30,
+            ),
+            readiness_probe=client.V1Probe(
+                http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
+                initial_delay_seconds=3,
+                period_seconds=10,
+            ),
+        )
+
         volumes = [
             client.V1Volume(
                 name="workspace",
                 empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
             ),
+            client.V1Volume(
+                name="managed",
+                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
+            ),
         ]
 
-        # Pod spec
         pod_spec = client.V1PodSpec(
             service_account_name=self._service_account,
-            containers=[sandbox_container],
+            containers=[sandbox_container, sidecar_container],
+            share_process_namespace=False,
             volumes=volumes,
             restart_policy="Never",
             termination_grace_period_seconds=10,  # Fast pod termination
@@ -637,6 +721,17 @@ class KubernetesSandboxManager(SandboxManager):
 
         return None
 
+    def _pod_ready_poll_intervals(self) -> Iterator[float]:
+        """Yield poll intervals according to ``POD_READY_POLL_SCHEDULE``.
+
+        Fast-path detection in the first few seconds (pods usually transition
+        Pending→Running→Ready in 12–18s), then back off so a stuck pod
+        doesn't hammer the API server.
+        """
+        for count, interval in POD_READY_POLL_SCHEDULE:
+            for _ in range(count):
+                yield interval
+
     def _wait_for_pod_ready(
         self,
         pod_name: str,
@@ -655,6 +750,7 @@ class KubernetesSandboxManager(SandboxManager):
             RuntimeError: If pod fails or is deleted
         """
         start_time = time.time()
+        poll_intervals = self._pod_ready_poll_intervals()
 
         while time.time() - start_time < timeout:
             try:
@@ -699,7 +795,7 @@ class KubernetesSandboxManager(SandboxManager):
                     raise RuntimeError(f"Pod {pod_name} was deleted")
                 logger.warning("Error checking pod status: %s", e)
 
-            time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
+            time.sleep(next(poll_intervals, 2.0))
 
         # On timeout, check one more time for init container failures
         try:
@@ -1050,8 +1146,6 @@ class KubernetesSandboxManager(SandboxManager):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1060,8 +1154,7 @@ class KubernetesSandboxManager(SandboxManager):
         2. Copy outputs template from local templates (downloaded during init)
         3. Write AGENTS.md
         4. Write opencode.json with LLM config
-        5. Create org_info/ directory with user identity file (if user_work_area provided)
-        6. Start Next.js dev server (skipped when ``nextjs_port`` is None,
+        5. Start Next.js dev server (skipped when ``nextjs_port`` is None,
            e.g. for headless scheduled-task fires that don't need a preview).
 
         Args:
@@ -1071,8 +1164,6 @@ class KubernetesSandboxManager(SandboxManager):
             snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for persona (e.g., "engineering")
-            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -1099,7 +1190,6 @@ class KubernetesSandboxManager(SandboxManager):
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
             user_role=user_role,
-            include_org_info=bool(user_work_area),
         )
 
         # Build opencode config JSON using shared config builder
@@ -1116,48 +1206,34 @@ class KubernetesSandboxManager(SandboxManager):
         opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
-        # Build org_info setup script if persona is set
-        # Uses shared constants from persona_mapping module as single source of truth
-        org_info_setup = ""
-        if user_work_area:
-            persona = get_persona_info(user_work_area, user_level)
-            if persona:
-                # Escape content for shell (single quotes)
-                agents_md_escaped = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-                identity_escaped = generate_user_identity_content(persona).replace(
-                    "'", "'\\''"
-                )
-                org_structure_escaped = json.dumps(
-                    ORGANIZATION_STRUCTURE, indent=2
-                ).replace("'", "'\\''")
-
-                org_info_setup = f"""
-# Create org_info directory with all files
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md_escaped}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
-"""
-
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
-# Copy outputs template (baked into image at build time)
 echo "Copying outputs template"
 if [ -d /workspace/templates/outputs ]; then
     cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # Install npm dependencies
-    echo "Installing npm dependencies..."
-    cd {session_path}/outputs/web && npm install
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd {session_path}/outputs/web && \\
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at /workspace/templates/outputs"
     mkdir -p {session_path}/outputs/web
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup).
-        # Headless callers (scheduled tasks) pass nextjs_port=None and don't
-        # need a dev server — the agent's tools work without one and the
-        # preview iframe isn't attached.
+        # Headless callers (scheduled tasks) pass nextjs_port=None — the
+        # agent's tools work without a dev server.
         nextjs_start_script = (
             _build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=False
@@ -1177,13 +1253,15 @@ mkdir -p {session_path}/attachments
 # Setup outputs
 {outputs_setup}
 
-# DO NOT mkdir /workspace/managed/skills here — the push daemon swaps
-# this path via os.rename(symlink, mount), which fails if mount is a
-# real directory. Dangling until the first push lands is fine; nothing
-# reads .opencode/skills during the rest of setup.
+# DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
+# here — the push daemon swaps these paths via os.rename(symlink, mount),
+# which fails if the mount is a real directory. Dangling until the first
+# push lands is fine; nothing reads these during the rest of setup.
 mkdir -p {session_path}/.opencode
 ln -sf /workspace/managed/skills {session_path}/.opencode/skills
 echo "Linked skills to /workspace/managed/skills"
+ln -sf /workspace/managed/user_library {session_path}/user_library
+echo "Linked user_library to /workspace/managed/user_library"
 
 # Write agent instructions
 echo "Writing AGENTS.md"
@@ -1192,7 +1270,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 # Write opencode config
 echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-{org_info_setup}
+
 # Start Next.js dev server
 {nextjs_start_script}
 
@@ -1308,94 +1386,55 @@ echo "Session cleanup complete"
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs and attachments directories.
+        """Create a snapshot via the sidecar's /snapshot/create endpoint.
 
-        Execs into the sandbox container to create a tar archive and upload
-        to S3 via AWS CLI. Captures:
-        - sessions/$session_id/outputs/ (generated artifacts, web apps)
-        - sessions/$session_id/attachments/ (user uploaded files)
-        - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
+        Captures:
+        - sessions/$session_id/outputs/
+        - sessions/$session_id/attachments/
+        - sessions/$session_id/.opencode-data/
 
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to snapshot
-            tenant_id: Tenant identifier for storage path
-
-        Returns:
-            SnapshotResult with storage path and size, or None if nothing to snapshot
-
-        Raises:
-            RuntimeError: If snapshot creation fails
+        Returns None if there are no outputs to snapshot.
         """
-        sandbox_id_str = str(sandbox_id)
-        session_id_str = str(session_id)
-        pod_name = self._get_pod_name(sandbox_id_str)
-        snapshot_id = str(uuid4())
-
-        # Use shlex.quote for safety (UUIDs are safe but good practice)
-        safe_session_path = shlex.quote(f"/workspace/sessions/{session_id_str}")
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
-
-        # Create tar and upload to S3 via the sandbox container using AWS CLI.
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            f"""
-set -eo pipefail
-cd {safe_session_path}
-if [ ! -d outputs ]; then
-    echo "EMPTY_SNAPSHOT"
-    exit 0
-fi
-dirs="outputs"
-[ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
-[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
-tar -czf - $dirs | aws s3 cp - {s3_path}
-echo "SNAPSHOT_CREATED"
-""",
-        ]
+        pod_name = self._get_pod_name(str(sandbox_id))
+        snapshot_id = uuid4()
 
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
-
-            logger.debug("Snapshot exec output: %s", resp)
-
-            # Check if nothing was snapshotted
-            if "EMPTY_SNAPSHOT" in resp:
-                logger.info(
-                    "No outputs or attachments to snapshot for session %s", session_id
-                )
-                return None
-
-            # Verify upload succeeded
-            if "SNAPSHOT_CREATED" not in resp:
-                raise RuntimeError(f"Snapshot upload may have failed. Output: {resp}")
-
-        except ApiException as e:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError) as e:
             raise RuntimeError(f"Failed to create snapshot: {e}") from e
 
-        # Estimate size (we can't easily get exact size from streamed tar)
-        # In production, you might want to query S3 for the actual size
-        size_bytes = 0
+        body = (
+            SnapshotCreateRequest(
+                session_id=session_id,
+                tenant_id=tenant_id,
+                s3_bucket=self._s3_bucket,
+                snapshot_id=snapshot_id,
+            )
+            .model_dump_json()
+            .encode()
+        )
 
-        # Storage path must match the S3 upload path (without s3://bucket/ prefix)
-        storage_path = f"{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
+        try:
+            resp = self._post_to_sidecar(
+                pod_ip, "/snapshot/create", body, timeout=300.0
+            )
+        except httpx.TransportError as e:
+            raise RuntimeError(f"Snapshot create request failed: {e}") from e
+
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Snapshot create failed: {resp.status_code} {resp.text}"
+            )
+
+        parsed = SnapshotCreateResponse.model_validate_json(resp.content)
+        if parsed.status == "empty":
+            logger.info("No outputs to snapshot for session %s", session_id)
+            return None
 
         logger.info("Created snapshot for session %s", session_id)
-
         return SnapshotResult(
-            storage_path=storage_path,
-            size_bytes=size_bytes,
+            storage_path=parsed.storage_path,
+            size_bytes=parsed.size_bytes,
         )
 
     def session_workspace_exists(
@@ -1453,20 +1492,65 @@ echo "SNAPSHOT_CREATED"
             )
             return False
 
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID session directories under /workspace/sessions/ in the pod.
+
+        Used by idle cleanup to discover sessions that need snapshotting.
+        Non-UUID directory names are silently filtered out.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container="sandbox",
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+        except ApiException as e:
+            logger.warning(
+                "Failed to list session directories for sandbox %s: %s",
+                sandbox_id,
+                e,
+            )
+            return []
+
+        result: list[UUID] = []
+        for raw_line in resp.strip().split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                result.append(UUID(line))
+            except ValueError:
+                continue
+        return result
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
+        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
     ) -> None:
-        """Download snapshot from S3 via AWS CLI, extract, regenerate config, and start NextJS.
+        """Download snapshot from S3 via s5cmd, extract, regenerate config, and start NextJS.
 
         Steps:
-        1. Download snapshot from S3 via aws s3 cp in the sandbox container
+        1. Download snapshot from S3 via s5cmd cat in the sandbox container
         2. Pipe directly to tar for extraction
         3. Regenerate configuration files (AGENTS.md, opencode.json)
         4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
@@ -1488,36 +1572,36 @@ echo "SNAPSHOT_CREATED"
         session_path = f"/workspace/sessions/{session_id}"
         safe_session_path = shlex.quote(session_path)
 
-        s3_path = f"s3://{self._s3_bucket}/{snapshot_storage_path}"
+        try:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError) as e:
+            raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
-        # Stream snapshot from S3 via AWS CLI in the sandbox container.
-        # Mirrors the upload pattern: upload uses `tar | aws s3 cp`,
-        # restore uses `aws s3 cp | tar`.
-        restore_script = f"""
-set -eo pipefail
-mkdir -p {safe_session_path}
-aws s3 cp {s3_path} - | tar -xzf - -C {safe_session_path}
-echo "SNAPSHOT_RESTORED"
-"""
+        body = (
+            SnapshotRestoreRequest(
+                session_id=session_id,
+                tenant_id=tenant_id,
+                s3_bucket=self._s3_bucket,
+                storage_path=snapshot_storage_path,
+            )
+            .model_dump_json()
+            .encode()
+        )
 
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=["/bin/sh", "-c", restore_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
+            resp = self._post_to_sidecar(
+                pod_ip, "/snapshot/restore", body, timeout=300.0
+            )
+        except httpx.TransportError as e:
+            raise RuntimeError(f"Snapshot restore request failed: {e}") from e
+
+        if resp.status_code != 204:
+            raise RuntimeError(
+                f"Snapshot restore failed: {resp.status_code} {resp.text}"
             )
 
-            if "SNAPSHOT_RESTORED" not in resp:
-                raise RuntimeError(f"Snapshot restore may have failed. Output: {resp}")
-
-            # Regenerate configuration files that aren't in the snapshot
-            # These are regenerated to ensure they match the current system state
+        try:
+            # Regenerate configuration files that aren't in the snapshot.
             self._regenerate_session_config(
                 pod_name=pod_name,
                 session_path=safe_session_path,
@@ -1526,9 +1610,6 @@ echo "SNAPSHOT_RESTORED"
                 skills_section=skills_section,
             )
 
-            # Start NextJS dev server (check node_modules since restoring
-            # from snapshot). Skipped when nextjs_port is None — headless
-            # callers (scheduled tasks) don't attach a preview.
             if nextjs_port is not None:
                 start_script = _build_nextjs_start_script(
                     safe_session_path, nextjs_port, check_node_modules=True
@@ -1577,7 +1658,6 @@ echo "SNAPSHOT_RESTORED"
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=None,
             user_role=None,
-            include_org_info=False,
         )
 
         # Generate opencode.json
@@ -1594,18 +1674,15 @@ echo "SNAPSHOT_RESTORED"
         opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
 
+        # Snapshot tar only carries outputs/, attachments/, .opencode-data/ —
+        # re-link the managed-tree symlinks that setup_session_workspace creates.
         config_script = f"""
 set -e
-
-# Write agent instructions
-echo "Writing AGENTS.md"
+mkdir -p {session_path}/.opencode
+ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
+ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Write opencode config
-echo "Writing opencode.json"
 printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-
-echo "Session config regeneration complete"
 """
 
         logger.info("Regenerating session configuration files")
@@ -1623,22 +1700,20 @@ echo "Session config regeneration complete"
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check if the sandbox pod is healthy (can exec into it).
-
-        Args:
-            sandbox_id: The sandbox ID to check
-            timeout: Health check timeout in seconds
-
-        Returns:
-            True if sandbox is healthy, False otherwise
-        """
+        """Check if the sidecar's /health endpoint responds."""
         pod_name = self._get_pod_name(str(sandbox_id))
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        return exec_client.health_check(timeout=timeout)
+        try:
+            pod_ip = self._get_pod_ip(pod_name)
+        except (FatalWriteError, RetriableWriteError):
+            return False
+
+        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/health"
+        try:
+            with httpx.Client(timeout=timeout) as http_client:
+                resp = http_client.get(url)
+            return resp.status_code == 200
+        except httpx.TransportError:
+            return False
 
     def _create_ephemeral_acp_client(
         self, sandbox_id: UUID, session_path: str
@@ -2475,16 +2550,8 @@ fi
             logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
 
-    def write_files_to_sandbox(
-        self,
-        *,
-        sandbox_id: UUID,
-        mount_path: str,
-        files: FileSet,
-    ) -> None:
-        """Build tar.gz, POST to in-pod daemon."""
-        pod_name = self._get_pod_name(sandbox_id)
-
+    def _get_pod_ip(self, pod_name: str) -> str:
+        """Read pod IP. Raises FatalWriteError on 404, RetriableWriteError otherwise."""
         try:
             pod = self._core_api.read_namespaced_pod(
                 name=pod_name,
@@ -2498,9 +2565,39 @@ fi
         pod_ip = pod.status.pod_ip
         if not pod_ip:
             raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
+        return pod_ip
+
+    def _post_to_sidecar(
+        self, pod_ip: str, endpoint_path: str, body: bytes, timeout: float = 30.0
+    ) -> httpx.Response:
+        """POST a signed JSON request to a sidecar endpoint."""
+        sha256_hex = hashlib.sha256(body).hexdigest()
+        sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
+        url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}{endpoint_path}"
+        with httpx.Client(timeout=timeout) as http_client:
+            return http_client.post(
+                url,
+                content=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Push-Signature": sig_b64,
+                    "X-Push-Timestamp": ts,
+                },
+            )
+
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: UUID,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Build tar.gz, POST to in-pod daemon."""
+        pod_name = self._get_pod_name(sandbox_id)
+        pod_ip = self._get_pod_ip(pod_name)
 
         tar_bytes, sha256_hex = _build_targz(files)
-        sig_b64, ts = _sign_push_request(mount_path, sha256_hex)
+        sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
 
         url = f"http://{pod_ip}:{PUSH_DAEMON_PORT}/push"
         try:
@@ -2516,7 +2613,7 @@ fi
                         "X-Push-Timestamp": ts,
                     },
                 )
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
+        except httpx.TransportError as e:
             raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
 
         if resp.status_code == 200:

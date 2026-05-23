@@ -22,7 +22,7 @@ import {
   updateGuildConfig,
 } from "@/app/admin/discord-bot/lib";
 import { toast } from "@/hooks/useToast";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 interface Props {
   guilds: DiscordGuildConfig[];

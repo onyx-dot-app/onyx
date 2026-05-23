@@ -1,6 +1,6 @@
 {
   "name": "@onyx-ai/opal",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Opal — Onyx's Typescript component library and design system.",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,8 @@
   "files": [
     "dist",
     "tailwind-preset.cjs",
-    "README.md"
+    "README.md",
+    "NOTICE.md"
   ],
   "main": "./dist/components/index.js",
   "types": "./dist/components/index.d.ts",
@@ -44,6 +45,10 @@
       "types": "./dist/illustrations/index.d.ts",
       "import": "./dist/illustrations/index.js"
     },
+    "./logos": {
+      "types": "./dist/logos/index.d.ts",
+      "import": "./dist/logos/index.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
@@ -52,12 +57,14 @@
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js"
     },
+    "./root.css": "./dist/root.css",
+    "./colors.css": "./dist/colors.css",
     "./styles.css": "./dist/styles.css",
     "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {
     "build": "tsup && node scripts/bundle-css.mjs",
-    "prepublishOnly": "npm run build"
+    "prepare": "bun run build"
   },
   "dependencies": {
     "clsx": "^2.0.0",

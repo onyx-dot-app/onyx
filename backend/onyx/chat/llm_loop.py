@@ -648,6 +648,7 @@ def run_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Fix some LiteLLM issues,

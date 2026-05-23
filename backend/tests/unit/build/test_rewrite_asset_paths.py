@@ -236,6 +236,102 @@ class TestProxyRequestWiring:
             "<title>x</title>"
         )
 
+    def test_proxy_request_strips_sensitive_viewer_headers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Credential, CSRF, and forwarded-identity headers must not reach the sandbox."""
+        upstream = httpx.Response(
+            200, headers={"content-type": "text/plain"}, content=b"ok"
+        )
+        forwarded_headers: dict[str, str] = {}
+
+        monkeypatch.setattr(api, "_get_sandbox_url", lambda *_args: "http://sandbox")
+
+        class FakeClient:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                pass
+
+            def __enter__(self) -> "FakeClient":
+                return self
+
+            def __exit__(self, *_args: object) -> Literal[False]:
+                return False
+
+            def get(self, _url: str, headers: dict[str, str]) -> httpx.Response:
+                forwarded_headers.update(headers)
+                return upstream
+
+        monkeypatch.setattr(api.httpx, "Client", FakeClient)
+
+        # Security spec: every header here must never reach the sandbox,
+        # regardless of how EXCLUDED_REQUEST_HEADERS evolves. Removing a key
+        # from the deny-list while leaving it here surfaces as a leak below.
+        # Mixed-case keys exercise the case-insensitive comparator.
+        sensitive_headers = {
+            "host": "app.onyx.local",
+            "content-length": "7",
+            "Connection": "keep-alive",
+            "Keep-Alive": "timeout=5",
+            "Proxy-Authenticate": "Basic",
+            "Proxy-Authorization": "Basic victim-proxy-token",
+            "TE": "trailers",
+            "Trailer": "Expires",
+            "Transfer-Encoding": "chunked",
+            "Upgrade": "websocket",
+            "Cookie": "fastapiusersauth=victim-session",
+            "Authorization": "Bearer victim-token",
+            "X-Api-Key": "victim-api-key",
+            "X-Auth-Token": "victim-auth-token",
+            "X-CSRF-Token": "csrf-token",
+            "X-XSRF-Token": "xsrf-token",
+            "Forwarded": "for=203.0.113.10;proto=https",
+            "X-Forwarded-For": "203.0.113.10",
+            "X-Forwarded-Host": "evil.example.com",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Server": "evil.example.com",
+            "X-Real-IP": "203.0.113.10",
+            "X-Client-IP": "203.0.113.10",
+            "CF-Connecting-IP": "203.0.113.10",
+            "True-Client-IP": "203.0.113.10",
+            "X-Forwarded-User": "victim@example.com",
+            "X-Forwarded-Email": "victim@example.com",
+            "X-Forwarded-Preferred-Username": "victim",
+            # x-onyx-* prefix matcher (not literal deny-list entries).
+            "X-Onyx-Authorization": "Bearer alt-victim-token",
+            "X-Onyx-Tenant-ID": "victim-tenant",
+            "X-Onyx-Request-ID": "abc-123",
+            "X-Onyx-Future-Header": "should-be-stripped-by-prefix",
+        }
+
+        # Completeness check: every literal deny-list entry is covered above.
+        # If a new entry is added to EXCLUDED_REQUEST_HEADERS without also
+        # being added here, this assertion fails and forces the test to grow.
+        covered = {key.lower() for key in sensitive_headers}
+        assert api.EXCLUDED_REQUEST_HEADERS <= covered, (
+            f"Deny-list entries missing from test input: "
+            f"{api.EXCLUDED_REQUEST_HEADERS - covered}"
+        )
+
+        benign_headers = {"accept": "text/plain", "user-agent": "pytest"}
+        request = cast(
+            Request,
+            SimpleNamespace(
+                headers={**sensitive_headers, **benign_headers},
+                query_params="",
+            ),
+        )
+
+        api._proxy_request(
+            "", request, UUID(SESSION_ID), cast(Session, SimpleNamespace())
+        )
+
+        lower = {key.lower(): value for key, value in forwarded_headers.items()}
+        # Exact match: no sensitive header survives, no extra header leaks
+        # through. If a new sensitive header is added to the request without a
+        # corresponding deny-list entry, this assertion will catch it.
+        assert lower == benign_headers
+
     def test_rewrites_absolute_link_header_font_preload_paths(self) -> None:
         headers = {
             "link": (

@@ -761,7 +761,7 @@ def connector_pruning_generator_task(
 def monitor_ccpair_pruning_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: TenantRedisClient,  # noqa: ARG001
+    r: TenantRedisClient,
     db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
@@ -782,11 +782,14 @@ def monitor_ccpair_pruning_taskset(
     if initial is None:
         return
 
-    remaining = redis_connector.prune.get_remaining()
-    task_logger.info(
-        f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
-    )
-    if remaining > 0:
+    # Check if the taskset still exists in Redis without reading its size.
+    # redis.exists() is O(1) and very cheap, whereas scard() on a large taskset
+    # (1M+ items during a big pruning fan-out) was OOMKilling the monitoring
+    # pod. Mirrors the deletion-side fix in #11155.
+    if r.exists(redis_connector.prune.taskset_key):
+        task_logger.info(
+            f"Connector pruning progress: cc_pair={cc_pair_id} initial={initial}"
+        )
         return
 
     mark_ccpair_as_pruned(int(cc_pair_id), db_session)

@@ -1,7 +1,5 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
-from uuid import UUID
-
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
@@ -12,17 +10,12 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
-)
 
 # Snapshot retention period in days
 SNAPSHOT_RETENTION_DAYS = 30
@@ -47,19 +40,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     4. Terminates the pod (but keeps the sandbox record)
     5. Marks the sandbox as SLEEPING (can be restored later)
 
-    NOTE: This task is a no-op for local backend - sandboxes persist until
-    manually terminated or server restart.
-
     Args:
         tenant_id: The tenant ID for multi-tenant isolation
     """
-    # Skip cleanup for local backend - sandboxes persist until manual termination
-    if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-        task_logger.debug(
-            "cleanup_idle_sandboxes_task skipped (local backend - cleanup disabled)"
-        )
-        return
-
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -84,13 +67,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
         sandbox_manager = get_sandbox_manager()
 
-        # Type guard for kubernetes-specific methods
-        if not isinstance(sandbox_manager, KubernetesSandboxManager):
-            task_logger.debug(
-                "cleanup_idle_sandboxes_task skipped (not kubernetes backend)"
-            )
-            return
-
         with get_session_with_current_tenant() as db_session:
             idle_sandboxes = get_idle_sandboxes(
                 db_session, SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -114,18 +90,20 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 task_logger.info(f"Putting sandbox {sandbox_id_str} to sleep")
 
                 try:
-                    # List session directories in the pod
-                    session_ids = _list_session_directories(sandbox_manager, sandbox_id)
+                    # List session directories in the sandbox via the
+                    # backend-agnostic manager API. K8s lists pod paths via
+                    # exec; Docker lists container paths via exec; Local
+                    # walks the on-disk sessions/ directory.
+                    session_ids = sandbox_manager.list_session_workspaces(sandbox_id)
                     task_logger.info(
                         f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
                     )
 
                     # Snapshot each session
-                    for session_id_str in session_ids:
+                    for session_id in session_ids:
                         try:
-                            session_id = UUID(session_id_str)
                             task_logger.debug(
-                                f"Creating snapshot for session {session_id_str}"
+                                f"Creating snapshot for session {session_id}"
                             )
                             snapshot_result = sandbox_manager.create_snapshot(
                                 sandbox_id, session_id, tenant_id
@@ -139,11 +117,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                     snapshot_result.size_bytes,
                                 )
                                 task_logger.debug(
-                                    f"Snapshot created for session {session_id_str}"
+                                    f"Snapshot created for session {session_id}"
                                 )
                         except Exception as e:
                             task_logger.warning(
-                                f"Failed to create snapshot for session {session_id_str}: {e}"
+                                f"Failed to create snapshot for session {session_id}: {e}"
                             )
                             # Continue with other sessions even if one fails
 
@@ -186,125 +164,3 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             lock.release()
 
     task_logger.info("cleanup_idle_sandboxes_task completed")
-
-
-def _list_session_directories(
-    sandbox_manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-) -> list[str]:
-    """List session directory names in the pod's /workspace/sessions/.
-
-    Args:
-        sandbox_manager: The kubernetes sandbox manager
-        sandbox_id: The sandbox ID
-
-    Returns:
-        List of session ID strings (directory names)
-    """
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream as k8s_stream
-
-    pod_name = sandbox_manager._get_pod_name(str(sandbox_id))
-
-    # List directories in /workspace/sessions/
-    exec_command = [
-        "/bin/sh",
-        "-c",
-        'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
-    ]
-
-    try:
-        resp = k8s_stream(
-            sandbox_manager._core_api.connect_get_namespaced_pod_exec,
-            name=pod_name,
-            namespace=sandbox_manager._namespace,
-            container="sandbox",
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-
-        # Parse output - one directory name per line
-        session_ids = []
-        for line in resp.strip().split("\n"):
-            line = line.strip()
-            if line:
-                # Validate it looks like a UUID
-                try:
-                    UUID(line)
-                    session_ids.append(line)
-                except ValueError:
-                    # Not a valid UUID, skip
-                    pass
-
-        return session_ids
-
-    except ApiException as e:
-        task_logger.warning(f"Failed to list session directories: {e}")
-        return []
-
-
-# NOTE: in the future, may need to add this. For now, will do manual cleanup.
-# @shared_task(
-#     name=OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
-#     soft_time_limit=300,
-#     bind=True,
-#     ignore_result=True,
-# )
-# def cleanup_old_snapshots_task(self: Task, *, tenant_id: str) -> None:
-#     """Delete snapshots older than the retention period.
-
-#     This task cleans up old snapshots to manage storage usage.
-#     Snapshots older than SNAPSHOT_RETENTION_DAYS are deleted.
-
-#     NOTE: This task is a no-op for local backend since snapshots are disabled.
-
-#     Args:
-#         tenant_id: The tenant ID for multi-tenant isolation
-#     """
-#     # Skip for local backend - no snapshots to clean up
-#     if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-#         task_logger.debug(
-#             "cleanup_old_snapshots_task skipped (local backend - snapshots disabled)"
-#         )
-#         return
-
-#     task_logger.info(f"cleanup_old_snapshots_task starting for tenant {tenant_id}")
-
-#     redis_client = get_redis_client(tenant_id=tenant_id)
-#     lock: RedisLock = redis_client.lock(
-#         OnyxRedisLocks.CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK,
-#         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
-#     )
-
-#     # Prevent overlapping runs of this task
-#     if not lock.acquire(blocking=False):
-#         task_logger.debug("cleanup_old_snapshots_task - lock not acquired, skipping")
-#         return
-
-#     try:
-#         from onyx.server.features.build.db.sandbox import delete_old_snapshots
-
-#         with get_session_with_current_tenant() as db_session:
-#             deleted_count = delete_old_snapshots(
-#                 db_session, tenant_id, SNAPSHOT_RETENTION_DAYS
-#             )
-
-#             if deleted_count > 0:
-#                 task_logger.info(
-#                     f"Deleted {deleted_count} old snapshots for tenant {tenant_id}"
-#                 )
-#             else:
-#                 task_logger.debug("No old snapshots to delete")
-
-#     except Exception:
-#         task_logger.exception("Error in cleanup_old_snapshots_task")
-#         raise
-
-#     finally:
-#         if lock.owned():
-#             lock.release()
-
-#     task_logger.info("cleanup_old_snapshots_task completed")

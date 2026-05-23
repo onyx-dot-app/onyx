@@ -1,11 +1,11 @@
 import os
 
 import pytest
-import requests
 
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -13,7 +13,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def _simulate_saml_login(email: str, admin_user: DATestUser) -> dict:
     """Simulate a SAML login by calling the test upsert endpoint."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/manage/users/test-upsert-user",
         json={"email": email},
         headers=admin_user.headers,

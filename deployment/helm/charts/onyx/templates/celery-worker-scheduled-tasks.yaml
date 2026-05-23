@@ -1,4 +1,4 @@
-{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,7 +65,9 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.scheduled_tasks",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_scheduled_tasks.logLevel | quote }},
+              {{- with .Values.celery_worker_scheduled_tasks.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=scheduled_tasks@%n",
               "-Q",
               "scheduled_tasks",
@@ -79,6 +81,10 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}

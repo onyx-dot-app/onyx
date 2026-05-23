@@ -2,9 +2,8 @@ from copy import deepcopy
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import httpx
 import pytest
-import requests
-from requests import HTTPError
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
@@ -16,6 +15,7 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 DOMAIN = "example.com"
@@ -62,7 +62,7 @@ class UserManager:
             "username": email,
             "password": password,
         }
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/auth/register",
             json=body,
             headers=GENERAL_HEADERS,
@@ -85,25 +85,21 @@ class UserManager:
 
     @staticmethod
     def login_as_user(test_user: DATestUser) -> DATestUser:
-        data = urlencode(
-            {
-                "username": test_user.email,
-                "password": test_user.password,
-            }
-        )
+        # httpx encodes dict-shaped `data=` as form-urlencoded itself and
+        # sets the Content-Type header automatically — no need to urlencode
+        # by hand the way the old `requests`-based flow did.
         headers = test_user.headers.copy()
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        headers.pop("Content-Type", None)
 
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/auth/login",
-            data=data,
+            data={"username": test_user.email, "password": test_user.password},
             headers=headers,
         )
 
         response.raise_for_status()
 
-        cookies = response.cookies.get_dict()
-        session_cookie = cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+        session_cookie = response.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
 
         if not session_cookie:
             raise Exception("Failed to login")
@@ -112,8 +108,16 @@ class UserManager:
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}
 
+        # TestClient shares a single cookie jar across the whole session.
+        # Without this, the most recently logged-in user's auth cookie would
+        # leak into subsequent requests made with explicit per-user headers
+        # (e.g. API-key auth), making cookie-based auth always win over the
+        # Bearer header. Clear the jar so each request authenticates via
+        # whatever `headers=...` the caller passes.
+        client.cookies.clear()
+
         # Get user role from /me endpoint
-        me_response = requests.get(
+        me_response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=test_user.headers,
             cookies=test_user.cookies,
@@ -128,7 +132,7 @@ class UserManager:
 
     @staticmethod
     def get_permissions(user: DATestUser) -> list[str]:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me/permissions",
             headers=user.headers,
         )
@@ -140,14 +144,14 @@ class UserManager:
         user_to_verify: DATestUser,
         target_role: UserRole,
     ) -> bool:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
             cookies=user_to_verify.cookies,
         )
 
         if user_to_verify.is_active is False:
-            with pytest.raises(HTTPError):
+            with pytest.raises(httpx.HTTPStatusError):
                 response.raise_for_status()
             return user_to_verify.role == target_role
         else:
@@ -167,7 +171,7 @@ class UserManager:
         user_performing_action: DATestUser,
         explicit_override: bool = False,
     ) -> DATestUser:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
             json={
                 "user_email": user_to_set.email,
@@ -191,13 +195,13 @@ class UserManager:
     # TODO: Add a way to check invited status
     @staticmethod
     def is_status(user_to_verify: DATestUser, target_status: bool) -> bool:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_to_verify.headers,
         )
 
         if target_status is False:
-            with pytest.raises(HTTPError):
+            with pytest.raises(httpx.HTTPStatusError):
                 response.raise_for_status()
         else:
             response.raise_for_status()
@@ -218,7 +222,7 @@ class UserManager:
             url_substring = "activate"
         elif target_status is False:
             url_substring = "deactivate"
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/{url_substring}-user",  # ty: ignore[possibly-unresolved-reference]
             json={"user_email": user_to_set.email},
             headers=user_performing_action.headers,
@@ -273,7 +277,7 @@ class UserManager:
         if is_active_filter is not None:
             query_params["is_active"] = is_active_filter
 
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
             headers=user_performing_action.headers,
         )
@@ -296,7 +300,7 @@ class UserManager:
             user_to_invite_email: Email of the user to invite
             user_performing_action: User with admin permissions performing the invitation
         """
-        response = requests.put(
+        response = client.put(
             url=f"{API_SERVER_URL}/manage/admin/users",
             headers=user_performing_action.headers,
             json={"emails": [user_to_invite_email]},
@@ -311,7 +315,7 @@ class UserManager:
             tenant_id: ID of the tenant/organization to accept invitation for
             user_performing_action: User accepting the invitation
         """
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/tenants/users/invite/accept",
             headers=user_performing_action.headers,
             json={"tenant_id": tenant_id},
@@ -330,7 +334,7 @@ class UserManager:
         Returns:
             List of invited user snapshots
         """
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users/invited",
             headers=user_performing_action.headers,
         )
@@ -345,7 +349,7 @@ class UserManager:
         Args:
             user_performing_action: User performing the action
         """
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/me",
             headers=user_performing_action.headers,
         )

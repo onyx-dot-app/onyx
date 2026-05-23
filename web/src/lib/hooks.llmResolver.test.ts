@@ -3,7 +3,7 @@ import {
   getValidLlmDescriptorForProviders,
 } from "@/lib/hooks";
 import { structureValue } from "@/lib/languageModels/utils";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
 describe("LLM resolver helpers", () => {

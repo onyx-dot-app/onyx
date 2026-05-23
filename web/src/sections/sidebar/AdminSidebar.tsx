@@ -58,7 +58,6 @@ function buildItems(
   hooksEnabled: boolean
 ): SidebarItemEntry[] {
   const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
-  const enterpriseTier = tierAtLeast(tier, Tier.ENTERPRISE);
   const items: SidebarItemEntry[] = [];
 
   const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
@@ -98,6 +97,7 @@ function buildItems(
 
   // 2. Agents & Actions
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.AGENTS);
+  add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.SKILLS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.MCP_ACTIONS);
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
@@ -112,9 +112,6 @@ function buildItems(
         section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
         error: settings?.settings.needs_reindexing,
       });
-    }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
     }
   }
 

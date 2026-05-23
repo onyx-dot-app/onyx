@@ -6,18 +6,46 @@ from pathlib import Path
 class SandboxBackend(str, Enum):
     """Backend mode for sandbox operations.
 
-    LOCAL: Development mode - no snapshots, no automatic cleanup
-    KUBERNETES: Production mode - full snapshots and cleanup
+    KUBERNETES: Production + dev (kind) - full snapshots and cleanup.
+    DOCKER: Self-hosted docker-compose - api_server drives the Docker Engine.
     """
 
-    LOCAL = "local"
     KUBERNETES = "kubernetes"
+    DOCKER = "docker"
+
+
+def _parse_sandbox_backend(raw: str) -> SandboxBackend:
+    """Parse SANDBOX_BACKEND with a friendly error on the retired ``local`` value.
+
+    The local backend was removed in favour of the kubernetes (kind) dev flow
+    documented in ``docs/dev/local-kubernetes.md``. We raise a deliberate
+    startup error rather than the bare ``ValueError`` from the enum
+    constructor so the operator gets pointed at the migration path.
+    """
+    if raw.lower() == "local":
+        raise RuntimeError(
+            "SANDBOX_BACKEND=local is no longer supported. The local sandbox "
+            "backend has been removed; use the kind-based Kubernetes dev flow. "
+            "See docs/dev/local-kubernetes.md (run `make craft-up`) and unset "
+            "SANDBOX_BACKEND in your environment (it now defaults to "
+            "'kubernetes')."
+        )
+    try:
+        return SandboxBackend(raw)
+    except ValueError as e:
+        raise RuntimeError(
+            f"SANDBOX_BACKEND={raw!r} is not a valid value. Allowed values: "
+            f"{[b.value for b in SandboxBackend]!r}. See "
+            "docs/dev/local-kubernetes.md for the recommended dev setup."
+        ) from e
 
 
 # Sandbox backend mode (controls snapshot and cleanup behavior)
-# "local" = no snapshots, no cleanup (for development)
-# "kubernetes" = full snapshots and cleanup (for production)
-SANDBOX_BACKEND = SandboxBackend(os.environ.get("SANDBOX_BACKEND", "local"))
+# "kubernetes" = full snapshots and cleanup (production Helm/cloud + dev kind)
+# "docker" = full snapshots and cleanup (self-hosted docker-compose)
+SANDBOX_BACKEND = _parse_sandbox_backend(
+    os.environ.get("SANDBOX_BACKEND", "kubernetes")
+)
 
 # Base directory path for persistent document storage (local filesystem)
 # Example: /var/onyx/file-system or /app/file-system
@@ -27,10 +55,6 @@ PERSISTENT_DOCUMENT_STORAGE_PATH = os.environ.get(
 
 _THIS_FILE = Path(__file__)
 
-# Sandbox filesystem paths
-SANDBOX_BASE_PATH = os.environ.get("SANDBOX_BASE_PATH", "/tmp/onyx-sandboxes")
-OUTPUTS_TEMPLATE_PATH = os.environ.get("OUTPUTS_TEMPLATE_PATH", "/templates/outputs")
-VENV_TEMPLATE_PATH = os.environ.get("VENV_TEMPLATE_PATH", "/templates/venv")
 SKILLS_TEMPLATE_PATH = str(
     _THIS_FILE.parent / "sandbox" / "kubernetes" / "docker" / "skills"
 )
@@ -85,7 +109,7 @@ SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 # Container image for sandbox pods
 # Should include Next.js template, opencode CLI, and agent skills
 SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.41"
+    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.44"
 )
 
 # S3 bucket for sandbox file storage (snapshots, knowledge files, uploads)
@@ -104,6 +128,42 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 # Internal URL the sandbox uses to reach the Onyx API server.
 # Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
+
+# Per-pod resource requests/limits. Defaults match production sizing for
+# real bun/npm/python workloads. CI overrides these in kind clusters where
+# the runner only has 4 vCPU and we provision 4+ sandbox pods concurrently;
+# k8s scheduler honors requests, so the production defaults would prevent
+# all-but-one pod from being scheduled at the same time.
+SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")
+SANDBOX_POD_MEMORY_REQUEST = os.environ.get("SANDBOX_POD_MEMORY_REQUEST", "2Gi")
+SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
+SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
+
+# ============================================================================
+# Docker Sandbox Configuration
+# Only used when SANDBOX_BACKEND = "docker" (self-hosted docker-compose)
+# ============================================================================
+
+# Docker socket path on the api_server host. Mounted into the api_server
+# container; api_server uses this to drive sandbox container lifecycle.
+SANDBOX_DOCKER_SOCKET = os.environ.get("SANDBOX_DOCKER_SOCKET", "/var/run/docker.sock")
+
+# Bridge network for sandbox containers. Sandbox containers join only this
+# network and never compose's default network, isolating them from
+# api_server, postgres, redis, etc.
+SANDBOX_DOCKER_NETWORK = os.environ.get("SANDBOX_DOCKER_NETWORK", "onyx_craft_sandbox")
+
+# Prefix for the per-sandbox named volumes that hold ``/workspace/sessions``.
+SANDBOX_DOCKER_VOLUME_PREFIX = os.environ.get(
+    "SANDBOX_DOCKER_VOLUME_PREFIX", "onyx-craft-sandbox-"
+)
+
+# Container resource limits. Memory accepts docker-style suffixes (``2g``).
+# Defaults match the Kubernetes sandbox pod's *requests* (1 CPU / 2Gi),
+# not its limits (2 CPU / 10Gi). Single-VM docker-compose deployments rarely
+# have the headroom to over-commit each sandbox to 10Gi.
+SANDBOX_DOCKER_MEMORY_LIMIT = os.environ.get("SANDBOX_DOCKER_MEMORY_LIMIT", "2g")
+SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0"))
 
 # ============================================================================
 # SSE Streaming Configuration

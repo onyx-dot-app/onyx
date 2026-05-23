@@ -1,10 +1,9 @@
 from uuid import UUID
 
-import requests
-
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -25,14 +24,14 @@ def test_limited(reset: None) -> None:  # noqa: ARG001
     )
 
     # test limited endpoint
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/0",
         headers=api_key.headers,
     )
     assert response.status_code == 200
 
     # test admin endpoints
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=api_key.headers,
     )
@@ -44,7 +43,7 @@ def _get_service_account_account_type(
     api_key_user_id: UUID,
 ) -> AccountType:
     """Fetch the account_type of a service account user via the user listing API."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/manage/users",
         headers=admin_user.headers,
         params={"include_api_keys": "true"},
@@ -167,7 +166,7 @@ def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG0
     )
 
     # current_limited_user endpoint → should succeed
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/persona/0",
         headers=limited_key.headers,
     )
@@ -176,7 +175,7 @@ def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG0
     )
 
     # current_user endpoint → should be blocked
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=limited_key.headers,
     )
@@ -194,7 +193,7 @@ def test_basic_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
         user_performing_action=admin_user,
     )
 
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=basic_key.headers,
     )
@@ -212,7 +211,7 @@ def test_admin_key_passes_current_user(reset: None) -> None:  # noqa: ARG001
         user_performing_action=admin_user,
     )
 
-    resp = requests.get(
+    resp = client.get(
         f"{API_SERVER_URL}/query/valid-tags",
         headers=admin_key.headers,
     )

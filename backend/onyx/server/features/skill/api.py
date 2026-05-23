@@ -16,9 +16,10 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import create_skill
+from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill_for_admin
 from onyx.db.skill import fetch_skill_for_user
@@ -29,7 +30,6 @@ from onyx.db.skill import list_skills_for_user
 from onyx.db.skill import patch_skill
 from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
-from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -39,12 +39,13 @@ from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillsList
-from onyx.skills.bundle import check_slug
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import compute_bundle_sha256
+from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from onyx.skills.registry import BuiltinSkillRegistry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,32 +54,69 @@ admin_router = APIRouter(prefix="/admin/skills")
 user_router = APIRouter(prefix="/skills")
 
 
+def _split_rows(
+    rows: list[Skill],
+    db_session: Session,
+    *,
+    include_grants: bool,
+) -> tuple[list[BuiltinSkillResponse], list[CustomSkillResponse]]:
+    """Partition a flat row list into built-in + custom responses.
+
+    A row with an unknown ``built_in_skill_id`` (definition was removed
+    in code without cleaning up the seeded row) is logged and dropped —
+    we don't surface a half-broken built-in to admins. ``include_grants``
+    only applies to custom skills; built-ins are not group-shareable.
+    """
+    builtins: list[BuiltinSkillResponse] = []
+    customs: list[CustomSkillResponse] = []
+
+    for skill in rows:
+        if skill.built_in_skill_id is not None:
+            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+            if definition is None:
+                logger.warning(
+                    "Skill row %s references unknown built-in %s; hiding from listing",
+                    skill.slug,
+                    skill.built_in_skill_id,
+                )
+                continue
+            builtins.append(
+                BuiltinSkillResponse.from_row(skill, definition, db_session)
+            )
+        else:
+            group_ids = (
+                get_group_ids_for_skill(skill.id, db_session) if include_grants else []
+            )
+            customs.append(CustomSkillResponse.from_model(skill, group_ids=group_ids))
+
+    return builtins, customs
+
+
+def _ensure_custom(skill: Skill) -> None:
+    """Block any mutation on a built-in skill row.
+
+    Built-ins are codified, always-on, always-public; admins cannot
+    rename, disable, share, replace, or delete them. The check
+    discriminates on ``built_in_skill_id``."""
+    if skill.built_in_skill_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' is a built-in and cannot be modified.",
+        )
+
+
 @admin_router.get("")
 def list_skills_admin(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
-    registry = BuiltinSkillRegistry.instance()
-    builtins = [
-        BuiltinSkillResponse.from_builtin(b, db_session) for b in registry.list_all()
-    ]
-    customs = list_skills_for_admin(db_session=db_session)
-    return SkillsList(
-        builtins=builtins,
-        customs=[
-            CustomSkillResponse.from_model(
-                c, group_ids=get_group_ids_for_skill(c.id, db_session)
-            )
-            for c in customs
-        ],
-    )
+    rows = list(list_skills_for_admin(db_session=db_session))
+    builtins, customs = _split_rows(rows, db_session, include_grants=True)
+    return SkillsList(builtins=builtins, customs=customs)
 
 
 @admin_router.post("/custom")
 def create_custom_skill(
-    slug: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(...),
     is_public: bool = Form(False),
     group_ids: str = Form("[]"),
     bundle: UploadFile = File(...),
@@ -86,7 +124,9 @@ def create_custom_skill(
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     bundle_bytes = bundle.file.read()
+    slug = slug_from_filename(bundle.filename)
     validate_custom_bundle(bundle_bytes, slug=slug)
+    name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
     parsed_group_ids = _parse_group_ids(group_ids)
 
@@ -99,7 +139,7 @@ def create_custom_skill(
     )
 
     try:
-        skill = create_skill(
+        skill = create_skill__no_commit(
             slug=slug,
             name=name,
             description=description,
@@ -127,33 +167,25 @@ def patch_custom_skill(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
+    """Toggle ``enabled``/``is_public`` on a custom skill. Built-in
+    rows are rejected — their identity and lifecycle are codified."""
     domain_patch = patch_req.to_domain()
 
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    _ensure_custom(skill)
 
-    if not isinstance(domain_patch.slug, UnsetType):
-        check_slug(domain_patch.slug)
-        if domain_patch.slug in BuiltinSkillRegistry.instance().reserved_slugs():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT, "Slug reserved by a built-in skill"
-            )
-
-    # Snapshot before patch — SQLAlchemy identity map means the ORM object
-    # is mutated in-place by patch_skill, so we can't compare before/after.
+    # SQLAlchemy identity map mutates in place; snapshot before patch.
     old_is_public = skill.is_public
     old_enabled = skill.enabled
-    old_slug = skill.slug
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
     updated = patch_skill(skill_id=skill_id, patch=domain_patch, db_session=db_session)
     db_session.commit()
 
     visibility_changed = (
-        old_is_public != updated.is_public
-        or old_enabled != updated.enabled
-        or old_slug != updated.slug
+        old_is_public != updated.is_public or old_enabled != updated.enabled
     )
     if visibility_changed:
         after_affected = affected_user_ids_for_skill(updated, db_session)
@@ -174,9 +206,11 @@ def replace_custom_skill_bundle(
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    _ensure_custom(skill)
 
     bundle_bytes = bundle.file.read()
     validate_custom_bundle(bundle_bytes, slug=skill.slug)
+    name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
 
     file_store = get_default_file_store()
@@ -192,6 +226,8 @@ def replace_custom_skill_bundle(
             skill_id=skill_id,
             new_bundle_file_id=new_file_id,
             new_bundle_sha256=sha,
+            new_name=name,
+            new_description=description,
             db_session=db_session,
         )
         db_session.commit()
@@ -216,6 +252,7 @@ def replace_custom_skill_grants(
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    _ensure_custom(skill)
 
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
@@ -240,6 +277,7 @@ def delete_custom_skill(
     skill = fetch_skill_for_admin(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    _ensure_custom(skill)
 
     affected = affected_user_ids_for_skill(skill, db_session)
     old_file_id = delete_skill(skill_id, db_session)
@@ -255,16 +293,9 @@ def list_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
-    registry = BuiltinSkillRegistry.instance()
-    builtins = [
-        BuiltinSkillResponse.from_builtin(b, db_session)
-        for b in registry.list_available(db_session)
-    ]
-    customs = list_skills_for_user(user=user, db_session=db_session)
-    return SkillsList(
-        builtins=builtins,
-        customs=[CustomSkillResponse.from_model(c, group_ids=[]) for c in customs],
-    )
+    rows = list(list_skills_for_user(user=user, db_session=db_session))
+    builtins, customs = _split_rows(rows, db_session, include_grants=False)
+    return SkillsList(builtins=builtins, customs=customs)
 
 
 @user_router.get("/{slug_or_id}")
@@ -280,22 +311,20 @@ def fetch_skill_for_current_user(
     except ValueError:
         skill_id = None
 
+    found: Skill | None = None
     if skill_id is not None:
-        custom = fetch_skill_for_user(skill_id, user, db_session)
-        if custom is not None:
-            return CustomSkillResponse.from_model(custom, group_ids=[])
-        # Fall through: a UUID-shaped string may also be a valid slug
-        # (regex allows it), so don't 404 yet — try the slug path.
-
-    registry = BuiltinSkillRegistry.instance()
-    builtin = registry.get(slug_or_id)
-    if builtin is not None and builtin.is_available(db_session):
-        return BuiltinSkillResponse.from_builtin(builtin, db_session)
-
-    custom = fetch_skill_for_user_by_slug(slug_or_id, user, db_session)
-    if custom is None:
+        found = fetch_skill_for_user(skill_id, user, db_session)
+    if found is None:
+        found = fetch_skill_for_user_by_slug(slug_or_id, user, db_session)
+    if found is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return CustomSkillResponse.from_model(custom, group_ids=[])
+
+    if found.built_in_skill_id is not None:
+        definition = BUILT_IN_SKILLS.get(found.built_in_skill_id)
+        if definition is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        return BuiltinSkillResponse.from_row(found, definition, db_session)
+    return CustomSkillResponse.from_model(found, group_ids=[])
 
 
 def _parse_group_ids(raw: str) -> list[int]:

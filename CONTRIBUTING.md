@@ -93,7 +93,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 
 - **Python 3.11** — If using a lower version, modifications will have to be made to the code. Higher versions may have library compatibility issues.
 - **Docker** — Required for running external services (Postgres, OpenSearch, Redis, MinIO).
-- **Node.js v22** — We recommend using [nvm](https://github.com/nvm-sh/nvm) to manage Node installations.
+- **Bun** — We use [bun](https://bun.sh) as the JavaScript package manager. Install it from https://bun.sh/docs/installation.
 
 ### Backend: Python Requirements
 
@@ -130,15 +130,10 @@ uv run playwright install
 
 ### Frontend: Node Dependencies
 
-```bash
-nvm install 22 && nvm use 22
-node -v # verify your active version
-```
-
 Navigate to `onyx/web` and run:
 
 ```bash
-npm i
+bun install
 ```
 
 ### Formatting and Linting
@@ -159,19 +154,19 @@ uv run ty check
 
 #### Frontend
 
-We use `oxfmt` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
+We use `oxfmt` for formatting. The desired version will be installed via `bun install` from the `onyx/web` directory. To run the formatter:
 
 ```bash
-npx oxfmt .  # from onyx/web
+bunx oxfmt .  # from onyx/web
 ```
 
 Pre-commit will also run oxfmt automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
 
-We use `oxlint` for linting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the linter:
+We use `oxlint` for linting. The desired version will be installed via `bun install` from the `onyx/web` directory. To run the linter:
 
 ```bash
-npx oxlint  # from onyx/web
-npx oxlint --fix  # auto-fix what it can
+bunx oxlint  # from onyx/web
+bunx oxlint --fix  # auto-fix what it can
 ```
 
 Pre-commit will also run oxlint automatically. If it reports errors, fix them and commit again.
@@ -230,7 +225,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relat
 To start the frontend, navigate to `onyx/web` and run:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Next, start the model server which runs the local NLP models. Navigate to `onyx/backend` and run:
@@ -291,7 +286,7 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft development with `SANDBOX_BACKEND=kubernetes`, see [Local Kubernetes Development](/docs/dev/local-kubernetes.md).
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
 
 ### Running in Docker
 

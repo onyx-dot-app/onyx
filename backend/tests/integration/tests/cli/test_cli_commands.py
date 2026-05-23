@@ -402,7 +402,6 @@ def test_search_returns_results(
 
 
 def test_search_raw(
-    reset: None,  # noqa: ARG001
     cli_binary: Path,
     pat_token: str,
     admin_user: DATestUser,
@@ -420,12 +419,10 @@ def test_search_raw(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
-    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
-    # so the API must return exactly one result that contains it.
     data = json.loads(result.stdout)
-    assert len(data["results"]) == 1
-    assert phrase in data["results"][0]["content"]
-    assert data["results"][0]["citation_id"] is not None
+    matches = [r for r in data["results"] if phrase in r["content"]]
+    assert len(matches) == 1
+    assert matches[0]["citation_id"] is not None
 
 
 def test_search_truncation(

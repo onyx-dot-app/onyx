@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import NewTeamModal from "@/components/modals/NewTeamModal";
+import NewTeamModal from "@/sections/modals/NewTeamModal";
 import NewTenantModal from "@/sections/modals/NewTenantModal";
 import { NewTenantInfo } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

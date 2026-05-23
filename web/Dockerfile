@@ -11,17 +11,22 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
 
-# Copy package files first for better layer caching
-# This layer will be cached unless package.json or package-lock.json changes
-COPY package.json package-lock.json ./
-COPY lib/opal/package.json ./lib/opal/
+# Copy package files + the full opal workspace source so that opal's `prepare`
+# lifecycle hook (which runs during `bun install` for workspace packages) can build
+# `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
+# extends web's `tsconfig.json`, so that file must also be present at install
+# time for the DTS build to succeed.
+COPY package.json bun.lock tsconfig.json ./
+COPY lib/opal/ ./lib/opal/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies. opal's `prepare` script builds dist/ as part of install.
+RUN bun install --frozen-lockfile
 
-# pull in source code / package.json / package-lock.json
+# pull in remaining source code
 COPY . .
 
 # needed to get the `standalone` dir we expect later
@@ -169,5 +174,10 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # Note: Don't expose ports here, Compose will handle that for us if necessary.
 # If you want to run this without compose, specify the ports to
 # expose via cli
+
+# Next.js standalone server.js reads HOSTNAME to decide what to bind to.
+# Docker auto-sets HOSTNAME to the container ID, which makes Next bind to that
+# name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
+ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]

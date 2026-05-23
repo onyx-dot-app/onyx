@@ -42,16 +42,15 @@ from onyx.server.features.build.api.models import SuggestionBubble
 from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
+from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
@@ -134,10 +133,9 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=request.user_work_area,
-            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
+            headless=request.headless,
         )
         db_session.commit()
 
@@ -439,6 +437,12 @@ def restore_session(
         llm_config = session_manager._get_llm_config(None, None)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
+            # Mint/look up the PAT before flipping to PROVISIONING so that a
+            # failure here can be retried without the sandbox getting stuck.
+            # Docker (and Kubernetes) require the PAT at provision time so
+            # the sandbox can talk back to Onyx via onyx-cli.
+            onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+
             # Mark as PROVISIONING before the long-running provision() call
             # so other requests know work is in progress
             update_sandbox_status__no_commit(
@@ -451,6 +455,7 @@ def restore_session(
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
+                onyx_pat=onyx_pat,
             )
 
             # Mark as RUNNING after successful provision
@@ -472,10 +477,9 @@ def restore_session(
                     # Commit port allocation before long-running operations
                     db_session.commit()
 
-                # Only Kubernetes backend supports snapshot restoration
-                snapshot = None
-                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                # All supported backends snapshot session state to durable
+                # storage (S3 for kubernetes, host disk for docker).
+                snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
                 skills_section, skills_files = build_user_skills_payload(
                     user, db_session
@@ -531,6 +535,29 @@ def restore_session(
 
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
+        # Roll the sandbox out of ``PROVISIONING`` so the frontend's
+        # ``needsRestore`` check picks it back up and the next attempt isn't
+        # blocked by a stuck status. Without this, an api_server restart
+        # mid-provision (or any other transient failure) leaves the sandbox
+        # marked PROVISIONING forever and the user has to manually unstick it
+        # in the DB. Re-fetch the sandbox in case the session was rolled back.
+        try:
+            db_session.rollback()
+            stuck = get_sandbox_by_user_id(db_session, user.id)
+            if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
+                update_sandbox_status__no_commit(
+                    db_session, stuck.id, SandboxStatus.SLEEPING
+                )
+                db_session.commit()
+                logger.info(
+                    "Rolled sandbox %s back to SLEEPING after failed restore",
+                    stuck.id,
+                )
+        except Exception as rollback_err:
+            logger.warning(
+                "Failed to roll sandbox status back after restore failure: %s",
+                rollback_err,
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",

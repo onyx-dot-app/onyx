@@ -1,10 +1,10 @@
 """OpenAI voice provider for STT and TTS.
 
 OpenAI supports:
-- **STT**: Whisper (batch transcription via REST) and Realtime API (streaming
-  transcription via WebSocket with server-side VAD). Audio is sent as base64-encoded
-  PCM16 at 24kHz mono. The Realtime API returns transcript deltas and completed
-  transcription events per VAD-detected utterance.
+- **STT**: Whisper (batch transcription via REST). Streaming transcription via
+  the Realtime API is currently disabled (`supports_streaming_stt()` returns
+  `False`) pending migration to the GA Realtime API; `OpenAIStreamingTranscriber`
+  remains in this file for the upcoming migration but is unreachable today.
 - **TTS**: HTTP streaming endpoint that returns audio chunks progressively.
   Supported models: tts-1 (standard) and tts-1-hd (high quality).
 
@@ -297,7 +297,9 @@ OPENAI_VOICES = [
     {"id": "shimmer", "name": "Shimmer"},
 ]
 
-# OpenAI available STT models (all support streaming via Realtime API)
+# OpenAI available STT models. All use the chunked HTTP transcription endpoint
+# today; Realtime streaming is disabled until the GA migration lands (see
+# `supports_streaming_stt()`).
 OPENAI_STT_MODELS = [
     {"id": "whisper-1", "name": "Whisper v1"},
     {"id": "gpt-4o-transcribe", "name": "GPT-4o Transcribe"},
@@ -525,12 +527,19 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
 
         Args:
             audio_data: Raw audio bytes
-            audio_format: Audio format (e.g., "webm", "wav", "mp3")
+            audio_format: Audio format (e.g., "webm", "wav", "mp3", "pcm16")
 
         Returns:
             Transcribed text
         """
         client = self._get_client()
+
+        # OpenAI's /v1/audio/transcriptions endpoint does not accept raw PCM;
+        # wrap PCM16 in a WAV container (24kHz mono — matches the browser
+        # capture format used by the streaming WebSocket fallback).
+        if audio_format == "pcm16":
+            audio_data = _create_wav_header(len(audio_data)) + audio_data
+            audio_format = "wav"
 
         # Create a file-like object from the audio bytes
         audio_file = io.BytesIO(audio_data)
@@ -612,8 +621,12 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return OPENAI_TTS_MODELS.copy()
 
     def supports_streaming_stt(self) -> bool:
-        """OpenAI supports streaming via Realtime API for all STT models."""
-        return True
+        # OpenAI deprecated the Realtime Beta API shape we depend on
+        # (header `OpenAI-Beta: realtime=v1` + `transcription_session.update`),
+        # which now returns `beta_api_shape_disabled`. Route through the
+        # chunked HTTP path until the streaming transcriber is migrated to
+        # the GA Realtime API.
+        return False
 
     def supports_streaming_tts(self) -> bool:
         """OpenAI supports real-time streaming TTS via Realtime API."""

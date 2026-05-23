@@ -5,12 +5,13 @@ import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, InputVertical } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import {
   useInitialValues,
   buildValidationSchema,
@@ -20,6 +21,7 @@ import {
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics";
 import {
+  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -31,8 +33,7 @@ import { Card } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-
-const DEFAULT_API_BASE = "http://127.0.0.1:11434";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
@@ -61,6 +62,7 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
+  const { settings } = useSettingsContext();
 
   const isFetchDisabled = useMemo(
     () =>
@@ -107,7 +109,13 @@ function OllamaModalInternals({
             <InputVertical
               withLabel="api_base"
               title="API Base URL"
-              subDescription="The base URL for your Ollama instance."
+              subDescription={
+                settings.is_containerized
+                  ? markdown(
+                      `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
+                    )
+                  : "The base URL for your Ollama instance."
+              }
             >
               <InputTypeInField
                 name="api_base"
@@ -163,6 +171,10 @@ export default function OllamaModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const { settings } = useSettingsContext();
+  const defaultApiBase = settings.is_containerized
+    ? "http://host.docker.internal:11434"
+    : "http://127.0.0.1:11434";
   const apiKey = existingLlmProvider?.custom_config?.OLLAMA_API_KEY;
   const defaultTab =
     existingLlmProvider && !!apiKey ? Tab.TAB_CLOUD : Tab.TAB_SELF_HOSTED;
@@ -176,7 +188,7 @@ export default function OllamaModal({
       LLMProviderName.OLLAMA_CHAT,
       existingLlmProvider
     ),
-    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    api_base: existingLlmProvider?.api_base ?? defaultApiBase,
     custom_config: {
       OLLAMA_API_KEY: apiKey,
     },

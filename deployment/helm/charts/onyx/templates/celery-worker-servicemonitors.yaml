@@ -149,7 +149,7 @@ spec:
       interval: 30s
       scrapeTimeout: 10s
 {{- end }}
-{{- if gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0 }}
+{{- if and (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

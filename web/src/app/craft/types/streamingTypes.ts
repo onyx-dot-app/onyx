@@ -2,7 +2,7 @@
 // Sharing Types
 // =============================================================================
 
-export type SharingScope = "private" | "public_org" | "public_global";
+export type SharingScope = "private" | "public_org";
 
 // =============================================================================
 // Session Error Constants

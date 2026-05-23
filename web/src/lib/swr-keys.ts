@@ -106,6 +106,10 @@ export const SWR_KEYS = {
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
 
+  // ── Skills ────────────────────────────────────────────────────────────────
+  adminSkills: "/api/admin/skills",
+  userSkills: "/api/skills",
+
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
@@ -129,10 +133,9 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-
-  // ── OpenSearch Migration ──────────────────────────────────────────────────
-  opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
-  opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
+  buildExternalApps: "/api/build/apps",
+  buildExternalAppsAdmin: "/api/build/admin/apps",
+  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",

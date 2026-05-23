@@ -2,7 +2,7 @@ import { WorkArea, Level } from "./constants";
 import type {
   LLMProviderDescriptor,
   LLMProviderResponse,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 
 export interface BuildUserInfo {
   firstName: string;

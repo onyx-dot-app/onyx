@@ -2,9 +2,8 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -17,12 +16,12 @@ class SettingsManager:
         headers = user_performing_action.headers
         headers.pop("Content-Type", None)
 
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/settings",
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             return (
                 {},
                 f"Failed to get settings - {response.json().get('detail', 'Unknown error')}",
@@ -39,13 +38,13 @@ class SettingsManager:
         headers.pop("Content-Type", None)
 
         payload = settings.model_dump()
-        response = requests.put(
+        response = client.put(
             f"{API_SERVER_URL}/admin/settings",
             json=payload,
             headers=headers,
         )
 
-        if not response.ok:
+        if response.is_error:
             return (
                 {},
                 f"Failed to update settings - {response.json().get('detail', 'Unknown error')}",

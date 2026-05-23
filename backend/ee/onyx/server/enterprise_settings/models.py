@@ -1,9 +1,11 @@
 from enum import Enum
 from typing import Any
 from typing import List
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 
 class NavigationItem(BaseModel):
@@ -53,6 +55,26 @@ class EnterpriseSettings(BaseModel):
     consent_screen_prompt: str | None = None
     show_first_visit_notice: bool | None = None
     custom_greeting_message: str | None = None
+
+    # custom help link surfaced in the profile dropdown alongside the
+    # built-in "Help & FAQ" item
+    custom_help_link_url: str | None = None
+    custom_help_link_label: str | None = None
+
+    # hide the "Powered by Onyx" tagline under the sidebar logo
+    hide_onyx_branding: bool | None = None
+
+    @field_validator("custom_help_link_url")
+    @classmethod
+    def _validate_help_link_scheme(cls, v: str | None) -> str | None:
+        if not v:
+            return v
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError(
+                "custom_help_link_url must be an absolute http or https URL"
+            )
+        return v
 
     def check_validity(self) -> None:
         return

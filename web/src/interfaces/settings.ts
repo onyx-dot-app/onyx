@@ -85,6 +85,10 @@ export interface Settings {
   default_pruning_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
+
+  // True when the backend runs inside a container (Docker/Podman).
+  // Used to default local-service URLs to host.docker.internal.
+  is_containerized?: boolean;
 }
 
 export interface NavigationItem {
@@ -113,6 +117,13 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+
+  // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
+  custom_help_link_url: string | null;
+  custom_help_link_label: string | null;
+
+  // Hide the "Powered by Onyx" tagline under the sidebar logo.
+  hide_onyx_branding: boolean | null;
 }
 
 export interface CombinedSettings {

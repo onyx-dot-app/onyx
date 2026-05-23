@@ -115,19 +115,19 @@ web/lib/opal/
 
 Opal reuses `/web/node_modules` — it does not have its own `node_modules`. To add a runtime
 dependency, declare it under `peerDependencies` in `web/lib/opal/package.json` AND add the
-matching version in the root `web/package.json` `dependencies` block, then run `npm i` in `/web`
+matching version in the root `web/package.json` `dependencies` block, then run `bun install` in `/web`
 so Onyx's web app keeps building.
 
 The package is consumed by `web/` as a workspace via `web/package.json`'s `"@onyx-ai/opal":
 "./lib/opal"`. During Onyx development, `web/` resolves Opal source through the `@opal/*`
 TypeScript path alias (defined in `web/tsconfig.json`), so changes are picked up live without
-running `npm run build`.
+running `bun run build`.
 
 To produce the published artifact:
 
 ```sh
 cd web/lib/opal
-npm run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
+bun run build       # tsup -> dist/, then bundle-css.mjs -> dist/styles.css
 ```
 
 ## Releasing to npm
@@ -151,7 +151,7 @@ Steps:
    ```
 
 4. The workflow runs automatically on tag push. It builds (`tsup` + CSS barrel) and runs
-   `npm publish --provenance --access public`. Watch the run under the Actions tab; verify
+   `bun publish --provenance --access public`. Watch the run under the Actions tab; verify
    the new version on https://www.npmjs.com/package/@onyx-ai/opal.
 
 The tag pattern must match `opal/v*.*.*` for the workflow to fire.
@@ -166,3 +166,10 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.
 - See `web/AGENTS.md` for broader frontend standards.
+
+## Third-party trademarks
+
+The `@onyx-ai/opal/logos` subpath ships brand marks of third-party
+products Onyx integrates with. Marks remain the property of their
+respective owners; Onyx claims no trademark over them. See
+[`NOTICE.md`](./NOTICE.md) for details.

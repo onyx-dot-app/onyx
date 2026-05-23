@@ -11,10 +11,18 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.skill import SkillPatch
-from onyx.skills.registry import BuiltinSkill
+from onyx.skills.built_in import BuiltInSkillDefinition
 
 
 class BuiltinSkillResponse(BaseModel):
+    """A built-in skill — backed by a ``skill`` row whose
+    ``built_in_skill_id`` references a definition in
+    ``onyx.skills.built_in.BUILT_IN_SKILLS``. Display fields come from
+    the row; ``is_available`` / ``unavailable_reason`` come from the
+    codified definition. Built-ins are not admin-mutable, so lifecycle
+    fields (``enabled``, ``is_public``, group grants) are not part of
+    this response — they're row-level implementation detail."""
+
     source: Literal["builtin"] = "builtin"
     slug: str
     name: str
@@ -23,15 +31,18 @@ class BuiltinSkillResponse(BaseModel):
     unavailable_reason: str | None = None
 
     @classmethod
-    def from_builtin(
-        cls, skill: BuiltinSkill, db_session: Session
+    def from_row(
+        cls,
+        skill: Skill,
+        definition: BuiltInSkillDefinition,
+        db_session: Session,
     ) -> "BuiltinSkillResponse":
         return cls(
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_available=skill.is_available(db_session),
-            unavailable_reason=skill.unavailable_reason,
+            is_available=definition.is_available(db_session),
+            unavailable_reason=definition.unavailable_reason,
         )
 
 
@@ -44,6 +55,7 @@ class CustomSkillResponse(BaseModel):
     is_public: bool
     enabled: bool
     author_user_id: UUID | None = None
+    author_email: str | None = None
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
@@ -58,6 +70,7 @@ class CustomSkillResponse(BaseModel):
             is_public=skill.is_public,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
+            author_email=skill.author.email if skill.author is not None else None,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             granted_group_ids=group_ids,
@@ -70,9 +83,6 @@ class SkillsList(BaseModel):
 
 
 class SkillPatchRequest(BaseModel):
-    slug: str | None = None
-    name: str | None = None
-    description: str | None = None
     is_public: bool | None = None
     enabled: bool | None = None
 
@@ -81,7 +91,7 @@ class SkillPatchRequest(BaseModel):
     def _reject_explicit_nulls(cls, data: Any) -> Any:
         """Omitting a field = 'leave unchanged'. Sending null = invalid."""
         if isinstance(data, dict):
-            for field in ("slug", "name", "description", "is_public", "enabled"):
+            for field in ("is_public", "enabled"):
                 if field in data and data[field] is None:
                     raise ValueError(f"{field} cannot be null")
         return data

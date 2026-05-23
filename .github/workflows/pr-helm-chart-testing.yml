@@ -22,7 +22,6 @@ jobs:
       [
         runs-on,
         runner=8cpu-linux-x64,
-        hdd=256,
         "run-id=${{ github.run_id }}-helm-chart-check",
       ]
     timeout-minutes: 45

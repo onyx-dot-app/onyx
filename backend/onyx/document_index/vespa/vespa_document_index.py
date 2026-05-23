@@ -197,7 +197,9 @@ def deploy_vespa_schemas(
         )
         return
 
-    jinja_env = jinja2.Environment()
+    # TODO(security): if schema generation ever takes user-controlled input,
+    # swap to `jinja2.Environment(autoescape=select_autoescape(["xml"]))`.
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
     logger.notice("Deploying Vespa application package to %s", deploy_url)
@@ -303,7 +305,9 @@ def register_multitenant_vespa_indices(
         vespa_schema_path, "validation-overrides.xml.jinja"
     )
 
-    jinja_env = jinja2.Environment()
+    # TODO(security): if schema generation ever takes user-controlled input,
+    # swap to `jinja2.Environment(autoescape=select_autoescape(["xml"]))`.
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     with open(services_jinja_file, "r") as services_f:
         schema_names = list(indices)
@@ -1096,7 +1100,7 @@ class VespaDocumentIndex(DocumentIndex):
         where_clause = (
             f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
         )
-        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"
+        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"  # noqa: S608 - Vespa YQL with internal index_name/tenant_id
         params: dict[str, str | int] = {
             "yql": yql,
             "ranking.profile": "unranked",

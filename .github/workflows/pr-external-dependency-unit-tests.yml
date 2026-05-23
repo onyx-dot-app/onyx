@@ -24,6 +24,8 @@ permissions:
   contents: read
 
 env:
+  SANDBOX_BACKEND: "docker"
+
   # AWS credentials for S3-specific test
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
@@ -125,9 +127,8 @@ jobs:
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
+          COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
-          OPENSEARCH_FOR_ONYX_ENABLED=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -140,7 +141,6 @@ jobs:
             minio \
             relational_db \
             cache \
-            index \
             opensearch \
             code-interpreter
 

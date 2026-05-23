@@ -8,6 +8,7 @@ export default defineConfig({
     "src/core/index.ts",
     "src/icons/index.ts",
     "src/illustrations/index.ts",
+    "src/logos/index.ts",
     "src/types.ts",
     "src/utils.ts",
   ],

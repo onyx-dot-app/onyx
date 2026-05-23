@@ -20,6 +20,7 @@ from abc import ABC
 from abc import abstractmethod
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -38,10 +39,34 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+# In-sandbox paths shared by every backend implementation. Kept in sync with
+# the SESSIONS_ROOT constants the individual managers define (those exist
+# separately because the K8s manager emits exec scripts and the Docker
+# manager mounts via the named volume — both happen to land at the same
+# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
+# own copy because it can't import from this package at runtime.
+BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
+BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
+
 # ACPEvent is a union type defined in both local and kubernetes modules
 # Using Any here to avoid circular imports - the actual type checking
 # happens in the implementation modules
 ACPEvent = Any
+
+
+@dataclass
+class SSEKeepalive:
+    """Marker event yielded by sandbox-manager ACP clients when no real ACP
+    events have arrived for ``SSE_KEEPALIVE_INTERVAL`` seconds.
+
+    Defined here (rather than in any one backend's exec client) so every
+    backend yields the same class and ``isinstance`` checks in the
+    session-manager SSE pipeline work uniformly. Otherwise a Docker-emitted
+    keepalive would be a different class than a K8s-emitted keepalive and
+    one would fall through the manager's isinstance chain as "unrecognized"
+    and be silently dropped.
+    """
 
 
 class SandboxManager(ABC):
@@ -131,8 +156,6 @@ class SandboxManager(ABC):
         snapshot_path: str | None = None,
         user_name: str | None = None,
         user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -143,7 +166,6 @@ class SandboxManager(ABC):
         - sessions/$session_id/AGENTS.md
         - sessions/$session_id/opencode.json
         - sessions/$session_id/attachments/
-        - sessions/$session_id/org_info/ (if user_work_area provided)
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
@@ -154,8 +176,6 @@ class SandboxManager(ABC):
             snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
             user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for persona (e.g., "engineering")
-            user_level: User's level for persona (e.g., "ic", "manager")
 
         Raises:
             RuntimeError: If workspace setup fails
@@ -261,6 +281,24 @@ class SandboxManager(ABC):
 
         Returns:
             True if the session workspace exists, False otherwise
+        """
+        ...
+
+    @abstractmethod
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List session workspace IDs under a sandbox's sessions/ directory.
+
+        Used by idle cleanup to discover which sessions need snapshotting before
+        the sandbox is terminated. Implementations should filter out non-UUID
+        directory names.
+
+        Args:
+            sandbox_id: The sandbox ID
+
+        Returns:
+            List of session UUIDs found under sessions/. Returns an empty list
+            if the sandbox is not running, has no sessions, or the backend does
+            not support cleanup (e.g. local).
         """
         ...
 
@@ -601,8 +639,10 @@ class SandboxManager(ABC):
     ) -> None:
         """Ensure the Next.js server is running for a session.
 
-        Default is a no-op — only meaningful for local backends that manage
-        process lifecycles directly (e.g., LocalSandboxManager).
+        Default is a no-op — only meaningful for backends that manage Next.js
+        process lifecycles directly from the api_server side. The kubernetes
+        backend starts Next.js inside the sandbox pod at workspace setup, so
+        nothing further is needed.
 
         Args:
             sandbox_id: The sandbox ID
@@ -621,27 +661,28 @@ def get_sandbox_manager() -> SandboxManager:
 
     Returns:
         SandboxManager instance:
-        - LocalSandboxManager for local backend (development)
-        - KubernetesSandboxManager for kubernetes backend (production)
+        - KubernetesSandboxManager for kubernetes backend (production + dev kind)
+        - DockerSandboxManager for self-hosted docker-compose
     """
     global _sandbox_manager_instance
 
     if _sandbox_manager_instance is None:
         with _sandbox_manager_lock:
             if _sandbox_manager_instance is None:
-                if SANDBOX_BACKEND == SandboxBackend.LOCAL:
-                    from onyx.server.features.build.sandbox.local.local_sandbox_manager import (
-                        LocalSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = LocalSandboxManager()
-                elif SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
+                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
                     from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
                         KubernetesSandboxManager,
                     )
 
                     _sandbox_manager_instance = KubernetesSandboxManager()
                     logger.info("Using KubernetesSandboxManager for sandbox operations")
+                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
+                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+                        DockerSandboxManager,
+                    )
+
+                    _sandbox_manager_instance = DockerSandboxManager()
+                    logger.info("Using DockerSandboxManager for sandbox operations")
                 else:
                     raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
 

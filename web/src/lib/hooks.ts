@@ -28,7 +28,10 @@ import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { MinimalAgent } from "@/lib/agents/types";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";

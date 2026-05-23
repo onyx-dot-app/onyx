@@ -58,6 +58,7 @@ backend = [
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
+    "docker==7.1.0",
     "httpcore==1.0.9",
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
@@ -115,6 +116,7 @@ backend = [
     "RapidFuzz==3.14.5",
     "tiktoken==0.7.0",
     "timeago==1.0.16",
+    "types-docker==7.1.0.20260518",
     "types-openpyxl==3.0.4.7",
     "unstructured==0.18.27",
     "unstructured-client==0.42.6",
@@ -126,6 +128,8 @@ backend = [
     "stripe==10.12.0",
     "urllib3==2.7.0",
     "mistune==3.2.1",
+    # Pinned: 11.1+ requires Python 3.12.
+    "mitmproxy==11.0.2",
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
@@ -146,7 +150,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.7.7",
+    "onyx-devtools==0.7.8",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -172,8 +176,12 @@ dev = [
     "types-requests==2.32.0.20250328",
     "types-retry==0.9.9.3",
     "types-setuptools==68.0.0.3",
-    "zizmor==1.18.0",
+    { include-group = "zizmor" },
 ]
+
+# Isolated group so CI can `uv sync --only-group zizmor` without pulling
+# the rest of the dev toolchain.
+zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
@@ -213,6 +221,13 @@ override-dependencies = [
     "tiktoken",
     "tokenizers",
     "google-cloud-aiplatform>=1.38.0",
+    # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
+    # backend's newer versions.
+    "brotli>=1.2.0,<2.0",
+    "h11>=0.11,<1.0",
+    "cryptography>=42.0,<50.0",
+    "h2>=4.3.0,<5.0",
+    "hyperframe>=6.1.0,<7.0",
 ]
 
 [tool.ty.environment]
@@ -255,8 +270,21 @@ target-version = "py311"
 [tool.ruff.lint]
 ignore = [
     "E501", # Long lines are handled by `ruff format`.
+    # flake8-bandit (S) rules ignored as noisy / low-signal:
+    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
+    "S105", # Hardcoded password string — very high false-positive rate.
+    "S106", # Hardcoded password func arg — very high false-positive rate.
+    "S107", # Hardcoded password default — very high false-positive rate.
+    "S110", # try/except/pass — intentional pattern.
+    "S112", # try/except/continue — intentional pattern.
+    "S311", # Non-crypto random — used for jitter/sampling/non-security purposes.
+    "S603", # subprocess without shell=True — this is the *correct* invocation form.
+    "S607", # Start-process with partial path — common and low signal.
+    # Tracked in kanban ticket #491 — to be removed once existing violations are
+    # cleaned up:
+    "S113", # request-without-timeout (~463 existing violations).
 ]
-select = ["ARG", "E", "F", "I", "S324", "W"]
+select = ["ARG", "E", "F", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
@@ -264,9 +292,18 @@ order-by-type = false
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
 [tool.ruff.lint.per-file-ignores]
-# alembic has a folder named `alembic` in backend/ which confuses import sorters
-"backend/alembic/**" = ["I"]
-"backend/alembic_tenants/**" = ["I"]
+# alembic has a folder named `alembic` in backend/ which confuses import sorters.
+# Migrations write raw DDL, so S608 (hardcoded-sql) is unavoidable.
+"backend/alembic/**" = ["I", "S608"]
+"backend/alembic_tenants/**" = ["I", "S608"]
+# Tests use asserts, mock credentials, and lots of patterns the bandit rules
+# flag as suspicious. Disable the full S rule set in tests.
+"backend/tests/**" = ["S"]
+# Ops and developer scripts run by humans (kubectl exec payloads, one-off
+# data dumps, manual tenant cleanup) commonly use `/tmp/...` script payloads,
+# pipe shell commands, and build ad-hoc SQL against trusted internal inputs
+# (tenant IDs, schema names). Other S rules still apply.
+"backend/scripts/**" = ["S108", "S602", "S608"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

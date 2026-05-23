@@ -143,3 +143,7 @@ class UserSettings(Settings):
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         )
     )
+    # True when the backend is running inside a container (Docker/Podman).
+    # The frontend uses this to default local-service URLs (e.g. Ollama,
+    # LM Studio) to host.docker.internal instead of localhost.
+    is_containerized: bool = False
