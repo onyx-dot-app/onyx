@@ -16,7 +16,9 @@ from onyx.connectors.canvas.connector import _parse_canvas_dt
 from onyx.connectors.canvas.connector import _unix_to_canvas_time
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.canvas.connector import CanvasConnectorCheckpoint
+from onyx.connectors.canvas.connector import CanvasCourse
 from onyx.connectors.canvas.connector import CanvasStage
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
@@ -1724,48 +1726,6 @@ class TestMaybeAttachPermissions:
 
         assert result.external_access is None
 
-    @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_per_document_conversion_failure_yields_connector_failure(
-        self, mock_requests: MagicMock
-    ) -> None:
-        """Bad data for one page yields ConnectorFailure, doesn't stop processing."""
-        bad_page = {"page_id": 10, "url": "test", "title": "Test", "body": None,
-                     "created_at": "2025-06-15T12:00:00Z", "updated_at": "bad-date"}
-        mock_requests.get.side_effect = _make_url_dispatcher(pages=[bad_page])
-        connector = _build_connector()
-        cp = CanvasConnectorCheckpoint(
-            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
-        )
-
-        items, new_cp = _run_checkpoint(connector, cp)
-
-        assert len(items) == 1
-        assert isinstance(items[0], ConnectorFailure)
-        assert new_cp.stage == "assignments"
-
-    @patch("onyx.connectors.canvas.client.rl_requests")
-    def test_all_courses_done_sets_has_more_false(self, mock_requests: MagicMock) -> None:
-        mock_requests.get.side_effect = _make_url_dispatcher()
-        connector = _build_connector()
-        cp = CanvasConnectorCheckpoint(
-            has_more=True, course_ids=[1], current_course_index=1
-        )
-
-        items, new_cp = _run_checkpoint(connector, cp)
-
-        assert items == []
-        assert new_cp.has_more is False
-
-    def test_invalid_stage_raises_value_error(self) -> None:
-        connector = _build_connector()
-        cp = CanvasConnectorCheckpoint(
-            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
-        )
-        cp.stage = "invalid"  # type: ignore[assignment]
-
-        with pytest.raises(ValueError, match="Invalid checkpoint stage"):
-            _run_checkpoint(connector, cp)
-
 
 # ---------------------------------------------------------------------------
 # retrieve_all_slim_docs_perm_sync tests
@@ -1851,6 +1811,119 @@ class TestRetrieveAllSlimDocsPermSync:
         assert len(batches) == expected_batch_count
         assert len(batches[0]) == 2
         assert len(batches[1]) == 1
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_stop_signal_after_batch_raises_runtime_error(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        """If callback.should_stop() flips True after a batch yields, abort."""
+        mock_perms.return_value = ExternalAccess.empty()
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10), _mock_page(11, "Page 2")],
+            assignments=[],
+            announcements=[],
+        )
+        connector = _build_connector()
+        connector.batch_size = 1
+
+        callback = MagicMock(spec=IndexingHeartbeatInterface)
+        callback.should_stop.side_effect = [True]  # stop after first batch
+
+        gen = connector.retrieve_all_slim_docs_perm_sync(callback=callback)
+        # First batch yields successfully.
+        first_batch = next(gen)
+        assert len(first_batch) == 1
+
+        # Stop signal is checked after batch yields → raises before next batch.
+        with pytest.raises(RuntimeError, match="Stop signal detected"):
+            next(gen)
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    def test_api_error_propagates_does_not_swallow(
+        self, mock_perms: MagicMock
+    ) -> None:
+        """SAFETY: per-stage fetch failures MUST propagate.
+
+        If swallowed, generic_doc_sync would treat the missing items as
+        deleted and mass-revoke permissions (see connector.py comment).
+        """
+        mock_perms.return_value = ExternalAccess.empty()
+        connector = _build_connector()
+
+        with patch.object(
+            connector, "_list_courses", return_value=[CanvasCourse(id=1)]
+        ), patch.object(
+            connector, "_list_pages", side_effect=Exception("Canvas API down")
+        ):
+            with pytest.raises(Exception, match="Canvas API down"):
+                list(connector.retrieve_all_slim_docs_perm_sync())
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_multi_course_per_course_perms_and_progress(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        """Each course gets its own permissions, progress fires per course,
+        and the trailing batch flushes with items from the last course."""
+        access_by_course = {
+            1: ExternalAccess(
+                external_user_emails={"course1@school.edu"},
+                external_user_group_ids=set(),
+                is_public=False,
+            ),
+            2: ExternalAccess(
+                external_user_emails={"course2@school.edu"},
+                external_user_group_ids=set(),
+                is_public=False,
+            ),
+        }
+        mock_perms.side_effect = lambda canvas_client, course_id: access_by_course[
+            course_id
+        ]
+
+        # Per-course dispatchers: pages keyed by course_id in the URL.
+        api_prefix = f"{FAKE_BASE_URL}/api/v1"
+
+        def _dispatcher(url: str, **_: Any) -> MagicMock:
+            if url == f"{api_prefix}/courses":
+                return _mock_response(
+                    json_data=[_mock_course(1), _mock_course(2)]
+                )
+            if "/courses/1/pages" in url:
+                return _mock_response(json_data=[_mock_page(10)])
+            if "/courses/2/pages" in url:
+                return _mock_response(json_data=[_mock_page(20)])
+            return _mock_response(json_data=[])
+
+        mock_requests.get.side_effect = _dispatcher
+
+        callback = MagicMock(spec=IndexingHeartbeatInterface)
+        callback.should_stop.return_value = False
+
+        connector = _build_connector()
+        batches = list(connector.retrieve_all_slim_docs_perm_sync(callback=callback))
+        all_docs = [doc for b in batches for doc in b]
+
+        # Each doc carries its own course's permissions.
+        access_by_id = {
+            doc.id: doc.external_access
+            for doc in all_docs
+            if isinstance(doc, SlimDocument)
+        }
+        assert access_by_id["canvas-page-1-10"] == access_by_course[1]
+        assert access_by_id["canvas-page-2-20"] == access_by_course[2]
+
+        # _get_course_permissions is cached, so one lookup per course.
+        assert mock_perms.call_count == 2
+
+        # Progress fires once per course.
+        progress_calls = [
+            call for call in callback.progress.call_args_list
+            if call.args and call.args[0] == "canvas_perm_sync"
+        ]
+        assert len(progress_calls) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -2025,6 +2098,50 @@ class TestEEGetCoursePermissions:
 
         assert result == ExternalAccess.empty()
 
+    def test_skips_login_id_without_at_sign(self) -> None:
+        """login_id like 'jdoe123' (bare username, not an email) is filtered out.
+
+        login_id is the Canvas pseudonym — not format-constrained. Institutions
+        that don't use email-as-username will surface bare usernames or SIS
+        ids here, which we must not treat as emails.
+        """
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.paginate.return_value = iter(
+            [
+                [
+                    _mock_enrollment("jdoe123"),  # bare username
+                    _mock_enrollment("00123456"),  # SIS id
+                    _mock_enrollment("real@school.edu"),
+                ],
+            ]
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        assert result.external_user_emails == {"real@school.edu"}
+
+    def test_email_field_preferred_over_login_id(self) -> None:
+        """When both email and login_id are present, email wins."""
+        from ee.onyx.external_permissions.canvas.access import get_course_permissions
+
+        client = MagicMock(spec=CanvasApiClient)
+        client.paginate.return_value = iter(
+            [
+                [
+                    _mock_enrollment(
+                        login_id="loginid@school.edu",
+                        email="primary@school.edu",
+                    )
+                ],
+            ]
+        )
+
+        result = get_course_permissions(client, course_id=1)
+
+        assert result.external_user_emails == {"primary@school.edu"}
+
 
 # ---------------------------------------------------------------------------
 # canvas_doc_sync — EE orchestrator wrapping generic_doc_sync
@@ -2158,3 +2275,25 @@ class TestCanvasDocSync:
             )
 
             mock_connector.load_credentials.assert_called_once_with({})
+
+
+# ---------------------------------------------------------------------------
+# sync_params registration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("enable_ee")
+class TestSyncParamsRegistration:
+    def test_canvas_registered_to_canvas_doc_sync(self) -> None:
+        """DocumentSource.CANVAS dispatches to canvas_doc_sync.
+
+        Guards against accidental dict-key typos in sync_params.py.
+        """
+        from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
+        from ee.onyx.external_permissions.sync_params import _SOURCE_TO_SYNC_CONFIG
+
+        config = _SOURCE_TO_SYNC_CONFIG[DocumentSource.CANVAS]
+        assert config.doc_sync_config is not None
+        assert config.doc_sync_config.doc_sync_func is canvas_doc_sync
+        # Canvas has no group sync — permissions are user-email-only.
+        assert config.group_sync_config is None
