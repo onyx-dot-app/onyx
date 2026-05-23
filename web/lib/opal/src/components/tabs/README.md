@@ -23,30 +23,36 @@ import { Tabs } from "@opal/components";
 Equal-width tabs laid out in a grid on a tinted background. Active tab gets a white card with a subtle shadow. Best for primary page-level navigation.
 
 ```tsx
-<Tabs.List variant="contained">
-  <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
-  <Tabs.Trigger value="b">Tab B</Tabs.Trigger>
-</Tabs.List>
+<Tabs variant="contained">
+  <Tabs.List>
+    <Tabs.Trigger value="a">Tab A</Tabs.Trigger>
+    <Tabs.Trigger value="b">Tab B</Tabs.Trigger>
+  </Tabs.List>
+</Tabs>
 ```
 
 ### Pill
 Content-width tabs with a sliding underline indicator that animates between active tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
-<Tabs.List variant="pill">
-  <Tabs.Trigger value="all">All</Tabs.Trigger>
-  <Tabs.Trigger value="active">Active</Tabs.Trigger>
-</Tabs.List>
+<Tabs variant="pill">
+  <Tabs.List>
+    <Tabs.Trigger value="all">All</Tabs.Trigger>
+    <Tabs.Trigger value="active">Active</Tabs.Trigger>
+  </Tabs.List>
+</Tabs>
 ```
 
 ### Underline
 Like pill but without the filled active background on the trigger — only the underline indicator is shown.
 
 ```tsx
-<Tabs.List variant="underline">
-  <Tabs.Trigger value="cloud">Cloud-based</Tabs.Trigger>
-  <Tabs.Trigger value="self">Self-hosted</Tabs.Trigger>
-</Tabs.List>
+<Tabs variant="underline">
+  <Tabs.List>
+    <Tabs.Trigger value="cloud">Cloud-based</Tabs.Trigger>
+    <Tabs.Trigger value="self">Self-hosted</Tabs.Trigger>
+  </Tabs.List>
+</Tabs>
 ```
 
 ## Features
@@ -70,10 +76,12 @@ Like pill but without the filled active background on the trigger — only the u
 ### Right-side content
 
 ```tsx
-<Tabs.List variant="pill" rightContent={<Button size="sm">Add New</Button>}>
-  <Tabs.Trigger value="all">All</Tabs.Trigger>
-  <Tabs.Trigger value="mine">Mine</Tabs.Trigger>
-</Tabs.List>
+<Tabs variant="pill">
+  <Tabs.List rightChildren={<Button size="sm">Add New</Button>}>
+    <Tabs.Trigger value="all">All</Tabs.Trigger>
+    <Tabs.Trigger value="mine">Mine</Tabs.Trigger>
+  </Tabs.List>
+</Tabs>
 ```
 
 ### Horizontal scroll arrows
@@ -81,11 +89,13 @@ Like pill but without the filled active background on the trigger — only the u
 When tabs overflow the available width, show navigation arrows:
 
 ```tsx
-<Tabs.List variant="pill" enableScrollArrows>
-  {manyTabs.map((t) => (
-    <Tabs.Trigger key={t.value} value={t.value}>{t.label}</Tabs.Trigger>
-  ))}
-</Tabs.List>
+<Tabs variant="pill">
+  <Tabs.List enableScrollArrows>
+    {manyTabs.map((t) => (
+      <Tabs.Trigger key={t.value} value={t.value}>{t.label}</Tabs.Trigger>
+    ))}
+  </Tabs.List>
+</Tabs>
 ```
 
 ### Controlled mode
@@ -112,6 +122,7 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
+| `variant` | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
 | `defaultValue` | `string` | — | Initially active tab (uncontrolled) |
 | `value` | `string` | — | Controlled active tab |
 | `onValueChange` | `(value: string) => void` | — | Called when active tab changes |
@@ -120,10 +131,8 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `variant` | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant |
-| `rightContent` | `ReactNode` | — | Content pinned to the right (pill/underline only) |
+| `rightChildren` | `ReactNode` | — | Content pinned to the right (pill/underline only) |
 | `enableScrollArrows` | `boolean` | `false` | Show scroll arrows on overflow (pill/underline only) |
-| `className` | `string` | — | Additional class names |
 
 ### `Tabs.Trigger`
 
@@ -135,12 +144,10 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"` | Tooltip placement |
 | `disabled` | `boolean` | — | Disables the tab (tooltip still shows) |
 | `isLoading` | `boolean` | — | Shows a spinner after the label |
-| `variant` | `"contained" \| "pill" \| "underline"` | inherited | Override the list variant |
 
 ### `Tabs.Content`
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `value` | `string` | **required** | Must match a `Tabs.Trigger` value |
-| `padding` | `number` | `0` | Inner padding in rem units |
-| `className` | `string` | — | Additional class names |
+| `padding` | `number` | `0` | Additional inner padding in rem units |

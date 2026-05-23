@@ -280,10 +280,23 @@ function TabsTrigger({
 /* =============================================================================
    TABS CONTENT
    ============================================================================= */
-function TabsContent(
-  props: WithoutStyles<React.ComponentProps<typeof TabsPrimitive.Content>>
-) {
-  return <TabsPrimitive.Content {...props} className="w-full" />;
+interface TabsContentProps extends WithoutStyles<
+  React.ComponentProps<typeof TabsPrimitive.Content>
+> {
+  /** Additional inner padding in rem. @default 0 */
+  padding?: number;
+}
+
+function TabsContent({ padding, children, ...props }: TabsContentProps) {
+  return (
+    <TabsPrimitive.Content {...props} className="w-full pt-4">
+      {padding ? (
+        <div style={{ padding: `${padding}rem` }}>{children}</div>
+      ) : (
+        children
+      )}
+    </TabsPrimitive.Content>
+  );
 }
 
 /* =============================================================================

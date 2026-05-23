@@ -77,13 +77,22 @@ export function usePillIndicator(
     updateIndicator();
 
     const resizeObserver = new ResizeObserver(() => updateIndicator());
+    resizeObserver.observe(list);
     list.querySelectorAll<HTMLElement>('[role="tab"]').forEach((tab) => {
       resizeObserver.observe(tab);
     });
 
-    const mutationObserver = new MutationObserver(() => updateIndicator());
+    const mutationObserver = new MutationObserver((mutations) => {
+      updateIndicator();
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (node instanceof HTMLElement) resizeObserver.observe(node);
+        }
+      }
+    });
     mutationObserver.observe(list, {
       attributes: true,
+      childList: true,
       subtree: true,
       attributeFilter: ["data-state"],
     });
@@ -152,11 +161,21 @@ export function useHorizontalScroll(
     Array.from(container.children).forEach((child) =>
       resizeObserver.observe(child)
     );
+    const mutationObserver = new MutationObserver((mutations) => {
+      updateScrollState();
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (node instanceof HTMLElement) resizeObserver.observe(node);
+        }
+      }
+    });
+    mutationObserver.observe(container, { childList: true });
 
     return () => {
       cancelAnimationFrame(rafId);
       container.removeEventListener("scroll", updateScrollState);
       resizeObserver.disconnect();
+      mutationObserver.disconnect();
     };
   }, [enabled, containerRef, updateScrollState]);
 
