@@ -125,7 +125,7 @@ export function ParallelTimelineTabs({
             >
               <Tabs.List
                 enableScrollArrows
-                rightContent={
+                rightChildren={
                   <Button
                     prominence="tertiary"
                     size="sm"

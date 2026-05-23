@@ -124,7 +124,7 @@ export const RightContent: Story = {
   render: () => (
     <Tabs defaultValue="all" variant="pill">
       <Tabs.List
-        rightContent={
+        rightChildren={
           <Button size="sm" prominence="secondary" icon={SvgRefreshCw}>
             Refresh
           </Button>

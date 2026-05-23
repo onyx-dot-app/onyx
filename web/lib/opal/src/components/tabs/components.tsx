@@ -4,7 +4,7 @@ import "@opal/components/tabs/styles.css";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { mergeRefs } from "@opal/utils";
-import { type IconProps, type WithoutStyles } from "@opal/types";
+import { IconFunctionComponent, type WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { Tooltip, Text, Button } from "@opal/components";
 import {
@@ -48,14 +48,14 @@ interface TabsListProps extends WithoutStyles<
   React.ComponentProps<typeof TabsPrimitive.List>
 > {
   /** Content pinned to the right of the list. Only visible on pill/underline. */
-  rightContent?: React.ReactNode;
+  rightChildren?: React.ReactNode;
   /** Show scroll arrows when tabs overflow (pill/underline only). @default false */
   enableScrollArrows?: boolean;
 }
 
 function TabsList({
   ref,
-  rightContent,
+  rightChildren,
   enableScrollArrows = false,
   children,
   ...props
@@ -63,7 +63,7 @@ function TabsList({
   const listRef = useRef<HTMLDivElement>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
-  const rightContentRef = useRef<HTMLDivElement>(null);
+  const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
@@ -93,8 +93,8 @@ function TabsList({
       let totalWidth = 0;
       if (scrollArrowsRef.current)
         totalWidth += scrollArrowsRef.current.offsetWidth;
-      if (rightContentRef.current)
-        totalWidth += rightContentRef.current.offsetWidth;
+      if (rightChildrenRef.current)
+        totalWidth += rightChildrenRef.current.offsetWidth;
       setRightOffset(totalWidth);
     };
 
@@ -103,11 +103,11 @@ function TabsList({
     const resizeObserver = new ResizeObserver(updateWidth);
     if (scrollArrowsRef.current)
       resizeObserver.observe(scrollArrowsRef.current);
-    if (rightContentRef.current)
-      resizeObserver.observe(rightContentRef.current);
+    if (rightChildrenRef.current)
+      resizeObserver.observe(rightChildrenRef.current);
 
     return () => resizeObserver.disconnect();
-  }, [isPill, rightContent, showScrollArrows]);
+  }, [isPill, rightChildren, showScrollArrows]);
 
   return (
     <TabsPrimitive.List
@@ -163,9 +163,9 @@ function TabsList({
         </div>
       )}
 
-      {isPill && rightContent && (
-        <div ref={rightContentRef} className="ml-auto shrink-0">
-          {rightContent}
+      {isPill && rightChildren && (
+        <div ref={rightChildrenRef} className="ml-auto shrink-0">
+          {rightChildren}
         </div>
       )}
 
@@ -196,27 +196,27 @@ function TabsList({
    ============================================================================= */
 
 interface TabsTriggerProps extends WithoutStyles<
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
+  React.ComponentProps<typeof TabsPrimitive.Trigger>
 > {
-  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Trigger>>;
   /** Tooltip shown on hover. */
   tooltip?: string;
   /** Side where the tooltip appears. @default "top" */
   tooltipSide?: "top" | "bottom" | "left" | "right";
   /** Icon rendered before the label. */
-  icon?: React.FunctionComponent<IconProps>;
+  icon?: IconFunctionComponent;
   /** Show a loading spinner after the label. */
   isLoading?: boolean;
 }
 
 function TabsTrigger({
-  ref,
   tooltip,
   tooltipSide = "top",
   icon: Icon,
+  isLoading,
+
+  ref,
   children,
   disabled,
-  isLoading,
   ...props
 }: TabsTriggerProps) {
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
