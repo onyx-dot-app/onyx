@@ -136,5 +136,4 @@ export {
   type TabsRootProps,
   type TabsListProps,
   type TabsTriggerProps,
-  type TabsContentProps,
 } from "@opal/components/tabs/components";

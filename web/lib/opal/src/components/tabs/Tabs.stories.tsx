@@ -41,8 +41,8 @@ export const Contained: Story = {
 
 export const Pill: Story = {
   render: () => (
-    <Tabs defaultValue="all">
-      <Tabs.List variant="pill">
+    <Tabs defaultValue="all" variant="pill">
+      <Tabs.List>
         <Tabs.Trigger value="all">All</Tabs.Trigger>
         <Tabs.Trigger value="active">Active</Tabs.Trigger>
         <Tabs.Trigger value="paused">Paused</Tabs.Trigger>
@@ -58,8 +58,8 @@ export const Pill: Story = {
 
 export const Underline: Story = {
   render: () => (
-    <Tabs defaultValue="cloud">
-      <Tabs.List variant="underline">
+    <Tabs defaultValue="cloud" variant="underline">
+      <Tabs.List>
         <Tabs.Trigger value="cloud">Cloud-based</Tabs.Trigger>
         <Tabs.Trigger value="self">Self-hosted</Tabs.Trigger>
       </Tabs.List>
@@ -122,9 +122,8 @@ export const TooltipsAndDisabled: Story = {
 
 export const RightContent: Story = {
   render: () => (
-    <Tabs defaultValue="all">
+    <Tabs defaultValue="all" variant="pill">
       <Tabs.List
-        variant="pill"
         rightContent={
           <Button size="sm" prominence="secondary" icon={SvgRefreshCw}>
             Refresh
@@ -164,8 +163,8 @@ export const Loading: Story = {
 export const ScrollArrows: Story = {
   render: () => (
     <div style={{ width: 320 }}>
-      <Tabs defaultValue="tab1">
-        <Tabs.List variant="pill" enableScrollArrows>
+      <Tabs defaultValue="tab1" variant="pill">
+        <Tabs.List enableScrollArrows>
           {Array.from({ length: 10 }, (_, i) => (
             <Tabs.Trigger key={i + 1} value={`tab${i + 1}`}>
               {`Tab ${i + 1}`}

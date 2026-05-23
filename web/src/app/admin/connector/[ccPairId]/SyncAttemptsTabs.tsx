@@ -90,7 +90,7 @@ export function SyncAttemptsTabs({
       value={tab}
       onValueChange={(value) => setTab(value as SyncAttemptsTab)}
     >
-      <Tabs.List variant="contained">
+      <Tabs.List>
         <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
           Document Permission Sync

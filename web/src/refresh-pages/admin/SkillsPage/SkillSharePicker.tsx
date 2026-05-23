@@ -132,8 +132,8 @@ export default function SkillSharePicker({
           )}
         </Tabs.Content>
 
-        <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-          <Section gap={1} alignItems="stretch">
+        <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+          <Section gap={1} alignItems="stretch" padding={0.5}>
             <InputHorizontal
               title="Publish This Skill"
               description="Make this skill available to everyone in your organization."

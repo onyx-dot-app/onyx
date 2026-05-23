@@ -41,9 +41,8 @@ export const ParallelStreamingHeader = React.memo(
     );
 
     return (
-      <Tabs value={activeTab} onValueChange={onTabChange}>
+      <Tabs value={activeTab} onValueChange={onTabChange} variant="pill">
         <Tabs.List
-          variant="pill"
           enableScrollArrows
           rightContent={
             collapsible ? (

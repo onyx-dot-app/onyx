@@ -3,7 +3,7 @@
 import "@opal/components/tabs/styles.css";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { mergeRefs, cn } from "@opal/utils";
+import { mergeRefs } from "@opal/utils";
 import { type IconProps, type WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { Tooltip, Text, Button } from "@opal/components";
@@ -18,26 +18,26 @@ import {
    TABS ROOT
    ============================================================================= */
 
-/**
- * Tabs Root — container for tab navigation and content.
- * Supports both controlled (`value` + `onValueChange`) and uncontrolled
- * (`defaultValue`) modes.
- *
- * @example
- * <Tabs defaultValue="tab1">
- *   <Tabs.List variant="pill">
- *     <Tabs.Trigger value="tab1">Overview</Tabs.Trigger>
- *     <Tabs.Trigger value="tab2">Details</Tabs.Trigger>
- *   </Tabs.List>
- *   <Tabs.Content value="tab1">Overview content</Tabs.Content>
- *   <Tabs.Content value="tab2">Details content</Tabs.Content>
- * </Tabs>
- */
-type TabsRootProps = WithoutStyles<
+interface TabsRootProps extends WithoutStyles<
   React.ComponentProps<typeof TabsPrimitive.Root>
->;
-function TabsRoot({ ref, ...props }: TabsRootProps) {
-  return <TabsPrimitive.Root ref={ref} className="w-full" {...props} />;
+> {
+  /**
+   * Visual variant applied to the whole tab group.
+   *
+   * - `contained` (default): equal-width grid tabs on a tinted background.
+   * - `pill`: content-width tabs with a sliding underline indicator.
+   * - `underline`: like pill but without the filled active state.
+   */
+  variant?: "contained" | "pill" | "underline";
+}
+
+function TabsRoot({ variant = "contained", ...props }: TabsRootProps) {
+  const contextValue = useMemo(() => ({ variant }), [variant]);
+  return (
+    <TabsContext.Provider value={contextValue}>
+      <TabsPrimitive.Root className="w-full" {...props} />
+    </TabsContext.Provider>
+  );
 }
 
 /* =============================================================================
@@ -47,14 +47,6 @@ function TabsRoot({ ref, ...props }: TabsRootProps) {
 interface TabsListProps extends WithoutStyles<
   React.ComponentProps<typeof TabsPrimitive.List>
 > {
-  /**
-   * Visual variant of the tab list.
-   *
-   * - `contained` (default): equal-width grid tabs on a tinted background.
-   * - `pill`: content-width tabs with a sliding underline indicator.
-   * - `underline`: like pill but without the filled active state.
-   */
-  variant?: "contained" | "pill" | "underline";
   /** Content pinned to the right of the list. Only visible on pill/underline. */
   rightContent?: React.ReactNode;
   /** Show scroll arrows when tabs overflow (pill/underline only). @default false */
@@ -63,7 +55,6 @@ interface TabsListProps extends WithoutStyles<
 
 function TabsList({
   ref,
-  variant = "contained",
   rightContent,
   enableScrollArrows = false,
   children,
@@ -74,6 +65,7 @@ function TabsList({
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightContentRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
+  const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
   const { style: indicatorStyle } = usePillIndicator(
@@ -81,7 +73,6 @@ function TabsList({
     isPill,
     enableScrollArrows ? tabsContainerRef : undefined
   );
-  const contextValue = useMemo(() => ({ variant }), [variant]);
   const {
     canScrollLeft,
     canScrollRight,
@@ -132,72 +123,70 @@ function TabsList({
       }
       {...props}
     >
-      <TabsContext.Provider value={contextValue}>
-        {isPill ? (
-          enableScrollArrows ? (
-            <div
-              ref={tabsContainerRef}
-              className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-            >
-              {children}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 pt-1">{children}</div>
-          )
-        ) : (
-          children
-        )}
-
-        {showScrollArrows && (
+      {isPill ? (
+        enableScrollArrows ? (
           <div
-            ref={scrollArrowsRef}
-            className="flex items-center gap-1 pl-2 shrink-0"
+            ref={tabsContainerRef}
+            className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            <Button
-              disabled={!canScrollLeft}
-              prominence="tertiary"
-              size="sm"
-              icon={SvgChevronLeft}
-              onClick={handleScrollLeft}
-              tooltip="Scroll tabs left"
-            />
-            <Button
-              disabled={!canScrollRight}
-              prominence="tertiary"
-              size="sm"
-              icon={SvgChevronRight}
-              onClick={handleScrollRight}
-              tooltip="Scroll tabs right"
-            />
+            {children}
           </div>
-        )}
+        ) : (
+          <div className="flex items-center gap-2 pt-1">{children}</div>
+        )
+      ) : (
+        children
+      )}
 
-        {isPill && rightContent && (
-          <div ref={rightContentRef} className="ml-auto shrink-0">
-            {rightContent}
-          </div>
-        )}
+      {showScrollArrows && (
+        <div
+          ref={scrollArrowsRef}
+          className="flex items-center gap-1 pl-2 shrink-0"
+        >
+          <Button
+            disabled={!canScrollLeft}
+            prominence="tertiary"
+            size="sm"
+            icon={SvgChevronLeft}
+            onClick={handleScrollLeft}
+            tooltip="Scroll tabs left"
+          />
+          <Button
+            disabled={!canScrollRight}
+            prominence="tertiary"
+            size="sm"
+            icon={SvgChevronRight}
+            onClick={handleScrollRight}
+            tooltip="Scroll tabs right"
+          />
+        </div>
+      )}
 
-        {isPill && (
-          <>
-            {variant !== "underline" && (
-              <div
-                className="opal-tabs-pill-baseline"
-                style={{ right: rightOffset }}
-              />
-            )}
+      {isPill && rightContent && (
+        <div ref={rightContentRef} className="ml-auto shrink-0">
+          {rightContent}
+        </div>
+      )}
+
+      {isPill && (
+        <>
+          {variant !== "underline" && (
             <div
-              className="opal-tabs-pill-indicator"
-              style={{
-                left: indicatorStyle.left,
-                width: indicatorStyle.width,
-                opacity: indicatorStyle.opacity,
-              }}
+              className="opal-tabs-pill-baseline"
+              style={{ right: rightOffset }}
             />
-          </>
-        )}
-      </TabsContext.Provider>
+          )}
+          <div
+            className="opal-tabs-pill-indicator"
+            style={{
+              left: indicatorStyle.left,
+              width: indicatorStyle.width,
+              opacity: indicatorStyle.opacity,
+            }}
+          />
+        </>
+      )}
     </TabsPrimitive.List>
   );
 }
@@ -230,8 +219,7 @@ function TabsTrigger({
   isLoading,
   ...props
 }: TabsTriggerProps) {
-  const context = useTabsContext();
-  const variant = context?.variant ?? "contained";
+  const { variant } = useTabsContext() ?? { variant: "contained" as const };
 
   const inner = (
     <>
@@ -292,35 +280,10 @@ function TabsTrigger({
 /* =============================================================================
    TABS CONTENT
    ============================================================================= */
-
-interface TabsContentProps {
-  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Content>>;
-  value: string;
-  /** Padding applied to the content area in rem units. @default 0 */
-  padding?: number;
-  children?: React.ReactNode;
-  className?: string;
-}
-
-function TabsContent({
-  ref,
-  children,
-  value,
-  className,
-  padding = 0,
-}: TabsContentProps) {
-  return (
-    <TabsPrimitive.Content
-      ref={ref}
-      value={value}
-      className={cn(
-        "pt-4 focus:outline-hidden focus:border-theme-primary-05 w-full",
-        className
-      )}
-    >
-      <div style={{ padding: `${padding}rem` }}>{children}</div>
-    </TabsPrimitive.Content>
-  );
+function TabsContent(
+  props: WithoutStyles<React.ComponentProps<typeof TabsPrimitive.Content>>
+) {
+  return <TabsPrimitive.Content {...props} className="w-full" />;
 }
 
 /* =============================================================================
@@ -333,10 +296,4 @@ const Tabs = Object.assign(TabsRoot, {
   Content: TabsContent,
 });
 
-export {
-  Tabs,
-  type TabsRootProps,
-  type TabsListProps,
-  type TabsTriggerProps,
-  type TabsContentProps,
-};
+export { Tabs, type TabsRootProps, type TabsListProps, type TabsTriggerProps };

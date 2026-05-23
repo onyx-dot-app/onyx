@@ -105,7 +105,7 @@ function OllamaModalInternals({
             </Tabs.Trigger>
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
-          <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
+          <Tabs.Content value={Tab.TAB_SELF_HOSTED}>
             <InputVertical
               withLabel="api_base"
               title="API Base URL"

@@ -321,8 +321,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               )}
             </Tabs.Content>
 
-            <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-              <Section gap={1} alignItems="stretch">
+            <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+              <Section gap={1} alignItems="stretch" padding={0.5}>
                 <InputHorizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."

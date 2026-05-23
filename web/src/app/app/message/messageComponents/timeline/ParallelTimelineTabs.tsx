@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "../interfaces";
@@ -14,9 +14,8 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-import { Tabs } from "@opal/components";
+import { Button, Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
@@ -92,7 +91,7 @@ export function ParallelTimelineTabs({
     isLastTurnGroup && (!shouldShowResults || !hasActivePackets);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} variant="pill">
       <div className="flex flex-col w-full">
         <TimelineRow
           railVariant="rail"
@@ -125,7 +124,6 @@ export function ParallelTimelineTabs({
               onMouseLeave={handleHeaderLeave}
             >
               <Tabs.List
-                variant="pill"
                 enableScrollArrows
                 rightContent={
                   <Button
