@@ -3,10 +3,9 @@
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@opal/utils";
-import { Divider } from "@opal/components/divider/components";
-import { ShadowDiv } from "@opal/components/shadow-div/components";
+import { Divider, ShadowDiv } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
-import { Section } from "@opal/layouts/general/components";
+import { Section } from "@opal/layouts";
 
 /**
  * Popover Root Component
