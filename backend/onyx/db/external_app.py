@@ -1,17 +1,22 @@
 import re
 from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import Skill
+from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,11 +106,9 @@ def get_user_credentials_by_app_id(
 
 def create_external_app(
     db_session: Session,
-    slug: str,
+    *,
     name: str,
     description: str,
-    bundle_file_id: str,
-    bundle_sha256: str,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
@@ -119,27 +122,53 @@ def create_external_app(
     (name/description) and lifecycle (enabled); the external_app row owns
     gateway state (auth_template, upstream patterns, org creds).
 
-    `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision
-    (before anything is committed).
+    The skill row's *shape* is derived from ``app_type``:
+
+    - A built-in provider (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) gets a built-in
+      skill row (``built_in_skill_id`` set, ``slug`` == that id) so it delivers
+      its bundled on-disk content through the same path as a seeded built-in.
+      Slug uniqueness means one instance per provider per tenant — a duplicate
+      raises ``OnyxError(DUPLICATE_RESOURCE)``.
+    - A ``CUSTOM`` app gets a custom (bundle-backed) skill row with a fresh
+      slug, so multiple instances can coexist.
+
+    Deferred import: ``db.skill`` imports ``is_user_authenticated_for_app`` from
+    this module to filter listings, so the dependency only flows one way at
+    module-load time.
     """
-    # Deferred import: `db.skill` imports `is_user_authenticated_for_app`
-    # from this module to filter listings, so the dependency only flows
-    # one way at module-load time.
+    from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
 
-    skill = create_skill__no_commit(
-        slug=slug,
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=bundle_sha256,
-        is_public=is_public,
-        author_user_id=author_user_id,
-        db_session=db_session,
-    )
-    # `create_skill` hardcodes enabled=True; honour the caller's intent.
-    if not enabled:
-        skill.enabled = False
+    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
+    if built_in_skill_id is not None:
+        skill = create_built_in_skill_row__no_commit(
+            built_in_skill_id=built_in_skill_id,
+            name=name,
+            description=description,
+            is_public=is_public,
+            enabled=enabled,
+            author_user_id=author_user_id,
+            db_session=db_session,
+        )
+    else:
+        # CUSTOM: fresh slug so multiple instances don't collide. The bundle is
+        # intentionally empty for now — custom-app bundle rendering is a
+        # separate workstream.
+        slug = f"{app_type.value.lower()}-{uuid4().hex[:8]}"
+        skill = create_skill__no_commit(
+            slug=slug,
+            name=name,
+            description=description,
+            bundle_file_id="",
+            bundle_sha256="",
+            is_public=is_public,
+            author_user_id=author_user_id,
+            db_session=db_session,
+        )
+        # `create_skill` hardcodes enabled=True; honour the caller's intent.
+        if not enabled:
+            skill.enabled = False
+
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
@@ -150,6 +179,50 @@ def create_external_app(
     db_session.add(app)
     db_session.commit()
     return app
+
+
+def _rebind_skill_for_app_type__no_commit(
+    skill: Skill,
+    app_type: ExternalAppType,
+    db_session: Session,
+) -> None:
+    """Keep the linked skill's definition source in lockstep with the app's
+    provider type after an update. A built-in provider type binds the row to
+    that provider's built-in content (``built_in_skill_id`` + ``slug`` + NULL
+    bundle); ``CUSTOM`` reverts it to a custom (bundle-backed) row. No-op when
+    the row already matches.
+
+    Raises ``OnyxError(DUPLICATE_RESOURCE)`` if rebinding would collide with an
+    existing row for the same provider in this tenant.
+    """
+    target_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
+    if target_id is not None:
+        if skill.built_in_skill_id == target_id:
+            return
+        skill.built_in_skill_id = target_id
+        skill.slug = target_id
+        skill.bundle_file_id = None
+        skill.bundle_sha256 = None
+    else:
+        if skill.built_in_skill_id is None:
+            return
+        skill.built_in_skill_id = None
+        # Custom rows satisfy the XOR check constraint via a (currently empty)
+        # bundle rather than a built-in id.
+        skill.bundle_file_id = ""
+        skill.bundle_sha256 = ""
+
+    from onyx.db.skill import SKILL_SLUG_UNIQUE_CONSTRAINT
+
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
+            raise OnyxError(
+                OnyxErrorCode.DUPLICATE_RESOURCE,
+                f"A skill with slug '{skill.slug}' already exists.",
+            ) from e
+        raise
 
 
 def update_external_app(
@@ -190,6 +263,10 @@ def update_external_app(
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
+
+    # Provider type drives which skill content is delivered, so keep the
+    # backing skill row's definition source aligned when app_type changes.
+    _rebind_skill_for_app_type__no_commit(app.skill, app_type, db_session)
 
     db_session.commit()
     return app

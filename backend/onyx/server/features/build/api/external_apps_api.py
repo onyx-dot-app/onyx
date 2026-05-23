@@ -1,5 +1,3 @@
-import uuid
-
 from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -99,20 +97,14 @@ def upsert_external_app(
             organization_credentials=request.organization_credentials,
         )
     else:
-        # Skill identity is server-derived: a fresh slug per instance
-        # so multiple connections of the same provider don't collide;
-        # default-public so every org user sees it once it's connected.
-        # The bundle is intentionally empty for now — we'll attach the
-        # provider's skill_bundles/<provider>/ blob when the rendering
-        # path lands.
-        slug = f"{request.app_type.value.lower()}-{uuid.uuid4().hex[:8]}"
+        # Skill identity is server-derived from app_type: built-in providers
+        # bind to their built-in skill content (and slug), CUSTOM apps get a
+        # fresh per-instance slug + empty bundle. Default-public so every org
+        # user sees it once it's connected (then gated per-user on credentials).
         app = create_external_app(
             db_session=db_session,
-            slug=slug,
             name=request.name,
             description=request.description,
-            bundle_file_id="",
-            bundle_sha256="",
             enabled=request.enabled,
             is_public=True,
             app_type=request.app_type,

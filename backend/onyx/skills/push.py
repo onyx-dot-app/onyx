@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills_for_user
+from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
@@ -105,7 +105,13 @@ def _assemble_fileset(
 
     Built-in rows are rendered from disk; custom rows are unpacked from
     their FileStore bundle. A row whose ``built_in_skill_id`` no longer
-    matches a codified definition is skipped with a warning."""
+    matches a codified definition is skipped with a warning.
+
+    External-app skills are *not* a special case here: a connected provider's
+    row carries its ``built_in_skill_id`` (e.g. ``slack``) like any other
+    built-in, so it renders straight from disk. Which external-app rows reach
+    this point is decided upstream by ``list_skills_for_sandbox_injection``
+    (enabled + per-user credential gate)."""
     files: FileSet = {}
     file_store = get_default_file_store()
 
@@ -129,14 +135,16 @@ def _assemble_fileset(
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_skills_for_user(user=user, db_session=db_session)
+    """Return a flat ``{path: bytes}`` map of every skill delivered into the
+    user's sandbox — regular skills they can see plus the external-app skills
+    they've connected and authenticated for."""
+    skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     return _assemble_fileset(skills, user, db_session)
 
 
 def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
     """Return (skills_section, fileset) sharing one set of DB reads."""
-    skills = list_skills_for_user(user=user, db_session=db_session)
+    skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     section = build_skills_section_from_data(skills)
     files = _assemble_fileset(skills, user, db_session)
     return section, files

@@ -1,11 +1,21 @@
 """Codified built-in skill definitions (runtime behavior only).
 
 ``BUILT_IN_SKILLS`` defines built-in behavior (``source_dir``,
-``has_template``, ``is_available``). The ``skill`` table *rows* are owned
-by Alembic migrations — adding/changing a built-in requires a migration.
+``has_template``, ``is_available``) for every built-in, regardless of how its
+``skill`` table *row* comes to exist:
 
-Removing an entry leaves orphan rows: runtime skips them (with a warning),
-but a retiring migration should delete them.
+- **Seeded built-ins** (``pptx``, ``image-generation``, ``company-search``):
+  their rows are owned by Alembic migrations — adding/changing one requires a
+  migration. Removing an entry leaves orphan rows: runtime skips them (with a
+  warning), but a retiring migration should delete them.
+
+- **External-app built-ins** (``slack``, ``google-calendar``, ``linear``):
+  *not* seeded. A row is created on demand when an admin connects the app
+  (``onyx.db.external_app.create_external_app``), with ``built_in_skill_id``
+  set so it renders through the exact same disk-backed path as a seeded
+  built-in. ``EXTERNAL_APP_BUILT_IN_SKILL_IDS`` maps each provider's
+  ``ExternalAppType`` to its built-in id (also the slug + on-disk dir). Per-user
+  availability is gated on credentials by the sandbox-injection query, not here.
 """
 
 import re
@@ -19,6 +29,7 @@ from pydantic import ConfigDict
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ExternalAppType
 from onyx.server.features.build.configs import SKILLS_TEMPLATE_PATH
 
 # Slug grammar shared with custom bundle slugs (bundle.py imports this).
@@ -60,6 +71,30 @@ PPTX = _def("pptx")
 IMAGE_GENERATION = _def("image-generation")
 COMPANY_SEARCH = _def("company-search")
 
+# External-app providers that ship built-in skill content. Rows are created on
+# demand by ``create_external_app`` (never seeded), so these definitions exist
+# purely so the push path can render their on-disk content like any built-in.
+GOOGLE_CALENDAR = _def("google-calendar")
+SLACK = _def("slack")
+LINEAR = _def("linear")
+
 BUILT_IN_SKILLS: dict[str, BuiltInSkillDefinition] = {
-    d.built_in_skill_id: d for d in (PPTX, IMAGE_GENERATION, COMPANY_SEARCH)
+    d.built_in_skill_id: d
+    for d in (
+        PPTX,
+        IMAGE_GENERATION,
+        COMPANY_SEARCH,
+        GOOGLE_CALENDAR,
+        SLACK,
+        LINEAR,
+    )
+}
+
+# Maps an external-app provider's ``ExternalAppType`` to its built-in skill id
+# (== slug == on-disk dir). Only providers that ship bundled skill content
+# appear here; ``CUSTOM`` apps have none and stay custom (bundle-backed) rows.
+EXTERNAL_APP_BUILT_IN_SKILL_IDS: dict[ExternalAppType, str] = {
+    ExternalAppType.GOOGLE_CALENDAR: GOOGLE_CALENDAR.built_in_skill_id,
+    ExternalAppType.SLACK: SLACK.built_in_skill_id,
+    ExternalAppType.LINEAR: LINEAR.built_in_skill_id,
 }

@@ -210,6 +210,7 @@ def list_skills_for_sandbox_injection(
         .order_by(Skill.name)
     )
     stmt = _add_user_visibility_filter(stmt, user)
+    stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return list(db_session.scalars(stmt))
 
 
@@ -259,6 +260,59 @@ def create_skill__no_commit(
             raise OnyxError(
                 OnyxErrorCode.DUPLICATE_RESOURCE,
                 f"A skill with slug '{slug}' already exists.",
+            ) from e
+        raise
+    return skill
+
+
+def create_built_in_skill_row__no_commit(
+    *,
+    built_in_skill_id: str,
+    name: str,
+    description: str,
+    is_public: bool,
+    enabled: bool,
+    author_user_id: UUID | None = None,
+    db_session: Session,
+) -> Skill:
+    """Create a built-in-style ``Skill`` row: ``built_in_skill_id`` set,
+    ``slug == built_in_skill_id`` (the stable on-disk dir name), bundle fields
+    NULL (per the XOR check constraint). Used for external-app providers, whose
+    rows are created on demand rather than seeded.
+
+    Because the slug is the (globally unique) built-in id, a tenant can hold at
+    most one row per provider — a second attempt raises
+    ``OnyxError(DUPLICATE_RESOURCE)``, which is the desired "connect Slack once"
+    behaviour.
+    """
+    existing = db_session.scalars(
+        select(Skill.id).where(Skill.slug == built_in_skill_id)
+    ).first()
+    if existing is not None:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"A skill with slug '{built_in_skill_id}' already exists.",
+        )
+
+    skill = Skill(
+        slug=built_in_skill_id,
+        name=name,
+        description=description,
+        built_in_skill_id=built_in_skill_id,
+        bundle_file_id=None,
+        bundle_sha256=None,
+        is_public=is_public,
+        author_user_id=author_user_id,
+        enabled=enabled,
+    )
+    db_session.add(skill)
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
+            raise OnyxError(
+                OnyxErrorCode.DUPLICATE_RESOURCE,
+                f"A skill with slug '{built_in_skill_id}' already exists.",
             ) from e
         raise
     return skill
