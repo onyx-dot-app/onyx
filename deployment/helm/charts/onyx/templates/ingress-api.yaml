@@ -13,6 +13,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ .Values.nginx.timeouts.send }}"
     nginx.ingress.kubernetes.io/proxy-body-size: "5G"
     cert-manager.io/cluster-issuer: {{ include "onyx.fullname" . }}-letsencrypt
+    {{- with .Values.ingress.extraAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
@@ -28,8 +31,10 @@ spec:
                 name: {{ include "onyx.fullname" . }}-api-service
                 port:
                   number: {{ .Values.api.service.servicePort }}
+  {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
         - {{ .Values.ingress.api.host }}
       secretName: {{ include "onyx.fullname" . }}-ingress-api-tls
+  {{- end }}
 {{- end }}

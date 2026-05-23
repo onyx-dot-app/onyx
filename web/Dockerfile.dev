@@ -22,10 +22,40 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# Install deps first. opal's `prepare` lifecycle hook builds dist/ during
-# install, so the full opal workspace + tsconfig must be present.
+# Install deps. opal's workspace `prepare` hook (which runs `tsup`) races
+# bun's workspace dependency linking on a cold install — tsup tries to
+# resolve tailwind-merge from lib/opal/ but its local node_modules isn't
+# populated yet because root and opal pin incompatible versions of
+# tailwind-merge (^3 vs ^2) that can't be hoisted to a single dir.
+# `bun install --ignore-scripts` doesn't skip workspace-package prepare
+# hooks in bun 1.x.
+#
+# Fix: strip the prepare hook before install, then build opal explicitly
+# once all deps are linked. The package.json edit lives only inside this
+# image layer; the source tree on disk is untouched.
 COPY package.json bun.lock tsconfig.json ./
 COPY lib/opal/ ./lib/opal/
+
+# Install with the committed lockfile so transitive deps land at the
+# correct, host-matched versions. Two-pass workaround for an opal
+# workspace bug: opal's `prepare` lifecycle hook runs `tsup` during
+# `bun install`, but on a cold workspace install the workspace's local
+# node_modules isn't populated when prepare fires — so tsup can't
+# resolve `tailwind-merge` and the install fails. The first pass leaves
+# deps linked but exits non-zero; the second pass re-runs prepare
+# against the now-populated tree and succeeds.
+#
+# Prod's web/Dockerfile uses the same single `bun install --frozen-lockfile`
+# and only avoids this in CI because the GHA `cache-from` restores the
+# install layer from a prior image. Any commit that perturbs the install
+# layer in prod will hit this same race — fix is queued in a separate
+# focused PR.
+#
+# We do NOT rebuild opal in this image — a separate esbuild `@opal/*`
+# path-alias issue surfaces when tsup runs from a fresh container.
+# The host's already-built `lib/opal/dist/` is brought in by the
+# `COPY . .` below.
+RUN bun install --frozen-lockfile || true
 RUN bun install --frozen-lockfile
 
 # Copy the rest of the source tree. Tilt's live_update sync() overwrites

@@ -91,10 +91,34 @@ setup at ~10 GB instead of ~30 GB.
 brew bundle   # repo-root Brewfile
 ```
 
-Installs `k3d`, `tilt`, `kubectl`, `helm`, `k9s`, `stern`, `jq`.
+Installs `k3d`, `tilt`, `kubectl`, `helm`, `k9s`, `stern`, `jq`, `direnv`.
 
 Docker Desktop should have at least **6 CPU / 12 GB RAM** allocated (more if
 you plan to run > 2 worktrees concurrently).
+
+### 1a. Enable direnv (one-time)
+
+The repo's `.envrc` scopes `KUBECONFIG` to the local k3d cluster so naked
+`kubectl` / `helm` from inside the repo can't accidentally hit prod or
+staging. Hook direnv into your shell once:
+
+```bash
+# zsh
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
+
+# bash
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+```
+
+Then, in this checkout:
+
+```bash
+direnv allow .
+```
+
+After that, every shell entering the repo gets `KUBECONFIG=~/.kube/onyx-local.yaml`
+automatically. Outside the repo, your usual contexts (prod, staging) are
+unaffected.
 
 ### 2. Bring up everything
 

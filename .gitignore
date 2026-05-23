@@ -67,3 +67,7 @@ plans/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+
+# direnv local overrides (the committed .envrc is checked in)
+.envrc.local
+.direnv/

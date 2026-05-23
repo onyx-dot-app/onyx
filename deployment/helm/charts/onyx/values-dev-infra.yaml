@@ -128,6 +128,34 @@ nginx:
     # localhost:13000 -> this Service.
     service:
       type: ClusterIP
+
+    # Override the chart's default `containerPort.http: 1024` back to 80.
+    # The chart's default ships a custom server block at :1024 with hard-
+    # coded `proxy_pass http://<release>-webserver:3000` upstreams, used
+    # by the docker-compose deploy as a single-host reverse proxy. In our
+    # multi-namespace k8s topology that path is wrong — the per-worktree
+    # Service lives in a different release than the nginx pod, and the
+    # nginx config in the infra release would hardcode the WRONG upstream
+    # (pointing at the zero-replica `onyx-infra-webserver`). Using the
+    # standard ingress-nginx port 80 makes nginx serve the cluster's
+    # Ingress resources (each worktree's `onyx-<slug>-ingress-*`) via the
+    # normal Lua-balancer flow.
+    containerPort:
+      http: 80
+
+    # Drop the chart's reverse-proxy http-snippet for the same reason:
+    # it injects a `listen 1024; proxy_pass http://web_server;` server
+    # block whose `web_server` upstream is bound to onyx-infra at config
+    # load time. Local-cluster routes through Ingress resources instead.
+    config:
+      main-snippet: ""
+      http-snippet: ""
+
+    # Unmount the custom-snippets ConfigMap volume so nginx can't pick up
+    # stale upstream defs on a future reload either.
+    extraVolumes: []
+    extraVolumeMounts: []
+
     ingressClassResource:
       name: nginx
       default: true

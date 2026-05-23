@@ -125,17 +125,24 @@ api:
   replicaCount: 1
   autoscaling:
     enabled: false
-  # debugpy wrap: api becomes
-  #   alembic upgrade head && python -m debugpy --listen 0.0.0.0:5678 -m uvicorn ...
-  # so VSCode/PyCharm can attach via the Tilt-forwarded port. The `--listen`
-  # form does NOT use `--wait-for-client`, so the pod starts normally even
-  # without a debugger attached. The chart's api.command override picks this
-  # up; the production entrypoint runs when command is unset.
-  # See docs/dev/local-cluster.md.
+  # uvicorn --reload keeps the parent process alive across reloads —
+  # imports stay cached, only the worker child re-execs on file change.
+  # That drops the cold-restart Python import bill (3-5s) off every save.
+  #
+  # Debugpy is opt-in via the ENABLE_DEBUGPY env var below. The listener
+  # is started inside the uvicorn worker by `onyx.dev_debugpy.maybe_listen`
+  # called from `onyx/main.py` — VSCode attaches directly via the
+  # Tilt-forwarded port. The new worker on each reload re-listens; the
+  # VSCode attach config has `restart: true` to auto-reattach.
   command:
     - "/bin/sh"
     - "-c"
-    - "alembic upgrade head && echo 'Starting Onyx Api Server' && exec python -m debugpy --listen 0.0.0.0:5678 -m uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    - "alembic upgrade head && echo 'Starting Onyx Api Server' && exec uvicorn onyx.main:app --host 0.0.0.0 --port 8080 --reload --reload-dir /app/onyx --reload-dir /app/ee --reload-dir /app/shared_configs"
+  extraEnv:
+    - name: ENABLE_DEBUGPY
+      value: "true"
+    - name: DEBUGPY_PORT
+      value: "5678"
   resources:
     requests:
       cpu: 100m
@@ -150,106 +157,139 @@ webserver:
     enabled: false
   # Override the production `next start` entrypoint with `bun dev` for HMR.
   # Tilt syncs `web/` into /app inside the dev image (web/Dockerfile.dev).
-  # `bun install` is a no-op when the lockfile + node_modules are already
-  # baked into the image; it re-runs only if Tilt syncs a new package.json.
+  # The image's bake-time install already populated node_modules; at runtime
+  # we just kick off the Next.js dev server. No re-install — Tilt sync()s
+  # only source files, so package.json / lockfile state matches the image.
   command:
     - "/bin/sh"
     - "-c"
-    - "bun install && bun run dev"
+    - "bun run dev"
   workingDir: "/app"
+  # `next dev` with Turbopack on initial compile of the full Onyx web tree
+  # peaks around 3 GiB. 4 GiB limit gives headroom against OOMKill during
+  # the first cold start.
   resources:
     requests:
       cpu: 200m
-      memory: 512Mi
+      memory: 1Gi
     limits:
       cpu: 2000m
-      memory: 2Gi
+      memory: 4Gi
 
-# Each celery worker's command is overridden to wrap the celery CLI with
-# debugpy, so VSCode/PyCharm attach configs (see .vscode/launch.json) can
-# hit breakpoints in the synced source. Tilt forwards each port host:pod.
-# Ports allocated contiguously off 5678 for muscle-memory.
+# Each celery worker runs through the watchfiles-based
+# dev_celery_reload.py helper for hot-reload on source change. Debugpy is
+# opt-in via ENABLE_DEBUGPY + DEBUGPY_PORT env vars below; the listener
+# starts inside the celery worker via the `celeryd_init` signal handler
+# in `onyx/background/celery/apps/app_base.py`. VSCode attaches via the
+# Tilt-forwarded port (configs in .vscode/launch.json).
 
 celery_beat:
   replicaCount: 1
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.beat", "beat"]
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.beat", "beat"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5679"}
 
 celery_worker_primary:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5680", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.primary", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.primary", "worker",
      "--hostname=primary@%n", "-Q", "celery,periodic_tasks"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5680"}
 
 celery_worker_light:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5681", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.light", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.light", "worker",
      "--hostname=light@%n", "-Q",
      "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5681"}
 
 celery_worker_heavy:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5682", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.heavy", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.heavy", "worker",
      "--hostname=heavy@%n", "-Q",
      "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5682"}
 
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5683", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.docfetching", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.docfetching", "worker",
      "--pool=threads", "--concurrency=2", "--prefetch-multiplier=1",
      "--hostname=docfetching@%n", "-Q", "connector_doc_fetching"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5683"}
 
 celery_worker_docprocessing:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5684", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.docprocessing", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.docprocessing", "worker",
      "--pool=threads", "--concurrency=6", "--prefetch-multiplier=1",
      "--hostname=docprocessing@%n", "-Q", "docprocessing"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5684"}
 
 celery_worker_monitoring:
   replicaCount: 1
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5685", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.monitoring", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.monitoring", "worker",
      "--hostname=monitoring@%n", "-Q", "monitoring"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5685"}
 
 celery_worker_user_file_processing:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5686", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.user_file_processing", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.user_file_processing", "worker",
      "--hostname=user-file-processing@%n", "-Q",
      "user_file_processing,user_file_project_sync,user_file_delete"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5686"}
 
 celery_worker_scheduled_tasks:
   replicaCount: 1
   autoscaling:
     enabled: false
   command:
-    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5687", "-m",
-     "celery", "-A", "onyx.background.celery.versioned_apps.scheduled_tasks", "worker",
+    ["python", "/app/scripts/dev_celery_reload.py",
+     "-A", "onyx.background.celery.versioned_apps.scheduled_tasks", "worker",
      "--hostname=scheduled_tasks@%n", "-Q", "scheduled_tasks"]
+  extraEnv:
+    - {name: ENABLE_DEBUGPY, value: "true"}
+    - {name: DEBUGPY_PORT, value: "5687"}
 
 # Bots / mcpServer / model servers off in the worktree namespace
 # (model servers are shared from onyx-infra; see configMap hosts above).
@@ -281,6 +321,14 @@ monitoring:
 ingress:
   enabled: true
   className: nginx
+  # Disable TLS in dev — no real cert; serve plain HTTP. The annotations
+  # also turn off ingress-nginx's force-HTTPS redirect so `curl http://`
+  # and the browser work without trust-store gymnastics.
+  tls:
+    enabled: false
+  extraAnnotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
   api:
     host: "PLACEHOLDER-set-by-worktree-up"
   webserver:

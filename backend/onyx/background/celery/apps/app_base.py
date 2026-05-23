@@ -244,6 +244,13 @@ def on_celeryd_init(
 ) -> None:
     """The first signal sent on celery worker startup"""
 
+    # Opt-in debugpy listener. No-op when ENABLE_DEBUGPY is unset and on
+    # prod images that don't ship debugpy. Called here (in celeryd_init,
+    # the first signal) so the port is open before any task starts.
+    from onyx.dev_debugpy import maybe_listen as _maybe_start_debugpy
+
+    _maybe_start_debugpy()
+
     # NOTE(rkuo): start method "fork" is unsafe and we really need it to be "spawn"
     # But something is blocking set_start_method from working in the cloud unless
     # force=True. so we use force=True as a fallback.

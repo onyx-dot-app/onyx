@@ -8,7 +8,9 @@
 # What this does:
 #   1. Builds the onyx-backend image (with debugpy) and pushes to the
 #      local k3d registry. live_update syncs backend/onyx and backend/ee
-#      into the running pods; restart_container on each sync.
+#      into the running pods. The chart's command override runs each
+#      backend process under backend/scripts/dev_{api,celery}_reload.py,
+#      which uses watchfiles to re-exec the inner process on source change.
 #   2. Builds the onyx-web-dev image. live_update syncs web/ into /app;
 #      bun's `next dev` HMR reloads in the browser (~sub-second).
 #   3. Renders the onyx Helm chart into onyx-<slug>, pointing at the
@@ -31,8 +33,8 @@ VALUES_FILE = os.getenv('WORKTREE_VALUES_FILE')
 
 if not SLUG or not APP_NS or not APP_RELEASE or not INGRESS_HOST or not VALUES_FILE:
     fail(
-        'Tiltfile must be launched by deployment/helm/dev/dev.sh.\n'
-        'Required env vars: WORKTREE_SLUG, WORKTREE_APP_NS, WORKTREE_APP_RELEASE,\n'
+        'Tiltfile must be launched by deployment/helm/dev/dev.sh.\n' +
+        'Required env vars: WORKTREE_SLUG, WORKTREE_APP_NS, WORKTREE_APP_RELEASE,\n' +
         'WORKTREE_INGRESS_HOST, WORKTREE_VALUES_FILE.'
     )
 
@@ -73,13 +75,19 @@ docker_build(
         'ENABLE_CRAFT': 'true',
         'INSTALL_DEBUGPY': 'true',
     },
+    # Only source-tree dirs go in live_update. Config-shaped files
+    # (`requirements/*.txt`, `Dockerfile`, `alembic.ini`) intentionally
+    # do NOT — Tilt's live_update syncs into already-running pods but
+    # does not refresh the image, so a subsequent pod restart (helm
+    # upgrade, OOM, manual delete) would boot from the stale image and
+    # mask dev edits. Files outside live_update trigger image rebuilds
+    # on change, keeping image + running pods consistent.
     live_update=[
         sync('./backend/onyx', '/app/onyx'),
         sync('./backend/ee', '/app/ee'),
         sync('./backend/scripts', '/app/scripts'),
         sync('./backend/shared_configs', '/app/shared_configs'),
         sync('./backend/alembic', '/app/alembic'),
-        restart_container(),
     ],
 )
 
@@ -89,15 +97,19 @@ docker_build(
     'onyxdotapp/onyx-web-dev',
     context='./web',
     dockerfile='./web/Dockerfile.dev',
+    # Only source-tree paths go in live_update. Config-shaped files
+    # (`next.config.js`, `package.json`, `bun.lock`, `tsconfig.json`,
+    # tailwind/postcss config) intentionally do NOT live here — Tilt's
+    # live_update syncs into already-running pods but does not refresh
+    # the image. A subsequent pod restart (helm upgrade, OOM, manual
+    # delete) would boot the new pod from the stale image, masking dev
+    # edits. Files outside live_update trigger image rebuilds on change,
+    # so image + running pods stay consistent.
     live_update=[
         sync('./web/src', '/app/src'),
         sync('./web/public', '/app/public'),
         sync('./web/lib', '/app/lib'),
         sync('./web/types', '/app/types'),
-        sync('./web/next.config.js', '/app/next.config.js'),
-        sync('./web/tailwind.config.js', '/app/tailwind.config.js'),
-        sync('./web/postcss.config.js', '/app/postcss.config.js'),
-        sync('./web/tsconfig.json', '/app/tsconfig.json'),
     ],
 )
 
@@ -124,6 +136,7 @@ helm_resource(
         ],
         ('webserver.image.repository', 'webserver.image.tag'),
     ],
+    labels=['app'],
 )
 
 # ---- 7. Port-forwards ----
@@ -135,6 +148,7 @@ local_resource(
     'pf-ingress',
     serve_cmd='kubectl --context k3d-onyx-local -n onyx-infra port-forward svc/onyx-infra-nginx-controller 13000:80',
     resource_deps=[APP_RELEASE],
+    labels=['app'],
 )
 
 # ---- 8. Debugger port-forwards ----

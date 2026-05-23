@@ -17,6 +17,12 @@ brew "kubectl"
 brew "helm"
 brew "jq"
 
+# direnv auto-loads `.envrc` at the repo root, scoping KUBECONFIG to the
+# local k3d cluster so commands from inside the repo can't accidentally
+# hit prod/staging. After install, add `eval "$(direnv hook zsh)"` (or
+# bash) to your shell rc, then `direnv allow .` once per checkout.
+brew "direnv"
+
 # Recommended log + pod-exec tools used alongside the Tilt UI.
 brew "k9s"
 brew "stern"

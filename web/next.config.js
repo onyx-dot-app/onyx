@@ -20,8 +20,14 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   output: "standalone",
   // Hosts allowed to load Next.js dev resources (e.g. HMR) cross-origin.
-  // Needed when accessing the local dev server through a tunnel like ngrok.
-  allowedDevOrigins: ["cataract-brunette-icon.ngrok-free.dev"],
+  // Needed when accessing the local dev server through a tunnel like ngrok,
+  // or via the local-cluster Tilt path (each worktree serves at
+  // `<slug>.onyx.localhost:13000` via ingress-nginx, distinct from the
+  // pod's own hostname).
+  allowedDevOrigins: [
+    "cataract-brunette-icon.ngrok-free.dev",
+    "*.onyx.localhost",
+  ],
   transpilePackages: ["@onyx-ai/opal"],
   typedRoutes: true,
   reactCompiler: true,

@@ -180,6 +180,12 @@ COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervis
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
 COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
 COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
+# Dev-only watchfiles wrapper used by the local-cluster path's chart
+# command overrides (deployment/helm/charts/onyx/values-dev-app.yaml)
+# for celery hot-reload. Inert in prod images — nothing references it
+# unless explicitly invoked. (The api uses uvicorn --reload directly,
+# no wrapper script needed.)
+COPY --chown=onyx:onyx ./scripts/dev_celery_reload.py /app/scripts/dev_celery_reload.py
 RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 
 # Put logo in assets

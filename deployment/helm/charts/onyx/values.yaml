@@ -1156,6 +1156,16 @@ codeInterpreter:
 ingress:
   enabled: false
   className: ""
+  # Gate the `tls:` section on each Ingress. Default true keeps prod
+  # behavior unchanged; the local-cluster dev path sets this to false
+  # so port-80 HTTP works without forcing HTTPS-with-self-signed-cert.
+  tls:
+    enabled: true
+  # Map of additional annotations merged into both Ingress objects.
+  # Used by the local-cluster dev path to add
+  #   nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  # so curl/browser hits over plain HTTP succeed.
+  extraAnnotations: {}
   api:
     host: onyx.local
   webserver:

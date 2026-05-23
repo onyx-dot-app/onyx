@@ -63,6 +63,12 @@ from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+
+# Opt-in debugpy listener for the local-cluster dev path. No-op when
+# ENABLE_DEBUGPY is unset, and no-op on prod images that don't ship
+# debugpy. Called at module-load time so each uvicorn `--reload` worker
+# opens the listener before binding the HTTP port. See onyx/dev_debugpy.py.
+from onyx.dev_debugpy import maybe_listen as _maybe_start_debugpy
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -172,6 +178,8 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SENTRY_DSN
 from shared_configs.configs import SENTRY_TRACES_SAMPLE_RATE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+_maybe_start_debugpy()
 
 warnings.filterwarnings(
     "ignore", category=ResourceWarning, message=r"Unclosed client session"
