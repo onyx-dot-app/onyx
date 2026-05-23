@@ -46,11 +46,6 @@
   border-color: var(--border-01);
 }
 
-.opal-input[data-variant="internal"]:focus-within:not(:active) {
-  border-color: var(--border-05);
-  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
-}
-
 .opal-input[data-variant="error"] {
   background-color: var(--background-neutral-00);
   border: 1px solid var(--status-error-05);
