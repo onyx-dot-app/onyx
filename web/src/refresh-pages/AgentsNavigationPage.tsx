@@ -7,7 +7,7 @@ import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import Tabs from "@/refresh-components/Tabs";
@@ -117,7 +117,7 @@ export default function AgentsNavigationPage() {
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                leftSearchIcon
+                searchIcon
               />
             </div>
             <div className="flex-1">

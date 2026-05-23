@@ -25,7 +25,7 @@ import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/
 import { Credential } from "@/lib/connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import SourceTile from "@/components/SourceTile";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -261,7 +261,6 @@ export default function Page() {
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
           onKeyDown={handleKeyPress}
-          className="w-96 flex-none"
         />
 
         {dedupedPopular.length > 0 && (

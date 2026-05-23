@@ -1,0 +1,81 @@
+@reference "#reference.css";
+
+/* ==========================================================================
+   InputTypeIn — styled text input.
+
+   Visual states are driven by `data-variant` on the wrapper element:
+     "primary"  — standard bordered input (default)
+     "internal" — no border, transparent background (inside popovers/panels)
+     "error"    — red border, error state
+     "disabled" — muted background, not-allowed cursor
+     "readOnly" — transparent background, light border
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Wrapper
+   -------------------------------------------------------------------------- */
+
+.opal-input {
+  @apply flex flex-row items-center justify-between flex-1 h-fit p-1.5 rounded-08 relative w-full;
+}
+
+.opal-input[data-variant="primary"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--border-01);
+}
+
+.opal-input[data-variant="primary"]:hover {
+  border-color: var(--border-02);
+}
+
+.opal-input[data-variant="primary"]:active {
+  border-color: var(--border-05);
+}
+
+.opal-input[data-variant="primary"]:focus-within:not(:active) {
+  border-color: var(--border-05);
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input[data-variant="error"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--status-error-05);
+}
+
+.opal-input[data-variant="error"]:focus-within:not(:active) {
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input[data-variant="disabled"] {
+  background-color: var(--background-neutral-03);
+  border: 1px solid transparent;
+  cursor: not-allowed;
+}
+
+.opal-input[data-variant="readOnly"] {
+  @apply bg-transparent border rounded-08;
+}
+
+/* --------------------------------------------------------------------------
+   Inner input element
+   -------------------------------------------------------------------------- */
+
+.opal-input-field {
+  @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
+  font: inherit;
+}
+
+.opal-input[data-variant="primary"] .opal-input-field,
+.opal-input[data-variant="internal"] .opal-input-field,
+.opal-input[data-variant="error"] .opal-input-field {
+  @apply text-text-04;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-field {
+  @apply text-text-02;
+}
+
+.opal-input-field::placeholder {
+  @apply !font-main-ui-muted;
+  color: var(--text-02);
+}

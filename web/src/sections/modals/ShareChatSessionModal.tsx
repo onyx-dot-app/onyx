@@ -10,7 +10,7 @@ import Modal from "@/refresh-components/Modal";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
@@ -205,9 +205,9 @@ export default function ShareChatSessionModal({
           {isShared && (
             <InputTypeIn
               aria-label="share-modal-link-input"
-              readOnly
+              variant="readOnly"
               value={shareLink}
-              rightSection={
+              rightChildren={
                 <CopyIconButton
                   getCopyText={() => shareLink}
                   tooltip="Copy link"

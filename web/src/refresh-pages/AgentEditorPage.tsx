@@ -76,7 +76,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -376,7 +376,7 @@ function MCPServerCard({
             <InputTypeIn
               placeholder="Search tools..."
               variant="internal"
-              leftSearchIcon
+              searchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />

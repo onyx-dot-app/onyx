@@ -106,7 +106,7 @@ export const WithSearchIcon: Story = {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         options={fruitOptions}
-        leftSearchIcon
+        searchIcon
       />
     );
   },

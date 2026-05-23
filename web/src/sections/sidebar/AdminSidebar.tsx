@@ -12,7 +12,7 @@ import { UserRole } from "@/lib/types";
 import { CombinedSettings, Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
 import { Divider, SidebarTab } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Spacer from "@/refresh-components/Spacer";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
@@ -254,10 +254,11 @@ function AdminSidebarInner() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            leftSearchIcon
+            searchIcon
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            clearButton
           />
         )}
       </SidebarLayouts.Header>
