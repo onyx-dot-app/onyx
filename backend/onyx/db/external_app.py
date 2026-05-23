@@ -5,15 +5,12 @@ from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
-from onyx.db.models import Skill
-from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
@@ -181,50 +178,6 @@ def create_external_app(
     return app
 
 
-def _rebind_skill_for_app_type__no_commit(
-    skill: Skill,
-    app_type: ExternalAppType,
-    db_session: Session,
-) -> None:
-    """Keep the linked skill's definition source in lockstep with the app's
-    provider type after an update. A built-in provider type binds the row to
-    that provider's built-in content (``built_in_skill_id`` + ``slug`` + NULL
-    bundle); ``CUSTOM`` reverts it to a custom (bundle-backed) row. No-op when
-    the row already matches.
-
-    Raises ``OnyxError(DUPLICATE_RESOURCE)`` if rebinding would collide with an
-    existing row for the same provider in this tenant.
-    """
-    target_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
-    if target_id is not None:
-        if skill.built_in_skill_id == target_id:
-            return
-        skill.built_in_skill_id = target_id
-        skill.slug = target_id
-        skill.bundle_file_id = None
-        skill.bundle_sha256 = None
-    else:
-        if skill.built_in_skill_id is None:
-            return
-        skill.built_in_skill_id = None
-        # Custom rows satisfy the XOR check constraint via a (currently empty)
-        # bundle rather than a built-in id.
-        skill.bundle_file_id = ""
-        skill.bundle_sha256 = ""
-
-    from onyx.db.skill import SKILL_SLUG_UNIQUE_CONSTRAINT
-
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{skill.slug}' already exists.",
-            ) from e
-        raise
-
-
 def update_external_app(
     db_session: Session,
     external_app_id: int,
@@ -240,13 +193,16 @@ def update_external_app(
     committing both atomically.
 
     Skill-side fields: name, description, enabled.
-    External-app-side fields: app_type, upstream_url_patterns,
-    auth_template, organization_credentials.
+    External-app-side fields: upstream_url_patterns, auth_template,
+    organization_credentials.
 
-    Slug, bundle, and sharing scope are out of scope here (each has its
-    own update path in ``onyx.db.skill``).
+    ``app_type`` is immutable — it's the discriminator the OAuth dispatch
+    layer keys off and what the backing skill's definition source is bound
+    to, so it's passed for validation only. Slug, bundle, and sharing scope
+    are out of scope here (each has its own update path in ``onyx.db.skill``).
 
-    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
+    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists,
+    or ``OnyxError(INVALID_INPUT)`` if `app_type` differs from the stored value.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -255,18 +211,22 @@ def update_external_app(
             f"External app with id {external_app_id} not found.",
         )
 
+    # app_type is immutable. Changing it would silently rebind the skill's
+    # definition source
+    if app.app_type != app_type:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"app_type is immutable; cannot change from "
+            f"'{app.app_type.value}' to '{app_type.value}'.",
+        )
+
     app.skill.name = name
     app.skill.description = description
     app.skill.enabled = enabled
 
-    app.app_type = app_type
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
-
-    # Provider type drives which skill content is delivered, so keep the
-    # backing skill row's definition source aligned when app_type changes.
-    _rebind_skill_for_app_type__no_commit(app.skill, app_type, db_session)
 
     db_session.commit()
     return app
