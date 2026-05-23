@@ -13,6 +13,7 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/project"
 )
 
 // Schema represents an Alembic schema configuration.
@@ -25,7 +26,7 @@ const (
 
 // FindAlembicBinary locates the alembic binary, preferring the venv version.
 func FindAlembicBinary() (string, error) {
-	// Try to find venv alembic first
+	// Try to find venv alembic first.
 	root, err := paths.GitRoot()
 	if err == nil {
 		var venvAlembic string
@@ -40,7 +41,7 @@ func FindAlembicBinary() (string, error) {
 		}
 	}
 
-	// Fall back to system alembic
+	// Fall back to system alembic.
 	alembic, err := exec.LookPath("alembic")
 	if err != nil {
 		return "", fmt.Errorf("alembic not found. Ensure you have activated the venv or installed alembic globally")
@@ -48,12 +49,12 @@ func FindAlembicBinary() (string, error) {
 	return alembic, nil
 }
 
-// Run executes an alembic command with the given arguments.
-// It will try to run alembic locally if the database is accessible,
-// otherwise it will attempt to run via docker exec on a container
-// that has alembic installed (e.g., api_server).
+// Run executes an alembic command with the given arguments. It will try to run
+// alembic locally if the database is accessible, otherwise it will attempt to
+// run via docker exec on a container that has alembic installed (e.g.,
+// api_server).
 func Run(args []string, schema Schema) error {
-	// Check if we need to run via docker exec
+	// Check if we need to run via docker exec.
 	if shouldUseDockerExec() {
 		return runViaDockerExec(args, schema)
 	}
@@ -64,13 +65,13 @@ func Run(args []string, schema Schema) error {
 // shouldUseDockerExec determines if we should run alembic via docker exec.
 // Returns true if POSTGRES_HOST is not set and the port isn't exposed.
 func shouldUseDockerExec() bool {
-	// If POSTGRES_HOST is explicitly set, respect it
+	// If POSTGRES_HOST is explicitly set, respect it.
 	if os.Getenv("POSTGRES_HOST") != "" {
 		return false
 	}
 
-	// Check if we can find a postgres container with exposed port
-	container, err := docker.FindPostgresContainer()
+	// Check if we can find a postgres container with exposed port.
+	container, err := docker.FindPostgresContainer(project.Name())
 	if err != nil {
 		return false
 	}
@@ -90,7 +91,7 @@ func runLocally(args []string, schema Schema) error {
 		return err
 	}
 
-	// Build the full command
+	// Build the full command.
 	var cmdArgs []string
 	if schema == SchemaPrivate {
 		cmdArgs = append(cmdArgs, "-n", "schema_private")
@@ -103,18 +104,19 @@ func runLocally(args []string, schema Schema) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 
-	// Pass through POSTGRES_* environment variables
+	// Pass through POSTGRES_* environment variables.
 	cmd.Env = buildAlembicEnv()
 
 	return cmd.Run()
 }
 
-// runViaDockerExec runs alembic inside a Docker container that has network access.
+// runViaDockerExec runs alembic inside a Docker container that has network
+// access.
 func runViaDockerExec(args []string, schema Schema) error {
-	// Find a container with alembic installed (api_server)
+	// Find a container with alembic installed (api_server).
 	container, err := findAlembicContainer()
 	if err != nil {
-		// No suitable container found, give helpful error
+		// No suitable container found; give helpful error.
 		log.Errorf("PostgreSQL port 5432 is not exposed and no container with alembic found.")
 		log.Errorf("")
 		log.Errorf("Either expose the port by restarting with the dev compose file:")
@@ -127,15 +129,15 @@ func runViaDockerExec(args []string, schema Schema) error {
 
 	log.Infof("Running alembic via docker exec on container: %s", container)
 
-	// Build the alembic command
+	// Build the alembic command.
 	var alembicArgs []string
 	if schema == SchemaPrivate {
 		alembicArgs = append(alembicArgs, "-n", "schema_private")
 	}
 	alembicArgs = append(alembicArgs, args...)
 
-	// Run alembic inside the container
-	// The container should have the correct env vars and network access
+	// Run alembic inside the container.
+	// The container should have the correct env vars and network access.
 	dockerArgs := []string{"exec", "-i", container, "alembic"}
 	dockerArgs = append(dockerArgs, alembicArgs...)
 
@@ -181,7 +183,8 @@ func buildAlembicEnv() []string {
 		"POSTGRES_DB":       config.Database,
 	}
 
-	// Only add if not already set in environment (except HOST which we may have detected)
+	// Only add if not already set in environment (except HOST which we may have
+	// detected).
 	for key, value := range envVars {
 		if key == "POSTGRES_HOST" || os.Getenv(key) == "" {
 			env = append(env, fmt.Sprintf("%s=%s", key, value))
@@ -214,7 +217,7 @@ func isContainerRunning(name string) bool {
 // detectPostgresHost attempts to find a running PostgreSQL container
 // and return the host to connect to (for local execution).
 func detectPostgresHost() string {
-	container, err := docker.FindPostgresContainer()
+	container, err := docker.FindPostgresContainer(project.Name())
 	if err != nil {
 		log.Debugf("Could not find PostgreSQL container: %v", err)
 		return ""

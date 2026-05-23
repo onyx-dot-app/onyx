@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// Known container names for PostgreSQL in order of preference
-var postgresContainerNames = []string{
+// legacyPostgresContainerNames are fallback names tried after the
+// project-specific name.
+var legacyPostgresContainerNames = []string{
 	"onyx_postgres",                  // From restart_containers.sh
 	"onyx-relational_db-1",           // Docker compose default project name
 	"onyx-stack-relational_db-1",     // Docker compose with stack project name
@@ -17,18 +18,24 @@ var postgresContainerNames = []string{
 	"relational_db",                  // Service name only
 }
 
-// FindPostgresContainer finds a running PostgreSQL container.
-// It tries known container names first, then falls back to searching.
-func FindPostgresContainer() (string, error) {
-	// Try known names first
-	for _, name := range postgresContainerNames {
+// FindPostgresContainer finds a running PostgreSQL container. It tries the
+// project-specific name first, then legacy names, then falls back to searching
+// by image.
+func FindPostgresContainer(projectName string) (string, error) {
+	projectContainer := fmt.Sprintf("%s-relational_db-1", projectName)
+	if isContainerRunning(projectContainer) {
+		return projectContainer, nil
+	}
+
+	for _, name := range legacyPostgresContainerNames {
 		if isContainerRunning(name) {
 			return name, nil
 		}
 	}
 
-	// Fall back to searching for any postgres container by image name
-	// Try multiple filters since the image name may vary (postgres, postgres:15.2-alpine, etc.)
+	// Fall back to searching for any postgres container by image name. Try
+	// multiple filters since the image name may vary (postgres,
+	// postgres:15.2-alpine, etc.)
 	cmd := exec.Command("docker", "ps", "--format", "{{.Names}}\t{{.Image}}")
 	output, err := cmd.Output()
 	if err == nil {
@@ -44,7 +51,7 @@ func FindPostgresContainer() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no running PostgreSQL container found. Try one of: %s", strings.Join(postgresContainerNames, ", "))
+	return "", fmt.Errorf("no running PostgreSQL container found for project %q; try: ods compose dev", projectName)
 }
 
 // isContainerRunning checks if a container with the given name is running.
@@ -67,7 +74,8 @@ func Exec(container string, args ...string) error {
 	return cmd.Run()
 }
 
-// ExecWithEnv runs a command inside a Docker container with environment variables.
+// ExecWithEnv runs a command inside a Docker container with environment
+// variables.
 func ExecWithEnv(container string, env map[string]string, args ...string) error {
 	dockerArgs := []string{"exec", "-i"}
 	for k, v := range env {
@@ -113,10 +121,11 @@ func CopyToContainer(container, src, dst string) error {
 	return cmd.Run()
 }
 
-// GetContainerIP returns the IP address of a container.
-// It returns the first available network IP if the container has multiple networks.
+// GetContainerIP returns the IP address of a container. It returns the first
+// available network IP if the container has multiple networks.
 func GetContainerIP(container string) (string, error) {
-	// Get IPs from the container's network settings (space-separated if multiple)
+	// Get IPs from the container's network settings (space-separated if
+	// multiple).
 	cmd := exec.Command("docker", "inspect", "-f",
 		"{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", container)
 	output, err := cmd.Output()
