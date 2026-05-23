@@ -119,7 +119,10 @@ export function ParallelTimelineTabs({
             <TimelineTopSpacer variant={topSpacerVariant} />
 
             <div
-              className="flex items-center min-h-(--timeline-step-header-height) pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right)"
+              className={cn(
+                "flex items-center min-h-(--timeline-step-header-height) pl-(--timeline-header-padding-left) pr-(--timeline-header-padding-right) transition-colors duration-200",
+                isHover && "bg-background-tint-02"
+              )}
               onMouseEnter={handleHeaderEnter}
               onMouseLeave={handleHeaderLeave}
             >
