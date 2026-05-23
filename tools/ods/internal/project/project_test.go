@@ -6,41 +6,67 @@ import (
 	"testing"
 )
 
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("failed to find a free port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+	return port
+}
+
 func TestFindAvailablePort_returnsBaseWhenFree(t *testing.T) {
-	port, err := FindAvailablePort(59123)
+	base := freePort(t)
+	port, err := findAvailablePort(base, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if port != 59123 {
-		t.Fatalf("expected 59123, got %d", port)
+	if port != base {
+		t.Fatalf("expected %d, got %d", base, port)
 	}
 }
 
 func TestFindAvailablePort_skipsOccupiedPort(t *testing.T) {
-	ln4, err := net.Listen("tcp4", ":59200")
+	base := freePort(t)
+	ln4, err := net.Listen("tcp4", ":"+strconv.Itoa(base))
 	if err != nil {
 		t.Fatalf("failed to occupy port (ipv4): %v", err)
 	}
 	defer func() { _ = ln4.Close() }()
-	ln6, err := net.Listen("tcp6", ":59200")
-	if err != nil {
-		t.Fatalf("failed to occupy port (ipv6): %v", err)
+	if hasIPv6() {
+		ln6, err := net.Listen("tcp6", ":"+strconv.Itoa(base))
+		if err != nil {
+			t.Fatalf("failed to occupy port (ipv6): %v", err)
+		}
+		defer func() { _ = ln6.Close() }()
 	}
-	defer func() { _ = ln6.Close() }()
 
-	port, err := FindAvailablePort(59200)
+	port, err := findAvailablePort(base, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if port == 59200 {
-		t.Fatal("expected port != 59200 (occupied), but got 59200")
+	if port <= base {
+		t.Fatalf("expected port > %d (occupied), got %d", base, port)
 	}
-	if port != 59201 {
-		t.Fatalf("expected 59201, got %d", port)
+}
+
+func TestFindAvailablePort_skipsClaimedPort(t *testing.T) {
+	base := freePort(t)
+	claimed := map[int]bool{base: true}
+	port, err := findAvailablePort(base, claimed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if port <= base {
+		t.Fatalf("expected port > %d (claimed), got %d", base, port)
 	}
 }
 
 func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
+	base := freePort(t)
+
 	var listeners []net.Listener
 	defer func() {
 		for _, ln := range listeners {
@@ -48,7 +74,7 @@ func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
 		}
 	}()
 
-	base := 59700
+	v6 := hasIPv6()
 	for i := 0; i < maxPortScanRange; i++ {
 		addr := ":" + strconv.Itoa(base+i)
 		ln4, err := net.Listen("tcp4", addr)
@@ -56,14 +82,16 @@ func TestFindAvailablePort_errorWhenAllOccupied(t *testing.T) {
 			t.Fatalf("failed to occupy port %d (ipv4): %v", base+i, err)
 		}
 		listeners = append(listeners, ln4)
-		ln6, err := net.Listen("tcp6", addr)
-		if err != nil {
-			t.Fatalf("failed to occupy port %d (ipv6): %v", base+i, err)
+		if v6 {
+			ln6, err := net.Listen("tcp6", addr)
+			if err != nil {
+				t.Fatalf("failed to occupy port %d (ipv6): %v", base+i, err)
+			}
+			listeners = append(listeners, ln6)
 		}
-		listeners = append(listeners, ln6)
 	}
 
-	_, err := FindAvailablePort(base)
+	_, err := findAvailablePort(base, nil)
 	if err == nil {
 		t.Fatal("expected error when all ports occupied, got nil")
 	}
@@ -167,8 +195,6 @@ func TestResolvedPorts_AppEnv_emptyAppVarSkipped(t *testing.T) {
 		ContainerPort: 9001,
 		DefaultHost:   9005,
 		ComposeVar:    "MINIO_CONSOLE_HOST_PORT",
-		AppVar:        "",
-		AppFormat:     "",
 	})
 
 	env := resolved.AppEnv()
