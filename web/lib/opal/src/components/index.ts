@@ -126,3 +126,11 @@ export {
   PopoverMenu,
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsRootProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+} from "@opal/components/tabs/components";

@@ -2,7 +2,7 @@
 
 import { FormField } from "@/refresh-components/form/FormField";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { Preview } from "./Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Switch from "@/refresh-components/inputs/Switch";

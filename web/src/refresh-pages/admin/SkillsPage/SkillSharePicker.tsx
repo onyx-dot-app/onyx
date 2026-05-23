@@ -5,7 +5,7 @@ import { SvgOrganization, SvgUsers, SvgX } from "@opal/icons";
 import { Button, Card, MessageCard } from "@opal/components";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import Switch from "@/refresh-components/inputs/Switch";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { Section } from "@/layouts/general-layouts";
@@ -132,8 +132,8 @@ export default function SkillSharePicker({
           )}
         </Tabs.Content>
 
-        <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-          <Section gap={1} alignItems="stretch">
+        <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+          <Section gap={1} alignItems="stretch" padding={0.5}>
             <InputHorizontal
               title="Publish This Skill"
               description="Make this skill available to everyone in your organization."

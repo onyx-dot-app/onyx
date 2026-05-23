@@ -6,7 +6,7 @@ import { MessageCard } from "@opal/components";
 
 import { Section } from "@/layouts/general-layouts";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { IndexAttemptSnapshot } from "@/lib/types";
 
@@ -90,7 +90,7 @@ export function SyncAttemptsTabs({
       value={tab}
       onValueChange={(value) => setTab(value as SyncAttemptsTab)}
     >
-      <Tabs.List variant="contained">
+      <Tabs.List>
         <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
           Document Permission Sync

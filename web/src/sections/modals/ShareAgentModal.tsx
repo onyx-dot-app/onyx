@@ -12,7 +12,7 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
@@ -321,8 +321,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               )}
             </Tabs.Content>
 
-            <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-              <Section gap={1} alignItems="stretch">
+            <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+              <Section gap={1} alignItems="stretch" padding={0.5}>
                 <InputHorizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { cn } from "@opal/utils";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "../interfaces";
@@ -14,9 +14,8 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-import Tabs from "@/refresh-components/Tabs";
+import { Button, Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
@@ -92,7 +91,7 @@ export function ParallelTimelineTabs({
     isLastTurnGroup && (!shouldShowResults || !hasActivePackets);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} variant="pill">
       <div className="flex flex-col w-full">
         <TimelineRow
           railVariant="rail"
@@ -125,13 +124,8 @@ export function ParallelTimelineTabs({
               onMouseLeave={handleHeaderLeave}
             >
               <Tabs.List
-                variant="pill"
                 enableScrollArrows
-                className={cn(
-                  isHover && "bg-background-tint-02",
-                  "transition-colors duration-200"
-                )}
-                rightContent={
+                rightChildren={
                   <Button
                     prominence="tertiary"
                     size="sm"
@@ -144,7 +138,6 @@ export function ParallelTimelineTabs({
                   <Tabs.Trigger
                     key={step.key}
                     value={step.key}
-                    variant="pill"
                     isLoading={loadingStates.get(step.key)}
                   >
                     <span className="flex items-center gap-1.5">

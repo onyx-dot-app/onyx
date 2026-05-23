@@ -10,7 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";

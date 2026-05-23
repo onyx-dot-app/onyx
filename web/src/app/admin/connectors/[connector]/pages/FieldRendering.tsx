@@ -8,7 +8,7 @@ import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
-import Tabs from "@/refresh-components/Tabs";
+import { Tabs } from "@opal/components";
 import { useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputVertical } from "@opal/layouts";
