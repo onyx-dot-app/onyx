@@ -75,10 +75,6 @@
   @apply text-text-02;
 }
 
-.opal-input[data-variant="internal"]:focus-within {
-  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
-}
-
 .opal-input-field::placeholder {
   @apply !font-main-ui-muted;
   color: var(--text-02);
