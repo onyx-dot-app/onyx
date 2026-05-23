@@ -1,31 +1,22 @@
 "use client";
 
 import "@opal/components/tabs/styles.css";
-
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { mergeRefs, cn } from "@opal/utils";
 import { type IconProps, type WithoutStyles } from "@opal/types";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import { Tooltip } from "@opal/components/tooltip/components";
-import { Button } from "@opal/components/buttons/button/components";
-import { Text } from "@opal/components/text/components";
+import { Tooltip, Text, Button } from "@opal/components";
 import {
   TabsContext,
   useTabsContext,
   usePillIndicator,
   useHorizontalScroll,
-} from "./hooks";
+} from "@opal/components/tabs/hooks";
 
 /* =============================================================================
    TABS ROOT
    ============================================================================= */
-
-interface TabsRootProps extends WithoutStyles<
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
-> {
-  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Root>>;
-}
 
 /**
  * Tabs Root — container for tab navigation and content.
@@ -42,6 +33,9 @@ interface TabsRootProps extends WithoutStyles<
  *   <Tabs.Content value="tab2">Details content</Tabs.Content>
  * </Tabs>
  */
+type TabsRootProps = WithoutStyles<
+  React.ComponentProps<typeof TabsPrimitive.Root>
+>;
 function TabsRoot({ ref, ...props }: TabsRootProps) {
   return <TabsPrimitive.Root ref={ref} className="w-full" {...props} />;
 }
@@ -50,11 +44,9 @@ function TabsRoot({ ref, ...props }: TabsRootProps) {
    TABS LIST
    ============================================================================= */
 
-interface TabsListProps extends Omit<
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>,
-  "style"
+interface TabsListProps extends WithoutStyles<
+  React.ComponentProps<typeof TabsPrimitive.List>
 > {
-  ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.List>>;
   /**
    * Visual variant of the tab list.
    *
@@ -75,7 +67,6 @@ function TabsList({
   rightContent,
   enableScrollArrows = false,
   children,
-  className,
   ...props
 }: TabsListProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -131,7 +122,7 @@ function TabsList({
     <TabsPrimitive.List
       ref={mergeRefs(listRef, ref)}
       data-variant={variant}
-      className={cn("opal-tabs-list", className)}
+      className="opal-tabs-list"
       style={
         variant === "contained"
           ? {
@@ -216,29 +207,21 @@ function TabsList({
    ============================================================================= */
 
 interface TabsTriggerProps extends WithoutStyles<
-  Omit<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>, "children">
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
 > {
   ref?: React.Ref<React.ElementRef<typeof TabsPrimitive.Trigger>>;
-  /**
-   * Visual variant. Inherited from `Tabs.List` via context; only set this to
-   * override the inherited value on a specific trigger.
-   */
-  variant?: "contained" | "pill" | "underline";
   /** Tooltip shown on hover. */
   tooltip?: string;
   /** Side where the tooltip appears. @default "top" */
   tooltipSide?: "top" | "bottom" | "left" | "right";
   /** Icon rendered before the label. */
   icon?: React.FunctionComponent<IconProps>;
-  /** Tab label — string or custom ReactNode. */
-  children?: React.ReactNode;
   /** Show a loading spinner after the label. */
   isLoading?: boolean;
 }
 
 function TabsTrigger({
   ref,
-  variant: variantProp,
   tooltip,
   tooltipSide = "top",
   icon: Icon,
@@ -248,7 +231,7 @@ function TabsTrigger({
   ...props
 }: TabsTriggerProps) {
   const context = useTabsContext();
-  const variant = variantProp ?? context?.variant ?? "contained";
+  const variant = context?.variant ?? "contained";
 
   const inner = (
     <>

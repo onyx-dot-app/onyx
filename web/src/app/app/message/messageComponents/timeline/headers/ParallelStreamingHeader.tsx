@@ -59,13 +59,11 @@ export const ParallelStreamingHeader = React.memo(
               />
             ) : undefined
           }
-          className="bg-transparent"
         >
           {steps.map((step) => (
             <Tabs.Trigger
               key={step.key}
               value={step.key}
-              variant="pill"
               isLoading={loadingStates.get(step.key)}
             >
               <span className="flex items-center gap-1.5">

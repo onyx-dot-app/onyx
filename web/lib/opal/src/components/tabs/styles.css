@@ -21,14 +21,14 @@
 
 .opal-tabs-list[data-variant="pill"],
 .opal-tabs-list[data-variant="underline"] {
-  @apply relative flex items-center overflow-hidden bg-background-tint-00;
+  @apply relative flex items-center overflow-hidden bg-background-tint-00 rounded-none;
   padding-bottom: 5px;
 }
 
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
 .opal-tabs-trigger {
-  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08;
+  @apply inline-flex items-center justify-center whitespace-nowrap rounded-08 cursor-pointer;
 }
 
 .opal-tabs-trigger[data-variant="contained"] {
@@ -37,7 +37,7 @@
 
 .opal-tabs-trigger[data-variant="pill"],
 .opal-tabs-trigger[data-variant="underline"] {
-  @apply p-1 font-secondary-action transition-all duration-200 ease-out;
+  @apply p-1 font-secondary-action;
 }
 
 /* contained · active */
@@ -91,6 +91,6 @@
 }
 
 .opal-tabs-pill-indicator {
-  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03 transition-all duration-200 ease-out;
+  @apply absolute bottom-0 z-10 pointer-events-none bg-background-tint-inverted-03;
   height: 2px;
 }

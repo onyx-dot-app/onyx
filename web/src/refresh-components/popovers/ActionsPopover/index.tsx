@@ -828,7 +828,8 @@ export default function ActionsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder="Search Actions"
+          placeholder="Search actions..."
+          searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           autoFocus

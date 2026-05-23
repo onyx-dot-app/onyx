@@ -127,10 +127,6 @@ export function ParallelTimelineTabs({
               <Tabs.List
                 variant="pill"
                 enableScrollArrows
-                className={cn(
-                  isHover && "bg-background-tint-02",
-                  "transition-colors duration-200"
-                )}
                 rightContent={
                   <Button
                     prominence="tertiary"
@@ -144,7 +140,6 @@ export function ParallelTimelineTabs({
                   <Tabs.Trigger
                     key={step.key}
                     value={step.key}
-                    variant="pill"
                     isLoading={loadingStates.get(step.key)}
                   >
                     <span className="flex items-center gap-1.5">
