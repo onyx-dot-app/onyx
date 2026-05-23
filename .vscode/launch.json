@@ -131,6 +131,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -154,6 +155,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -204,6 +206,7 @@
       "request": "launch",
       "program": "onyx/onyxbot/slack/listener.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -222,6 +225,7 @@
       "request": "launch",
       "program": "onyx/onyxbot/discord/client.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -240,6 +244,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "MCP_SERVER_ENABLED": "true",
@@ -268,6 +273,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -299,6 +305,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -330,6 +337,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -362,6 +370,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -393,6 +402,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -425,6 +435,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -457,6 +468,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -488,6 +500,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "ENABLE_MULTIPASS_INDEXING": "false",
@@ -520,6 +533,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -840,6 +854,7 @@
       "request": "launch",
       "module": "pytest",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -880,12 +895,13 @@
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start Infrastructure (ods compose dev)",
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "bash",
       "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
+        "-c",
+        "uv run --with onyx-devtools ods compose dev"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -901,6 +917,7 @@
       "cwd": "${workspaceFolder}/backend",
       "console": "integratedTerminal",
       "justMyCode": false,
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "presentation": {
         "group": "3"
@@ -922,6 +939,7 @@
       "request": "launch",
       "program": "scripts/dev_run_background_jobs.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -949,6 +967,7 @@
       "request": "launch",
       "module": "onyx.server.features.build.sandbox.build_templates",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "PYTHONUNBUFFERED": "1",
