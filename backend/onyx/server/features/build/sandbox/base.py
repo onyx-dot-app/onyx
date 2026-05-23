@@ -18,6 +18,7 @@ import threading
 import time
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -332,6 +333,7 @@ class SandboxManager(ABC):
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
         """Stream typed ACP events for one user message.
 
@@ -343,6 +345,13 @@ class SandboxManager(ABC):
         - ``agent_provider`` / ``agent_model``: per-prompt model
           override (``body["model"]``). Both must be set; either
           ``None`` falls back to opencode's loaded default.
+        - ``on_opencode_session_resolved``: invoked synchronously, before
+          the first event is yielded, with the resolved opencode session
+          id whenever it differs from the caller-supplied
+          ``opencode_session_id`` (i.e. the persisted id 404'd and the
+          transport had to mint a new one, or the caller passed ``None``).
+          Callers persist the new id so subsequent turns don't 404 the
+          same stale id and orphan a fresh opencode session per turn.
         """
         ...
 

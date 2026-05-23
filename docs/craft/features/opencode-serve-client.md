@@ -363,12 +363,17 @@ The unit tests are the load-bearing wire-contract lock. The external-dependency-
 ```python
 # backend/onyx/server/features/build/sandbox/opencode/serve_client.py
 class OpencodeServeClient:
-    def __init__(self, base_url, password, *, client_info=None, timeouts=None):
+    def __init__(self, base_url, password, *, event_bus, client_info=None, timeouts=None):
         self._base_url = base_url.rstrip("/")
         self._auth = (
             httpx.BasicAuth("onyx", password) if password else None
         )
         self._timeouts = timeouts or ClientTimeouts()
+        # Unary-only client. ``request_timeout`` bounds GET/POST against /session,
+        # /prompt_async, /abort, etc. The long-lived ``/event`` SSE stream lives on
+        # the shared per-pod PodEventBus, which owns its own httpx.stream with
+        # ``event_read_timeout`` — that way the bus's per-frame idle timeout is
+        # not capped by this client's unary read timeout.
         self._http = httpx.Client(
             base_url=self._base_url,
             auth=self._auth,
