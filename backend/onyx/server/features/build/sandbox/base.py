@@ -109,8 +109,16 @@ class SandboxManager(ABC):
         tenant_id: str,
         llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user.
+
+        ``all_llm_configs`` (serve transport only): the full set of LLM
+        providers the user has configured. K8s pre-loads each into
+        opencode-serve's startup config so per-prompt model overrides
+        can cross providers without restarting the pod. Defaults to
+        ``[llm_config]`` (single-provider, back-compat).
 
         Creates the sandbox container/directory with:
         - sessions/ directory for per-session workspaces
@@ -320,24 +328,67 @@ class SandboxManager(ABC):
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
+        *,
+        opencode_session_id: str | None = None,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
     ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream typed ACP events.
+        """Stream typed ACP events for one user message.
 
-        The agent runs in the session-specific workspace:
-        sessions/$session_id/
+        Serve-only kwargs (ignored by ACP transport):
 
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID (determines workspace directory)
-            message: The message content to send
-
-        Yields:
-            Typed ACP schema event objects
-
-        Raises:
-            RuntimeError: If agent communication fails
+        - ``opencode_session_id``: persistent opencode-serve session id.
+          Callers should pass ``BuildSession.opencode_session_id``; if
+          ``None`` the transport calls :meth:`ensure_opencode_session`.
+        - ``agent_provider`` / ``agent_model``: per-prompt model
+          override (``body["model"]``). Both must be set; either
+          ``None`` falls back to opencode's loaded default.
         """
         ...
+
+    def ensure_opencode_session(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
+        session_id: UUID,  # noqa: ARG002
+    ) -> str | None:
+        """Return a stable opencode-serve session id for this build session.
+
+        Used only when ``AGENT_TRANSPORT=serve``. The caller (session
+        manager) persists the returned id on the ``BuildSession`` row so
+        subsequent ``send_message`` calls can hit the same opencode
+        session by id, eliminating the on-disk session/list heuristic
+        the ACP path uses.
+
+        Default implementation returns ``None`` — applies to the ACP
+        transport, which has no notion of a persistent session id and
+        doesn't need this preflight.
+
+        Implementations on the serve path MUST be idempotent: calling
+        twice for the same (sandbox, session) returns the same id.
+        """
+        return None
+
+    def list_subagents(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
+        parent_opencode_session_id: str,  # noqa: ARG002
+    ) -> list[str]:
+        """Child opencode session ids spawned under the parent. Empty
+        on transports that don't track subagents (e.g. docker/ACP)."""
+        return []
+
+    def subscribe_to_opencode_session(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002
+        opencode_session_id: str,  # noqa: ARG002
+        *,
+        keepalive_seconds: float = 15.0,  # noqa: ARG002
+    ) -> Generator["ACPEvent", None, None]:
+        """Stream events for an arbitrary opencode session without
+        sending a prompt. Yields keepalives while idle. Empty on
+        transports without a shared event bus."""
+        return
+        yield  # pragma: no cover — make this a generator
 
     @abstractmethod
     def list_directory(
