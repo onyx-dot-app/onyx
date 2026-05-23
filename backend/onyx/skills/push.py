@@ -105,13 +105,7 @@ def _assemble_fileset(
 
     Built-in rows are rendered from disk; custom rows are unpacked from
     their FileStore bundle. A row whose ``built_in_skill_id`` no longer
-    matches a codified definition is skipped with a warning.
-
-    External-app skills are *not* a special case here: a connected provider's
-    row carries its ``built_in_skill_id`` (e.g. ``slack``) like any other
-    built-in, so it renders straight from disk. Which external-app rows reach
-    this point is decided upstream by ``list_skills_for_sandbox_injection``
-    (enabled + per-user credential gate)."""
+    matches a codified definition is skipped with a warning."""
     files: FileSet = {}
     file_store = get_default_file_store()
 
@@ -135,9 +129,7 @@ def _assemble_fileset(
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill delivered into the
-    user's sandbox — regular skills they can see plus the external-app skills
-    they've connected and authenticated for."""
+    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
     skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     return _assemble_fileset(skills, user, db_session)
 
