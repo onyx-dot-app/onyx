@@ -11,12 +11,6 @@ from typing import cast
 import httpx
 from retry import retry
 
-from onyx.background.celery.tasks.opensearch_migration.constants import (
-    FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
-)
-from onyx.background.celery.tasks.opensearch_migration.transformer import (
-    FIELDS_NEEDED_FOR_TRANSFORMATION,
-)
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.configs.app_configs import VESPA_MIGRATION_REQUEST_TIMEOUT_S
@@ -43,13 +37,17 @@ from onyx.document_index.vespa_constants import DOC_SUMMARY
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
+from onyx.document_index.vespa_constants import DOCUMENT_SETS
+from onyx.document_index.vespa_constants import EMBEDDINGS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
 from onyx.document_index.vespa_constants import METADATA
+from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import METADATA_SUFFIX
+from onyx.document_index.vespa_constants import PERSONAS
 from onyx.document_index.vespa_constants import PRIMARY_OWNERS
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SECONDARY_OWNERS
@@ -59,12 +57,50 @@ from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
+from onyx.document_index.vespa_constants import TITLE_EMBEDDING
+from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+# Sentinel returned by Vespa's Visit API when a slice has been fully traversed.
+FINISHED_VISITING_SLICE_CONTINUATION_TOKEN = (
+    "FINISHED_VISITING_SLICE_CONTINUATION_TOKEN"
+)
+
+# Field set requested from Vespa's Visit API to reconstruct a chunk.
+FIELDS_NEEDED_FOR_TRANSFORMATION: list[str] = [
+    DOCUMENT_ID,
+    CHUNK_ID,
+    TITLE,
+    TITLE_EMBEDDING,
+    CONTENT,
+    EMBEDDINGS,
+    SOURCE_TYPE,
+    METADATA_LIST,
+    DOC_UPDATED_AT,
+    HIDDEN,
+    BOOST,
+    SEMANTIC_IDENTIFIER,
+    IMAGE_FILE_NAME,
+    SOURCE_LINKS,
+    BLURB,
+    DOC_SUMMARY,
+    CHUNK_CONTEXT,
+    METADATA_SUFFIX,
+    DOCUMENT_SETS,
+    USER_PROJECT,
+    PERSONAS,
+    PRIMARY_OWNERS,
+    SECONDARY_OWNERS,
+    ACCESS_CONTROL_LIST,
+]
+if MULTI_TENANT:
+    FIELDS_NEEDED_FOR_TRANSFORMATION.append(TENANT_ID)
 
 
 def _process_dynamic_summary(
