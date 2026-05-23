@@ -1603,14 +1603,12 @@ jobs:
       - determine-builds
       - merge-backend
       - merge-model-server
-      - merge-web-cloud
     if: >-
       always() && !cancelled() &&
       needs.determine-builds.outputs.is-cloud-tag == 'true' &&
       needs.determine-builds.outputs.is-test-run != 'true' &&
       needs.merge-backend.result == 'success' &&
-      needs.merge-model-server.result == 'success' &&
-      needs.merge-web-cloud.result == 'success'
+      needs.merge-model-server.result == 'success'
     runs-on:
       - runs-on
       - runner=1cpu-linux-x64
@@ -1660,16 +1658,33 @@ jobs:
               "onyxdotapp/${IMG}-cloud:${CLOUD_TAG}"
           done
 
-      - name: Notify Slack with st-dev deploy link
+      - name: Mint GitHub App installation token for cloud-deployment-yamls
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
+        with:
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          owner: onyx-dot-app
+          repositories: cloud-deployment-yamls
+          permission-actions: write
+
+      - name: Dispatch st-dev deploy with version_tag=edge
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run st-dev-deploy.yml \
+            --repo onyx-dot-app/cloud-deployment-yamls \
+            --ref main \
+            -f version_tag=edge
+
+      - name: Notify Slack
         if: always()
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
-          title: ${{ job.status == 'success' && '🌀 Cloud tag re-tagged as :edge — ready to deploy to st-dev' || '❌ Cloud → edge re-tag failed' }}
+          title: ${{ job.status == 'success' && '🌀 Cloud tag re-tagged as :edge + st-dev deploy dispatched' || '❌ Cloud → edge re-tag or st-dev dispatch failed' }}
           ref-name: ${{ github.ref_name }}
-          details: |
-            Cloud tag `${{ github.ref_name }}` re-tag finished with status: ${{ job.status }}.
-            Deploy to st-dev: run `ods deploy edge` locally, or click Run workflow in https://github.com/onyx-dot-app/cloud-deployment-yamls/actions/workflows/st-dev-deploy.yml with `version_tag=edge`.
+          details: "Cloud tag `${{ github.ref_name }}` retag + st-dev dispatch finished with status: ${{ job.status }}."
 
   notify-slack-on-failure:
     needs:
@@ -1690,7 +1705,8 @@ jobs:
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || (needs.determine-builds.outputs.build-backend-craft == 'true' && (needs.build-backend-craft-amd64.result == 'failure' || needs.build-backend-craft-arm64.result == 'failure' || needs.merge-backend-craft.result == 'failure')) || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - retag-cloud-as-edge
+    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || (needs.determine-builds.outputs.build-backend-craft == 'true' && (needs.build-backend-craft-amd64.result == 'failure' || needs.build-backend-craft-arm64.result == 'failure' || needs.merge-backend-craft.result == 'failure')) || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.retag-cloud-as-edge.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
