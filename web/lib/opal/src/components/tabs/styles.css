@@ -16,7 +16,7 @@
 
 .opal-tabs-list[data-variant="contained"] {
   display: grid;
-  @apply bg-background-tint-03;
+  @apply relative bg-background-tint-03;
 }
 
 .opal-tabs-list[data-variant="pill"],

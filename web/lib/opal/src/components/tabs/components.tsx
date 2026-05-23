@@ -70,7 +70,7 @@ function TabsList({
 
   const { style: indicatorStyle } = usePillIndicator(
     listRef,
-    isPill,
+    true,
     enableScrollArrows ? tabsContainerRef : undefined
   );
   const {
@@ -169,24 +169,20 @@ function TabsList({
         </div>
       )}
 
-      {isPill && (
-        <>
-          {variant !== "underline" && (
-            <div
-              className="opal-tabs-pill-baseline"
-              style={{ right: rightOffset }}
-            />
-          )}
-          <div
-            className="opal-tabs-pill-indicator"
-            style={{
-              left: indicatorStyle.left,
-              width: indicatorStyle.width,
-              opacity: indicatorStyle.opacity,
-            }}
-          />
-        </>
+      {variant === "pill" && (
+        <div
+          className="opal-tabs-pill-baseline"
+          style={{ right: rightOffset }}
+        />
       )}
+      <div
+        className="opal-tabs-pill-indicator"
+        style={{
+          left: indicatorStyle.left,
+          width: indicatorStyle.width,
+          opacity: indicatorStyle.opacity,
+        }}
+      />
     </TabsPrimitive.List>
   );
 }
