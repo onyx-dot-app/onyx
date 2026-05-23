@@ -128,10 +128,6 @@ def create_external_app(
       raises ``OnyxError(DUPLICATE_RESOURCE)``.
     - A ``CUSTOM`` app gets a custom (bundle-backed) skill row with a fresh
       slug, so multiple instances can coexist.
-
-    Deferred import: ``db.skill`` imports ``is_user_authenticated_for_app`` from
-    this module to filter listings, so the dependency only flows one way at
-    module-load time.
     """
     from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
