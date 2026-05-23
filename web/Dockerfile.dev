@@ -1,0 +1,42 @@
+# Web dev image for the local-cluster workflow (docs/dev/local-cluster.md).
+#
+# Built and pushed to the local k3d registry by the Tiltfile. The chart's
+# webserver.image is pointed at this image; webserver.command overrides the
+# entrypoint to `bun dev` so Next.js runs in dev mode with HMR.
+#
+# Tilt live_updates source files via sync() into /app on every save; bun's
+# Next.js dev server detects the change and HMR-reloads in the browser.
+#
+# Not used in production; this Dockerfile lives alongside the prod
+# Dockerfile in web/ and is only referenced by the dev path.
+
+FROM node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f
+
+# bun (matches the version used by the production Dockerfile).
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 /usr/local/bin/bunx /usr/local/bin/bunx
+
+# libc6-compat: same rationale as the prod image (Next.js compiled binaries
+# expect glibc symbols).
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+# Install deps first. opal's `prepare` lifecycle hook builds dist/ during
+# install, so the full opal workspace + tsconfig must be present.
+COPY package.json bun.lock tsconfig.json ./
+COPY lib/opal/ ./lib/opal/
+RUN bun install --frozen-lockfile
+
+# Copy the rest of the source tree. Tilt's live_update sync() overwrites
+# anything we copy here on file changes, so the build-time contents are
+# the cold-start state only.
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+EXPOSE 3000
+
+# The chart's webserver.command in values-dev-app.yaml overrides this; the
+# CMD below is a safe fallback if a developer runs the image standalone.
+CMD ["bun", "run", "dev"]

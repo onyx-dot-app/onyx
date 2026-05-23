@@ -1,0 +1,204 @@
+# Onyx local-cluster INFRA overlay.
+#
+# Deployed once per machine into namespace `onyx-infra` by
+# deployment/helm/dev/dev-up.sh. Renders only the shared infra
+# resources: postgres (CNPG Cluster CR — the operator is pre-installed
+# separately by dev-up.sh), opensearch, minio, redis, ingress-nginx,
+# and the two model servers.
+#
+# All app pods (api / webserver / celery / sandbox-proxy / bots / mcp)
+# are scaled to 0 here. Per-worktree app pods come from values-dev-app.yaml
+# in a separate helm release in `onyx-<slug>`.
+#
+# See docs/dev/local-cluster.md.
+
+global:
+  version: "edge"
+  pullPolicy: "IfNotPresent"
+
+# ---- Postgres / CNPG ----
+#
+# The CNPG operator is pre-installed by dev-up.sh (separate Helm release in
+# cnpg-system namespace) so its mutating webhook is ready before the Cluster
+# CR is applied — avoiding the "webhook has no endpoints" race during a
+# single combined helm install. Disable the subchart here; keep the Cluster
+# CR rendering via the explicit `cluster.enabled` gate.
+
+postgresql:
+  enabled: false
+  cluster:
+    enabled: true
+    instances: 1
+    storage:
+      size: 5Gi
+      storageClass: ""
+
+# ---- Redis / opstree operator ----
+#
+# Same race-avoidance pattern as CNPG. Operator pre-installed by dev-up.sh;
+# the `redis` subchart that renders the Redis CR stays on.
+
+redis:
+  enabled: true
+  operator:
+    enabled: false
+  redisStandalone:
+    # Bump the database count so we can allocate 3 consecutive DB numbers
+    # per worktree (worker cache + celery result backend + celery broker).
+    # 256 dbs / 3 per worktree → ~85 worktrees comfortably.
+    redisConfig:
+      additionalRedisConfig: |
+        databases 256
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+# ---- OpenSearch ----
+#
+# Shared across worktrees. Index name collision across worktrees is a known
+# limitation in Phase 1 — see docs/dev/local-cluster.md.
+
+opensearch:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  opensearchJavaOpts: "-Xmx2g -Xms2g"
+
+# ---- MinIO ----
+
+minio:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- Model servers ----
+#
+# Stateless: shared across worktrees. Each worktree's app pods point at
+# these via cross-namespace DNS (`onyx-infra-inference-model-service.onyx-infra.svc.cluster.local`).
+
+inferenceCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+indexCapability:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# ---- ingress-nginx ----
+#
+# Single cluster-wide controller. Each worktree's namespace creates its own
+# Ingress objects targeting <slug>.onyx.localhost; nginx routes them.
+
+nginx:
+  enabled: true
+  controller:
+    # kind/k3d has no LoadBalancer provider. Tilt port-forwards from
+    # localhost:13000 -> this Service.
+    service:
+      type: ClusterIP
+    ingressClassResource:
+      name: nginx
+      default: true
+    # Worktree Ingresses live in other namespaces; the controller must
+    # watch them. By default ingress-nginx watches the cluster.
+    scope:
+      enabled: false
+
+ingress:
+  enabled: false   # No Ingress objects in the infra release itself.
+
+letsencrypt:
+  enabled: false
+
+# ---- Monitoring ----
+
+monitoring:
+  grafana:
+    dashboards:
+      enabled: false
+  serviceMonitors:
+    enabled: false
+
+codeInterpreter:
+  enabled: false
+
+# ---- App pods (all OFF in the infra release) ----
+
+api:
+  replicaCount: 0
+webserver:
+  replicaCount: 0
+celery_beat:
+  replicaCount: 0
+celery_worker_primary:
+  replicaCount: 0
+celery_worker_light:
+  replicaCount: 0
+celery_worker_heavy:
+  replicaCount: 0
+celery_worker_docfetching:
+  replicaCount: 0
+celery_worker_docprocessing:
+  replicaCount: 0
+celery_worker_monitoring:
+  replicaCount: 0
+celery_worker_user_file_processing:
+  replicaCount: 0
+celery_worker_scheduled_tasks:
+  replicaCount: 0
+
+slackbot:
+  enabled: false
+discordbot:
+  enabled: false
+mcpServer:
+  enabled: false
+
+# ---- Dev credentials ----
+
+auth:
+  opensearch:
+    values:
+      opensearch_admin_password: "Aa1!onyx-localdev-opensearch"
+
+# ---- Sandbox namespaces ----
+#
+# The chart auto-creates `onyx-sandboxes`. With the multi-worktree model,
+# sandbox namespaces are per-worktree (`onyx-<slug>-sandboxes`) and created
+# by worktree-up.sh, so disable the chart's bundled one.
+
+configMap:
+  # ENABLE_CRAFT is off in the infra release (it has no api server).
+  ENABLE_CRAFT: ""

@@ -38,10 +38,16 @@ dependencies:
     condition: nginx.enabled
     alias: nginx
   # Installs the Redis CRD that the 'redis' subchart's CR binds to.
+  # Gated on `redis.operator.enabled` (defaults to `redis.enabled` for
+  # back-compat — see values.yaml) so the local-cluster dev path can
+  # disable the operator subchart while keeping the Redis CR rendering.
+  # Pre-installing the operator separately avoids the race where helm
+  # install applies the Redis CR before the operator pod is ready to
+  # reconcile it.
   - name: redis-operator
     version: 0.24.0
     repository: https://ot-container-kit.github.io/helm-charts
-    condition: redis.enabled
+    condition: redis.operator.enabled
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts

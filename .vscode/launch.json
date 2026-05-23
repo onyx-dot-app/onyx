@@ -95,6 +95,25 @@
         "group": "1"
       },
       "stopAll": true
+    },
+    {
+      "name": "Attach All Onyx Services (cluster)",
+      "configurations": [
+        "Attach API Server (cluster)",
+        "Attach Celery beat (cluster)",
+        "Attach Celery primary (cluster)",
+        "Attach Celery light (cluster)",
+        "Attach Celery heavy (cluster)",
+        "Attach Celery docfetching (cluster)",
+        "Attach Celery docprocessing (cluster)",
+        "Attach Celery monitoring (cluster)",
+        "Attach Celery user_file_processing (cluster)",
+        "Attach Celery scheduled_tasks (cluster)"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
     }
   ],
   "configurations": [
@@ -1128,6 +1147,125 @@
       "request": "launch",
       "url": "http://localhost:3000",
       "webRoot": "${workspaceFolder}/web"
+    },
+    {
+      "name": "Attach API Server (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5678 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "justMyCode": false,
+      "presentation": { "group": "3" }
+    },
+    {
+      "name": "Attach Celery beat (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5679 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery primary (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5680 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery light (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5681 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery heavy (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5682 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery docfetching (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5683 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery docprocessing (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5684 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery monitoring (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5685 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery user_file_processing (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5686 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
+    },
+    {
+      "name": "Attach Celery scheduled_tasks (cluster)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5687 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/backend", "remoteRoot": "/app" }
+      ],
+      "subProcess": true,
+      "justMyCode": false,
+      "presentation": { "group": "3", "hidden": true }
     }
   ]
 }

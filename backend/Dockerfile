@@ -11,6 +11,13 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 # Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
 ARG ENABLE_CRAFT=false
 
+# Build argument for the local-cluster dev path. When true, debugpy is
+# installed system-wide so the chart's `<svc>.debug.enabled` wrapper can
+# launch `python -m debugpy --listen ...` and VSCode/PyCharm can attach.
+# Defaults off — production images don't need it.
+# See docs/dev/local-cluster.md.
+ARG INSTALL_DEBUGPY=false
+
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
@@ -71,6 +78,14 @@ RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
         curl -fsSL https://opencode.ai/install | bash; \
     fi
 ENV PATH="/root/.opencode/bin:${PATH}"
+
+# Conditionally install debugpy for the local-cluster dev path.
+# Version pinned to match backend/requirements/dev.txt so attach behavior
+# matches what devs see in the local Python interpreter.
+RUN if [ "$INSTALL_DEBUGPY" = "true" ]; then \
+        echo "Installing debugpy for local-cluster dev..." && \
+        uv pip install --system --no-cache-dir debugpy==1.8.17; \
+    fi
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE

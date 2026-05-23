@@ -59,6 +59,21 @@ spec:
             {{- toYaml .Values.webserver.securityContext | nindent 12 }}
           image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
+          {{- /* Optional command override. When unset, the webserver image's
+                 own CMD (the production `next start` entrypoint) runs. The
+                 local-cluster dev path sets this to `pnpm dev` for HMR.
+                 See docs/dev/local-cluster.md. */}}
+          {{- with .Values.webserver.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.webserver.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.webserver.workingDir }}
+          workingDir: {{ . | quote }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.webserver.containerPorts.server }}

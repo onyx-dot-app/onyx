@@ -286,7 +286,9 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods. From any worktree, run `deployment/helm/dev/dev.sh up` — on first invocation it creates the shared local k3d cluster + infra, then provisions per-worktree state and execs `tilt up` with hot-reload of api / celery / web. Multiple worktrees can run side by side, each isolated by Postgres database / MinIO bucket / Redis DB number. See [Local Cluster Development](/docs/dev/local-cluster.md) for the full workflow.
+
+The original kind + Telepresence path is still supported — see [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for that flow.
 
 ### Running in Docker
 

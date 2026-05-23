@@ -6,7 +6,12 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
-  {{- if .Values.postgresql.enabled }}
+  {{- /* See postgres-cluster.yaml for the cluster.enabled gate rationale. */}}
+  {{- $pgClusterEnabled := .Values.postgresql.enabled }}
+  {{- if and (hasKey .Values.postgresql "cluster") (hasKey (default dict .Values.postgresql.cluster) "enabled") }}
+  {{-   $pgClusterEnabled = .Values.postgresql.cluster.enabled }}
+  {{- end }}
+  {{- if $pgClusterEnabled }}
   POSTGRES_HOST: {{ .Release.Name }}-pg-rw
   {{- end }}
   {{- if .Values.opensearch.enabled }}
@@ -20,12 +25,23 @@ data:
   # suffix — that suffix is only for RedisReplication CRs).
   REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}
   {{- end }}
+  {{- /* Auto-derived only when not explicitly set in configMap. The
+         local-cluster app overlay overrides these to point at the shared
+         infra release's model servers in `onyx-infra`. */}}
+  {{- if not (hasKey .Values.configMap "MODEL_SERVER_HOST") }}
   MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
+  {{- end }}
   {{- if .Values.vectorDB.enabled }}
+  {{- if not (hasKey .Values.configMap "INDEXING_MODEL_SERVER_HOST") }}
   INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-indexing-model-service"
+  {{- end }}
+  {{- if not (hasKey .Values.configMap "DISABLE_VECTOR_DB") }}
   DISABLE_VECTOR_DB: "false"
+  {{- end }}
   {{- else }}
+  {{- if not (hasKey .Values.configMap "DISABLE_VECTOR_DB") }}
   DISABLE_VECTOR_DB: "true"
+  {{- end }}
   {{- end }}
 {{- range $key, $value := .Values.configMap }}
 {{- if not (empty $value) }}

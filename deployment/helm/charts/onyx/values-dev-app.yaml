@@ -1,0 +1,300 @@
+# Onyx local-cluster APP overlay (per-worktree).
+#
+# Layered on top of values.yaml by worktree-up.sh:
+#
+#   helm upgrade --install onyx-<slug> deployment/helm/charts/onyx \
+#     -f deployment/helm/charts/onyx/values-dev-app.yaml \
+#     -f ~/.config/onyx-dev/<slug>.values.yaml   # slug-specific values
+#
+# This file:
+#   - Disables every infra subchart (postgres/opensearch/minio/redis/nginx)
+#     so the per-worktree release only renders app pods.
+#   - Points the chart's configmap at services in the shared `onyx-infra`
+#     namespace via cross-namespace DNS.
+#   - Enables api + webserver + every celery worker with replicaCount=1.
+#   - Sets the webserver command to `pnpm dev` for HMR.
+#
+# The per-worktree values file (rendered by worktree-up.sh) fills in:
+#   - configMap.POSTGRES_DB
+#   - configMap.S3_FILE_STORE_BUCKET_NAME
+#   - configMap.REDIS_DB_NUMBER / *_CELERY_RESULT_BACKEND / *_CELERY
+#   - ingress.api.host / ingress.webserver.host
+#   - image tags for backend + web (set by Tilt)
+
+global:
+  # Worktree pods pull from the local k3d registry that Tilt pushes to.
+  # `latest` is fine because Tilt content-hash tags images on each build.
+  pullPolicy: "IfNotPresent"
+
+# ---- Infra subcharts: all OFF ----
+#
+# Pods point at the shared infra release in `onyx-infra` instead. The
+# `enabled: false` here both gates the subchart install AND prevents the
+# corresponding host auto-derivation in templates/configmap.yaml, so the
+# explicit hosts below take effect.
+
+postgresql:
+  enabled: false
+  cluster:
+    enabled: false
+
+redis:
+  enabled: false
+  operator:
+    enabled: false
+
+opensearch:
+  enabled: false
+
+minio:
+  enabled: false
+
+nginx:
+  enabled: false
+
+codeInterpreter:
+  enabled: false
+
+# ---- Cross-namespace host overrides ----
+#
+# When the matching subchart is disabled above, configmap.yaml does NOT
+# auto-derive these. Set explicitly here pointing at the shared
+# `onyx-infra` release. The release name in the infra deploy is
+# `onyx-infra`, so the Services are:
+#   onyx-infra-pg-rw.onyx-infra.svc.cluster.local
+#   onyx-infra.onyx-infra.svc.cluster.local         (Redis CR named after release)
+#   onyx-opensearch-master.onyx-infra.svc.cluster.local
+#   onyx-infra-minio.onyx-infra.svc.cluster.local
+#   onyx-infra-inference-model-service.onyx-infra.svc.cluster.local
+#   onyx-infra-indexing-model-service.onyx-infra.svc.cluster.local
+
+configMap:
+  # Pointers to the shared infra in onyx-infra.
+  POSTGRES_HOST: "onyx-infra-pg-rw.onyx-infra.svc.cluster.local"
+  # Redis CR + Service are named after the release (`onyx-infra`) by default —
+  # see `redisStandalone.name | default .Release.Name` in the chart.
+  REDIS_HOST: "onyx-infra.onyx-infra.svc.cluster.local"
+  OPENSEARCH_HOST: "onyx-opensearch-master.onyx-infra.svc.cluster.local"
+  OPENSEARCH_REST_API_PORT: "9200"
+  ENABLE_OPENSEARCH_INDEXING_FOR_ONYX: "true"
+  ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
+  S3_ENDPOINT_URL: "http://onyx-infra-minio.onyx-infra.svc.cluster.local:9000"
+  MODEL_SERVER_HOST: "onyx-infra-inference-model-service.onyx-infra.svc.cluster.local"
+  INDEXING_MODEL_SERVER_HOST: "onyx-infra-indexing-model-service.onyx-infra.svc.cluster.local"
+  DISABLE_VECTOR_DB: "false"
+
+  # POSTGRES_DB / S3_FILE_STORE_BUCKET_NAME / REDIS_DB_NUMBER* are
+  # filled in by the per-worktree values file.
+
+  # Craft is on by default for the local-cluster dev path. SANDBOX_API_SERVER_URL
+  # is needed for sandbox-spawned pods to call back to the worktree's api;
+  # the per-worktree values file overrides with the namespaced api service.
+  ENABLE_CRAFT: "true"
+
+# Local-dev superuser secrets. These match the infra release's secret
+# values so the per-worktree pods can authenticate against the shared
+# Postgres / MinIO / Redis with the same credentials. Two namespaces, two
+# Secret objects, same payload.
+auth:
+  postgresql:
+    values:
+      username: "postgres"
+      password: "postgres"
+  redis:
+    values:
+      redis_password: "password"
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
+  opensearch:
+    values:
+      opensearch_admin_password: "Aa1!onyx-localdev-opensearch"
+  sandboxPushSecret:
+    enabled: true
+    values:
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+# ---- App pods (all ON) ----
+#
+# Single replica per service. No HPAs (autoscaling disabled below).
+
+api:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  # debugpy wrap: api becomes
+  #   alembic upgrade head && python -m debugpy --listen 0.0.0.0:5678 -m uvicorn ...
+  # so VSCode/PyCharm can attach via the Tilt-forwarded port. The `--listen`
+  # form does NOT use `--wait-for-client`, so the pod starts normally even
+  # without a debugger attached. The chart's api.command override picks this
+  # up; the production entrypoint runs when command is unset.
+  # See docs/dev/local-cluster.md.
+  command:
+    - "/bin/sh"
+    - "-c"
+    - "alembic upgrade head && echo 'Starting Onyx Api Server' && exec python -m debugpy --listen 0.0.0.0:5678 -m uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+webserver:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  # Override the production `next start` entrypoint with `bun dev` for HMR.
+  # Tilt syncs `web/` into /app inside the dev image (web/Dockerfile.dev).
+  # `bun install` is a no-op when the lockfile + node_modules are already
+  # baked into the image; it re-runs only if Tilt syncs a new package.json.
+  command:
+    - "/bin/sh"
+    - "-c"
+    - "bun install && bun run dev"
+  workingDir: "/app"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# Each celery worker's command is overridden to wrap the celery CLI with
+# debugpy, so VSCode/PyCharm attach configs (see .vscode/launch.json) can
+# hit breakpoints in the synced source. Tilt forwards each port host:pod.
+# Ports allocated contiguously off 5678 for muscle-memory.
+
+celery_beat:
+  replicaCount: 1
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.beat", "beat"]
+
+celery_worker_primary:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5680", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.primary", "worker",
+     "--hostname=primary@%n", "-Q", "celery,periodic_tasks"]
+
+celery_worker_light:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5681", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.light", "worker",
+     "--hostname=light@%n", "-Q",
+     "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"]
+
+celery_worker_heavy:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5682", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.heavy", "worker",
+     "--hostname=heavy@%n", "-Q",
+     "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox"]
+
+celery_worker_docfetching:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5683", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.docfetching", "worker",
+     "--pool=threads", "--concurrency=2", "--prefetch-multiplier=1",
+     "--hostname=docfetching@%n", "-Q", "connector_doc_fetching"]
+
+celery_worker_docprocessing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5684", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.docprocessing", "worker",
+     "--pool=threads", "--concurrency=6", "--prefetch-multiplier=1",
+     "--hostname=docprocessing@%n", "-Q", "docprocessing"]
+
+celery_worker_monitoring:
+  replicaCount: 1
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5685", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.monitoring", "worker",
+     "--hostname=monitoring@%n", "-Q", "monitoring"]
+
+celery_worker_user_file_processing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5686", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.user_file_processing", "worker",
+     "--hostname=user-file-processing@%n", "-Q",
+     "user_file_processing,user_file_project_sync,user_file_delete"]
+
+celery_worker_scheduled_tasks:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  command:
+    ["python", "-m", "debugpy", "--listen", "0.0.0.0:5687", "-m",
+     "celery", "-A", "onyx.background.celery.versioned_apps.scheduled_tasks", "worker",
+     "--hostname=scheduled_tasks@%n", "-Q", "scheduled_tasks"]
+
+# Bots / mcpServer / model servers off in the worktree namespace
+# (model servers are shared from onyx-infra; see configMap hosts above).
+slackbot:
+  enabled: false
+discordbot:
+  enabled: false
+mcpServer:
+  enabled: false
+inferenceCapability:
+  replicaCount: 0
+indexCapability:
+  replicaCount: 0
+
+# ---- Monitoring off in worktree ----
+monitoring:
+  grafana:
+    dashboards:
+      enabled: false
+  serviceMonitors:
+    enabled: false
+
+# ---- Ingress (per-worktree host) ----
+#
+# `ingress.<svc>.host` is overridden by the per-worktree values file to
+# `<slug>.onyx.localhost`. The ingressClass uses the cluster-wide
+# nginx controller installed by the infra release.
+
+ingress:
+  enabled: true
+  className: nginx
+  api:
+    host: "PLACEHOLDER-set-by-worktree-up"
+  webserver:
+    host: "PLACEHOLDER-set-by-worktree-up"
+
+# ---- Sandbox push NetworkPolicy ----
+#
+# No telepresence in the new workflow — leave the prod-strict policy in place.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
+
+# ---- Persistence: opt out ----
+#
+# All persistent state lives in the shared infra release. The worktree
+# release has no PVCs of its own.
+persistent:
+  storageClassName: ""
