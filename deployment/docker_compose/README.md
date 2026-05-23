@@ -10,6 +10,8 @@ This README focuses on the easiest guided deployment which is via install.sh.
 
 **For more detailed guides, please refer to the documentation: https://docs.onyx.app/deployment/overview**
 
+If you are deploying with Coolify, see [Coolify setup](./coolify.md).
+
 ## install.sh script
 
 ```
