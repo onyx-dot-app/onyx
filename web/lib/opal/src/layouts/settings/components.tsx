@@ -3,8 +3,12 @@
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
 import { Divider, Button, Spacer } from "@opal/components";
-import type { WithoutStyles } from "@opal/types";
-import type { IconFunctionComponent } from "@opal/types";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  SizeVariants,
+  WithoutStyles,
+} from "@opal/types";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { SvgArrowLeft } from "@opal/icons";
@@ -13,18 +17,20 @@ import { SvgArrowLeft } from "@opal/icons";
 // Root
 // ---------------------------------------------------------------------------
 
-const widthClasses = {
+const widthClasses: Record<
+  Extract<SizeVariants, "sm" | "md" | "lg" | "full">,
+  string
+> = {
   sm: "w-[min(var(--app-container-sm),100%)]",
-  "sm-md": "w-[min(var(--app-container-sm-md),100%)]",
   md: "w-[min(var(--app-container-md),100%)]",
   lg: "w-[min(var(--app-container-lg),100%)]",
   full: "w-(--app-container-full)",
-} as const;
+};
 
 interface SettingsRootProps extends WithoutStyles<
   React.HtmlHTMLAttributes<HTMLDivElement>
 > {
-  width?: keyof typeof widthClasses;
+  width?: Extract<SizeVariants, "sm" | "md" | "lg" | "full">;
 }
 
 /**
@@ -51,12 +57,11 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 
 export interface SettingsHeaderProps {
   icon: IconFunctionComponent;
-  title: string;
-  description?: string;
+  title?: string | RichStr;
+  description?: string | RichStr;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
-  backButton?: boolean;
-  onBack?: () => void;
+  backButton?: boolean | (() => void);
   divider?: boolean;
 }
 
@@ -74,7 +79,6 @@ function SettingsHeader({
   children,
   rightChildren,
   backButton,
-  onBack,
   divider,
 }: SettingsHeaderProps) {
   const router = useRouter();
@@ -82,6 +86,9 @@ function SettingsHeader({
   const headerRef = useRef<HTMLDivElement>(null);
 
   const isSticky = !!rightChildren;
+  const showBackButton = !!backButton;
+  const onBack =
+    typeof backButton === "function" ? backButton : () => router.back();
 
   useEffect(() => {
     if (!isSticky) return;
@@ -107,29 +114,25 @@ function SettingsHeader({
       className={cn(
         "w-full bg-background-tint-01",
         isSticky && "sticky top-0 z-settings-header",
-        backButton && "md:pt-4"
+        showBackButton && "md:pt-4"
       )}
     >
-      {backButton && (
+      {showBackButton && (
         <div className="px-2">
-          <Button
-            icon={SvgArrowLeft}
-            prominence="tertiary"
-            onClick={() => (onBack ? onBack() : router.back())}
-          >
+          <Button icon={SvgArrowLeft} prominence="tertiary" onClick={onBack}>
             Back
           </Button>
         </div>
       )}
 
-      <Spacer vertical rem={2.5} />
+      <Spacer orientation="vertical" rem={2.5} />
 
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
-              title={title}
+              title={title ?? ""}
               description={description}
               sizePreset="headline"
               variant="heading"
@@ -143,11 +146,11 @@ function SettingsHeader({
 
       {divider ? (
         <>
-          <Spacer vertical rem={1.5} />
+          <Spacer orientation="vertical" rem={1.5} />
           <Divider paddingParallel="md" paddingPerpendicular="fit" />
         </>
       ) : (
-        <Spacer vertical rem={0.5} />
+        <Spacer orientation="vertical" rem={0.5} />
       )}
 
       {isSticky && (

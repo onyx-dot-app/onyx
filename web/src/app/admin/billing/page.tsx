@@ -499,8 +499,7 @@ export default function BillingPage() {
       <SettingsLayouts.Header
         icon={viewConfig.icon}
         title={viewConfig.title}
-        backButton={viewConfig.showBackButton}
-        onBack={handleBack}
+        backButton={viewConfig.showBackButton && handleBack}
         divider
       />
       <SettingsLayouts.Body>

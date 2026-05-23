@@ -1030,7 +1030,7 @@ const AppInputBar = React.memo(
                     }}
                     prominence="tertiary"
                   />
-                  <Spacer horizontal rem={0.25} />
+                  <Spacer orientation="horizontal" rem={0.25} />
                 </Section>
               )}
             </div>

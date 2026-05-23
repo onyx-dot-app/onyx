@@ -197,7 +197,7 @@ export function FileCard({
                 : typeLabel
             }
           />
-          <Spacer horizontal rem={0.5} />
+          <Spacer orientation="horizontal" rem={0.5} />
         </Interactive.Container>
       </div>
     </Removable>

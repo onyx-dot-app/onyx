@@ -39,8 +39,7 @@ export default function EditScheduledTaskPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Edit scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -56,8 +55,7 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Header
         icon={SvgClock}
         title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
       />
       <SettingsLayouts.Body>
         {isLoading ? (

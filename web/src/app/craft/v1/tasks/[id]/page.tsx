@@ -108,8 +108,7 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text mainUiBody text03>
@@ -126,8 +125,7 @@ export default function ScheduledTaskDetailPage() {
         icon={SvgClock}
         title={data?.name ?? "Scheduled task"}
         description={data?.human_readable_schedule}
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
         rightChildren={
           data ? (
             <div className="flex items-center gap-2">

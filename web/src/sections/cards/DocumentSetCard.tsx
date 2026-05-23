@@ -60,7 +60,7 @@ export default function DocumentSetCard({
                 )
               }
             />
-            <Spacer horizontal rem={0.5} />
+            <Spacer orientation="horizontal" rem={0.5} />
           </Interactive.Container>
         </Interactive.Simple>
       </div>

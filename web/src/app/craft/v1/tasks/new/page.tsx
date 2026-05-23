@@ -66,8 +66,7 @@ export default function NewScheduledTaskPage() {
         icon={SvgClock}
         title="New scheduled task"
         description="Save a prompt + schedule. Craft will run it on a timer."
-        backButton
-        onBack={handleBack}
+        backButton={handleBack}
       />
       <SettingsLayouts.Body>
         <ScheduleTaskForm initial={initial} isEdit={false} />
