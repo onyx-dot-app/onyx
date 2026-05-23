@@ -1459,16 +1459,42 @@ class SessionManager:
             .first()
         )
         if build_session is None:
+            logger.warning(
+                "[SESSION-LIFECYCLE] preflight: BuildSession %s not found",
+                session_id,
+            )
             return None
         if build_session.opencode_session_id:
+            logger.info(
+                "[SESSION-LIFECYCLE] preflight: reusing persisted opencode_session_id=%s "
+                "for build_session=%s (no DB write, no /session call)",
+                build_session.opencode_session_id,
+                session_id,
+            )
             return build_session.opencode_session_id
 
+        logger.info(
+            "[SESSION-LIFECYCLE] preflight: BuildSession %s has no opencode_session_id; "
+            "calling sandbox_manager.ensure_opencode_session",
+            session_id,
+        )
         new_id = self._sandbox_manager.ensure_opencode_session(sandbox_id, session_id)
         if new_id is None:
             # Sandbox manager declined (shouldn't happen in serve mode).
+            logger.warning(
+                "[SESSION-LIFECYCLE] preflight: ensure_opencode_session returned None "
+                "for build_session=%s; returning None",
+                session_id,
+            )
             return None
         build_session.opencode_session_id = new_id
         self._db_session.commit()
+        logger.info(
+            "[SESSION-LIFECYCLE] preflight: persisted new opencode_session_id=%s "
+            "for build_session=%s (first-turn create)",
+            new_id,
+            session_id,
+        )
         return new_id
 
     def _persist_opencode_session_id(self, session_id: UUID, new_id: str) -> None:
@@ -1482,11 +1508,31 @@ class SessionManager:
             .first()
         )
         if build_session is None:
+            logger.warning(
+                "[SESSION-LIFECYCLE] callback: BuildSession %s vanished before "
+                "we could persist new opencode_session_id=%s",
+                session_id,
+                new_id,
+            )
             return
         if build_session.opencode_session_id == new_id:
+            logger.info(
+                "[SESSION-LIFECYCLE] callback: opencode_session_id=%s already "
+                "matches DB for build_session=%s; no-op",
+                new_id,
+                session_id,
+            )
             return
+        old_id = build_session.opencode_session_id
         build_session.opencode_session_id = new_id
         self._db_session.commit()
+        logger.warning(
+            "[SESSION-LIFECYCLE] callback: rewrote opencode_session_id %s -> %s "
+            "for build_session=%s (stale id replaced)",
+            old_id,
+            new_id,
+            session_id,
+        )
 
     def _persist_acp_event(
         self,

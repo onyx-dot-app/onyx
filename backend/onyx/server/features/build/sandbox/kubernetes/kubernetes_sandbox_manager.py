@@ -2166,6 +2166,13 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return None
         session_path = f"/workspace/sessions/{session_id}"
+        logger.info(
+            "[SESSION-LIFECYCLE] sandbox.ensure_opencode_session: build_session=%s "
+            "sandbox=%s cwd=%s (passing id=None, so client will POST /session)",
+            session_id,
+            sandbox_id,
+            session_path,
+        )
         with self._build_serve_client(sandbox_id) as client:
             return client.ensure_session(
                 None,
@@ -2257,6 +2264,12 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         session_path = f"/workspace/sessions/{session_id}"
         client = self._build_serve_client(sandbox_id)
         try:
+            logger.info(
+                "[SESSION-LIFECYCLE] _send_message_via_serve: build_session=%s "
+                "caller-supplied opencode_session_id=%s",
+                session_id,
+                opencode_session_id,
+            )
             resolved_session_id = client.ensure_session(
                 opencode_session_id,
                 cwd=session_path,

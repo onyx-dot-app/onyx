@@ -670,10 +670,25 @@ class OpencodeServeClient:
         if opencode_session_id:
             r = self._http.get(f"/session/{opencode_session_id}")
             if r.status_code == 200:
+                logger.info(
+                    "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 200 "
+                    "(reusing existing opencode session, no create)",
+                    opencode_session_id,
+                )
                 return opencode_session_id
-            if r.status_code != 404:
+            if r.status_code == 404:
+                logger.warning(
+                    "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 404 "
+                    "(persisted id stale; will create new)",
+                    opencode_session_id,
+                )
+            else:
                 _raise_for_status(r, "session lookup")
             # Fall through and create.
+        else:
+            logger.info(
+                "[SESSION-LIFECYCLE] ensure_session: no caller-supplied id; creating"
+            )
 
         body: dict[str, Any] = {"directory": cwd}
         if title:
@@ -684,6 +699,11 @@ class OpencodeServeClient:
         new_id = data.get("id")
         if not isinstance(new_id, str):
             raise RuntimeError("opencode /session returned no id")
+        logger.info(
+            "[SESSION-LIFECYCLE] ensure_session: POST /session -> id=%s (cwd=%s)",
+            new_id,
+            cwd,
+        )
         return new_id
 
     def delete_session(self, opencode_session_id: str) -> None:
