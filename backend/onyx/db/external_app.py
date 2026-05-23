@@ -103,9 +103,10 @@ def get_user_credentials_by_app_id(
 
 def create_external_app(
     db_session: Session,
-    *,
     name: str,
     description: str,
+    bundle_file_id: str,
+    bundle_sha256: str,
     app_type: ExternalAppType,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
@@ -152,8 +153,8 @@ def create_external_app(
             slug=slug,
             name=name,
             description=description,
-            bundle_file_id="",
-            bundle_sha256="",
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=bundle_sha256,
             is_public=is_public,
             author_user_id=author_user_id,
             db_session=db_session,
