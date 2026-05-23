@@ -2,7 +2,6 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.app_configs import SHOW_EXTRA_CONNECTORS
@@ -59,7 +58,6 @@ def load_settings() -> Settings:
         settings.user_knowledge_enabled = False
 
     settings.show_extra_connectors = SHOW_EXTRA_CONNECTORS
-    settings.opensearch_indexing_enabled = ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 
     # Resolve context-aware defaults for token threshold.
     # None = admin hasn't set a value yet → use context-aware default.

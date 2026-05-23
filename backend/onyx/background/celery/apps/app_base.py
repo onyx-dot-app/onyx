@@ -30,13 +30,10 @@ from onyx.background.celery.celery_utils import make_probe_path
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
-from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
-from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
@@ -613,24 +610,13 @@ def wait_for_document_index_or_shutdown() -> None:
     Raises WorkerShutdown if the timeout is reached.
     """
     if DISABLE_VECTOR_DB:
-        logger.info(
-            "DISABLE_VECTOR_DB is set — skipping Vespa/OpenSearch readiness check."
-        )
+        logger.info("DISABLE_VECTOR_DB is set — skipping OpenSearch readiness check.")
         return
 
-    if not ONYX_DISABLE_VESPA:
-        if not wait_for_vespa_with_timeout():
-            msg = (
-                "[Vespa] Readiness probe did not succeed within the timeout. Exiting..."
-            )
-            logger.error(msg)
-            raise WorkerShutdown(msg)
-
-    if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        if not wait_for_opensearch_with_timeout():
-            msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
-            logger.error(msg)
-            raise WorkerShutdown(msg)
+    if not wait_for_opensearch_with_timeout():
+        msg = "[OpenSearch] Readiness probe did not succeed within the timeout. Exiting..."
+        logger.error(msg)
+        raise WorkerShutdown(msg)
 
 
 # File for validating worker liveness
