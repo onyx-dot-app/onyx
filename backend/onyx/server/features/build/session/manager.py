@@ -64,6 +64,9 @@ from onyx.server.features.build.db.build_session import create_build_session__no
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
 from onyx.server.features.build.db.build_session import (
+    fetch_all_build_mode_llm_providers,
+)
+from onyx.server.features.build.db.build_session import (
     fetch_llm_provider_by_type_for_build_mode,
 )
 from onyx.server.features.build.db.build_session import get_build_session
@@ -419,18 +422,46 @@ class SessionManager:
         tenant_id: str,
         llm_config: LLMProviderConfig,
     ) -> None:
-        """Ensure PAT exists and provision the sandbox pod."""
+        """Ensure PAT, then provision the pod with every configured
+        provider pre-loaded so per-prompt model overrides can cross
+        providers without a pod restart."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
+        all_llm_configs = self._get_all_llm_configs(default=llm_config)
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
             user_id=user_id,
             tenant_id=tenant_id,
             llm_config=llm_config,
             onyx_pat=onyx_pat,
+            all_llm_configs=all_llm_configs,
         )
         update_sandbox_status__no_commit(
             self._db_session, sandbox.id, sandbox_info.status
         )
+
+    def _get_all_llm_configs(
+        self, default: LLMProviderConfig
+    ) -> list[LLMProviderConfig]:
+        """``default`` first, then every other ``build-mode-*`` provider
+        with a visible model."""
+        configs: list[LLMProviderConfig] = [default]
+        seen_providers: set[str] = {default.provider}
+        for provider in fetch_all_build_mode_llm_providers(self._db_session):
+            if provider.provider in seen_providers:
+                continue
+            seen_providers.add(provider.provider)
+            visible_models = [m for m in provider.model_configurations if m.is_visible]
+            if not visible_models:
+                continue
+            configs.append(
+                LLMProviderConfig(
+                    provider=provider.provider,
+                    model_name=visible_models[0].name,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                )
+            )
+        return configs
 
     def ensure_sandbox_running(
         self,
@@ -641,6 +672,8 @@ class SessionManager:
             self._db_session,
             name=name,
             origin=origin,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
         )
         build_session.nextjs_port = nextjs_port
         self._db_session.flush()
@@ -1359,17 +1392,74 @@ class SessionManager:
     ) -> Generator[Any, None, None]:
         """Drain the CLI agent to completion, yielding raw ACP events.
 
-        Pure ACP generator — no DB writes, no SSE formatting. Callers compose
-        this with `_persist_acp_event` (to apply persistence side effects)
+        Pure ACP generator — minimal DB work (one preflight on first
+        message under AGENT_TRANSPORT=serve to resolve+persist the
+        opencode session id). No SSE formatting. Callers compose this
+        with `_persist_acp_event` (to apply persistence side effects)
         and, in the SSE case, an SSE serializer.
 
         The events include `SSEKeepalive` markers from the sandbox client;
         callers should pass them through (interactive) or drop them
         (headless).
         """
+        opencode_session_id = self._ensure_opencode_session_id(sandbox_id, session_id)
+        agent_provider, agent_model = self._get_session_agent_selection(session_id)
         yield from self._sandbox_manager.send_message(
-            sandbox_id, session_id, user_message_content
+            sandbox_id,
+            session_id,
+            user_message_content,
+            opencode_session_id=opencode_session_id,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
         )
+
+    def _get_session_agent_selection(
+        self, session_id: UUID
+    ) -> tuple[str | None, str | None]:
+        """``(agent_provider, agent_model)`` from the BuildSession row;
+        ``(None, None)`` for pre-migration rows."""
+        row = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if row is None:
+            return None, None
+        return row.agent_provider, row.agent_model
+
+    def _ensure_opencode_session_id(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> str | None:
+        """Return BuildSession.opencode_session_id; lazily populate on
+        first turn under ``AGENT_TRANSPORT=serve``.
+
+        Returns ``None`` for the ACP transport (the sandbox manager
+        ignores the value in that mode)."""
+        from onyx.server.features.build.configs import AGENT_TRANSPORT
+        from onyx.server.features.build.configs import AgentTransport
+
+        if AGENT_TRANSPORT != AgentTransport.SERVE:
+            return None
+
+        build_session = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if build_session is None:
+            return None
+        if build_session.opencode_session_id:
+            return build_session.opencode_session_id
+
+        new_id = self._sandbox_manager.ensure_opencode_session(sandbox_id, session_id)
+        if new_id is None:
+            # Sandbox manager declined (shouldn't happen in serve mode).
+            return None
+        build_session.opencode_session_id = new_id
+        self._db_session.commit()
+        return new_id
 
     def _persist_acp_event(
         self,
@@ -1788,8 +1878,10 @@ class SessionManager:
             logger.exception("Unexpected error in build message streaming")
             yield self._format_packet_event(error_packet)
 
-    def _get_event_type(self, acp_event: Any) -> str:
-        """Get the event type string for an ACP event."""
+    @staticmethod
+    def _get_event_type(acp_event: Any) -> str:
+        """SSE ``type`` string for an ACP event. ACP schema classes
+        don't expose ``.type`` directly, so callers go through here."""
         if isinstance(acp_event, AgentMessageChunk):
             return "agent_message_chunk"
         elif isinstance(acp_event, AgentThoughtChunk):
