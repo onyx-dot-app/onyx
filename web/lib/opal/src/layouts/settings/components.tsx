@@ -57,7 +57,7 @@ function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
 
 export interface SettingsHeaderProps {
   icon: IconFunctionComponent;
-  title?: string | RichStr;
+  title: string | RichStr;
   description?: string | RichStr;
   children?: React.ReactNode;
   rightChildren?: React.ReactNode;
@@ -132,7 +132,7 @@ function SettingsHeader({
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
-              title={title ?? ""}
+              title={title}
               description={description}
               sizePreset="headline"
               variant="heading"
