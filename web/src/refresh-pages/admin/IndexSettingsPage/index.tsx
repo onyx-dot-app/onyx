@@ -9,7 +9,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
@@ -83,7 +83,7 @@ import {
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { Popover } from "@opal/components";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";

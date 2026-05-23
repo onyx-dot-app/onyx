@@ -2,7 +2,7 @@
 
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import { Button } from "@opal/components";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Link from "next/link";
 
 import AgentsTable from "./AgentsPage/AgentsTable";

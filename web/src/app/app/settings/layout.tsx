@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import * as AppLayouts from "@/layouts/app-layouts";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
