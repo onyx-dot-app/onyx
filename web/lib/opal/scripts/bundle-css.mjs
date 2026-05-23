@@ -24,9 +24,14 @@ function findCss(dir) {
 
 const referenceCss = join(srcDir, "_reference.css");
 const rootCss = join(srcDir, "root.css");
+// dbg.css contains dev-only debugging utilities and is excluded from the bundle.
+// It is imported by _reference.css for @apply resolution during authoring only.
+const dbgCss = join(srcDir, "styles", "dbg.css");
 const allCss = findCss(srcDir).sort();
 // _reference.css and root.css have fixed positions in the bundle (first and second).
-const leafCss = allCss.filter((p) => p !== referenceCss && p !== rootCss);
+const leafCss = allCss.filter(
+  (p) => p !== referenceCss && p !== rootCss && p !== dbgCss
+);
 // _reference.css carries `@import "tailwindcss"` + `@config` and must come
 // first. root.css follows so design tokens are defined before any rule that
 // consumes them. The remaining files are concatenated alphabetically.

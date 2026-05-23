@@ -10,7 +10,6 @@
 @import "./css/inputs.css" layer(base);
 @import "./css/knowledge-table.css" layer(base);
 @import "./css/line-item.css" layer(base);
-@import "./css/sizes.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/switch.css" layer(base);
 @import "./css/z-index.css" layer(base);
