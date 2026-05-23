@@ -10,6 +10,7 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
@@ -54,6 +55,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.sandbox.base import SSEKeepalive
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.manager import UploadLimitExceededError
 from onyx.server.features.build.utils import sanitize_filename
@@ -1030,11 +1032,6 @@ def stream_subagent_events(
     opencode session — otherwise any fabricated id would register a
     long-lived empty-queue subscriber and leak until pod terminate.
     """
-    from fastapi.responses import StreamingResponse
-
-    from onyx.server.features.build.sandbox.base import SSEKeepalive
-    from onyx.server.features.build.session.manager import SessionManager
-
     build_session = get_build_session(session_id, user.id, db_session)
     if build_session is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "session")
