@@ -42,10 +42,6 @@
   border: 1px solid transparent;
 }
 
-.opal-input[data-variant="internal"]:hover {
-  border-color: var(--border-01);
-}
-
 .opal-input[data-variant="error"] {
   background-color: var(--background-neutral-00);
   border: 1px solid var(--status-error-05);
