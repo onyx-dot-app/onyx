@@ -105,7 +105,13 @@ def _assemble_fileset(
 
     Built-in rows are rendered from disk; custom rows are unpacked from
     their FileStore bundle. A row whose ``built_in_skill_id`` no longer
-    matches a codified definition is skipped with a warning."""
+    matches a codified definition is skipped with a warning.
+
+    External-app skills are *not* a special case here: a connected provider's
+    row carries its ``built_in_skill_id`` (e.g. ``slack``) like any other
+    built-in, so it renders straight from disk. Which external-app rows reach
+    this point is decided upstream by ``list_skills_for_sandbox_injection``
+    (enabled + per-user credential gate)."""
     files: FileSet = {}
     file_store = get_default_file_store()
 

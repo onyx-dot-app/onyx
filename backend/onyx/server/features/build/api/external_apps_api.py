@@ -111,8 +111,6 @@ def upsert_external_app(
             db_session=db_session,
             name=request.name,
             description=request.description,
-            bundle_file_id="",
-            bundle_sha256="",
             enabled=request.enabled,
             is_public=True,
             app_type=request.app_type,
