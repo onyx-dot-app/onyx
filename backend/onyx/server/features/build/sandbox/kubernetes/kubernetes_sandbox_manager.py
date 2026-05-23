@@ -47,6 +47,7 @@ import shlex
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from pathlib import Path
@@ -68,6 +69,7 @@ from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import AGENT_TRANSPORT
 from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD_ENV
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
@@ -1949,6 +1951,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         opencode_session_id: str | None = None,
         agent_provider: str | None = None,
         agent_model: str | None = None,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
         """Stream ACP events for one user message. Transport selected by
         ``AGENT_TRANSPORT`` (configs.py).
@@ -1970,6 +1973,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 opencode_session_id,
                 agent_provider,
                 agent_model,
+                on_opencode_session_resolved=on_opencode_session_resolved,
             )
             return
         yield from self._send_message_via_acp(sandbox_id, session_id, message)
@@ -2135,6 +2139,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             bus = PodEventBus(
                 base_url=self._serve_base_url(sandbox_id),
                 auth=auth,
+                event_read_timeout=OPENCODE_SERVE_EVENT_READ_TIMEOUT,
             )
             self._event_buses[sandbox_id] = bus
             logger.info(
@@ -2234,6 +2239,8 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         opencode_session_id: str | None,
         agent_provider: str | None,
         agent_model: str | None,
+        *,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
         """Stream ACP events by driving the in-pod ``opencode serve`` via
         :class:`OpencodeServeClient`. See
@@ -2255,20 +2262,23 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 cwd=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
-            if (
-                opencode_session_id is not None
-                and resolved_session_id != opencode_session_id
-            ):
-                # Caller's persisted id was stale (404). Subsequent turns
-                # will hit the new id only if the caller refreshes the
-                # row — log so this is visible in prod.
-                logger.warning(
-                    "[SANDBOX-SERVE] persisted opencode_session_id %s was "
-                    "invalid; replaced with %s for session=%s",
-                    opencode_session_id,
-                    resolved_session_id,
-                    session_id,
-                )
+            if resolved_session_id != opencode_session_id:
+                # Caller's persisted id was stale (404) or missing. Notify
+                # the caller so they can persist the new id; without this,
+                # _ensure_opencode_session_id would reload the same stale
+                # id from the DB on every turn, 404 again, and orphan a
+                # fresh opencode session per turn (one assistant message
+                # per orphan → conversation loses all prior context).
+                if opencode_session_id is not None:
+                    logger.warning(
+                        "[SANDBOX-SERVE] persisted opencode_session_id %s was "
+                        "invalid; replaced with %s for session=%s",
+                        opencode_session_id,
+                        resolved_session_id,
+                        session_id,
+                    )
+                if on_opencode_session_resolved is not None:
+                    on_opencode_session_resolved(resolved_session_id)
 
             logger.info(
                 "[SANDBOX-SERVE] Sending message: session=%s opencode_session=%s api_pod=%s",

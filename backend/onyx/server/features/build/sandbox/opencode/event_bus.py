@@ -54,10 +54,16 @@ class PodEventBus:
         auth: httpx.Auth | None,
         *,
         connect_timeout: float = 10.0,
+        event_read_timeout: float | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._auth = auth
         self._connect_timeout = connect_timeout
+        # Per-read inactivity timeout for the SSE /event stream. ``None`` means
+        # block indefinitely between server frames (legacy behavior); a float
+        # bounds how long httpx will wait for the next byte before raising
+        # ReadTimeout, which the reader loop translates into a reconnect.
+        self._event_read_timeout = event_read_timeout
 
         self._stop = threading.Event()
         self._closed = False
@@ -196,7 +202,12 @@ class PodEventBus:
         logger.info("PodEventBus reader exiting (stop signaled)")
 
     def _read_one_stream(self) -> None:
-        timeout = httpx.Timeout(self._connect_timeout, read=None, write=10.0, pool=10.0)
+        timeout = httpx.Timeout(
+            self._connect_timeout,
+            read=self._event_read_timeout,
+            write=10.0,
+            pool=10.0,
+        )
         with httpx.stream(
             "GET",
             f"{self._base_url}/event",

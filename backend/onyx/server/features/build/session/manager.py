@@ -1404,6 +1404,15 @@ class SessionManager:
         """
         opencode_session_id = self._ensure_opencode_session_id(sandbox_id, session_id)
         agent_provider, agent_model = self._get_session_agent_selection(session_id)
+
+        def _persist_resolved_id(new_id: str) -> None:
+            # Pod restart / eviction / 404 → the persisted opencode_session_id
+            # was stale and the transport had to mint a new one. Write the
+            # new id back so the next turn doesn't 404 the same stale id
+            # and orphan another fresh opencode session (which would drop
+            # the conversation history).
+            self._persist_opencode_session_id(session_id, new_id)
+
         yield from self._sandbox_manager.send_message(
             sandbox_id,
             session_id,
@@ -1411,6 +1420,7 @@ class SessionManager:
             opencode_session_id=opencode_session_id,
             agent_provider=agent_provider,
             agent_model=agent_model,
+            on_opencode_session_resolved=_persist_resolved_id,
         )
 
     def _get_session_agent_selection(
@@ -1460,6 +1470,23 @@ class SessionManager:
         build_session.opencode_session_id = new_id
         self._db_session.commit()
         return new_id
+
+    def _persist_opencode_session_id(self, session_id: UUID, new_id: str) -> None:
+        """Write a freshly-resolved opencode_session_id back to the
+        BuildSession row. Called from the transport's
+        ``on_opencode_session_resolved`` callback when the persisted id
+        was stale (404) or absent."""
+        build_session = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if build_session is None:
+            return
+        if build_session.opencode_session_id == new_id:
+            return
+        build_session.opencode_session_id = new_id
+        self._db_session.commit()
 
     def _persist_acp_event(
         self,

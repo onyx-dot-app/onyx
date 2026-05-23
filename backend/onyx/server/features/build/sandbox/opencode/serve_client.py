@@ -18,7 +18,6 @@ Gated behind ``AGENT_TRANSPORT={"acp","serve"}`` in ``configs.py``.
 
 from __future__ import annotations
 
-import json
 import queue
 import time
 from collections.abc import Generator
@@ -921,25 +920,6 @@ class OpencodeServeClient:
 # ---------------------------------------------------------------------------
 # Module-private helpers.
 # ---------------------------------------------------------------------------
-
-
-def _parse_sse_block(block: str) -> dict[str, Any] | None:
-    """Parse a single ``data: …`` SSE block. Returns the JSON dict or None."""
-    data_lines = [
-        line[len("data: ") :]
-        for line in block.splitlines()
-        if line.startswith("data: ")
-    ]
-    if not data_lines:
-        return None
-    try:
-        payload = json.loads("\n".join(data_lines))
-    except json.JSONDecodeError:
-        logger.warning("opencode-serve: dropped malformed SSE block")
-        return None
-    if isinstance(payload, dict):
-        return payload
-    return None
 
 
 def _short_body(r: httpx.Response) -> str:
