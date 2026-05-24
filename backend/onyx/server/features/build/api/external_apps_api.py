@@ -36,13 +36,11 @@ from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import parse_json_form_field
-
-logger = setup_logger()
 
 router = APIRouter()
 
@@ -50,15 +48,6 @@ router = APIRouter()
 # strings (multipart can't carry native lists/objects).
 _STR_LIST_ADAPTER = TypeAdapter(list[str])
 _STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
-
-
-def _delete_bundle_blob(file_store: FileStore, file_id: str) -> None:
-    try:
-        file_store.delete_file(file_id, error_on_missing=False)
-    except Exception:
-        logger.warning(
-            "Failed to delete orphaned bundle blob %s", file_id, exc_info=True
-        )
 
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
@@ -280,7 +269,7 @@ def _create_custom_app(
             slug=ingested.slug,
         )
     except Exception:
-        _delete_bundle_blob(file_store, ingested.bundle_file_id)
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
         raise
 
     push_skill_to_affected_sandboxes(app.skill, db_session)
@@ -340,12 +329,12 @@ def _edit_custom_app(
     except Exception:
         # Roll back the freshly-stored bundle blob if the update failed.
         if new_bundle_file_id:
-            _delete_bundle_blob(file_store, new_bundle_file_id)
+            delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
     # Drop the superseded bundle blob only after the swap committed.
     if old_bundle_file_id:
-        _delete_bundle_blob(file_store, old_bundle_file_id)
+        delete_bundle_blob(file_store, old_bundle_file_id)
 
     push_skill_to_affected_sandboxes(app.skill, db_session)
     return _to_admin_response(app)

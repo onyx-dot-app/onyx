@@ -253,7 +253,7 @@ def test_create_cleans_up_blob_on_failure(
 
     deleted: list[str] = []
     monkeypatch.setattr(
-        api, "_delete_bundle_blob", lambda _fs, file_id: deleted.append(file_id)
+        api, "delete_bundle_blob", lambda _fs, file_id: deleted.append(file_id)
     )
 
     slug = f"custom-test-{uuid4().hex[:8]}"

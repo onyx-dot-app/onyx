@@ -16,6 +16,9 @@ from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class IngestedBundle(NamedTuple):
@@ -68,3 +71,11 @@ def ingest_skill_bundle(
         name=name,
         description=description,
     )
+
+
+def delete_bundle_blob(file_store: FileStore, file_id: str) -> None:
+    """Best-effort cleanup of a stored bundle blob we no longer reference."""
+    try:
+        file_store.delete_file(file_id, error_on_missing=False)
+    except Exception:
+        logger.warning("Failed to delete bundle blob %s", file_id, exc_info=True)

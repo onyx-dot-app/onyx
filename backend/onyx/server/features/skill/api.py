@@ -32,7 +32,6 @@ from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import BuiltinSkillResponse
 from onyx.server.features.skill.models import CustomSkillResponse
@@ -43,6 +42,7 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
@@ -143,7 +143,7 @@ def create_custom_skill(
             replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
         db_session.commit()
     except Exception:
-        _delete_old_bundle(file_store, ingested.bundle_file_id)
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
         raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
@@ -222,11 +222,11 @@ def replace_custom_skill_bundle(
         )
         db_session.commit()
     except Exception:
-        _delete_old_bundle(file_store, new_file_id)
+        delete_bundle_blob(file_store, new_file_id)
         raise
 
     push_skill_to_affected_sandboxes(updated, db_session)
-    _delete_old_bundle(file_store, old_file_id)
+    delete_bundle_blob(file_store, old_file_id)
     return CustomSkillResponse.from_model(
         updated, group_ids=get_group_ids_for_skill(skill_id, db_session)
     )
@@ -275,7 +275,7 @@ def delete_custom_skill(
 
     push_skills_for_users(affected, db_session)
     if old_file_id is not None:
-        _delete_old_bundle(get_default_file_store(), old_file_id)
+        delete_bundle_blob(get_default_file_store(), old_file_id)
 
 
 @user_router.get("")
@@ -333,10 +333,3 @@ def _parse_group_ids(raw: str) -> list[int]:
             "group_ids must be a JSON array of integers",
         )
     return parsed
-
-
-def _delete_old_bundle(file_store: FileStore, file_id: str) -> None:
-    try:
-        file_store.delete_file(file_id, error_on_missing=False)
-    except Exception:
-        logger.warning("Failed to delete old bundle blob %s", file_id, exc_info=True)
