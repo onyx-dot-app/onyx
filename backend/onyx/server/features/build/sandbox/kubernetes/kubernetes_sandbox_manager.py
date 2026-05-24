@@ -824,6 +824,56 @@ class KubernetesSandboxManager(SandboxManager):
             else:
                 raise
 
+    def stream_pod_logs(
+        self,
+        sandbox_id: UUID,
+        *,
+        container: str = "sandbox",
+        tail_lines: int = 200,
+    ) -> Iterator[str]:
+        """Yield log lines from a sandbox pod's container as they arrive.
+
+        Dev/debug surface — gated by ``ENABLE_OPENCODE_DEBUGGING`` in the
+        API layer. Uses ``read_namespaced_pod_log(follow=True)``, which
+        returns an iterable of bytes chunks; we decode and split into
+        lines ourselves so the consumer sees one log line per yield.
+        """
+        pod_name = self._get_pod_name(sandbox_id)
+        try:
+            stream = self._core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=self._namespace,
+                container=container,
+                follow=True,
+                tail_lines=tail_lines,
+                _preload_content=False,  # required for streaming response
+            )
+        except ApiException as e:
+            logger.warning(
+                "stream_pod_logs: read_namespaced_pod_log failed for %s/%s: %s",
+                pod_name,
+                container,
+                e,
+            )
+            return
+
+        buf = ""
+        try:
+            for chunk in stream.stream(decode_content=True):
+                if not chunk:
+                    continue
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    yield line
+        finally:
+            try:
+                stream.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if buf:
+                yield buf
+
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
 

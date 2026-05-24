@@ -125,6 +125,15 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Dev/debug-only: when true, exposes a frontend button + SSE endpoint that
+# tails the user's sandbox pod's opencode-serve container logs. Never
+# enable in prod — the logs include LLM I/O and tool invocations that may
+# contain sensitive data. Disabled by default; the SSE endpoint 404s when
+# this is false so the surface is gone (not just hidden).
+ENABLE_OPENCODE_DEBUGGING = (
+    os.environ.get("ENABLE_OPENCODE_DEBUGGING", "false").lower() == "true"
+)
+
 # Internal URL the sandbox uses to reach the Onyx API server.
 # Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")

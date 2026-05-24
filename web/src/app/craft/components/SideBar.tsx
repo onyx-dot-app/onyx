@@ -41,6 +41,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { Button } from "@opal/components";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import TypewriterText from "@/app/craft/components/TypewriterText";
+import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
 import {
   DELETE_SUCCESS_DISPLAY_DURATION_MS,
   DELETE_MESSAGE_ROTATION_INTERVAL_MS,
@@ -473,6 +474,7 @@ const MemoizedBuildSidebarInner = memo(
       () => (
         <div>
           {backToChatButton}
+          <OpencodeDebugLogsButton folded={folded} />
           <AccountPopover folded={folded} />
         </div>
       ),
