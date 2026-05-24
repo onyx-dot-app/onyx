@@ -7,8 +7,13 @@ second subscriber's bus catches the *first* turn's terminator and emits
 PromptResponse as if turn 2 succeeded, while a phantom user_message gets
 persisted with no assistant reply.
 
-The fix: a per-(sandbox_id, opencode_session_id) lock, acquired non-
-blocking before user_message persistence. These tests lock the contract.
+The fix: a per-(sandbox_id, build_session_id) lock, acquired non-
+blocking before user_message persistence. Keying on build_session_id
+(not opencode_session_id) is deliberate — the opencode id can rotate
+mid-turn via the on_opencode_session_resolved callback, and keying on
+it would let concurrent requests in the recovery path acquire
+different locks and bypass serialization. These tests lock the
+contract.
 
 Bypasses ``_initialize`` (no K8s config needed) — pure lock logic.
 """
@@ -45,7 +50,7 @@ def mgr() -> KubernetesSandboxManager:
 
 
 _SBX: UUID = uuid4()
-_SES = "ses_test_concurrent"
+_SES: UUID = uuid4()  # build_session_id (the lock key)
 
 
 def test_prompt_slot_first_call_acquires(mgr: KubernetesSandboxManager) -> None:
@@ -93,10 +98,11 @@ def test_prompt_slot_releases_on_exception(mgr: KubernetesSandboxManager) -> Non
 def test_prompt_slot_different_sessions_dont_block(
     mgr: KubernetesSandboxManager,
 ) -> None:
-    """The lock keys on (sandbox_id, opencode_session_id) — two
-    DIFFERENT sessions on the same sandbox must NOT serialize. Otherwise
-    two users sharing one sandbox couldn't both have active turns."""
-    other_session = "ses_test_concurrent_other"
+    """The lock keys on (sandbox_id, build_session_id) — two DIFFERENT
+    build sessions on the same sandbox must NOT serialize. Otherwise a
+    user with multiple BuildSessions sharing one pod couldn't have two
+    in-flight turns simultaneously."""
+    other_session: UUID = uuid4()
     with mgr.prompt_slot(_SBX, _SES) as first:
         assert first is True
         with mgr.prompt_slot(_SBX, other_session) as second:
@@ -106,8 +112,9 @@ def test_prompt_slot_different_sessions_dont_block(
 def test_prompt_slot_different_sandboxes_dont_block(
     mgr: KubernetesSandboxManager,
 ) -> None:
-    """Same opencode_session_id collision across two different sandboxes
-    is theoretically possible (opencode ids aren't globally unique) —
+    """Same build_session_id across two different sandboxes is
+    practically impossible (build sessions belong to one user, one
+    sandbox) but the lock granularity still keys on the tuple, so
     serializing across sandboxes would be wrong."""
     other_sandbox = uuid4()
     with mgr.prompt_slot(_SBX, _SES) as first:

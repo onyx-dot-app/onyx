@@ -360,16 +360,15 @@ class SandboxManager(ABC):
     def prompt_slot(
         self,
         sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
-        opencode_session_id: str,  # noqa: ARG002
+        build_session_id: UUID,  # noqa: ARG002
     ) -> Generator[bool, None, None]:
-        """Non-blocking try-acquire of a per-(sandbox, session) lock that
-        serializes concurrent ``send_message`` calls on the same opencode
-        session.
+        """Non-blocking try-acquire of a per-(sandbox, build_session) lock
+        that serializes concurrent ``send_message`` calls on a build session.
 
         Yields ``True`` if the slot was acquired and the caller may proceed
         with the turn (lock is released on context exit), or ``False`` if a
-        turn is already in flight on this session and the caller should
-        abort without side effects (no user_message persistence, no
+        turn is already in flight on this build session and the caller
+        should abort without side effects (no user_message persistence, no
         prompt POST).
 
         Why this exists: opencode-serve's ``prompt_async`` is fire-and-
@@ -378,6 +377,19 @@ class SandboxManager(ABC):
         the second subscriber catches the *first* turn's terminator. Without
         serialization at this layer the user sees an empty response and a
         phantom user_message is persisted with no assistant reply.
+
+        Keying on ``build_session_id`` (rather than ``opencode_session_id``)
+        is deliberate:
+          1. It's stable across opencode session id rotations triggered by
+             the ``on_opencode_session_resolved`` callback — concurrent
+             requests landing in the middle of a 404-then-mint sequence
+             still contend on the same lock.
+          2. It blocks first-turn races: two simultaneous prompts on a
+             fresh build session (where ``opencode_session_id`` is NULL
+             for both) both contend before each calls POST /session, so
+             only one opencode session is ever created.
+          3. It bounds the lock dict size to one entry per build session
+             instead of one per (build_session × pod_restart_count).
 
         Default implementation is a no-op (yields ``True``) for transports
         that don't multiplex a long-lived process (e.g. ACP, which exec's a

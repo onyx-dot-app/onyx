@@ -1733,46 +1733,40 @@ class SessionManager:
             # Update last activity timestamp
             update_session_activity(session_id, self._db_session)
 
-            # Acquire a per-opencode-session lock BEFORE we persist the
-            # user_message row. opencode-serve's prompt_async is fire-and-
-            # forget and not concurrent-safe — a second POST against a
-            # busy session is silently dropped, and the second subscriber
-            # catches the first turn's terminator (looks successful, no
-            # actual work). Without this lock the user sees an empty
-            # response and a phantom user_message gets persisted. See
-            # SandboxManager.prompt_slot for the full rationale.
+            # Acquire a per-build-session lock BEFORE we touch the opencode
+            # session id (preflight + persist + transport). Keying on
+            # build_session_id (not opencode_session_id) is deliberate:
+            # the opencode id can rotate mid-turn via the
+            # on_opencode_session_resolved callback, so a key based on it
+            # would let a concurrent request acquire a DIFFERENT lock and
+            # bypass serialization on exactly the recovery path. It also
+            # blocks first-turn races where two simultaneous prompts on a
+            # fresh build session would each mint their own opencode
+            # session. See SandboxManager.prompt_slot for the full
+            # rationale.
             #
             # The slot is released in the matching `finally` at the
             # bottom of this try/except block.
-            from onyx.server.features.build.configs import AGENT_TRANSPORT
-            from onyx.server.features.build.configs import AgentTransport
-
-            if AGENT_TRANSPORT == AgentTransport.SERVE:
-                opencode_session_id_for_lock = self._ensure_opencode_session_id(
-                    sandbox.id, session_id
-                )
-                if opencode_session_id_for_lock is not None:
-                    candidate_cm = self._sandbox_manager.prompt_slot(
-                        sandbox.id, opencode_session_id_for_lock
+            candidate_cm = self._sandbox_manager.prompt_slot(sandbox.id, session_id)
+            if not candidate_cm.__enter__():
+                # Release the no-op exit so the context manager's
+                # contract is respected, then surface a clean error
+                # without persisting any user_message or contacting
+                # opencode.
+                candidate_cm.__exit__(None, None, None)
+                error_packet = ErrorPacket(
+                    message=(
+                        "This session is busy with a previous turn. "
+                        "Please wait for it to finish before sending "
+                        "another message."
                     )
-                    if not candidate_cm.__enter__():
-                        # Release the no-op exit so the context manager's
-                        # contract is respected, then surface a clean error
-                        # without persisting any user_message.
-                        candidate_cm.__exit__(None, None, None)
-                        error_packet = ErrorPacket(
-                            message=(
-                                "This session is busy with a previous turn. "
-                                "Please wait for it to finish before sending "
-                                "another message."
-                            )
-                        )
-                        packet_logger.log("error", error_packet.model_dump())
-                        yield self._format_packet_event(error_packet)
-                        return
-                    # Slot acquired — hand off ownership to the outer
-                    # finally, which releases on every exit path.
-                    prompt_slot_cm = candidate_cm
+                )
+                packet_logger.log("error", error_packet.model_dump())
+                yield self._format_packet_event(error_packet)
+                return
+            # Slot acquired — hand off ownership to the outer finally,
+            # which releases on every exit path.
+            prompt_slot_cm = candidate_cm
 
             # Calculate turn_index BEFORE saving user message
             # turn_index = count of existing USER messages (this will be the Nth user message)

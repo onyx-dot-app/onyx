@@ -328,11 +328,14 @@ class KubernetesSandboxManager(SandboxManager):
         self._terminated_sandboxes: set[UUID] = set()
         self._event_buses_lock = threading.Lock()
 
-        # Per-(sandbox_id, opencode_session_id) locks that serialize
-        # concurrent send_message calls on the same opencode session.
-        # See SandboxManager.prompt_slot for the rationale (opencode's
-        # prompt_async silently no-ops a second prompt on a busy session).
-        self._prompt_locks: dict[tuple[UUID, str], threading.Lock] = {}
+        # Per-(sandbox_id, build_session_id) locks that serialize concurrent
+        # send_message calls on a single build session. See
+        # SandboxManager.prompt_slot for why this is keyed on
+        # build_session_id rather than opencode_session_id — short version:
+        # the opencode id can rotate mid-turn via the
+        # on_opencode_session_resolved callback, and keying on it would
+        # break serialization precisely in the recovery path.
+        self._prompt_locks: dict[tuple[UUID, UUID], threading.Lock] = {}
         self._prompt_locks_meta: threading.Lock = threading.Lock()
 
         # Load AGENTS.md template path
@@ -867,12 +870,15 @@ class KubernetesSandboxManager(SandboxManager):
                     line, buf = buf.split("\n", 1)
                     yield line
         finally:
+            # No `yield buf` here even if a partial line is in flight —
+            # PEP 342 forbids yielding while a generator is closing via
+            # GeneratorExit (raises RuntimeError). Losing the last
+            # unterminated chunk on client disconnect is acceptable; it
+            # would be incomplete anyway.
             try:
                 stream.close()
             except Exception:  # noqa: BLE001
                 pass
-            if buf:
-                yield buf
 
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
@@ -2230,10 +2236,11 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
     def prompt_slot(
         self,
         sandbox_id: UUID,
-        opencode_session_id: str,
+        build_session_id: UUID,
     ) -> Generator[bool, None, None]:
-        """Try-acquire the serializing lock for one opencode session. See
-        :meth:`SandboxManager.prompt_slot` for why this exists.
+        """Try-acquire the serializing lock for one build session. See
+        :meth:`SandboxManager.prompt_slot` for why this is keyed on
+        build_session_id rather than opencode_session_id.
 
         Returns ``False`` immediately (no waiting) if a turn is already in
         flight — the caller MUST surface a clean Error to the user without
@@ -2243,7 +2250,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             yield True
             return
 
-        key = (sandbox_id, opencode_session_id)
+        key = (sandbox_id, build_session_id)
         with self._prompt_locks_meta:
             lock = self._prompt_locks.get(key)
             if lock is None:
@@ -2255,9 +2262,9 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             if not acquired:
                 logger.warning(
                     "[SANDBOX-SERVE] prompt_slot: refused — concurrent send_message "
-                    "on sandbox=%s opencode_session=%s",
+                    "on sandbox=%s build_session=%s",
                     sandbox_id,
-                    opencode_session_id,
+                    build_session_id,
                 )
             yield acquired
         finally:
