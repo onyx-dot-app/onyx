@@ -1,6 +1,7 @@
 import re
 from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -12,6 +13,7 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,7 +103,6 @@ def get_user_credentials_by_app_id(
 
 def create_external_app(
     db_session: Session,
-    slug: str,
     name: str,
     description: str,
     bundle_file_id: str,
@@ -119,27 +120,49 @@ def create_external_app(
     (name/description) and lifecycle (enabled); the external_app row owns
     gateway state (auth_template, upstream patterns, org creds).
 
-    `create_skill` raises ``OnyxError(DUPLICATE_RESOURCE)`` on slug collision
-    (before anything is committed).
+    The skill row's *shape* is derived from ``app_type``:
+
+    - A built-in provider (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) gets a built-in
+      skill row (``built_in_skill_id`` set, ``slug`` == that id) so it delivers
+      its bundled on-disk content through the same path as a seeded built-in.
+      Slug uniqueness means one instance per provider per tenant — a duplicate
+      raises ``OnyxError(DUPLICATE_RESOURCE)``.
+    - A ``CUSTOM`` app gets a custom (bundle-backed) skill row with a fresh
+      slug, so multiple instances can coexist.
     """
-    # Deferred import: `db.skill` imports `is_user_authenticated_for_app`
-    # from this module to filter listings, so the dependency only flows
-    # one way at module-load time.
+    from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
 
-    skill = create_skill__no_commit(
-        slug=slug,
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=bundle_sha256,
-        is_public=is_public,
-        author_user_id=author_user_id,
-        db_session=db_session,
-    )
-    # `create_skill` hardcodes enabled=True; honour the caller's intent.
-    if not enabled:
-        skill.enabled = False
+    built_in_skill_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS.get(app_type)
+    if built_in_skill_id is not None:
+        skill = create_built_in_skill_row__no_commit(
+            built_in_skill_id=built_in_skill_id,
+            name=name,
+            description=description,
+            is_public=is_public,
+            enabled=enabled,
+            author_user_id=author_user_id,
+            db_session=db_session,
+        )
+    else:
+        # CUSTOM: fresh slug so multiple instances don't collide. The bundle is
+        # intentionally empty for now — custom-app bundle rendering is a
+        # separate workstream.
+        slug = f"{app_type.value.lower()}-{uuid4().hex[:8]}"
+        skill = create_skill__no_commit(
+            slug=slug,
+            name=name,
+            description=description,
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=bundle_sha256,
+            is_public=is_public,
+            author_user_id=author_user_id,
+            db_session=db_session,
+        )
+        # `create_skill` hardcodes enabled=True; honour the caller's intent.
+        if not enabled:
+            skill.enabled = False
+
     app = ExternalApp(
         skill_id=skill.id,
         app_type=app_type,
@@ -167,13 +190,16 @@ def update_external_app(
     committing both atomically.
 
     Skill-side fields: name, description, enabled.
-    External-app-side fields: app_type, upstream_url_patterns,
-    auth_template, organization_credentials.
+    External-app-side fields: upstream_url_patterns, auth_template,
+    organization_credentials.
 
-    Slug, bundle, and sharing scope are out of scope here (each has its
-    own update path in ``onyx.db.skill``).
+    ``app_type`` is immutable — it's the discriminator the OAuth dispatch
+    layer keys off and what the backing skill's definition source is bound
+    to, so it's passed for validation only. Slug, bundle, and sharing scope
+    are out of scope here (each has its own update path in ``onyx.db.skill``).
 
-    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
+    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists,
+    or ``OnyxError(INVALID_INPUT)`` if `app_type` differs from the stored value.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -182,11 +208,19 @@ def update_external_app(
             f"External app with id {external_app_id} not found.",
         )
 
+    # app_type is immutable. Changing it would silently rebind the skill's
+    # definition source
+    if app.app_type != app_type:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"app_type is immutable; cannot change from "
+            f"'{app.app_type.value}' to '{app_type.value}'.",
+        )
+
     app.skill.name = name
     app.skill.description = description
     app.skill.enabled = enabled
 
-    app.app_type = app_type
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials

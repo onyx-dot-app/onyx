@@ -30,6 +30,8 @@ from fastapi_users.password import PasswordHelper
 if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
 from redis import Redis
+from sqlalchemy import select
+from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -39,6 +41,8 @@ from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
+from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -67,6 +71,97 @@ _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 @pytest.fixture(autouse=True)
 def _sandbox_push_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+
+
+# ---------------------------------------------------------------------------
+# Skill-table isolation
+# ---------------------------------------------------------------------------
+#
+# These tests run against the shared ``public`` schema (``TEST_TENANT_ID ==
+# "public"``) — the very schema a self-hosted / local dev deployment uses. The
+# fixtures and helpers below commit ``Skill`` / ``ExternalApp`` rows directly
+# and nothing rolled them back, so every committed row leaked into the
+# developer's live craft skill list (and into the next test's view of the
+# table). Tests also delete/mutate the migration-seeded built-in rows
+# (``pptx``, ``image-generation``, ``company-search``), corrupting them for the
+# live app.
+#
+# The ``_test_helpers`` contract states "the surrounding test owns transaction
+# boundaries"; this autouse fixture is that boundary for the skill tables. It
+# snapshots their committed state before each test and restores it afterward,
+# so a run leaves these tables exactly as it found them (the canonical
+# built-ins on a freshly-migrated DB).
+
+# Parent -> child order (FKs all point child -> parent). Restore/insert in this
+# order; delete in reverse so FK constraints stay satisfied.
+_SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
+    Skill,
+    Skill__UserGroup,
+    ExternalApp,
+    ExternalAppUserCredential,
+)
+
+
+def _skill_table_column_keys(model: type[Any]) -> list[str]:
+    return [attr.key for attr in class_mapper(model).column_attrs]
+
+
+def _skill_table_pk_keys(model: type[Any]) -> list[str]:
+    return [col.key for col in class_mapper(model).primary_key]
+
+
+def _snapshot_skill_tables(
+    session: Session,
+) -> dict[type[Any], list[dict[str, Any]]]:
+    snapshot: dict[type[Any], list[dict[str, Any]]] = {}
+    for model in _SKILL_ISOLATION_MODELS:
+        keys = _skill_table_column_keys(model)
+        snapshot[model] = [
+            {key: getattr(row, key) for key in keys}
+            for row in session.execute(select(model)).scalars().all()
+        ]
+    return snapshot
+
+
+def _restore_skill_tables(
+    session: Session, snapshot: dict[type[Any], list[dict[str, Any]]]
+) -> None:
+    # Delete rows created during the test (children first so FKs stay valid).
+    for model in reversed(_SKILL_ISOLATION_MODELS):
+        pk_keys = _skill_table_pk_keys(model)
+        baseline_pks = {tuple(row[key] for key in pk_keys) for row in snapshot[model]}
+        for row in session.execute(select(model)).scalars().all():
+            if tuple(getattr(row, key) for key in pk_keys) not in baseline_pks:
+                session.delete(row)
+        session.flush()
+
+    # Re-insert baseline rows the test deleted and restore any it mutated
+    # (parents first). ``merge`` keys on PK: insert when absent, update when
+    # present.
+    for model in _SKILL_ISOLATION_MODELS:
+        for row in snapshot[model]:
+            session.merge(model(**row))
+        session.flush()
+
+    session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_skill_tables(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    """Restore the skill tables to their pre-test state (see note above).
+
+    Shares the test's ``db_session`` so there is a single transaction holder —
+    no second connection that could block on row locks the test still holds.
+    """
+    snapshot = _snapshot_skill_tables(db_session)
+    yield
+    # Drop any uncommitted state a failing/early-exiting test left open before
+    # reconciling against the committed baseline.
+    db_session.rollback()
+    _restore_skill_tables(db_session, snapshot)
 
 
 @pytest.fixture(scope="function")
