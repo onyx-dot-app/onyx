@@ -42,8 +42,8 @@ from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
-from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
@@ -123,28 +123,18 @@ def create_custom_skill(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    bundle_bytes = bundle.file.read()
-    slug = slug_from_filename(bundle.filename)
-    validate_custom_bundle(bundle_bytes, slug=slug)
-    name, description = parse_skill_md_metadata(bundle_bytes)
-    sha = compute_bundle_sha256(bundle_bytes)
     parsed_group_ids = _parse_group_ids(group_ids)
 
     file_store = get_default_file_store()
-    bundle_file_id = file_store.save_file(
-        content=io.BytesIO(bundle_bytes),
-        display_name=f"{slug}.zip",
-        file_origin=FileOrigin.SKILL_BUNDLE,
-        file_type="application/zip",
-    )
+    ingested = ingest_skill_bundle(bundle.file.read(), bundle.filename, file_store)
 
     try:
         skill = create_skill__no_commit(
-            slug=slug,
-            name=name,
-            description=description,
-            bundle_file_id=bundle_file_id,
-            bundle_sha256=sha,
+            slug=ingested.slug,
+            name=ingested.name,
+            description=ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
             is_public=is_public,
             author_user_id=user.id,
             db_session=db_session,
@@ -153,7 +143,7 @@ def create_custom_skill(
             replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
         db_session.commit()
     except Exception:
-        _delete_old_bundle(file_store, bundle_file_id)
+        _delete_old_bundle(file_store, ingested.bundle_file_id)
         raise
 
     push_skill_to_affected_sandboxes(skill, db_session)

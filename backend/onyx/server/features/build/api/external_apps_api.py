@@ -1,5 +1,11 @@
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import File
+from fastapi import Form
+from fastapi import UploadFile
+from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -14,6 +20,7 @@ from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
+from onyx.db.external_app import validate_auth_template
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
@@ -22,15 +29,36 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers import fetch_available_built_in_apps
 from onyx.external_apps.providers import fetch_built_in_app
+from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
 from onyx.server.features.build.api.models import UpsertExternalAppRequest
 from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
+from onyx.utils.logger import setup_logger
+from onyx.utils.pydantic_util import parse_json_form_field
+
+logger = setup_logger()
 
 router = APIRouter()
+
+# Adapters for the structured custom-app form fields, which arrive as JSON
+# strings (multipart can't carry native lists/objects).
+_STR_LIST_ADAPTER = TypeAdapter(list[str])
+_STR_DICT_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
+
+
+def _delete_bundle_blob(file_store: FileStore, file_id: str) -> None:
+    try:
+        file_store.delete_file(file_id, error_on_missing=False)
+    except Exception:
+        logger.warning(
+            "Failed to delete orphaned bundle blob %s", file_id, exc_info=True
+        )
 
 
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
@@ -89,9 +117,20 @@ def upsert_external_app(
     """Create a new external app, or update an existing one if `id` is set.
 
     If `id` is provided but no app with that id exists, returns 404.
+
+    This endpoint is for built-in providers only. Custom apps (bundle-backed)
+    are created and edited through ``/admin/apps/custom`` so their bundle can be
+    uploaded/replaced; sending ``app_type=CUSTOM`` here is rejected.
     """
+    if request.app_type == ExternalAppType.CUSTOM:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Custom apps must be managed via POST /admin/apps/custom.",
+        )
+
     if request.id is not None:
-        app = update_external_app(
+        # Built-in apps have no bundle to swap; ignore the returned old-blob id.
+        app, _old = update_external_app(
             db_session=db_session,
             external_app_id=request.id,
             name=request.name,
@@ -127,6 +166,183 @@ def upsert_external_app(
     # the skill and a user who hasn't authenticated yet still sees nothing.
     push_skill_to_affected_sandboxes(app.skill, db_session)
 
+    return _to_admin_response(app)
+
+
+@router.post("/admin/apps/custom")
+def upsert_custom_external_app(
+    name: str = Form(...),
+    description: str = Form(""),
+    upstream_url_patterns: str = Form(...),
+    auth_template: str = Form(...),
+    organization_credentials: str = Form(...),
+    app_id: int | None = Form(None),
+    enabled: bool = Form(True),
+    bundle: UploadFile | None = File(None),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ExternalAppAdminResponse:
+    """Create or edit a CUSTOM external app (bundle-backed) + gateway config.
+
+    Multipart because of the bundle file; the structured fields ride as
+    JSON-encoded form strings. The display name is the form value (overriding
+    the bundle's SKILL.md name); description falls back to the bundle's when
+    left blank.
+
+    - **Create** (`app_id` omitted): a bundle is required. It goes through the
+      same ingest pathway as a custom skill (validate → store) and an
+      ``ExternalApp`` row is created alongside the backing skill. Default-public.
+    - **Edit** (`app_id` set): updates name/description/enabled + gateway config.
+      A bundle is optional — when supplied it *replaces* the existing one
+      (keeping the slug); when omitted the current bundle is kept.
+    """
+    parsed_patterns = parse_json_form_field(
+        upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
+    )
+    parsed_auth_template = parse_json_form_field(
+        auth_template, _STR_DICT_ADAPTER, "auth_template"
+    )
+    parsed_org_credentials = parse_json_form_field(
+        organization_credentials, _STR_DICT_ADAPTER, "organization_credentials"
+    )
+
+    if not name.strip():
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "name is required.")
+    if not parsed_patterns:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "At least one upstream URL pattern is required.",
+        )
+    validate_auth_template(parsed_auth_template, parsed_org_credentials)
+
+    file_store = get_default_file_store()
+
+    if app_id is None:
+        return _create_custom_app(
+            db_session=db_session,
+            file_store=file_store,
+            name=name.strip(),
+            description=description.strip(),
+            upstream_url_patterns=parsed_patterns,
+            auth_template=parsed_auth_template,
+            organization_credentials=parsed_org_credentials,
+            bundle=bundle,
+        )
+
+    return _edit_custom_app(
+        db_session=db_session,
+        file_store=file_store,
+        app_id=app_id,
+        name=name.strip(),
+        description=description.strip(),
+        enabled=enabled,
+        upstream_url_patterns=parsed_patterns,
+        auth_template=parsed_auth_template,
+        organization_credentials=parsed_org_credentials,
+        bundle=bundle,
+    )
+
+
+def _create_custom_app(
+    *,
+    db_session: Session,
+    file_store: FileStore,
+    name: str,
+    description: str,
+    upstream_url_patterns: list[str],
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+    bundle: UploadFile | None,
+) -> ExternalAppAdminResponse:
+    if bundle is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A bundle (.zip) is required when creating a custom app.",
+        )
+    ingested = ingest_skill_bundle(bundle.file.read(), bundle.filename, file_store)
+    try:
+        app = create_external_app(
+            db_session=db_session,
+            name=name,
+            description=description or ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            app_type=ExternalAppType.CUSTOM,
+            upstream_url_patterns=upstream_url_patterns,
+            auth_template=auth_template,
+            organization_credentials=organization_credentials,
+            is_public=True,
+            slug=ingested.slug,
+        )
+    except Exception:
+        _delete_bundle_blob(file_store, ingested.bundle_file_id)
+        raise
+
+    push_skill_to_affected_sandboxes(app.skill, db_session)
+    return _to_admin_response(app)
+
+
+def _edit_custom_app(
+    *,
+    db_session: Session,
+    file_store: FileStore,
+    app_id: int,
+    name: str,
+    description: str,
+    enabled: bool,
+    upstream_url_patterns: list[str],
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+    bundle: UploadFile | None,
+) -> ExternalAppAdminResponse:
+    existing = get_external_app_by_id(db_session, app_id)
+    if existing is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"External app with id {app_id} not found.",
+        )
+
+    # Optionally replace the bundle, keeping the existing slug (stable identity).
+    new_bundle_file_id: str | None = None
+    new_bundle_sha256: str | None = None
+    final_description = description
+    if bundle is not None:
+        ingested = ingest_skill_bundle(
+            bundle.file.read(),
+            bundle.filename,
+            file_store,
+            slug=existing.skill.slug,
+        )
+        new_bundle_file_id = ingested.bundle_file_id
+        new_bundle_sha256 = ingested.bundle_sha256
+        if not final_description:
+            final_description = ingested.description
+
+    try:
+        app, old_bundle_file_id = update_external_app(
+            db_session=db_session,
+            external_app_id=app_id,
+            name=name,
+            description=final_description,
+            enabled=enabled,
+            app_type=ExternalAppType.CUSTOM,
+            upstream_url_patterns=upstream_url_patterns,
+            auth_template=auth_template,
+            organization_credentials=organization_credentials,
+            new_bundle_file_id=new_bundle_file_id,
+            new_bundle_sha256=new_bundle_sha256,
+        )
+    except Exception:
+        # Roll back the freshly-stored bundle blob if the update failed.
+        if new_bundle_file_id:
+            _delete_bundle_blob(file_store, new_bundle_file_id)
+        raise
+
+    # Drop the superseded bundle blob only after the swap committed.
+    if old_bundle_file_id:
+        _delete_bundle_blob(file_store, old_bundle_file_id)
+
+    push_skill_to_affected_sandboxes(app.skill, db_session)
     return _to_admin_response(app)
 
 

@@ -45,6 +45,44 @@ def required_user_credential_keys(
     )
 
 
+def validate_auth_template(
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+) -> None:
+    """Validate an external app's header credential template before persisting.
+
+    The egress proxy injects ``auth_template`` headers (with ``{placeholder}``
+    values filled from org + per-user credentials) into outbound requests. An
+    app may legitimately inject *no* headers — e.g. an allowlist-only app that
+    just grants the sandbox network access to its upstream patterns — so an
+    empty template (and empty organization credentials) is allowed. When headers
+    *are* provided, each must be a non-empty string name mapped to a non-empty
+    string value; organization-credential keys must likewise be non-empty
+    strings. Raises ``OnyxError(INVALID_INPUT)`` on any violation.
+
+    Note: only ``{name}`` tokens matching the credential-key grammar are treated
+    as placeholders (see ``_PLACEHOLDER_RE``); other braces are literal, so
+    there is nothing further to validate about placeholder legality here.
+    """
+    for key, value in auth_template.items():
+        if not isinstance(key, str) or not key.strip():
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "auth_template header names must be non-empty strings.",
+            )
+        if not isinstance(value, str) or not value.strip():
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"auth_template value for header '{key}' must be a non-empty string.",
+            )
+    for key in organization_credentials:
+        if not isinstance(key, str) or not key.strip():
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "organization_credentials keys must be non-empty strings.",
+            )
+
+
 def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
@@ -114,6 +152,7 @@ def create_external_app(
     enabled: bool = True,
     is_public: bool = False,
     author_user_id: UUID | None = None,
+    slug: str | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it,
     committing both atomically. The skill row owns display metadata
@@ -127,8 +166,10 @@ def create_external_app(
       its bundled on-disk content through the same path as a seeded built-in.
       Slug uniqueness means one instance per provider per tenant — a duplicate
       raises ``OnyxError(DUPLICATE_RESOURCE)``.
-    - A ``CUSTOM`` app gets a custom (bundle-backed) skill row with a fresh
-      slug, so multiple instances can coexist.
+    - A ``CUSTOM`` app gets a custom (bundle-backed) skill row. ``slug`` is the
+      uploaded bundle's filename-derived slug (see the custom-app create
+      endpoint); when omitted, a fresh ``custom-<uuid>`` slug is generated so
+      bundle-less callers still get a unique, collision-free row.
     """
     from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
@@ -145,12 +186,11 @@ def create_external_app(
             db_session=db_session,
         )
     else:
-        # CUSTOM: fresh slug so multiple instances don't collide. The bundle is
-        # intentionally empty for now — custom-app bundle rendering is a
-        # separate workstream.
-        slug = f"{app_type.value.lower()}-{uuid4().hex[:8]}"
+        # CUSTOM: use the bundle's filename-derived slug, falling back to a
+        # generated one when no bundle is supplied (e.g. the JSON upsert path).
+        custom_slug = slug or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
         skill = create_skill__no_commit(
-            slug=slug,
+            slug=custom_slug,
             name=name,
             description=description,
             bundle_file_id=bundle_file_id,
@@ -185,18 +225,28 @@ def update_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
-) -> ExternalApp:
+    new_bundle_file_id: str | None = None,
+    new_bundle_sha256: str | None = None,
+) -> tuple[ExternalApp, str | None]:
     """Replace mutable fields on the external app and its linked skill,
-    committing both atomically.
+    committing both atomically. Returns ``(app, old_bundle_file_id)``.
 
     Skill-side fields: name, description, enabled.
     External-app-side fields: upstream_url_patterns, auth_template,
     organization_credentials.
 
-    ``app_type`` is immutable — it's the discriminator the OAuth dispatch
-    layer keys off and what the backing skill's definition source is bound
-    to, so it's passed for validation only. Slug, bundle, and sharing scope
-    are out of scope here (each has its own update path in ``onyx.db.skill``).
+    ``app_type`` is immutable — it's the discriminator the OAuth dispatch layer
+    keys off and what the backing skill's definition source is bound to, so it's
+    passed for validation only. Passing a value that differs from the stored one
+    raises; this also blocks editing a built-in app through the custom-app path
+    (which passes ``CUSTOM``) and vice versa.
+
+    Bundle replacement (custom apps only): when ``new_bundle_file_id`` /
+    ``new_bundle_sha256`` are given the skill's bundle is swapped (slug
+    unchanged) and the *previous* ``bundle_file_id`` is returned so the caller
+    can delete that blob after the commit — never inline. When omitted the
+    existing bundle is kept and the returned old id is ``None``. Built-in
+    callers leave these unset and ignore the returned id.
 
     Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists,
     or ``OnyxError(INVALID_INPUT)`` if `app_type` differs from the stored value.
@@ -209,7 +259,7 @@ def update_external_app(
         )
 
     # app_type is immutable. Changing it would silently rebind the skill's
-    # definition source
+    # definition source.
     if app.app_type != app_type:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -221,12 +271,19 @@ def update_external_app(
     app.skill.description = description
     app.skill.enabled = enabled
 
+    old_bundle_file_id: str | None = None
+    if new_bundle_file_id is not None:
+        # Keep the slug; only the bundle bytes change.
+        old_bundle_file_id = app.skill.bundle_file_id
+        app.skill.bundle_file_id = new_bundle_file_id
+        app.skill.bundle_sha256 = new_bundle_sha256
+
     app.upstream_url_patterns = upstream_url_patterns
     app.auth_template = auth_template
     app.organization_credentials = organization_credentials
 
     db_session.commit()
-    return app
+    return app, old_bundle_file_id
 
 
 def delete_external_app(
