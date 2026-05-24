@@ -144,18 +144,18 @@ def test_ensure_session_does_not_retry_on_http_error() -> None:
     raise AssertionError("expected HTTPStatusError")
 
 
-def test_ensure_session_retries_on_create_post_too() -> None:
-    """When the caller passes opencode_session_id=None (preflight on a
-    brand-new BuildSession), the create POST also needs the cold-pod
-    retry — opencode-serve's bind race doesn't care which HTTP method we
-    use."""
+def test_ensure_session_retries_post_on_connecterror() -> None:
+    """When the caller passes opencode_session_id=None, the create POST
+    is retryable on ConnectError specifically — TCP-refused proves the
+    server never saw the request, so retrying it cannot create duplicate
+    state."""
     call_count = {"n": 0}
 
     def handler(req: httpx.Request) -> httpx.Response:
         call_count["n"] += 1
         if req.method == "POST" and req.url.path == "/session":
             if call_count["n"] == 1:
-                raise httpx.RemoteProtocolError("Server disconnected", request=req)
+                raise httpx.ConnectError("Connection refused", request=req)
             return httpx.Response(200, json={"id": _FRESH_ID})
         raise AssertionError(f"unexpected {req.method} {req.url.path}")
 
@@ -165,3 +165,30 @@ def test_ensure_session_retries_on_create_post_too() -> None:
     resolved = client.ensure_session(None, cwd=_CWD)
     assert resolved == _FRESH_ID
     assert call_count["n"] == 2
+
+
+def test_ensure_session_does_not_retry_post_on_remoteprotocolerror() -> None:
+    """POST /session is non-idempotent. RemoteProtocolError means the
+    server may have processed the request before the connection died —
+    retrying would create a duplicate opencode session and orphan the
+    first. The exception MUST propagate so the caller can surface the
+    failure rather than silently leaking sessions."""
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if req.method == "POST" and req.url.path == "/session":
+            raise httpx.RemoteProtocolError("Server disconnected", request=req)
+        raise AssertionError(f"unexpected {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    try:
+        client.ensure_session(None, cwd=_CWD)
+    except httpx.RemoteProtocolError:
+        assert call_count["n"] == 1, (
+            "POST /session must NOT retry on RemoteProtocolError"
+        )
+        return
+    raise AssertionError("expected RemoteProtocolError to propagate, not retry")

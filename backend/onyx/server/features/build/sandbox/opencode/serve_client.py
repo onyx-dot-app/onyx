@@ -664,21 +664,41 @@ class OpencodeServeClient:
     _COLD_POD_BASE_DELAY = 0.25
 
     def _http_with_cold_pod_retry(
-        self, method: str, path: str, **kwargs: Any
+        self,
+        method: str,
+        path: str,
+        *,
+        idempotent: bool = False,
+        **kwargs: Any,
     ) -> httpx.Response:
         """``self._http.request`` with bounded retries for transient
         connection errors that fire when the sandbox pod is K8s-Ready but
         opencode-serve hasn't bound :4096 yet.
 
-        Retries on ``ConnectError`` and ``RemoteProtocolError`` only — never
-        on HTTP error responses, which are application-level signals the
-        caller must handle.
+        ``ConnectError`` is always retryable — a TCP connection refused
+        proves the server never saw the request, so a retry can never
+        produce duplicate side effects.
+
+        ``RemoteProtocolError`` ("server disconnected without sending a
+        response") is only retryable when the caller passes
+        ``idempotent=True``. The server MAY have processed the request
+        before the connection died, so retrying a non-idempotent POST
+        (e.g. ``POST /session``) can create duplicate state — exactly the
+        orphan-session bug this transport was designed to avoid.
+
+        Never retries HTTP error responses — those are application-level
+        signals the caller must handle.
         """
-        last_exc: Exception | None = None
+        retryable: tuple[type[BaseException], ...] = (
+            (httpx.ConnectError, httpx.RemoteProtocolError)
+            if idempotent
+            else (httpx.ConnectError,)
+        )
+        last_exc: BaseException | None = None
         for attempt in range(self._COLD_POD_RETRIES + 1):
             try:
                 return self._http.request(method, path, **kwargs)
-            except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+            except retryable as e:
                 last_exc = e
                 if attempt == self._COLD_POD_RETRIES:
                     break
@@ -711,7 +731,11 @@ class OpencodeServeClient:
         response") are retried with short backoff before bubbling up.
         """
         if opencode_session_id:
-            r = self._http_with_cold_pod_retry("GET", f"/session/{opencode_session_id}")
+            # GET is idempotent — safe to retry on either ConnectError or
+            # RemoteProtocolError.
+            r = self._http_with_cold_pod_retry(
+                "GET", f"/session/{opencode_session_id}", idempotent=True
+            )
             if r.status_code == 200:
                 logger.info(
                     "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 200 "
@@ -736,7 +760,14 @@ class OpencodeServeClient:
         body: dict[str, Any] = {"directory": cwd}
         if title:
             body["title"] = title
-        r = self._http_with_cold_pod_retry("POST", "/session", json=body)
+        # POST /session is NOT idempotent — opencode mints a new session
+        # id on every request. Retrying only on ConnectError (TCP refused
+        # = server never saw it) keeps the call safe; a
+        # RemoteProtocolError after a half-handled POST could leak an
+        # orphan opencode session.
+        r = self._http_with_cold_pod_retry(
+            "POST", "/session", json=body, idempotent=False
+        )
         _raise_for_status(r, "session create")
         data = r.json()
         new_id = data.get("id")
