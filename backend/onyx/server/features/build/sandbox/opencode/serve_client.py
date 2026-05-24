@@ -659,6 +659,43 @@ class OpencodeServeClient:
         except httpx.HTTPError:
             return False
 
+    # Cold-pod retry tunables — short window, total worst-case ~1.5s.
+    _COLD_POD_RETRIES = 3
+    _COLD_POD_BASE_DELAY = 0.25
+
+    def _http_with_cold_pod_retry(
+        self, method: str, path: str, **kwargs: Any
+    ) -> httpx.Response:
+        """``self._http.request`` with bounded retries for transient
+        connection errors that fire when the sandbox pod is K8s-Ready but
+        opencode-serve hasn't bound :4096 yet.
+
+        Retries on ``ConnectError`` and ``RemoteProtocolError`` only — never
+        on HTTP error responses, which are application-level signals the
+        caller must handle.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(self._COLD_POD_RETRIES + 1):
+            try:
+                return self._http.request(method, path, **kwargs)
+            except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+                last_exc = e
+                if attempt == self._COLD_POD_RETRIES:
+                    break
+                delay = self._COLD_POD_BASE_DELAY * (attempt + 1)
+                logger.info(
+                    "[SESSION-LIFECYCLE] cold-pod retry %d/%d for %s %s after %s: %s",
+                    attempt + 1,
+                    self._COLD_POD_RETRIES,
+                    method,
+                    path,
+                    type(e).__name__,
+                    e,
+                )
+                time.sleep(delay)
+        assert last_exc is not None
+        raise last_exc
+
     def ensure_session(
         self,
         opencode_session_id: str | None,
@@ -666,9 +703,15 @@ class OpencodeServeClient:
         cwd: str,
         title: str | None = None,
     ) -> str:
-        """Return a valid opencode session id. Idempotent across replicas."""
+        """Return a valid opencode session id. Idempotent across replicas.
+
+        Tolerates a brief cold-pod window where the sandbox is K8s-Ready
+        but opencode-serve hasn't bound :4096 yet — both connect failures
+        and RemoteProtocolError ("server disconnected before sending a
+        response") are retried with short backoff before bubbling up.
+        """
         if opencode_session_id:
-            r = self._http.get(f"/session/{opencode_session_id}")
+            r = self._http_with_cold_pod_retry("GET", f"/session/{opencode_session_id}")
             if r.status_code == 200:
                 logger.info(
                     "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 200 "
@@ -693,7 +736,7 @@ class OpencodeServeClient:
         body: dict[str, Any] = {"directory": cwd}
         if title:
             body["title"] = title
-        r = self._http.post("/session", json=body)
+        r = self._http_with_cold_pod_retry("POST", "/session", json=body)
         _raise_for_status(r, "session create")
         data = r.json()
         new_id = data.get("id")
