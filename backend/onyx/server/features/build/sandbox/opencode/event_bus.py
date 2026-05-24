@@ -78,6 +78,15 @@ class PodEventBus:
         self._reader_thread: threading.Thread | None = None
         self.stream_ready = threading.Event()
 
+    @property
+    def closed(self) -> bool:
+        """True once the bus has either been explicitly closed or self-closed
+        after exhausting its reconnect budget. Callers that cache buses
+        (e.g. ``KubernetesSandboxManager._event_buses``) should check this
+        before reusing a bus — a closed bus will only deliver
+        ``BUS_CLOSED_SENTINEL`` to subscribers."""
+        return self._closed
+
     def subscribe(self, session_id: str) -> _Subscription:
         sub = _Subscription(
             session_id=session_id,

@@ -35,6 +35,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 
 import base64
 import binascii
+import contextlib
 import hashlib
 import io
 import json
@@ -326,6 +327,13 @@ class KubernetesSandboxManager(SandboxManager):
         # loop otherwise). Cleared on re-provision.
         self._terminated_sandboxes: set[UUID] = set()
         self._event_buses_lock = threading.Lock()
+
+        # Per-(sandbox_id, opencode_session_id) locks that serialize
+        # concurrent send_message calls on the same opencode session.
+        # See SandboxManager.prompt_slot for the rationale (opencode's
+        # prompt_async silently no-ops a second prompt on a busy session).
+        self._prompt_locks: dict[tuple[UUID, str], threading.Lock] = {}
+        self._prompt_locks_meta: threading.Lock = threading.Lock()
 
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
@@ -2114,11 +2122,23 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
     def _get_or_create_event_bus(self, sandbox_id: UUID) -> "PodEventBus":
         """Lazily build the per-pod :class:`PodEventBus`. Refuses to
-        create one for a terminated sandbox (see ``_terminated_sandboxes``)."""
+        create one for a terminated sandbox (see ``_terminated_sandboxes``).
+
+        Replaces a cached bus that has self-closed (exhausted its reconnect
+        budget) with a fresh one — otherwise callers would keep getting
+        ``BUS_CLOSED_SENTINEL`` until the api server restarted.
+        """
         with self._event_buses_lock:
             bus = self._event_buses.get(sandbox_id)
-            if bus is not None:
+            if bus is not None and not bus.closed:
                 return bus
+            if bus is not None and bus.closed:
+                logger.warning(
+                    "[SANDBOX-SERVE] Replacing self-closed PodEventBus for "
+                    "sandbox %s (prior bus exhausted its reconnect budget)",
+                    sandbox_id,
+                )
+                self._event_buses.pop(sandbox_id, None)
             if sandbox_id in self._terminated_sandboxes:
                 raise RuntimeError(
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
@@ -2155,6 +2175,44 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             password=password,
             event_bus=bus,
         )
+
+    @contextlib.contextmanager
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        opencode_session_id: str,
+    ) -> Generator[bool, None, None]:
+        """Try-acquire the serializing lock for one opencode session. See
+        :meth:`SandboxManager.prompt_slot` for why this exists.
+
+        Returns ``False`` immediately (no waiting) if a turn is already in
+        flight — the caller MUST surface a clean Error to the user without
+        persisting any new user_message row.
+        """
+        if AGENT_TRANSPORT != AgentTransport.SERVE:
+            yield True
+            return
+
+        key = (sandbox_id, opencode_session_id)
+        with self._prompt_locks_meta:
+            lock = self._prompt_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._prompt_locks[key] = lock
+
+        acquired = lock.acquire(blocking=False)
+        try:
+            if not acquired:
+                logger.warning(
+                    "[SANDBOX-SERVE] prompt_slot: refused — concurrent send_message "
+                    "on sandbox=%s opencode_session=%s",
+                    sandbox_id,
+                    opencode_session_id,
+                )
+            yield acquired
+        finally:
+            if acquired:
+                lock.release()
 
     def ensure_opencode_session(
         self,

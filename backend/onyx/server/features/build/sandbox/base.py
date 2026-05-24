@@ -14,6 +14,7 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
+import contextlib
 import threading
 import time
 from abc import ABC
@@ -354,6 +355,35 @@ class SandboxManager(ABC):
           same stale id and orphan a fresh opencode session per turn.
         """
         ...
+
+    @contextlib.contextmanager
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,  # noqa: ARG002 — used by serve-transport subclasses
+        opencode_session_id: str,  # noqa: ARG002
+    ) -> Generator[bool, None, None]:
+        """Non-blocking try-acquire of a per-(sandbox, session) lock that
+        serializes concurrent ``send_message`` calls on the same opencode
+        session.
+
+        Yields ``True`` if the slot was acquired and the caller may proceed
+        with the turn (lock is released on context exit), or ``False`` if a
+        turn is already in flight on this session and the caller should
+        abort without side effects (no user_message persistence, no
+        prompt POST).
+
+        Why this exists: opencode-serve's ``prompt_async`` is fire-and-
+        forget and not concurrent-safe — empirically, a second POST while
+        a turn is in flight is silently dropped (no 409, no queue), and
+        the second subscriber catches the *first* turn's terminator. Without
+        serialization at this layer the user sees an empty response and a
+        phantom user_message is persisted with no assistant reply.
+
+        Default implementation is a no-op (yields ``True``) for transports
+        that don't multiplex a long-lived process (e.g. ACP, which exec's a
+        fresh opencode per turn).
+        """
+        yield True
 
     def ensure_opencode_session(
         self,
