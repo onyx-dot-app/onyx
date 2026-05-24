@@ -49,7 +49,7 @@ router = APIRouter()
 # Adapters for the structured custom-app form fields, which arrive as JSON
 # strings (multipart can't carry native lists/objects).
 _STR_LIST_ADAPTER = TypeAdapter(list[str])
-_STR_DICT_ADAPTER: TypeAdapter[dict[str, Any]] = TypeAdapter(dict[str, Any])
+_STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
 
 
 def _delete_bundle_blob(file_store: FileStore, file_id: str) -> None:
@@ -212,6 +212,11 @@ def upsert_custom_external_app(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "At least one upstream URL pattern is required.",
+        )
+    if any(not p.strip() for p in parsed_patterns):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "upstream_url_patterns must not contain empty entries.",
         )
     validate_auth_template(parsed_auth_template, parsed_org_credentials)
 

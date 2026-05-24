@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button, Text } from "@opal/components";
+import { Button, MessageCard, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
@@ -239,9 +239,11 @@ export default function CreateCustomAppModal({
             </div>
 
             {error && (
-              <Text font="secondary-body" color="text-03">
-                {error}
-              </Text>
+              <MessageCard
+                variant="error"
+                title="Couldn't save"
+                description={error}
+              />
             )}
           </div>
         </Modal.Body>
