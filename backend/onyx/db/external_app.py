@@ -259,7 +259,7 @@ def update_external_app(
         )
 
     # app_type is immutable. Changing it would silently rebind the skill's
-    # definition source.
+    # definition source
     if app.app_type != app_type:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
