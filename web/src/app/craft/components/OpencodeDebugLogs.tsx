@@ -173,7 +173,12 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
             try {
               const payload = JSON.parse(dataLine.slice(5).trim());
               if (typeof payload.line === "string") {
-                appendLine(payload.line.replace(/\\n/g, "\n"));
+                // Backend uses json.dumps which already escapes any real
+                // newlines as \n inside the JSON string; JSON.parse
+                // decodes them back to real newlines. No client-side
+                // replace needed — and doing one would corrupt log lines
+                // that contain a literal backslash-n.
+                appendLine(payload.line);
               } else if (typeof payload.message === "string") {
                 setStatus("error");
                 setErrorMessage(payload.message);

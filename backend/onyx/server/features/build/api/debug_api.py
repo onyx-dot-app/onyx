@@ -8,6 +8,7 @@ The one endpoint right now is the opencode pod log streamer, used by the
 FE debug button to tail the user's sandbox pod logs in real time.
 """
 
+import json
 from collections.abc import Generator
 
 from fastapi import APIRouter
@@ -76,12 +77,14 @@ def stream_opencode_logs(
         try:
             for line in stream_fn(sandbox.id):
                 events_yielded += 1
-                # SSE: one event per line, JSON-wrapped for forward compat.
-                # Replace embedded newlines so they don't terminate the SSE
-                # frame mid-event (lines from kubectl can already be broken
-                # but defensive is cheaper than debugging).
-                safe = line.replace("\r", "").replace("\n", "\\n")
-                yield f'event: log\ndata: {{"line":"{_escape(safe)}"}}\n\n'
+                # json.dumps correctly escapes control characters (ANSI
+                # color codes, tabs, embedded newlines, U+2028/U+2029)
+                # that a hand-rolled escape misses and that JSON.parse
+                # rejects per RFC 8259 §7. Plus it round-trips a literal
+                # "\\n" in the log content as "\\n" rather than turning
+                # it into a real newline.
+                payload = json.dumps({"line": line.rstrip("\r")})
+                yield f"event: log\ndata: {payload}\n\n"
         except GeneratorExit:
             logger.info(
                 "Debug log stream closed by client after %d lines (sandbox=%s)",
@@ -96,7 +99,8 @@ def stream_opencode_logs(
                 events_yielded,
                 e,
             )
-            yield f'event: error\ndata: {{"message":"{_escape(str(e))}"}}\n\n'
+            err_payload = json.dumps({"message": str(e)})
+            yield f"event: error\ndata: {err_payload}\n\n"
 
     return StreamingResponse(
         sse_generator(),
@@ -107,10 +111,3 @@ def stream_opencode_logs(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-def _escape(s: str) -> str:
-    """Minimal JSON string escape — we're hand-building the event payload
-    because the value is a single field and we want to avoid the overhead
-    of importing json.dumps inside the tight per-line loop."""
-    return s.replace("\\", "\\\\").replace('"', '\\"')
