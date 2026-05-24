@@ -92,6 +92,16 @@ def _create(
     )
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _ensure_bundle_store(initialize_file_store: None) -> None:  # noqa: ARG001
+    """Create the bundle blob store before any test runs.
+
+    The create/edit paths save the uploaded bundle to the file store via
+    ``ingest_skill_bundle``; without this the bucket may not exist and
+    ``save_file`` raises ``NoSuchBucket`` depending on test ordering.
+    """
+
+
 def test_create_persists_skill_and_app(
     db_session: Session,
     test_user: User,
