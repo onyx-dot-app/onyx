@@ -51,7 +51,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7
+        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8
         with:
           targets: devcontainer
           set: |
@@ -110,7 +110,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7
+        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8
         with:
           targets: devcontainer
           set: |
