@@ -27,7 +27,7 @@ DOCX_FILE_NAME = "three_images.docx"
 def test_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: IndexFixture,
+    index_fixture: IndexFixture,
 ) -> None:
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
@@ -99,12 +99,12 @@ def test_image_indexing(
     )
 
     with get_session_with_current_tenant() as db_session:
-        # really gets the chunks from Vespa, which is why there are two;
+        # really gets the chunks from the index, which is why there are two;
         # one for the raw text and one for the summarized image.
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            index_fixture=index_fixture,
         )
 
         assert len(documents) == 2
@@ -119,7 +119,7 @@ def test_image_indexing(
 def test_docx_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: IndexFixture,
+    index_fixture: IndexFixture,
 ) -> None:
     """Test that images from docx files are correctly extracted and indexed."""
     os.makedirs(FILE_PATH, exist_ok=True)
@@ -194,11 +194,11 @@ def test_docx_image_indexing(
     )
 
     with get_session_with_current_tenant() as db_session:
-        # Fetch documents from Vespa - expect text content plus 3 images
+        # Fetch documents from the index - expect text content plus 3 images
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            index_fixture=index_fixture,
         )
 
         # Should have documents for text content plus 3 images

@@ -191,8 +191,7 @@ class IndexingSetting(EmbeddingModelDetail):
     multipass_indexing: bool
     # Defaults to FLOAT (float32). OpenSearch ignores embedding_precision and
     # stores vectors as float32 regardless — see
-    # onyx/document_index/opensearch/opensearch_document_index.py. BFLOAT16
-    # still works for existing Vespa deployments.
+    # onyx/document_index/opensearch/opensearch_document_index.py.
     embedding_precision: EmbeddingPrecision = EmbeddingPrecision.FLOAT
     reduced_dimension: int | None = None
 

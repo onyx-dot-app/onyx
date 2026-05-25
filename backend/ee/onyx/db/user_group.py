@@ -745,8 +745,8 @@ def update_user_group(
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
     """If successful, this can set db_user_group.is_up_to_date = False.
-    That will be processed by check_for_vespa_user_groups_sync_task and trigger
-    a long running background sync to Vespa.
+    That will be processed by the user-group sync background task and trigger
+    a long-running background sync to the document index.
     """
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
@@ -850,8 +850,8 @@ def rename_user_group(
     db_user_group.name = new_name
     db_user_group.time_last_modified_by_user = func.now()
 
-    # CC pair documents in Vespa contain the group name, so we need to
-    # trigger a sync to update them with the new name.
+    # CC pair documents in the document index contain the group name, so we
+    # need to trigger a sync to update them with the new name.
     _mark_user_group__cc_pair_relationships_outdated__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )

@@ -34,7 +34,7 @@ TEST_METADATA_FILE = f"{TEST_FILES_BASE}/.onyx_metadata.json"
 )
 def test_zip_metadata_handling(
     reset: None,  # noqa: ARG001
-    vespa_client: IndexFixture,  # noqa: ARG001
+    index_fixture: IndexFixture,  # noqa: ARG001
     zip_path: str,
     has_metadata: bool,
 ) -> None:

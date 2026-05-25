@@ -25,7 +25,7 @@ def _log_insufficient_storage_error(e: Exception) -> None:
             logger.error(
                 "NOTE: HTTP Status 507 Insufficient Storage indicates "
                 "you need to allocate more memory or disk space to the "
-                "Vespa/index container."
+                "document-index container."
             )
 
 

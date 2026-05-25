@@ -626,7 +626,7 @@ def delete_user_file_impl(
             return
 
     try:
-        skip_vespa = DISABLE_VECTOR_DB
+        skip_vector_db = DISABLE_VECTOR_DB
         retry_document_indices: list[RetryDocumentIndex] = []
         chunk_count_from_db: int | None = None
         file_id: str = ""
@@ -643,7 +643,7 @@ def delete_user_file_impl(
             file_id = user_file.file_id
             chunk_count_from_db = user_file.chunk_count
 
-            if not skip_vespa:
+            if not skip_vector_db:
                 active_search_settings = get_active_search_settings(db_session)
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
@@ -655,7 +655,7 @@ def delete_user_file_impl(
                 ]
 
         # Phase 2: document-index deletes + file store deletes (no DB session held)
-        if not skip_vespa:
+        if not skip_vector_db:
             chunk_count: int = (
                 chunk_count_from_db
                 if chunk_count_from_db is not None and chunk_count_from_db > 0
@@ -805,7 +805,7 @@ def project_sync_user_file_impl(
             return
 
     try:
-        # Phase 1: short read session — extract all data needed for Vespa, then
+        # Phase 1: short read session — extract all data needed for the index write, then
         # release the connection before the network-bound update calls.
         retry_document_indices: list[RetryDocumentIndex] = []
         project_ids: list[int] = []
@@ -813,7 +813,7 @@ def project_sync_user_file_impl(
         file_id_str: str = ""
         chunk_count: int | None = None
         access: DocumentAccess | None = None
-        skip_vespa = DISABLE_VECTOR_DB
+        skip_vector_db = DISABLE_VECTOR_DB
 
         with get_session_with_current_tenant() as db_session:
             user_files = fetch_user_files_with_access_relationships(
@@ -828,7 +828,7 @@ def project_sync_user_file_impl(
                 )
                 return
 
-            if not skip_vespa:
+            if not skip_vector_db:
                 active_search_settings = get_active_search_settings(db_session)
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
@@ -845,10 +845,10 @@ def project_sync_user_file_impl(
                 chunk_count = user_file.chunk_count
                 access_map = build_access_for_user_files([user_file])
                 access = access_map.get(file_id_str)
-        # DB connection returned to pool here; Vespa HTTP calls run without it.
+        # DB connection returned to pool here; index HTTP calls run without it.
 
-        # Phase 2: Vespa HTTP calls (no DB session held)
-        if not skip_vespa:
+        # Phase 2: index HTTP calls (no DB session held)
+        if not skip_vector_db:
             update_request = MetadataUpdateRequest(
                 document_ids=[file_id_str],
                 doc_id_to_chunk_cnt={

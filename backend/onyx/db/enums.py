@@ -211,7 +211,6 @@ class AccessType(str, PyEnum):
 
 
 class EmbeddingPrecision(str, PyEnum):
-    # matches vespa tensor type
     # only support float / bfloat16 for now, since there's not a
     # good reason to specify anything else
     BFLOAT16 = "bfloat16"

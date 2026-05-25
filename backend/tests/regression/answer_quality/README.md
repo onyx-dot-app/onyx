@@ -68,7 +68,7 @@ Edit `search_test_config.yaml` to set:
 
 - output_folder
   - This is the folder where the folders for each test will go
-  - These folders will contain the postgres/vespa data as well as the results for each test
+  - These folders will contain the postgres/opensearch data as well as the results for each test
 - zipped_documents_file
   - The path to the zip file containing the files you'd like to test against
 - questions_file
@@ -82,7 +82,7 @@ Edit `search_test_config.yaml` to set:
 - launch_web_ui
   - Set this to true if you want to use the UI during/after the testing process
 - only_state
-  - Whether to only run Vespa and Postgres
+  - Whether to only Run OpenSearch and Postgres
 - only_retrieve_docs
   - Set true to only retrieve documents, not LLM response
   - This is to save on API costs

@@ -178,7 +178,7 @@ class TestDeleteIngestionDoc:
         _index_doc(db_session, doc, attempt_metadata)
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa — we're testing the file cleanup, not the document
+        # Patch out the index — we're testing the file cleanup, not the document
         # index integration.
         with patch(
             "onyx.server.onyx_api.ingestion.get_all_document_indices",
@@ -212,7 +212,7 @@ class TestDocumentByCcPairCleanupTask:
 
         assert get_filerecord(db_session, file_id) is not None
 
-        # Patch out Vespa interaction — no chunks were ever written, and we're
+        # Patch out index interaction — no chunks were ever written, and we're
         # not testing the document index here.
         with patch(
             "onyx.background.celery.tasks.shared.tasks.get_all_document_indices",

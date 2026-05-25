@@ -654,7 +654,7 @@ def get_bootsteps() -> list[type]:
     return [LivenessProbe]
 
 
-# Task modules that require a vector DB (Vespa/OpenSearch).
+# Task modules that require a vector DB (OpenSearch).
 # When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
 _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.connector_deletion",

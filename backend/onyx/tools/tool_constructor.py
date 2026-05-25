@@ -54,7 +54,7 @@ logger = setup_logger()
 
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
-    # Vespa metadata filters for overflowing user files.  These are NOT the
+    # Index metadata filters for overflowing user files.  These are NOT the
     # IDs of the current project/persona — they are only set when the
     # project's/persona's user files didn't fit in the LLM context window and
     # must be found via vector DB search instead.

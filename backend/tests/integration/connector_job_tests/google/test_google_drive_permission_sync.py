@@ -109,7 +109,7 @@ def google_drive_test_env_setup() -> Generator[
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")
 def test_google_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: IndexFixture,  # noqa: ARG001
+    index_fixture: IndexFixture,  # noqa: ARG001
     google_drive_test_env_setup: tuple[
         GoogleDriveService, str, DATestCCPair, DATestUser, DATestUser, DATestUser
     ],
@@ -279,8 +279,8 @@ def test_google_permission_sync(
         number_of_updated_docs=2,
         user_performing_action=admin_user,
         # if we are only updating the group definition for this test we use this varaiable,
-        # since it doesn't result in a vespa sync so we don't want to wait for it
-        should_wait_for_vespa_sync=False,
+        # since it doesn't result in a document-index sync so we don't want to wait for it
+        should_wait_for_index_sync=False,
     )
 
     # Verify user 1 can access both documents

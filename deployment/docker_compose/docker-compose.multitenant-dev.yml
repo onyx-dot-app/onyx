@@ -81,7 +81,6 @@ services:
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
       - LOG_ONYX_MODEL_INTERACTIONS=${LOG_ONYX_MODEL_INTERACTIONS:-}
-      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
       - LOG_ENDPOINT_LATENCY=${LOG_ENDPOINT_LATENCY:-}
       - LOG_POSTGRES_LATENCY=${LOG_POSTGRES_LATENCY:-}
       - LOG_POSTGRES_CONN_COUNTS=${LOG_POSTGRES_CONN_COUNTS:-}
@@ -110,10 +109,6 @@ services:
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
       - OPENAI_DEFAULT_API_KEY=${OPENAI_DEFAULT_API_KEY:-}
-
-      # Vespa Language Forcing
-      # See: https://docs.vespa.ai/en/linguistics.html
-      - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -203,7 +198,6 @@ services:
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       # Indexing Configs
-      - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-}
       - ENABLED_CONNECTOR_TYPES=${ENABLED_CONNECTOR_TYPES:-}
       - DISABLE_INDEX_UPDATE_ON_SWAP=${DISABLE_INDEX_UPDATE_ON_SWAP:-}
       - CONTINUE_ON_CONNECTOR_FAILURE=${CONTINUE_ON_CONNECTOR_FAILURE:-}
@@ -251,7 +245,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info} # Set to debug to get more fine-grained logs
       # Log all of Onyx prompts and interactions with the LLM
       - LOG_ONYX_MODEL_INTERACTIONS=${LOG_ONYX_MODEL_INTERACTIONS:-}
-      - LOG_VESPA_TIMING_INFORMATION=${LOG_VESPA_TIMING_INFORMATION:-}
 
       # Analytics Configs
       - SENTRY_DSN=${SENTRY_DSN:-}

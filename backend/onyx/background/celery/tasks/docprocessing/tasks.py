@@ -1720,7 +1720,7 @@ def _docprocessing_task(
         )
 
         # Phase 1: fast DB reads to set up the pipeline. Session closes before
-        # the slow embedding + Vespa work begins, returning the connection to the pool.
+        # the slow embedding + index-write work begins, returning the connection to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(

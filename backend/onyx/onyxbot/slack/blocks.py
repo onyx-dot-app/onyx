@@ -43,7 +43,7 @@ from onyx.onyxbot.slack.utils import build_continue_in_web_ui_id
 from onyx.onyxbot.slack.utils import build_feedback_id
 from onyx.onyxbot.slack.utils import build_publish_ephemeral_message_id
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
-from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
+from onyx.onyxbot.slack.utils import translate_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
@@ -269,7 +269,7 @@ def _build_documents_blocks(
             doc_sem_id = "#" + doc_sem_id
 
         used_chars = len(doc_sem_id) + 3
-        match_str = translate_vespa_highlight_to_slack(d.match_highlights, used_chars)
+        match_str = translate_highlight_to_slack(d.match_highlights, used_chars)
 
         included_docs += 1
 

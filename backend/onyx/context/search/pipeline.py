@@ -279,7 +279,7 @@ def search_pipeline(
     db_session: Session | None = None,
     auto_detect_filters: bool = False,
     llm: LLM | None = None,
-    # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+    # Index metadata filters for overflowing user files.  NOT the raw IDs
     # of the current project/persona — only set when user files couldn't fit
     # in the LLM context and need to be searched via vector DB.
     project_id_filter: int | None = None,

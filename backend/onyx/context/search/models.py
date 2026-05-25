@@ -69,7 +69,7 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    # Scopes search to user files tagged with a given project/persona in Vespa.
+    # Scopes search to user files tagged with a given project/persona in the index.
     # These are NOT simply the IDs of the current project or persona — they are
     # only set when the persona's/project's user files overflowed the LLM
     # context window and must be searched via vector DB instead of being loaded
@@ -149,7 +149,7 @@ class InferenceChunk(BaseChunk):
     # TODO(andrei): Ideally we could improve this to where each value is just a
     # list of strings.
     metadata: dict[str, str | list[str]]
-    # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the chunk. Uses <hi>TEXT</hi> highlight tags
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
@@ -257,7 +257,7 @@ class SearchDoc(BaseModel):
     score: float | None = None
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
-    # Matched sections in the doc. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the doc. Uses <hi>TEXT</hi> highlight tags
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]

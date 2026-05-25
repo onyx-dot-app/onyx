@@ -99,7 +99,7 @@ function Prompt-DeploymentMode {
     param([string]$LiteOverlayPath)
     if ($script:LiteMode) { Print-Info "Deployment mode: Lite (set via -Lite flag)"; return }
     Print-Info "Which deployment mode would you like?"
-    Write-Host "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    Write-Host "  1) Lite      - Minimal deployment (no vector DB, Redis, or model servers)"
     Write-Host "                  LLM chat, tools, file uploads, and Projects still work"
     Write-Host "  2) Standard  - Full deployment with search, connectors, and RAG"
     $modeChoice = Prompt-OrDefault "Choose a mode (1 or 2) [default: 1]" "1"
@@ -116,7 +116,7 @@ function Assert-NotCraftLite {
     param([string]$Tag)
     if (-not ($script:LiteMode -and $Tag -match '^craft-')) { return }
     Print-OnyxError "Cannot use a craft image tag ($Tag) with Lite mode."
-    Print-Info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
+    Print-Info "Craft requires services (vector DB, Redis, background workers) that lite mode disables."
     exit 1
 }
 
@@ -327,7 +327,7 @@ function Show-OnyxHelp {
     $help += "`nUsage: .\install.ps1 [OPTIONS]`n"
     $help += "`nOptions:"
     $help += "`n  -IncludeCraft  Enable Onyx Craft (AI-powered web app building)"
-    $help += "`n  -Lite          Deploy Onyx Lite (no Vespa, Redis, or model servers)"
+    $help += "`n  -Lite          Deploy Onyx Lite (no vector DB, Redis, or model servers)"
     $help += "`n  -Local         Use existing config files instead of downloading from GitHub"
     $help += "`n  -Shutdown      Stop (pause) Onyx containers"
     $help += "`n  -DeleteData    Remove all Onyx data (containers, volumes, and files)"
@@ -1121,7 +1121,7 @@ function Main {
     Print-Info "The first user created will automatically have admin privileges"
 
     if ($script:LiteMode) {
-        Print-Info "Running in Lite mode - Vespa, Redis, model servers, and background workers are NOT started."
+        Print-Info "Running in Lite mode - The vector DB, Redis, model servers, and background workers are NOT started."
         Print-Info "Connectors and RAG search are disabled. LLM chat, tools, Projects still work."
     }
 

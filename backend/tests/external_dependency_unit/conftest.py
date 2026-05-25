@@ -40,7 +40,7 @@ def full_deployment_setup() -> Generator[None, None, None]:
     """Optional fixture to perform full deployment-like setup on demand.
 
     Import and call tests.external_dependency_unit.startup.full_setup.ensure_full_deployment_setup
-    to initialize Postgres defaults, Vespa indices, and seed initial docs.
+    to initialize Postgres defaults, index, and seed initial docs.
     """
     ensure_full_deployment_setup()
     yield

@@ -133,7 +133,7 @@ class IndexingPipelineResult(BaseModel):
     # NOTE: need total_docs, since the pipeline can skip some docs
     # (e.g. not even insert them into Postgres)
     total_docs: int
-    # number of chunks that were inserted into Vespa
+    # number of chunks that were inserted into the document index
     total_chunks: int
 
     failures: list[ConnectorFailure]
@@ -1346,7 +1346,7 @@ def index_doc_batch(
         )
 
         # Filter to only successfully embedded chunks so
-        # doc_id_to_new_chunk_cnt reflects what's actually written to Vespa.
+        # doc_id_to_new_chunk_cnt reflects what's actually written to the index.
         embedded_chunks = [
             c for c in chunks if c.source_document.id not in embedding_failed_doc_ids
         ]

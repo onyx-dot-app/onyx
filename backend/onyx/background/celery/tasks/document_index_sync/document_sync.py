@@ -154,8 +154,8 @@ def try_generate_stale_document_sync_tasks(
         return None
 
     # Tenant-work-gating hook: refresh this tenant's active-set membership
-    # whenever vespa sync actually has stale docs to dispatch.
-    maybe_mark_tenant_active(tenant_id, caller="vespa_sync")
+    # whenever document-index sync actually has stale docs to dispatch.
+    maybe_mark_tenant_active(tenant_id, caller="document_index_sync")
 
     logger.info(
         "Stale documents found (at least %s). Generating sync tasks in one batch.",

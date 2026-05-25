@@ -242,7 +242,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_index: DocumentIndex,
         # Respecting user selections
         user_selected_filters: BaseFilters | None,
-        # Vespa metadata filters for overflowing user files.  NOT the raw IDs
+        # Index metadata filters for overflowing user files.  NOT the raw IDs
         # of the current project/persona — only set when user files couldn't
         # fit in the LLM context and need to be searched via vector DB.
         project_id_filter: int | None,
@@ -790,8 +790,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
             search_weights.append(weight)
 
-        # Add Slack federated search (runs once in parallel with all Vespa queries)
-        # This avoids the query multiplication problem where each Vespa query
+        # Add Slack federated search (runs once in parallel with all index queries)
+        # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
         # Only run if pre-fetch found a valid Slack access token.
         if slack_access_token and override_kwargs.original_query:
@@ -810,7 +810,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             # Use same weight as original query for Slack results
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
-        # Run all searches in parallel (Vespa queries + Slack)
+        # Run all searches in parallel (index queries + Slack)
         all_search_results = run_functions_tuples_in_parallel(search_functions)
         if not all_search_results:
             all_search_results = []
@@ -839,7 +839,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
-        # stored in Vespa).
+        # stored in the document index).
         with get_session_with_current_tenant() as enrichment_session:
             populate_file_ids_on_sections(top_sections, enrichment_session)
 
