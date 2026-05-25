@@ -5,11 +5,60 @@ import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import {
   BuiltInExternalAppDescriptor,
+  EndpointDescriptor,
+  EndpointPolicy,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
 import { upsertExternalApp } from "@/app/craft/services/externalAppsService";
+
+const POLICY_OPTIONS: { value: EndpointPolicy; label: string }[] = [
+  { value: "ALWAYS", label: "Auto-approve" },
+  { value: "ASK", label: "Ask" },
+  { value: "DENY", label: "Deny" },
+];
+
+interface PolicyToggleProps {
+  value: EndpointPolicy;
+  onChange: (value: EndpointPolicy) => void;
+}
+
+function PolicyToggle({ value, onChange }: PolicyToggleProps) {
+  return (
+    <div className="flex gap-1 shrink-0">
+      {POLICY_OPTIONS.map((option) => (
+        <Button
+          key={option.value}
+          size="xs"
+          prominence={value === option.value ? "primary" : "tertiary"}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+// The bulk selector collapses every action to a single policy. "CUSTOM" is a
+// display-only state shown when per-action choices diverge (or any is DENY,
+// which the two-option bulk control can't represent) — selecting it isn't
+// possible, so the trigger falls back to its "Custom" placeholder.
+type BulkPolicy = "ALWAYS" | "ASK" | "CUSTOM";
+
+function bulkPolicyOf(
+  actions: EndpointDescriptor[],
+  policies: Record<string, EndpointPolicy>
+): BulkPolicy {
+  const values = actions.map((action) => policies[action.action_id] ?? "ASK");
+  if (values.length === 0) return "ASK";
+  if (values.every((value) => value === "ALWAYS")) return "ALWAYS";
+  if (values.every((value) => value === "ASK")) return "ASK";
+  return "CUSTOM";
+}
 
 interface ConfigureProviderModalProps {
   open: boolean;
@@ -31,6 +80,8 @@ export default function ConfigureProviderModal({
   const [credentialValues, setCredentialValues] = useState<
     Record<string, string>
   >({});
+  const [policies, setPolicies] = useState<Record<string, EndpointPolicy>>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +96,23 @@ export default function ConfigureProviderModal({
         existingApp?.organization_credentials[field.key] ?? "";
     }
     setCredentialValues(initial);
+
+    // Seed each action from the admin's stored choice (edit) or "Ask" by
+    // default (create) — every action starts in ask-approval mode.
+    const storedState: Record<string, EndpointPolicy> = {};
+    for (const action of existingApp?.actions ?? []) {
+      storedState[action.action_id] = action.state;
+    }
+    const seededPolicies: Record<string, EndpointPolicy> = {};
+    for (const action of descriptor.actions) {
+      seededPolicies[action.action_id] = storedState[action.action_id] ?? "ASK";
+    }
+    setPolicies(seededPolicies);
+    // Open "Advanced" up front only when the stored choices can't be shown as a
+    // single bulk value (mixed, or containing a Deny).
+    setAdvancedOpen(
+      bulkPolicyOf(descriptor.actions, seededPolicies) === "CUSTOM"
+    );
     setError(null);
   }, [open, descriptor, existingApp]);
 
@@ -53,6 +121,17 @@ export default function ConfigureProviderModal({
     (f) => (credentialValues[f.key] ?? "").trim().length > 0
   );
   const canSave = nameFilled && credsFilled && !isSaving;
+
+  const bulkValue = bulkPolicyOf(descriptor.actions, policies);
+
+  // Apply one policy to every action (the simple, non-advanced control).
+  function applyBulk(policy: EndpointPolicy) {
+    setPolicies(
+      Object.fromEntries(
+        descriptor.actions.map((action) => [action.action_id, policy])
+      )
+    );
+  }
 
   async function save() {
     setIsSaving(true);
@@ -75,6 +154,7 @@ export default function ConfigureProviderModal({
         // Saving credentials implies enable; disable is a separate
         // action on the admin page.
         enabled: true,
+        action_policies: policies,
       });
       onSaved();
       onClose();
@@ -131,6 +211,68 @@ export default function ConfigureProviderModal({
                 </div>
               );
             })}
+
+            {descriptor.actions.length > 0 && (
+              <div className="flex flex-col gap-2 pt-2">
+                <Text font="main-ui-action">Permissions</Text>
+                <Text font="secondary-body" color="text-03">
+                  Choose what the agent may do with this app. “Ask” prompts you
+                  in chat before each action runs; “Auto-approve” lets it run
+                  without prompting. Use Advanced to set a policy per action.
+                </Text>
+
+                <InputSelect
+                  value={bulkValue}
+                  onValueChange={(value) => applyBulk(value as EndpointPolicy)}
+                >
+                  <InputSelect.Trigger placeholder="Custom" />
+                  <InputSelect.Content>
+                    <InputSelect.Item value="ALWAYS">
+                      Auto-approve
+                    </InputSelect.Item>
+                    <InputSelect.Item value="ASK">Ask</InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+
+                <SimpleCollapsible
+                  open={advancedOpen}
+                  onOpenChange={setAdvancedOpen}
+                >
+                  <SimpleCollapsible.Header
+                    title="Advanced"
+                    description="Set a policy for each action individually."
+                  />
+                  <SimpleCollapsible.Content>
+                    <div className="flex flex-col gap-2">
+                      {descriptor.actions.map((action) => (
+                        <div
+                          key={action.action_id}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="flex flex-col">
+                            <Text font="main-ui-action">
+                              {action.normalised_name}
+                            </Text>
+                            <Text font="secondary-body" color="text-03">
+                              {action.description}
+                            </Text>
+                          </div>
+                          <PolicyToggle
+                            value={policies[action.action_id] ?? "ASK"}
+                            onChange={(value) =>
+                              setPolicies((prev) => ({
+                                ...prev,
+                                [action.action_id]: value,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </SimpleCollapsible.Content>
+                </SimpleCollapsible>
+              </div>
+            )}
             {error && (
               <Text font="secondary-body" color="text-03">
                 {error}

@@ -1,13 +1,17 @@
+from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from onyx.server.features.build.api.models import ActionPolicyView
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
+from onyx.server.features.build.api.models import EndpointDescriptor
 from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
@@ -65,7 +69,64 @@ def _descriptor_for(
             for f in descriptor.required_org_credential_fields
         ],
         setup_instructions=descriptor.setup_instructions,
+        actions=[
+            EndpointDescriptor(
+                action_id=e.id,
+                normalised_name=e.normalised_name,
+                description=e.description,
+            )
+            for e in spec.endpoint_catalog
+        ],
     )
+
+
+def _catalog_for(app_type: ExternalAppType) -> list[EndpointSpec]:
+    """The action catalog for an app_type (empty for CUSTOM / unregistered)."""
+    provider = PROVIDERS.get(app_type)
+    return list(provider.spec.endpoint_catalog) if provider is not None else []
+
+
+def validate_action_policies(
+    app_type: ExternalAppType,
+    policies: dict[str, EndpointPolicy],
+) -> dict[str, EndpointPolicy]:
+    """Validate admin-submitted ``{action_id: policy}`` against the provider
+    catalog: canonicalise aliases to their current id and reject ids that don't
+    exist for this ``app_type``. Returns the canonicalised map."""
+    canonical: dict[str, str] = {}
+    for endpoint in _catalog_for(app_type):
+        canonical[endpoint.id] = endpoint.id
+        for alias in endpoint.aliases:
+            canonical[alias] = endpoint.id
+
+    out: dict[str, EndpointPolicy] = {}
+    for action_id, policy in policies.items():
+        resolved = canonical.get(action_id)
+        if resolved is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Unknown action '{action_id}' for app type {app_type.value}.",
+            )
+        out[resolved] = policy
+    return out
+
+
+def action_policy_views(
+    app_type: ExternalAppType,
+    stored: dict[str, EndpointPolicy],
+) -> list[ActionPolicyView]:
+    """Merge the catalog with the admin's stored overrides: each action's
+    effective ``state`` is the override if present, else ``ASK``.
+    Orphan stored ids (no longer in the catalog) are silently dropped."""
+    return [
+        ActionPolicyView(
+            action_id=endpoint.id,
+            normalised_name=endpoint.normalised_name,
+            description=endpoint.description,
+            state=stored.get(endpoint.id, EndpointPolicy.ASK),
+        )
+        for endpoint in _catalog_for(app_type)
+    ]
 
 
 def _to_credential_field_descriptor(
@@ -105,4 +166,6 @@ __all__ = [
     "get_provider_or_raise",
     "fetch_available_built_in_apps",
     "fetch_built_in_app",
+    "validate_action_policies",
+    "action_policy_views",
 ]

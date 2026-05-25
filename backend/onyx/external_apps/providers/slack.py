@@ -3,11 +3,53 @@ from typing import Any
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.external_apps.providers.actions import RestRoute
 from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OrgCredentialField
+
+# Slack Web API calls are POST to https://slack.com/api/<method>; the action is
+# the method segment of the path.
+_ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id="slack.channels.read",
+        normalised_name="List channels",
+        description="List the workspace's channels and conversations.",
+        matches=[RestRoute(method="POST", path_regex=r"^/api/conversations\.list$")],
+    ),
+    EndpointSpec(
+        id="slack.messages.read",
+        normalised_name="Read channel messages",
+        description="Read messages and thread replies in a channel.",
+        matches=[
+            RestRoute(
+                method="POST",
+                path_regex=r"^/api/conversations\.(history|replies)$",
+            )
+        ],
+    ),
+    EndpointSpec(
+        id="slack.users.read",
+        normalised_name="Read users",
+        description="List workspace users and look up individual profiles.",
+        matches=[RestRoute(method="POST", path_regex=r"^/api/users\.(list|info)$")],
+    ),
+    EndpointSpec(
+        id="slack.search.read",
+        normalised_name="Search messages",
+        description="Full-text search across messages the user can see.",
+        matches=[RestRoute(method="POST", path_regex=r"^/api/search\.messages$")],
+    ),
+    EndpointSpec(
+        id="slack.messages.write",
+        normalised_name="Post a message",
+        description="Post a message to a channel or conversation.",
+        matches=[RestRoute(method="POST", path_regex=r"^/api/chat\.postMessage$")],
+    ),
+]
 
 
 class SlackProvider(OAuthExternalAppProvider):
@@ -66,6 +108,7 @@ class SlackProvider(OAuthExternalAppProvider):
                 "Client Secret below."
             ),
         ),
+        endpoint_catalog=_ENDPOINTS,
     )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
