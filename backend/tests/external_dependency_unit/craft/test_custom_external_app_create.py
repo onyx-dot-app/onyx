@@ -1,21 +1,3 @@
-"""The custom external-app endpoint (`POST /admin/apps/custom`) upserts a
-bundle-backed app: create runs an uploaded skill bundle through the shared
-ingest pathway and persists a custom ``Skill`` + ``ExternalApp``; edit updates
-the config and optionally replaces the bundle (keeping the slug).
-
-These call the endpoint function directly (push helper monkeypatched) against
-real Postgres + file store, asserting:
-
-- a happy upload persists both rows, form name overriding the bundle's name and
-  a blank description falling back to the bundle's;
-- a no-credentials (allowlist-only) app persists;
-- an edit updates config and swaps the bundle while keeping the slug;
-- a bundle without SKILL.md is rejected and nothing is persisted;
-- create without a bundle is rejected;
-- a failure after the blob is stored triggers blob cleanup;
-- the JSON `/admin/apps` endpoint rejects CUSTOM outright.
-"""
-
 from __future__ import annotations
 
 import io
@@ -76,8 +58,7 @@ def _create(
     auth_template: str = json.dumps(_AUTH_TEMPLATE),
     organization_credentials: str = json.dumps({"api_key": "sk-test"}),
 ) -> ExternalAppAdminResponse:
-    """Create a custom app with a valid default bundle. Tests that need a
-    specific bundle (missing SKILL.md, or none) call the endpoint directly."""
+    """Create a custom app with a valid default bundle."""
     return api.upsert_custom_external_app(
         name="My Form Name",
         description="",
@@ -94,12 +75,8 @@ def _create(
 
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_bundle_store(initialize_file_store: None) -> None:  # noqa: ARG001
-    """Create the bundle blob store before any test runs.
-
-    The create/edit paths save the uploaded bundle to the file store via
-    ``ingest_skill_bundle``; without this the bucket may not exist and
-    ``save_file`` raises ``NoSuchBucket`` depending on test ordering.
-    """
+    """Create the bundle blob store before any test runs (create/edit save the
+    uploaded bundle via ``ingest_skill_bundle``)."""
 
 
 def test_create_persists_skill_and_app(

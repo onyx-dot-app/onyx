@@ -1,6 +1,4 @@
-"""Unit tests for `validate_auth_template` — the structural guard the
-custom external-app create endpoint runs before persisting an app's header
-credential template."""
+"""Unit tests for `validate_auth_template`."""
 
 from __future__ import annotations
 

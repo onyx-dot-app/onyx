@@ -22,13 +22,9 @@ def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
 
 
 def parse_json_form_field(raw: str, adapter: TypeAdapter[T], field_name: str) -> T:
-    """Parse a JSON-encoded multipart form field into a validated value.
-
-    Multipart endpoints carry structured fields (lists, objects) as JSON
-    strings. This validates ``raw`` against ``adapter`` (e.g. a module-level
-    ``TypeAdapter(list[str])``) and raises ``OnyxError(INVALID_INPUT)`` naming
-    the field on malformed input — covering both bad JSON and wrong shape —
-    rather than leaking a pydantic ``ValidationError`` to the client."""
+    """Parse a JSON-encoded multipart form field, validating against ``adapter``.
+    Raises ``OnyxError(INVALID_INPUT)`` naming the field on bad JSON or wrong
+    shape instead of leaking a pydantic ``ValidationError``."""
     try:
         return adapter.validate_json(raw)
     except ValidationError as e:

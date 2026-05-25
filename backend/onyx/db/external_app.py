@@ -33,13 +33,9 @@ def required_user_credential_keys(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
 ) -> list[str]:
-    """Credential parameter names the user must supply, derived from
-    `{placeholder}` references in `auth_template` values minus what
-    `organization_credentials` pre-fills. Returned sorted.
-
-    Looks at template *values*, not keys — keys are header names,
-    placeholders inside the values are the credential parameter names.
-    """
+    """Sorted credential parameter names the user must supply: `{placeholder}`
+    references in `auth_template` values not pre-filled by
+    `organization_credentials`."""
     return sorted(
         _placeholders_in_template(auth_template) - organization_credentials.keys()
     )
@@ -49,20 +45,12 @@ def validate_auth_template(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
 ) -> None:
-    """Validate an external app's header credential template before persisting.
+    """Validate an app's header credential template before persisting.
 
-    The egress proxy injects ``auth_template`` headers (with ``{placeholder}``
-    values filled from org + per-user credentials) into outbound requests. An
-    app may legitimately inject *no* headers — e.g. an allowlist-only app that
-    just grants the sandbox network access to its upstream patterns — so an
-    empty template (and empty organization credentials) is allowed. When headers
-    *are* provided, each must be a non-empty string name mapped to a non-empty
-    string value; organization-credential keys must likewise be non-empty
-    strings. Raises ``OnyxError(INVALID_INPUT)`` on any violation.
-
-    Note: only ``{name}`` tokens matching the credential-key grammar are treated
-    as placeholders (see ``_PLACEHOLDER_RE``); other braces are literal, so
-    there is nothing further to validate about placeholder legality here.
+    An empty template is allowed (e.g. an allowlist-only app that injects no
+    headers). When headers are present, each name and value must be a non-empty
+    string, as must every organization-credential key. Raises
+    ``OnyxError(INVALID_INPUT)`` on violation.
     """
     for key, value in auth_template.items():
         if not isinstance(key, str) or not key.strip():
@@ -88,10 +76,8 @@ def is_user_authenticated_for_app(
     user_cred: ExternalAppUserCredential | None,
 ) -> bool:
     """True iff the user has supplied every credential parameter the app's
-    ``auth_template`` references that the org has not pre-filled. An
-    app with no user-required keys (everything covered by
-    ``organization_credentials``) is considered authenticated for every
-    user, no credential row needed."""
+    ``auth_template`` requires that the org hasn't pre-filled. Apps with no
+    user-required keys need no credential row."""
     required = required_user_credential_keys(
         app.auth_template, app.organization_credentials
     )
@@ -129,10 +115,8 @@ def get_user_credentials_by_app_id(
     db_session: Session,
     user_id: UUID,
 ) -> dict[int, ExternalAppUserCredential]:
-    """Return mapping from external_app_id -> the user's credential row.
-
-    Apps the user has never configured are simply absent from the mapping.
-    """
+    """Map external_app_id -> the user's credential row. Apps the user never
+    configured are absent."""
     stmt = select(ExternalAppUserCredential).where(
         ExternalAppUserCredential.user_id == user_id
     )
@@ -155,21 +139,14 @@ def create_external_app(
     slug: str | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it,
-    committing both atomically. The skill row owns display metadata
-    (name/description) and lifecycle (enabled); the external_app row owns
-    gateway state (auth_template, upstream patterns, org creds).
+    committing atomically. The skill owns display metadata + lifecycle; the
+    external_app owns gateway state.
 
-    The skill row's *shape* is derived from ``app_type``:
-
-    - A built-in provider (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) gets a built-in
-      skill row (``built_in_skill_id`` set, ``slug`` == that id) so it delivers
-      its bundled on-disk content through the same path as a seeded built-in.
-      Slug uniqueness means one instance per provider per tenant — a duplicate
-      raises ``OnyxError(DUPLICATE_RESOURCE)``.
-    - A ``CUSTOM`` app gets a custom (bundle-backed) skill row. ``slug`` is the
-      uploaded bundle's filename-derived slug (see the custom-app create
-      endpoint); when omitted, a fresh ``custom-<uuid>`` slug is generated so
-      bundle-less callers still get a unique, collision-free row.
+    Built-in providers (``EXTERNAL_APP_BUILT_IN_SKILL_IDS``) get a built-in
+    skill row whose slug is the provider id, so slug uniqueness means one
+    instance per provider per tenant (duplicate raises ``DUPLICATE_RESOURCE``).
+    CUSTOM apps get a bundle-backed skill using ``slug``, or a generated
+    ``custom-<uuid>`` slug when omitted.
     """
     from onyx.db.skill import create_built_in_skill_row__no_commit
     from onyx.db.skill import create_skill__no_commit
@@ -229,27 +206,19 @@ def update_external_app(
     new_bundle_sha256: str | None = None,
 ) -> tuple[ExternalApp, str | None]:
     """Replace mutable fields on the external app and its linked skill,
-    committing both atomically. Returns ``(app, old_bundle_file_id)``.
+    committing atomically. Returns ``(app, old_bundle_file_id)``.
 
-    Skill-side fields: name, description, enabled.
-    External-app-side fields: upstream_url_patterns, auth_template,
-    organization_credentials.
+    ``app_type`` is immutable (it's the dispatch discriminator); passing a value
+    differing from the stored one raises, which also blocks cross-editing
+    built-in vs custom apps.
 
-    ``app_type`` is immutable — it's the discriminator the OAuth dispatch layer
-    keys off and what the backing skill's definition source is bound to, so it's
-    passed for validation only. Passing a value that differs from the stored one
-    raises; this also blocks editing a built-in app through the custom-app path
-    (which passes ``CUSTOM``) and vice versa.
+    For custom apps, passing ``new_bundle_file_id``/``new_bundle_sha256`` swaps
+    the bundle (slug unchanged) and returns the previous ``bundle_file_id`` so
+    the caller can delete that blob after commit; otherwise the old id is
+    ``None``.
 
-    Bundle replacement (custom apps only): when ``new_bundle_file_id`` /
-    ``new_bundle_sha256`` are given the skill's bundle is swapped (slug
-    unchanged) and the *previous* ``bundle_file_id`` is returned so the caller
-    can delete that blob after the commit — never inline. When omitted the
-    existing bundle is kept and the returned old id is ``None``. Built-in
-    callers leave these unset and ignore the returned id.
-
-    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists,
-    or ``OnyxError(INVALID_INPUT)`` if `app_type` differs from the stored value.
+    Raises ``OnyxError(NOT_FOUND)`` if the app doesn't exist, or
+    ``INVALID_INPUT`` if ``app_type`` differs from the stored value.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -290,12 +259,10 @@ def delete_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> str | None:
-    """Delete the linked Skill (FK ON DELETE CASCADE removes the
-    external_app row as well as user credentials) and commit. Returns the
-    skill's ``bundle_file_id`` so the caller can clean up FileStore *after*
-    the delete is committed.
-
-    Raises ``OnyxError(NOT_FOUND)`` if no row with `external_app_id` exists.
+    """Delete the linked Skill (cascade removes the external_app row and user
+    credentials) and commit. Returns the skill's ``bundle_file_id`` so the
+    caller can clean up FileStore after the commit. Raises
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -316,13 +283,9 @@ def upsert_external_app_user_credential(
     user_id: UUID,
     user_credentials: dict[str, Any],
 ) -> ExternalAppUserCredential:
-    """Create or replace the calling user's credentials for the given external
-    app, and commit.
-
-    Atomic via ON CONFLICT against the unique (external_app_id, user_id)
-    constraint, so concurrent callers can't both insert a duplicate row.
-
-    Raises ``OnyxError(NOT_FOUND)`` if no app with `external_app_id` exists.
+    """Create or replace the calling user's credentials for the app, and commit.
+    Atomic via ON CONFLICT on (external_app_id, user_id). Raises
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:

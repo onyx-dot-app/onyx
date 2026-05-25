@@ -1,12 +1,3 @@
-"""Shared ingest pathway for custom skill bundles.
-
-Both the custom-skill upload endpoint and the custom external-app create
-endpoint take the same uploaded ``.zip`` and run it through the same
-validate → parse → hash → store steps. This module is that single pathway;
-callers own the DB row they create from the result (a plain ``Skill`` or a
-``Skill`` + ``ExternalApp``) and the cleanup of the stored blob on failure.
-"""
-
 import io
 from typing import NamedTuple
 
@@ -36,21 +27,16 @@ def ingest_skill_bundle(
     *,
     slug: str | None = None,
 ) -> IngestedBundle:
-    """Validate, parse, and store a custom skill bundle.
+    """Validate, parse, hash, and store a custom skill bundle.
 
-    Derives the slug from the upload filename, validates the zip structure
-    (``SKILL.md`` present, no traversal/symlinks, size caps, slug not a reserved
-    built-in id), parses ``(name, description)`` from the ``SKILL.md``
-    frontmatter, hashes the raw bytes, and saves the blob to the file store.
+    Validates the zip structure, parses ``(name, description)`` from SKILL.md
+    frontmatter, hashes the bytes, and saves the blob.
 
-    Pass ``slug`` to keep an existing row's slug when *replacing* a bundle on an
-    update (the slug is the stable skill identity, not derived from the new
-    upload's filename). When omitted, the slug comes from ``filename`` — the
-    create path.
+    Pass ``slug`` to keep an existing row's slug when replacing a bundle on
+    update; when omitted the slug is derived from ``filename`` (create path).
 
-    Returns the slug, the stored ``bundle_file_id``, the sha256, and the parsed
-    ``(name, description)``. The caller owns DB row creation and is responsible
-    for deleting ``bundle_file_id`` if its transaction fails.
+    The caller owns DB row creation and must delete ``bundle_file_id`` if its
+    transaction fails.
     """
     if slug is None:
         slug = slug_from_filename(filename)

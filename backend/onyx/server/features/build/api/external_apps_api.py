@@ -67,12 +67,9 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
 def _to_user_response(
     app: ExternalApp, user_cred: ExternalAppUserCredential | None
 ) -> ExternalAppUserResponse:
-    """Compute the user-facing view of an app.
-
-    `credential_keys` = keys the auth_template references that the org has
-    not pre-filled. `credential_values` is the user's stored values for
-    those same keys (stale keys from prior templates are filtered out so
-    the frontend never renders a field that's no longer relevant).
+    """User-facing view of an app. ``credential_keys`` = auth_template keys the
+    org hasn't pre-filled; ``credential_values`` = the user's stored values for
+    those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
         app.auth_template, app.organization_credentials
@@ -103,13 +100,9 @@ def upsert_external_app(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Create a new external app, or update an existing one if `id` is set.
-
-    If `id` is provided but no app with that id exists, returns 404.
-
-    This endpoint is for built-in providers only. Custom apps (bundle-backed)
-    are created and edited through ``/admin/apps/custom`` so their bundle can be
-    uploaded/replaced; sending ``app_type=CUSTOM`` here is rejected.
+    """Create a new external app, or update the one with `id` if set (404 if
+    absent). Built-in providers only — custom apps use ``/admin/apps/custom``;
+    ``app_type=CUSTOM`` here is rejected.
     """
     if request.app_type == ExternalAppType.CUSTOM:
         raise OnyxError(
@@ -171,19 +164,16 @@ def upsert_custom_external_app(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
-    """Create or edit a CUSTOM external app (bundle-backed) + gateway config.
+    """Create or edit a CUSTOM (bundle-backed) external app + gateway config.
 
-    Multipart because of the bundle file; the structured fields ride as
-    JSON-encoded form strings. The display name is the form value (overriding
-    the bundle's SKILL.md name); description falls back to the bundle's when
-    left blank.
+    Multipart (for the bundle); structured fields ride as JSON-encoded form
+    strings. Form ``name`` overrides the bundle's; blank ``description`` falls
+    back to the bundle's.
 
-    - **Create** (`app_id` omitted): a bundle is required. It goes through the
-      same ingest pathway as a custom skill (validate → store) and an
-      ``ExternalApp`` row is created alongside the backing skill. Default-public.
-    - **Edit** (`app_id` set): updates name/description/enabled + gateway config.
-      A bundle is optional — when supplied it *replaces* the existing one
-      (keeping the slug); when omitted the current bundle is kept.
+    - **Create** (`app_id` omitted): bundle required; ingested + persisted
+      alongside the backing skill. Default-public.
+    - **Edit** (`app_id` set): updates config; a supplied bundle replaces the
+      existing one (keeping the slug), otherwise the current bundle is kept.
     """
     parsed_patterns = parse_json_form_field(
         upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
@@ -375,9 +365,8 @@ def delete_external_app_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Delete an external app. Cascades to all user-credential rows for the app.
-
-    Returns 404 if no app with `external_app_id` exists.
+    """Delete an external app, cascading to its user-credential rows. 404 if
+    absent.
     """
     # Resolve affected users *before* the delete cascades the skill row away,
     # then refresh their sandboxes so the skill is removed live.
@@ -428,12 +417,10 @@ def list_external_apps(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppUserResponse]:
-    """List enabled external apps with the calling user's credential state.
-
-    For each app, returns the credential keys the user must supply (auth
-    template keys not pre-filled by the org), the values the user has
-    already stored for those keys, and an `authenticated` flag. Org-level
-    credentials and the raw auth template are never exposed here.
+    """List enabled external apps with the calling user's credential state: the
+    keys the user must supply, the values already stored, and an
+    ``authenticated`` flag. Org credentials and the raw auth template aren't
+    exposed.
     """
     apps = get_external_apps(db_session=db_session)
     user_creds_by_app = get_user_credentials_by_app_id(

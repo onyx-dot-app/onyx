@@ -17,11 +17,8 @@ _BUILD_PREFIX = f"{API_SERVER_URL}/build"
 
 
 def _minimal_bundle_zip() -> bytes:
-    """A valid skill bundle: a SKILL.md with frontmatter plus a helper file.
-
-    Custom apps are now bundle-backed, so creating one through the admin
-    endpoint requires uploading a .zip that passes ``ingest_skill_bundle``
-    (SKILL.md present, parseable frontmatter)."""
+    """A valid skill bundle (SKILL.md + helper file) for creating bundle-backed
+    custom apps through the admin endpoint."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -142,9 +139,8 @@ class ExternalAppManager:
         organization_credentials: dict[str, Any],
         enabled: bool,
     ) -> Any:
-        """POST the multipart custom-app endpoint. The structured fields ride as
-        JSON-encoded form strings; a bundle is required on create (``app_id``
-        omitted) and omitted on edit (the existing bundle is kept)."""
+        """POST the multipart custom-app endpoint. A bundle is required on create
+        (``app_id`` omitted) and omitted on edit."""
         data: dict[str, str] = {
             "name": name,
             "description": description,
