@@ -1,0 +1,56 @@
+"""External app action policies
+
+Adds the per-action policy table for external-app egress governance.
+
+Revision ID: f1a2b3c4d5e6
+Revises: 7f5b159041be
+Create Date: 2026-05-25 00:00:00.000000
+
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision = "f1a2b3c4d5e6"
+down_revision = "7f5b159041be"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "external_app_policy",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("external_app_id", sa.Integer(), nullable=False),
+        sa.Column("action_id", sa.Text(), nullable=False),
+        sa.Column("policy", sa.String(), nullable=False),
+        sa.Column("name", sa.Text(), nullable=True),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+            onupdate=sa.text("now()"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["external_app_id"], ["external_app.id"], ondelete="CASCADE"
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "external_app_id",
+            "action_id",
+            name="uq_external_app_policy_app_action",
+        ),
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("external_app_policy")

@@ -18,6 +18,7 @@ from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
+from onyx.db.external_app import replace_policies
 from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
