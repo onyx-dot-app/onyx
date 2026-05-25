@@ -24,7 +24,7 @@ import { cn } from "@opal/utils";
  *
  * Client-side ring buffer caps memory at 5k lines.
  */
-const LOG_BUFFER_MAX = 5_000;
+const LOG_BUFFER_MAX = 2_000;
 // Below this many pixels from the bottom edge counts as "at the bottom"
 // for follow-mode auto-resume. 32px is one line of slop on most fonts.
 const SCROLL_BOTTOM_THRESHOLD_PX = 32;
