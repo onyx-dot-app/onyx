@@ -43,11 +43,75 @@ export async function upsertExternalApp(
   return res.json();
 }
 
-/** Toggle `enabled` without touching credentials. */
+interface UpsertCustomExternalAppInput {
+  /** Omit to create; set to edit an existing custom app. */
+  id?: number;
+  name: string;
+  description: string;
+  upstream_url_patterns: string[];
+  auth_template: Record<string, string>;
+  organization_credentials: Record<string, string>;
+  enabled: boolean;
+  /** Required on create; optional on edit (when set, replaces the bundle). */
+  bundle?: File;
+}
+
+/**
+ * Create or edit a CUSTOM external app. Custom apps go through this multipart
+ * endpoint (never the JSON `/admin/apps`) so their bundle can be uploaded or
+ * replaced. The structured fields are JSON-encoded form strings to match the
+ * backend's `POST /admin/apps/custom` handler.
+ */
+export async function upsertCustomExternalApp(
+  input: UpsertCustomExternalAppInput
+): Promise<ExternalAppAdminResponse> {
+  const form = new FormData();
+  if (input.id !== undefined) form.append("app_id", String(input.id));
+  form.append("name", input.name);
+  form.append("description", input.description);
+  form.append("enabled", String(input.enabled));
+  form.append(
+    "upstream_url_patterns",
+    JSON.stringify(input.upstream_url_patterns)
+  );
+  form.append("auth_template", JSON.stringify(input.auth_template));
+  form.append(
+    "organization_credentials",
+    JSON.stringify(input.organization_credentials)
+  );
+  if (input.bundle) form.append("bundle", input.bundle);
+
+  // No explicit Content-Type — the browser sets the multipart boundary.
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
+}
+
+/**
+ * Toggle `enabled` without touching credentials. Custom apps route through the
+ * custom endpoint (resending their current config, no bundle); built-in
+ * providers use the JSON endpoint.
+ */
 export async function setExternalAppEnabled(
   app: ExternalAppAdminResponse,
   enabled: boolean
 ): Promise<ExternalAppAdminResponse> {
+  if (app.app_type === "CUSTOM") {
+    return upsertCustomExternalApp({
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      upstream_url_patterns: app.upstream_url_patterns,
+      auth_template: app.auth_template,
+      organization_credentials: app.organization_credentials,
+      enabled,
+    });
+  }
   return upsertExternalApp({
     id: app.id,
     name: app.name,

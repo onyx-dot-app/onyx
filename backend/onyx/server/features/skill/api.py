@@ -1,4 +1,3 @@
-import io
 import json
 from typing import Annotated
 from uuid import UUID
@@ -14,7 +13,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import Permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Skill
 from onyx.db.models import User
@@ -32,7 +30,6 @@ from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import BuiltinSkillResponse
 from onyx.server.features.skill.models import CustomSkillResponse
@@ -40,10 +37,8 @@ from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import parse_skill_md_metadata
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.ingest import delete_bundle_blob
+from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
@@ -123,28 +118,18 @@ def create_custom_skill(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    bundle_bytes = bundle.file.read()
-    slug = slug_from_filename(bundle.filename)
-    validate_custom_bundle(bundle_bytes, slug=slug)
-    name, description = parse_skill_md_metadata(bundle_bytes)
-    sha = compute_bundle_sha256(bundle_bytes)
     parsed_group_ids = _parse_group_ids(group_ids)
 
     file_store = get_default_file_store()
-    bundle_file_id = file_store.save_file(
-        content=io.BytesIO(bundle_bytes),
-        display_name=f"{slug}.zip",
-        file_origin=FileOrigin.SKILL_BUNDLE,
-        file_type="application/zip",
-    )
+    ingested = ingest_skill_bundle(bundle.file.read(), bundle.filename, file_store)
 
     try:
         skill = create_skill__no_commit(
-            slug=slug,
-            name=name,
-            description=description,
-            bundle_file_id=bundle_file_id,
-            bundle_sha256=sha,
+            slug=ingested.slug,
+            name=ingested.name,
+            description=ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
             is_public=is_public,
             author_user_id=user.id,
             db_session=db_session,
@@ -153,7 +138,7 @@ def create_custom_skill(
             replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
         db_session.commit()
     except Exception:
-        _delete_old_bundle(file_store, bundle_file_id)
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
         raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
@@ -208,35 +193,27 @@ def replace_custom_skill_bundle(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
 
-    bundle_bytes = bundle.file.read()
-    validate_custom_bundle(bundle_bytes, slug=skill.slug)
-    name, description = parse_skill_md_metadata(bundle_bytes)
-    sha = compute_bundle_sha256(bundle_bytes)
-
     file_store = get_default_file_store()
-    new_file_id = file_store.save_file(
-        content=io.BytesIO(bundle_bytes),
-        display_name=f"{skill.slug}.zip",
-        file_origin=FileOrigin.SKILL_BUNDLE,
-        file_type="application/zip",
+    ingested = ingest_skill_bundle(
+        bundle.file.read(), bundle.filename, file_store, slug=skill.slug
     )
 
     try:
         updated, old_file_id = replace_skill_bundle(
             skill_id=skill_id,
-            new_bundle_file_id=new_file_id,
-            new_bundle_sha256=sha,
-            new_name=name,
-            new_description=description,
+            new_bundle_file_id=ingested.bundle_file_id,
+            new_bundle_sha256=ingested.bundle_sha256,
+            new_name=ingested.name,
+            new_description=ingested.description,
             db_session=db_session,
         )
         db_session.commit()
     except Exception:
-        _delete_old_bundle(file_store, new_file_id)
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
         raise
 
     push_skill_to_affected_sandboxes(updated, db_session)
-    _delete_old_bundle(file_store, old_file_id)
+    delete_bundle_blob(file_store, old_file_id)
     return CustomSkillResponse.from_model(
         updated, group_ids=get_group_ids_for_skill(skill_id, db_session)
     )
@@ -285,7 +262,7 @@ def delete_custom_skill(
 
     push_skills_for_users(affected, db_session)
     if old_file_id is not None:
-        _delete_old_bundle(get_default_file_store(), old_file_id)
+        delete_bundle_blob(get_default_file_store(), old_file_id)
 
 
 @user_router.get("")
@@ -343,10 +320,3 @@ def _parse_group_ids(raw: str) -> list[int]:
             "group_ids must be a JSON array of integers",
         )
     return parsed
-
-
-def _delete_old_bundle(file_store: FileStore, file_id: str) -> None:
-    try:
-        file_store.delete_file(file_id, error_on_missing=False)
-    except Exception:
-        logger.warning("Failed to delete old bundle blob %s", file_id, exc_info=True)
