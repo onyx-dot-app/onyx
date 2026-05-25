@@ -137,8 +137,6 @@ Resources:
               Value: info
             - Name: INDEXING_ONLY
               Value: True
-            - Name: VESPA_SEARCHER_THREADS
-              Value: "1"
           MountPoints:
             - SourceVolume: efs-volume
               ContainerPath: /app/.cache/huggingface/

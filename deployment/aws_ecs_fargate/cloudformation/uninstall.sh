@@ -27,7 +27,6 @@ STACK_NAMES=(
   "${ENVIRONMENT}-onyx-backend-api-server-service"
   "${ENVIRONMENT}-onyx-model-server-inference-service"
   "${ENVIRONMENT}-onyx-model-server-indexing-service"
-  "${ENVIRONMENT}-onyx-vespaengine-service"
   "${ENVIRONMENT}-onyx-redis-service"
   "${ENVIRONMENT}-onyx-postgres-service"
   "${ENVIRONMENT}-onyx-cluster"
