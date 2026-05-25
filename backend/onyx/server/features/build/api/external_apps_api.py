@@ -217,6 +217,7 @@ def upsert_custom_external_app(
             file_store=file_store,
             name=name.strip(),
             description=description.strip(),
+            enabled=enabled,
             upstream_url_patterns=parsed_patterns,
             auth_template=parsed_auth_template,
             organization_credentials=parsed_org_credentials,
@@ -243,6 +244,7 @@ def _create_custom_app(
     file_store: FileStore,
     name: str,
     description: str,
+    enabled: bool,
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
@@ -265,6 +267,7 @@ def _create_custom_app(
             upstream_url_patterns=upstream_url_patterns,
             auth_template=auth_template,
             organization_credentials=organization_credentials,
+            enabled=enabled,
             is_public=True,
             slug=ingested.slug,
         )
