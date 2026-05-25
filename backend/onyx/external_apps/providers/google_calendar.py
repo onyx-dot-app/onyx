@@ -12,6 +12,60 @@ from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OrgCredentialField
 
+# Google Calendar REST v3 (https://www.googleapis.com/calendar/v3/...); the
+# action is HTTP method + path. Method disambiguates list/create on the shared
+# `/events` collection and read/update/delete on `/events/{id}`.
+_EVENTS_COLLECTION = r"^/calendar/v3/calendars/[^/]+/events/?$"
+_EVENT_ITEM = r"^/calendar/v3/calendars/[^/]+/events/[^/]+$"
+_ENDPOINTS: list[EndpointSpec] = [
+    EndpointSpec(
+        id="gcal.calendars.read",
+        normalised_name="List calendars",
+        description="List the calendars on the user's calendar list.",
+        matches=[
+            RestRoute(
+                method="GET", path_regex=r"^/calendar/v3/users/[^/]+/calendarList"
+            )
+        ],
+    ),
+    EndpointSpec(
+        id="gcal.events.read",
+        normalised_name="Read events",
+        description="List events in a calendar or fetch a single event.",
+        matches=[
+            RestRoute(method="GET", path_regex=_EVENTS_COLLECTION),
+            RestRoute(method="GET", path_regex=_EVENT_ITEM),
+        ],
+    ),
+    EndpointSpec(
+        id="gcal.freebusy.read",
+        normalised_name="Query free/busy",
+        description="Query busy intervals across calendars.",
+        matches=[RestRoute(method="POST", path_regex=r"^/calendar/v3/freeBusy$")],
+    ),
+    EndpointSpec(
+        id="gcal.events.create",
+        normalised_name="Create an event",
+        description="Create a new event on a calendar.",
+        matches=[RestRoute(method="POST", path_regex=_EVENTS_COLLECTION)],
+    ),
+    EndpointSpec(
+        id="gcal.events.update",
+        normalised_name="Update an event",
+        description="Modify an existing event.",
+        matches=[
+            RestRoute(method="PUT", path_regex=_EVENT_ITEM),
+            RestRoute(method="PATCH", path_regex=_EVENT_ITEM),
+        ],
+    ),
+    EndpointSpec(
+        id="gcal.events.delete",
+        normalised_name="Delete an event",
+        description="Permanently delete an event.",
+        matches=[RestRoute(method="DELETE", path_regex=_EVENT_ITEM)],
+    ),
+]
+
 
 # Google Calendar REST v3 (https://www.googleapis.com/calendar/v3/...); the
 # action is HTTP method + path. Method disambiguates list/create on the shared
