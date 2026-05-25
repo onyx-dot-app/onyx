@@ -4,6 +4,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { Text } from "@opal/components";
 import { SvgClock, SvgExternalLink } from "@opal/icons";
+import { cn } from "@opal/utils";
 import { taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { formatAbsolute } from "@/app/craft/v1/tasks/utils";
 import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
@@ -44,7 +45,17 @@ export default function ScheduledRunBanner({
     >
       <Link
         href={taskDetailPath(data.task_id)}
-        className="group inline-flex min-w-0 max-w-[5.75rem] items-center overflow-hidden rounded-08 border border-border-01 bg-background-tint-00 px-2 py-1 transition-[max-width,background-color] duration-[350ms] ease-out hover:max-w-[30rem] hover:bg-background-tint-01 focus:max-w-[30rem] focus:bg-background-tint-01 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04"
+        className={cn(
+          "group inline-flex min-w-0 max-w-[5.75rem] items-center",
+          "overflow-hidden rounded-08 border border-border-01",
+          "bg-background-tint-00 px-2 py-1",
+          "transition-[max-width,background-color]",
+          "duration-[350ms] ease-out",
+          "hover:max-w-[30rem] hover:bg-background-tint-01",
+          "focus:max-w-[30rem] focus:bg-background-tint-01",
+          "focus:outline-hidden focus-visible:ring-2",
+          "focus-visible:ring-border-04"
+        )}
         data-testid="back-to-task-button"
         title={`Scheduled task: ${data.task_name}. Started ${formatAbsolute(
           data.started_at
@@ -54,7 +65,13 @@ export default function ScheduledRunBanner({
         )}`}
       >
         <span className="grid shrink-0 translate-y-px items-center">
-          <span className="col-start-1 row-start-1 flex h-5 items-center gap-1.5 opacity-100 transition-opacity duration-200 ease-out group-hover:opacity-0 group-focus:opacity-0">
+          <span
+            className={cn(
+              "col-start-1 row-start-1 flex h-5 items-center gap-1.5",
+              "opacity-100 transition-opacity duration-200 ease-out",
+              "group-hover:opacity-0 group-focus:opacity-0"
+            )}
+          >
             <SvgClock size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
               <Text font="figure-small-label" color="text-03" nowrap>
@@ -62,7 +79,13 @@ export default function ScheduledRunBanner({
               </Text>
             </span>
           </span>
-          <span className="col-start-1 row-start-1 flex h-5 items-center gap-1.5 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100 group-focus:opacity-100">
+          <span
+            className={cn(
+              "col-start-1 row-start-1 flex h-5 items-center gap-1.5",
+              "opacity-0 transition-opacity duration-200 ease-out",
+              "group-hover:opacity-100 group-focus:opacity-100"
+            )}
+          >
             <SvgExternalLink size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
               <Text font="figure-small-label" color="text-03" nowrap>
@@ -71,7 +94,17 @@ export default function ScheduledRunBanner({
             </span>
           </span>
         </span>
-        <div className="ml-0 flex h-5 w-max max-w-0 translate-y-px items-center gap-1.5 overflow-hidden opacity-0 transition-[max-width,opacity,margin-left] duration-[350ms] ease-out group-hover:ml-1.5 group-hover:max-w-[23rem] group-hover:opacity-100 group-focus:ml-1.5 group-focus:max-w-[23rem] group-focus:opacity-100">
+        <div
+          className={cn(
+            "ml-0 flex h-5 w-max max-w-0 translate-y-px items-center",
+            "gap-1.5 overflow-hidden opacity-0",
+            "transition-[max-width,opacity,margin-left]",
+            "duration-[350ms] ease-out",
+            "group-hover:ml-1.5 group-hover:max-w-[23rem]",
+            "group-hover:opacity-100 group-focus:ml-1.5",
+            "group-focus:max-w-[23rem] group-focus:opacity-100"
+          )}
+        >
           <div className="h-3 w-px shrink-0 bg-border-01" />
           <span className="flex h-5 min-w-0 -translate-y-px items-center overflow-hidden">
             <Text font="main-ui-action" color="text-05" nowrap maxLines={1}>
