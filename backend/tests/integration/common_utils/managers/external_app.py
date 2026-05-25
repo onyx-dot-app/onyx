@@ -166,11 +166,16 @@ class ExternalAppManager:
                     "application/zip",
                 )
             }
+        # Drop the default JSON Content-Type so httpx can set the multipart
+        # boundary itself; leaving "application/json" in place makes the server
+        # try to JSON-parse the form body and report every field as missing.
+        headers = user_performing_action.headers.copy()
+        headers.pop("Content-Type", None)
         return client.post(
             f"{_BUILD_PREFIX}/admin/apps/custom",
             data=data,
             files=files,
-            headers=user_performing_action.headers,
+            headers=headers,
             cookies=user_performing_action.cookies,
         )
 
