@@ -55,7 +55,7 @@ fi
 
 if [[ "$KEEP_CLUSTER" -eq 1 ]]; then
   # PVCs are intentionally left intact so the next install reuses postgres /
-  # opensearch / minio data. For a clean slate, omit --keep-cluster
+  # opensearch / vespa / minio data. For a clean slate, omit --keep-cluster
   # or run: kubectl -n $NAMESPACE delete pvc --all
   echo "uninstalling helm release 'onyx' in namespace '$NAMESPACE' ..."
   helm uninstall onyx -n "$NAMESPACE" 2>/dev/null || true

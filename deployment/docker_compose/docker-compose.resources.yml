@@ -35,6 +35,16 @@ services:
   #        cpus: ${API_SERVER_CPU_RESERVATION}
   #        memory: ${API_SERVER_MEM_RESERVATION}
   #
+  #   index:
+  #     deploy:
+  #       resources:
+  #         limits:
+  #           cpus: ${VESPA_CPU_LIMIT}
+  #           memory: ${VESPA_MEM_LIMIT}
+  #         reservations:
+  #           cpus: ${VESPA_CPU_RESERVATION}
+  #           memory: ${VESPA_MEM_RESERVATION}
+  #
   inference_model_server:
     deploy:
       resources:

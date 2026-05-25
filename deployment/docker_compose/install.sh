@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --include-craft  Enable Onyx Craft (AI-powered web app building)"
-            echo "  --lite           Deploy Onyx Lite (no vector DB, Redis, or model servers)"
+            echo "  --lite           Deploy Onyx Lite (no Vespa, Redis, or model servers)"
             echo "  --local          Use existing config files instead of downloading from GitHub"
             echo "  --shutdown       Stop (pause) Onyx containers"
             echo "  --delete-data    Remove all Onyx data (containers, volumes, and files)"
@@ -98,7 +98,7 @@ fi
 
 if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
     echo "ERROR: --lite and --include-craft cannot be used together."
-    echo "Craft requires services (vector DB, Redis, background workers) that lite mode disables."
+    echo "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
     exit 1
 fi
 
@@ -827,7 +827,7 @@ fi
 if [[ "$LITE_MODE" = false ]]; then
     print_info "Which deployment mode would you like?"
     echo ""
-    echo "  1) Lite      - Minimal deployment (no vector DB, Redis, or model servers)"
+    echo "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
     echo "                  LLM chat, tools, file uploads, and Projects still work"
     echo "  2) Standard  - Full deployment with search, connectors, and RAG"
     echo ""
@@ -849,7 +849,7 @@ fi
 
 if [[ "$LITE_MODE" = true ]] && [[ "$INCLUDE_CRAFT" = true ]]; then
     print_error "--include-craft cannot be used with Lite mode."
-    print_info "Craft requires services (vector DB, Redis, background workers) that lite mode disables."
+    print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
     exit 1
 fi
 
@@ -1304,7 +1304,7 @@ echo ""
 if [[ "$LITE_MODE" = true ]]; then
     echo ""
     print_info "Running in Lite mode — the following services are NOT started:"
-    echo "  • OpenSearch (vector database)"
+    echo "  • Vespa (vector database)"
     echo "  • Redis (cache)"
     echo "  • Model servers (embedding/inference)"
     echo "  • Background workers (Celery)"
