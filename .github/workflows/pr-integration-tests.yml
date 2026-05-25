@@ -160,7 +160,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
-      # needed for pulling OpenSearch, Redis, Postgres, and Minio images
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub
@@ -280,7 +280,7 @@ jobs:
         with:
           aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
-      # needed for pulling OpenSearch, Redis, Postgres, and Minio images
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub

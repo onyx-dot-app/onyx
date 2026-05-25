@@ -79,7 +79,7 @@ jobs:
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
-    # Use larger runner with more resources for OpenSearch + Postgres + Redis + Minio
+    # Use larger runner with more resources for Vespa
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -115,7 +115,7 @@ jobs:
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
 
-      # needed for pulling OpenSearch, Redis, Postgres, and Minio images
+      # needed for pulling Vespa, Redis, Postgres, and Minio images
       # otherwise, we hit the "Unauthenticated users" limit
       # https://docs.docker.com/docker-hub/usage/
       - name: Login to Docker Hub

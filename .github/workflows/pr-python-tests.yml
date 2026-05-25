@@ -52,7 +52,7 @@ jobs:
       REDIS_CLOUD_PYTEST_PASSWORD: ${{ secrets.REDIS_CLOUD_PYTEST_PASSWORD }}
       DISABLE_TELEMETRY: "true"
       # Unit tests run without a live backend; EE code paths that depend on
-      # Redis/the vector index/etc are not available, so disable enforcement here.
+      # Redis/Vespa/etc are not available, so disable enforcement here.
       LICENSE_ENFORCEMENT_ENABLED: "false"
 
     steps:
