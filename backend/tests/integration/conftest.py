@@ -64,6 +64,7 @@ from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import ADMIN_USER_NAME  # noqa: E402
 from tests.integration.common_utils.constants import GENERAL_HEADERS  # noqa: E402
+from tests.integration.common_utils.index_fixture import IndexFixture  # noqa: E402
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
     DocumentManager,
@@ -87,7 +88,6 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
 from tests.integration.common_utils.test_models import DATestLLMProvider  # noqa: E402
 from tests.integration.common_utils.test_models import DATestUser  # noqa: E402
 from tests.integration.common_utils.test_models import SimpleTestDocument  # noqa: E402
-from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
 
 BASIC_USER_NAME = "basic_user"
 
@@ -353,10 +353,10 @@ instantiate the session directly within the test.
 
 
 @pytest.fixture
-def vespa_client() -> vespa_fixture:
+def vespa_client() -> IndexFixture:
     with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
-        return vespa_fixture(index_name=search_settings.index_name)
+        return IndexFixture(index_name=search_settings.index_name)
 
 
 @pytest.fixture

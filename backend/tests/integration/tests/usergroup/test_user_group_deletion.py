@@ -14,6 +14,7 @@ import os
 import pytest
 
 from onyx.server.documents.models import DocumentSource
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -27,7 +28,6 @@ from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 @pytest.mark.skipif(
@@ -36,7 +36,7 @@ from tests.integration.common_utils.vespa import vespa_fixture
 )
 def test_user_group_deletion(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
+    vespa_client: IndexFixture,  # noqa: ARG001
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

@@ -2,17 +2,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import IngestionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_ingestion_api_crud(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     """Test create, list, and delete via the ingestion API."""
     admin_user: DATestUser = UserManager.create(email="admin@onyx.app")

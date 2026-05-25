@@ -11,11 +11,11 @@ from onyx.db.models import DocumentByConnectorCredentialPair
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import NUM_DOCS
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import SimpleTestDocument
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def _verify_document_permissions(
@@ -165,7 +165,7 @@ class DocumentManager:
 
     @staticmethod
     def verify(
-        vespa_client: vespa_fixture,
+        vespa_client: IndexFixture,
         cc_pair: DATestCCPair,
         doc_creating_user: DATestUser,
         # If None, will not check doc sets or groups
@@ -219,7 +219,7 @@ class DocumentManager:
     def fetch_documents_for_cc_pair(
         cc_pair_id: int,
         db_session: Session,
-        vespa_client: vespa_fixture,
+        vespa_client: IndexFixture,
     ) -> list[SimpleTestDocument]:
         stmt = (
             select(DocumentByConnectorCredentialPair)
