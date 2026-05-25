@@ -25,10 +25,6 @@ from onyx.db.relationships import transfer_relationship
 from onyx.db.relationships import transfer_relationship_type
 from onyx.db.relationships import upsert_relationship
 from onyx.db.relationships import upsert_relationship_type
-from onyx.document_index.vespa.kg_interactions import (
-    get_kg_vespa_info_update_requests_for_document,
-)
-from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.lock_utils import extend_lock
@@ -410,21 +406,16 @@ def kg_clustering(
     for i_batch, documents in enumerate(
         _get_batch_kg_processed_documents(batch_size=processing_chunk_batch_size)
     ):
-        batch_update_requests = run_functions_tuples_in_parallel(
-            [
-                (get_kg_vespa_info_update_requests_for_document, (document.id,))
-                for document in documents
-            ]
+        logger.warning(
+            "KG clustering: document-index chunk update skipped for %d documents "
+            "(no OpenSearch implementation; tenant=%s, index=%s).",
+            len(documents),
+            tenant_id,
+            index_name,
         )
-        for update_requests, document in zip(batch_update_requests, documents):
-            try:
-                update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
-            except Exception as e:
-                logger.error("Error updating vespa for document %s: %s", document.id, e)
         last_lock_time = extend_lock(
             lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
         )
-        # logger.debug(f"Updated vespa for documents batch {i}")
     time_delta = time.monotonic() - start_time
     logger.info(
         "Finished updating %s document batches in %ss",
