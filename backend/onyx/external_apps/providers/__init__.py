@@ -2,64 +2,69 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuth
+from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.google_calendar import GoogleCalendarOAuth
-from onyx.external_apps.providers.linear import LinearOAuth
-from onyx.external_apps.providers.slack import SlackOAuth
+from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.external_apps.providers.linear import LinearProvider
+from onyx.external_apps.providers.slack import SlackProvider
 from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
-_PROVIDER_CLASSES: list[type[OAuth]] = [
-    SlackOAuth,
-    GoogleCalendarOAuth,
-    LinearOAuth,
+_PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
+    SlackProvider,
+    GoogleCalendarProvider,
+    LinearProvider,
 ]
 
 
-def _build_providers() -> dict[ExternalAppType, OAuth]:
-    providers: dict[ExternalAppType, OAuth] = {}
+def _build_providers() -> dict[ExternalAppType, ExternalAppProvider]:
+    providers: dict[ExternalAppType, ExternalAppProvider] = {}
     for cls in _PROVIDER_CLASSES:
-        if cls.app_type in providers:
-            existing = type(providers[cls.app_type]).__name__
+        app_type = cls.spec.app_type
+        if app_type in providers:
+            existing = type(providers[app_type]).__name__
             raise RuntimeError(
-                f"Duplicate OAuth provider registration for "
-                f"app_type={cls.app_type}: {existing} and {cls.__name__}."
+                f"Duplicate provider registration for "
+                f"app_type={app_type}: {existing} and {cls.__name__}."
             )
-        providers[cls.app_type] = cls()
+        providers[app_type] = cls()
     return providers
 
 
-PROVIDERS: dict[ExternalAppType, OAuth] = _build_providers()
+PROVIDERS: dict[ExternalAppType, ExternalAppProvider] = _build_providers()
 
 
-def get_provider_for_app(app: ExternalApp) -> OAuth | None:
+def get_provider_for_app(app: ExternalApp) -> ExternalAppProvider | None:
     return PROVIDERS.get(app.app_type)
 
 
-def get_provider_or_raise(app: ExternalApp) -> OAuth:
+def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     provider = get_provider_for_app(app)
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"OAuth flow not configured for app '{app.skill.name}' "
+            f"No provider configured for app '{app.skill.name}' "
             f"(app_type={app.app_type}).",
         )
     return provider
 
 
-def _descriptor_for(provider_cls: type[OAuth]) -> BuiltInExternalAppDescriptor:
+def _descriptor_for(
+    provider_cls: type[ExternalAppProvider],
+) -> BuiltInExternalAppDescriptor:
+    spec = provider_cls.spec
+    descriptor = spec.descriptor
     return BuiltInExternalAppDescriptor(
-        app_type=provider_cls.app_type,
-        name=provider_cls.app_name,
-        description=provider_cls.description,
-        upstream_url_patterns=list(provider_cls.upstream_url_patterns),
-        auth_template=dict(provider_cls.auth_template),
+        app_type=spec.app_type,
+        name=spec.app_name,
+        description=descriptor.description,
+        upstream_url_patterns=list(descriptor.upstream_url_patterns),
+        auth_template=dict(descriptor.auth_template),
         required_org_credential_fields=[
             _to_credential_field_descriptor(f)
-            for f in provider_cls.required_org_credential_fields
+            for f in descriptor.required_org_credential_fields
         ],
-        setup_instructions=provider_cls.setup_instructions,
+        setup_instructions=descriptor.setup_instructions,
     )
 
 
@@ -82,7 +87,7 @@ def fetch_available_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
 
 def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
     for cls in _PROVIDER_CLASSES:
-        if cls.app_type == app_type:
+        if cls.spec.app_type == app_type:
             return _descriptor_for(cls)
     raise OnyxError(
         OnyxErrorCode.NOT_FOUND,
@@ -91,10 +96,10 @@ def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescripto
 
 
 __all__ = [
-    "OAuth",
-    "SlackOAuth",
-    "GoogleCalendarOAuth",
-    "LinearOAuth",
+    "ExternalAppProvider",
+    "SlackProvider",
+    "GoogleCalendarProvider",
+    "LinearProvider",
     "PROVIDERS",
     "get_provider_for_app",
     "get_provider_or_raise",
