@@ -47,14 +47,13 @@ The deployment follows this order:
 2. Service stacks:
    - Postgres
    - Redis
+   - Vespa Engine
    - Model Server (Indexing)
    - Model Server (Inference)
    - Backend API Server
    - Backend Background Server
    - Web Server
    - Nginx
-
-OpenSearch is expected to be provisioned outside of this CloudFormation stack (for example, AWS OpenSearch Service). Wire its endpoint into the backend services via the standard OpenSearch environment variables.
 
 ## Usage
 

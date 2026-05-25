@@ -29,6 +29,34 @@ Resources:
         ReplicationOverwriteProtection: ENABLED
       ThroughputMode: elastic
 
+  VespaEngineTmpEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      AccessPointTags: 
+        - Key: Name
+          Value: vespaengine-tmp
+      FileSystemId: !Ref OnyxEfs
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0755"
+        Path: /var/tmp
+
+  VespaEngineDataEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      AccessPointTags: 
+        - Key: Name
+          Value: vespaengine-data
+      FileSystemId: !Ref OnyxEfs
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0755"
+        Path: /opt/vespa/var
+
   PostgresDataEfsAccessPoint:
     Type: AWS::EFS::AccessPoint
     Properties:
@@ -78,6 +106,16 @@ Outputs:
     Value: !Ref OnyxEfs
     Export:
       Name: !Sub ${AWS::StackName}-OnyxEfsId
+  OutputVespaEngineTmpEfsAccessPoint:
+    Description: VespaEngine Tmp AP
+    Value: !Ref VespaEngineTmpEfsAccessPoint
+    Export:
+      Name: !Sub ${AWS::StackName}-VespaEngineTmpEfsAccessPoint
+  OutputVespaEngineDataEfsAccessPoint:
+    Description: VespaEngine Data Ap
+    Value: !Ref VespaEngineDataEfsAccessPoint
+    Export:
+      Name: !Sub ${AWS::StackName}-VespaEngineDataEfsAccessPoint
   OutputPostgresDataEfsAccessPoint:
     Description: Postgres Data AP
     Value: !Ref PostgresDataEfsAccessPoint

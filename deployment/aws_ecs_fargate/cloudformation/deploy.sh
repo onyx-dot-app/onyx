@@ -45,6 +45,7 @@ INFRA_ORDER=(
 SERVICE_ORDER=(
   "onyx_postgres_service_template.yaml"
   "onyx_redis_service_template.yaml"
+  "onyx_vespaengine_service_template.yaml"
   "onyx_model_server_indexing_service_template.yaml"
   "onyx_model_server_inference_service_template.yaml"
   "onyx_backend_api_server_service_template.yaml"

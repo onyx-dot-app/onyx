@@ -147,8 +147,13 @@ Resources:
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: MODEL_SERVER_HOST
-              Value: !Sub
+              Value: !Sub 
                 - "${Environment}-onyx-model-server-inference-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: VESPA_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-vespaengine-service.${ImportedNamespace}"
                 - ImportedNamespace: !ImportValue
                     Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
             - Name: POSTGRES_HOST
