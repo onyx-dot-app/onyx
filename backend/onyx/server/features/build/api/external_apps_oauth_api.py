@@ -1,10 +1,3 @@
-"""OAuth flow routes for External Apps.
-
-Provider-agnostic — these routes look up the matching `OAuth`
-provider by `app.app_type` and delegate authorize-URL construction
-and response parsing to it.
-"""
-
 import base64
 import uuid
 from typing import Any

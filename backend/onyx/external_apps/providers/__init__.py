@@ -43,7 +43,7 @@ def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"OAuth flow not configured for app '{app.skill.name}' "
+            f"No provider configured for app '{app.skill.name}' "
             f"(app_type={app.app_type}).",
         )
     return provider
