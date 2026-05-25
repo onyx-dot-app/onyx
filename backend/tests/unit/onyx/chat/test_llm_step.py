@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from onyx.chat import llm_step as llm_step_module
 from onyx.chat.llm_step import _extract_tool_call_kickoffs
 from onyx.chat.llm_step import _increment_turns
 from onyx.chat.llm_step import _parse_tool_args_to_dict
@@ -11,14 +12,22 @@ from onyx.chat.llm_step import _resolve_tool_arguments
 from onyx.chat.llm_step import _XmlToolCallContentFilter
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import translate_history_to_llm_format
+from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import MessageType
+from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import AssistantMessage
+from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
+from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -581,3 +590,133 @@ class TestTranslateHistoryToLlmFormat:
                 ],
                 llm_config=self._llm_config(provider),
             )
+
+
+# Minimal valid PNG header bytes so get_image_type_from_bytes returns image/png
+# instead of raising — keeps the image-emission path running in tests.
+_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def _make_image(file_id: str) -> ChatLoadedFile:
+    return ChatLoadedFile(
+        file_id=file_id,
+        content=_PNG_BYTES,
+        file_type=ChatFileType.IMAGE,
+        filename=f"{file_id}.png",
+        content_text=None,
+        token_count=50,
+    )
+
+
+def _make_user_msg(
+    text: str, images: list[ChatLoadedFile] | None = None
+) -> ChatMessageSimple:
+    return ChatMessageSimple(
+        message=text,
+        token_count=5,
+        message_type=MessageType.USER,
+        image_files=images,
+    )
+
+
+def _make_llm_config(provider: str) -> LLMConfig:
+    return LLMConfig(
+        model_provider=provider,
+        model_name="test-model",
+        temperature=0,
+        max_input_tokens=8192,
+    )
+
+
+_ATTACHED_IMAGE_PREFIX = "[attached image — file_id: "
+_ATTACHED_IMAGE_SUFFIX = "]"
+
+
+def _attached_image_file_ids(user_msg: UserMessage) -> list[str]:
+    """Return file_ids in order, parsed from the per-image label text parts
+    emitted by translate_history_to_llm_format. Lets tests assert
+    `... == ["img0", "img1", ...]` instead of poking at substrings."""
+    if not isinstance(user_msg.content, list):
+        return []
+    return [
+        p.text[len(_ATTACHED_IMAGE_PREFIX) : -len(_ATTACHED_IMAGE_SUFFIX)]
+        for p in user_msg.content
+        if isinstance(p, TextContentPart) and p.text.startswith(_ATTACHED_IMAGE_PREFIX)
+    ]
+
+
+def _expected_image_drop_reminder(dropped_count: int) -> str:
+    """Build the exact wrapped reminder string a test should compare against."""
+    return (
+        f"{SYSTEM_REMINDER_TAG_OPEN}\n"
+        f"{IMAGE_DROP_REMINDER.format(dropped_count=dropped_count)}\n"
+        f"{SYSTEM_REMINDER_TAG_CLOSE}"
+    )
+
+
+class TestImageCap:
+    """End-to-end tests for the Azure-family image cap (translate_history_to_llm_format).
+
+    Three invariants worth pinning down — anything more is double coverage of
+    the same 30-line feature.
+    """
+
+    def test_disabled_by_default_passes_everything_through(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without ENABLE_AZURE_IMAGE_CAP, even an Azure request with many
+        images flows untouched (no drops, no trailing reminder)."""
+        monkeypatch.setattr(llm_step_module, "ENABLE_AZURE_IMAGE_CAP", False)
+        history = [
+            _make_user_msg("hi", images=[_make_image(f"img{i}") for i in range(100)])
+        ]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(AZURE_PROVIDER_NAME)
+        )
+        assert isinstance(translated, list)
+        assert len(translated) == 1
+        assert isinstance(translated[0], UserMessage)
+        assert len(_attached_image_file_ids(translated[0])) == 100
+
+    def test_enabled_caps_azure_keeps_first_attachments_and_emits_reminder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Azure + cap enabled + over-limit → first-N attachments survive
+        (user-attached preferred over later project-context fill), and a
+        trailing system-reminder UserMessage is emitted with the centralized
+        IMAGE_DROP_REMINDER prompt."""
+        monkeypatch.setattr(llm_step_module, "ENABLE_AZURE_IMAGE_CAP", True)
+        monkeypatch.setattr(llm_step_module, "_AZURE_DEFAULT_IMAGE_CAP", 3)
+        history = [
+            _make_user_msg(
+                "describe", images=[_make_image(f"img{i}") for i in range(5)]
+            )
+        ]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(AZURE_PROVIDER_NAME)
+        )
+        assert isinstance(translated, list)
+        assert len(translated) == 2
+        user_msg, reminder = translated
+        assert isinstance(user_msg, UserMessage)
+        assert _attached_image_file_ids(user_msg) == ["img0", "img1", "img2"]
+        assert isinstance(reminder, UserMessage)
+        assert reminder.content == _expected_image_drop_reminder(dropped_count=2)
+
+    def test_enabled_does_not_cap_non_azure_providers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The only way the Azure-prefix check could regress: a non-Azure
+        provider getting capped. Pin this down."""
+        monkeypatch.setattr(llm_step_module, "ENABLE_AZURE_IMAGE_CAP", True)
+        monkeypatch.setattr(llm_step_module, "_AZURE_DEFAULT_IMAGE_CAP", 3)
+        history = [
+            _make_user_msg("hi", images=[_make_image(f"img{i}") for i in range(5)])
+        ]
+        translated = translate_history_to_llm_format(
+            history=history, llm_config=_make_llm_config(OPENAI_PROVIDER_NAME)
+        )
+        assert isinstance(translated, list)
+        assert len(translated) == 1
+        assert isinstance(translated[0], UserMessage)
+        assert len(_attached_image_file_ids(translated[0])) == 5
