@@ -52,7 +52,7 @@ export default function ScheduledRunBanner({
           "transition-[max-width,background-color]",
           "duration-[350ms] ease-out",
           "hover:max-w-[30rem] hover:bg-background-tint-01",
-          "focus:max-w-[30rem] focus:bg-background-tint-01",
+          "focus-visible:max-w-[30rem] focus-visible:bg-background-tint-01",
           "focus:outline-hidden focus-visible:ring-2",
           "focus-visible:ring-border-04"
         )}
@@ -69,7 +69,7 @@ export default function ScheduledRunBanner({
             className={cn(
               "col-start-1 row-start-1 flex h-5 items-center gap-1.5",
               "opacity-100 transition-opacity duration-200 ease-out",
-              "group-hover:opacity-0 group-focus:opacity-0"
+              "group-hover:opacity-0 group-focus-visible:opacity-0"
             )}
           >
             <SvgClock size={14} className="shrink-0 text-text-03" />
@@ -83,7 +83,7 @@ export default function ScheduledRunBanner({
             className={cn(
               "col-start-1 row-start-1 flex h-5 items-center gap-1.5",
               "opacity-0 transition-opacity duration-200 ease-out",
-              "group-hover:opacity-100 group-focus:opacity-100"
+              "group-hover:opacity-100 group-focus-visible:opacity-100"
             )}
           >
             <SvgExternalLink size={14} className="shrink-0 text-text-03" />
@@ -101,8 +101,9 @@ export default function ScheduledRunBanner({
             "transition-[max-width,opacity,margin-left]",
             "duration-[350ms] ease-out",
             "group-hover:ml-1.5 group-hover:max-w-[23rem]",
-            "group-hover:opacity-100 group-focus:ml-1.5",
-            "group-focus:max-w-[23rem] group-focus:opacity-100"
+            "group-hover:opacity-100 group-focus-visible:ml-1.5",
+            "group-focus-visible:max-w-[23rem]",
+            "group-focus-visible:opacity-100"
           )}
         >
           <div className="h-3 w-px shrink-0 bg-border-01" />
