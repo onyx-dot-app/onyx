@@ -19,5 +19,8 @@ export function buildSessionPath(sessionId: string): Route {
   return `/craft/v1?sessionId=${sessionId}` as Route;
 }
 
+// Default page size for the scheduled task list.
+export const TASKS_PAGE_SIZE = 50;
+
 // Default page size for run history.
 export const RUNS_PAGE_SIZE = 50;

@@ -18,7 +18,11 @@ import {
   RunStatusBadge,
   TaskStatusBadge,
 } from "@/app/craft/v1/tasks/components/StatusBadge";
-import { NEW_TASK_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import {
+  NEW_TASK_PATH,
+  TASKS_PAGE_SIZE,
+  taskDetailPath,
+} from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskListItem,
   ScheduledTaskListResponse,
@@ -203,7 +207,9 @@ export default function ScheduledTasksListPage() {
             data={tasks}
             columns={columns}
             getRowId={(row) => row.id}
-            pageSize={Math.max(tasks.length, 1)}
+            pageSize={
+              tasks.length > 0 ? Math.min(tasks.length, TASKS_PAGE_SIZE) : 1
+            }
             selectionBehavior="single-select"
             onRowClick={(row) => router.push(taskDetailPath(row.id))}
             emptyState={
