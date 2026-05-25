@@ -77,4 +77,3 @@ def test_jsm_connector_emits_jsm_source() -> None:
     jira_client.search_issues.assert_called_once()
     search_kwargs = jira_client.search_issues.call_args.kwargs
     assert 'project = "HELP"' in search_kwargs["jql_str"]
-

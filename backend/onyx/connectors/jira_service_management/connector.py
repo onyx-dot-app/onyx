@@ -12,4 +12,3 @@ from onyx.connectors.jira.connector import JiraConnector
 
 class JiraServiceManagementConnector(JiraConnector):
     source: DocumentSource = DocumentSource.JIRA_SERVICE_MANAGEMENT
-

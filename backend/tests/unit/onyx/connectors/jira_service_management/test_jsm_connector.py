@@ -44,7 +44,9 @@ def test_jsm_connector_subclasses_jira_connector() -> None:
 
 
 def test_jsm_connector_source() -> None:
-    assert JiraServiceManagementConnector.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert (
+        JiraServiceManagementConnector.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
 
     # Base Jira connector should remain unchanged
     assert JiraConnector.source == DocumentSource.JIRA
@@ -76,4 +78,3 @@ def test_jsm_registered_in_connector_map() -> None:
     mapping = CONNECTOR_CLASS_MAP[DocumentSource.JIRA_SERVICE_MANAGEMENT]
     assert mapping.module_path == "onyx.connectors.jira_service_management.connector"
     assert mapping.class_name == "JiraServiceManagementConnector"
-
