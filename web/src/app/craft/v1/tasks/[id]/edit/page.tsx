@@ -12,7 +12,7 @@ import ScheduleTaskForm, {
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
 import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
-import { decodeCronToPayload } from "@/app/craft/v1/tasks/schedule";
+import { decodeUtcCronToLocalPayload } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -81,7 +81,7 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
   // cron can't be decoded back into the chosen mode (rare, e.g. someone
   // hand-edited via the API), we fall back to ``advanced`` mode so the user
   // sees the raw expression.
-  const { mode, payload } = decodeCronToPayload(
+  const { mode, payload } = decodeUtcCronToLocalPayload(
     detail.editor_mode,
     detail.cron_expression
   );

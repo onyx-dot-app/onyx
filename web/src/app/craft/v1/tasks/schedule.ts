@@ -3,6 +3,8 @@
  *
  * - ``compileToCron``: normalize the three editor modes into a single 5-field
  *   cron expression (mirrors ``backend/.../scheduled_tasks/schedule.py``).
+ * - ``compileLocalPayloadToUtcCron``: compile browser-local editor state into
+ *   the UTC cron persisted by the backend.
  * - ``computeNextRuns``: best-effort client-side preview of the next N fires,
  *   used by the editor's "next 3 runs" panel before save.
  * - ``humanReadableSchedule``: lightweight summary fallback when we can only
@@ -48,6 +50,192 @@ function parseTimeOfDay(value: string | null | undefined): {
   return { hour: Number(m[1]), minute: Number(m[2]) };
 }
 
+function timeOfDay(hour: number, minute: number): string {
+  return `${pad2(hour)}:${pad2(minute)}`;
+}
+
+function localTimeOfDayToUtc(
+  value: string | null | undefined,
+  referenceDate: Date
+): { hour: number; minute: number } | null {
+  const time = parseTimeOfDay(value);
+  if (!time) return null;
+  const date = new Date(referenceDate.getTime());
+  date.setHours(time.hour, time.minute, 0, 0);
+  return { hour: date.getUTCHours(), minute: date.getUTCMinutes() };
+}
+
+function utcTimeOfDayToLocal(
+  value: string | null | undefined,
+  referenceDate: Date
+): { hour: number; minute: number } | null {
+  const time = parseTimeOfDay(value);
+  if (!time) return null;
+  const date = new Date(referenceDate.getTime());
+  date.setUTCHours(time.hour, time.minute, 0, 0);
+  return { hour: date.getHours(), minute: date.getMinutes() };
+}
+
+function nextLocalDateForWeekday(
+  weekday: number,
+  hour: number,
+  minute: number,
+  referenceDate: Date
+): Date {
+  const date = new Date(referenceDate.getTime());
+  date.setHours(hour, minute, 0, 0);
+  const daysToAdd = (weekday - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + daysToAdd);
+  return date;
+}
+
+function nextUtcDateForWeekday(
+  weekday: number,
+  hour: number,
+  minute: number,
+  referenceDate: Date
+): Date {
+  const date = new Date(referenceDate.getTime());
+  date.setUTCHours(hour, minute, 0, 0);
+  const daysToAdd = (weekday - date.getUTCDay() + 7) % 7;
+  date.setUTCDate(date.getUTCDate() + daysToAdd);
+  return date;
+}
+
+function uniqueSortedWeekdays(weekdays: number[]): number[] {
+  return Array.from(new Set(weekdays)).sort((a, b) => a - b);
+}
+
+export function localPayloadToUtcPayload(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date = new Date()
+): EditorPayload {
+  if (mode === "interval") {
+    const intervalPayload = payload as IntervalPayload;
+    if (intervalPayload.unit !== "days") return intervalPayload;
+    const utcTime = localTimeOfDayToUtc(
+      intervalPayload.time_of_day,
+      referenceDate
+    );
+    if (!utcTime) return intervalPayload;
+    return {
+      ...intervalPayload,
+      time_of_day: timeOfDay(utcTime.hour, utcTime.minute),
+    };
+  }
+
+  if (mode === "daily_weekly") {
+    const dailyWeeklyPayload = payload as DailyWeeklyPayload;
+    const localTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
+    if (!localTime) return dailyWeeklyPayload;
+
+    const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
+      ? dailyWeeklyPayload.weekdays
+      : [];
+    if (weekdays.length === 0) {
+      const utcTime = localTimeOfDayToUtc(
+        dailyWeeklyPayload.time_of_day,
+        referenceDate
+      );
+      if (!utcTime) return dailyWeeklyPayload;
+      return {
+        ...dailyWeeklyPayload,
+        time_of_day: timeOfDay(utcTime.hour, utcTime.minute),
+        weekdays: [],
+      };
+    }
+
+    const converted = weekdays.map((weekday) => {
+      const date = nextLocalDateForWeekday(
+        weekday,
+        localTime.hour,
+        localTime.minute,
+        referenceDate
+      );
+      return {
+        weekday: date.getUTCDay(),
+        hour: date.getUTCHours(),
+        minute: date.getUTCMinutes(),
+      };
+    });
+    const first = converted[0];
+    if (!first) return dailyWeeklyPayload;
+    return {
+      ...dailyWeeklyPayload,
+      time_of_day: timeOfDay(first.hour, first.minute),
+      weekdays: uniqueSortedWeekdays(converted.map((item) => item.weekday)),
+    };
+  }
+
+  return payload;
+}
+
+function utcPayloadToLocalPayload(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date
+): EditorPayload {
+  if (mode === "interval") {
+    const intervalPayload = payload as IntervalPayload;
+    if (intervalPayload.unit !== "days") return intervalPayload;
+    const localTime = utcTimeOfDayToLocal(
+      intervalPayload.time_of_day,
+      referenceDate
+    );
+    if (!localTime) return intervalPayload;
+    return {
+      ...intervalPayload,
+      time_of_day: timeOfDay(localTime.hour, localTime.minute),
+    };
+  }
+
+  if (mode === "daily_weekly") {
+    const dailyWeeklyPayload = payload as DailyWeeklyPayload;
+    const utcTime = parseTimeOfDay(dailyWeeklyPayload.time_of_day);
+    if (!utcTime) return dailyWeeklyPayload;
+
+    const weekdays = Array.isArray(dailyWeeklyPayload.weekdays)
+      ? dailyWeeklyPayload.weekdays
+      : [];
+    if (weekdays.length === 0) {
+      const localTime = utcTimeOfDayToLocal(
+        dailyWeeklyPayload.time_of_day,
+        referenceDate
+      );
+      if (!localTime) return dailyWeeklyPayload;
+      return {
+        ...dailyWeeklyPayload,
+        time_of_day: timeOfDay(localTime.hour, localTime.minute),
+        weekdays: [],
+      };
+    }
+
+    const converted = weekdays.map((weekday) => {
+      const date = nextUtcDateForWeekday(
+        weekday,
+        utcTime.hour,
+        utcTime.minute,
+        referenceDate
+      );
+      return {
+        weekday: date.getDay(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+      };
+    });
+    const first = converted[0];
+    if (!first) return dailyWeeklyPayload;
+    return {
+      ...dailyWeeklyPayload,
+      time_of_day: timeOfDay(first.hour, first.minute),
+      weekdays: uniqueSortedWeekdays(converted.map((item) => item.weekday)),
+    };
+  }
+
+  return payload;
+}
+
 // ---------------------------------------------------------------------------
 // Cron compilation
 // ---------------------------------------------------------------------------
@@ -64,6 +252,17 @@ export function compileToCron(
     case "advanced":
       return compileAdvanced(payload as AdvancedPayload);
   }
+}
+
+export function compileLocalPayloadToUtcCron(
+  mode: EditorMode,
+  payload: EditorPayload,
+  referenceDate: Date = new Date()
+): ScheduleValidation {
+  return compileToCron(
+    mode,
+    localPayloadToUtcPayload(mode, payload, referenceDate)
+  );
 }
 
 function compileInterval(payload: IntervalPayload): ScheduleValidation {
@@ -280,9 +479,8 @@ export function computeNextRuns(
 // ---------------------------------------------------------------------------
 
 /**
- * Reconstruct a UI-friendly payload from a stored cron expression and the
- * editor_mode hint. The backend stores cron + editor_mode but does not
- * round-trip editor_payload, so we re-derive it on the edit page.
+ * Reconstruct the stored payload shape from a stored cron expression and the
+ * editor_mode hint. Use ``decodeUtcCronToLocalPayload`` for browser display.
  *
  * If we can't confidently decode the cron back into the chosen mode, we fall
  * back to ``advanced`` mode so the user sees the raw expression.
@@ -383,6 +581,22 @@ export function decodeCronToPayload(
   return { mode: "advanced", payload: { cron } };
 }
 
+export function decodeUtcCronToLocalPayload(
+  mode: EditorMode,
+  cron: string,
+  referenceDate: Date = new Date()
+): { mode: EditorMode; payload: EditorPayload } {
+  const decoded = decodeCronToPayload(mode, cron);
+  return {
+    mode: decoded.mode,
+    payload: utcPayloadToLocalPayload(
+      decoded.mode,
+      decoded.payload,
+      referenceDate
+    ),
+  };
+}
+
 function parseStepStar(field: string): number | null {
   if (!field.startsWith("*/")) return null;
   const n = Number(field.slice(2));
@@ -438,4 +652,13 @@ export function humanReadableSchedule(
     return `cron: ${cron}`;
   }
   return "—";
+}
+
+export function humanReadableScheduleFromCron(
+  mode: EditorMode,
+  cron: string,
+  referenceDate: Date = new Date()
+): string {
+  const decoded = decodeUtcCronToLocalPayload(mode, cron, referenceDate);
+  return humanReadableSchedule(decoded.mode, decoded.payload, cron);
 }

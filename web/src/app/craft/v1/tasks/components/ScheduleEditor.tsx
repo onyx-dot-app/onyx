@@ -15,7 +15,10 @@ import type {
   IntervalPayload,
   IntervalUnit,
 } from "@/app/craft/v1/tasks/interfaces";
-import { compileToCron } from "@/app/craft/v1/tasks/schedule";
+import {
+  compileLocalPayloadToUtcCron,
+  humanReadableSchedule,
+} from "@/app/craft/v1/tasks/schedule";
 
 // 0=Sun..6=Sat (cron convention).
 const WEEKDAY_LABELS: ReadonlyArray<{ value: number; short: string }> = [
@@ -97,7 +100,12 @@ export default function ScheduleEditor({
     [mode, payload, onPayloadChange]
   );
 
-  const compiled = compileToCron(mode, payload);
+  const compiled = compileLocalPayloadToUtcCron(mode, payload);
+  const summary = humanReadableSchedule(
+    mode,
+    payload,
+    mode === "advanced" && compiled.ok ? compiled.cron : null
+  );
 
   return (
     <Section gap={0.5}>
@@ -127,7 +135,7 @@ export default function ScheduleEditor({
         </Text>
       ) : compiled.ok ? (
         <Text secondaryBody text03>
-          Cron: <code className="font-mono">{compiled.cron}</code>
+          {summary}
         </Text>
       ) : null}
     </Section>

@@ -11,7 +11,11 @@ import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
-import { compileToCron, computeNextRuns } from "@/app/craft/v1/tasks/schedule";
+import {
+  compileLocalPayloadToUtcCron,
+  computeNextRuns,
+  localPayloadToUtcPayload,
+} from "@/app/craft/v1/tasks/schedule";
 import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
@@ -133,7 +137,7 @@ export default function ScheduleTaskForm({
     [prompt]
   );
 
-  const compiled = compileToCron(mode, payload);
+  const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
   const nextRuns = useMemo(() => {
     if (!compiled.ok) return [];
@@ -155,12 +159,13 @@ export default function ScheduleTaskForm({
       if (!compiled.ok) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
+        const storagePayload = localPayloadToUtcPayload(mode, payload);
         if (isEdit && initial.taskId) {
           const body: ScheduledTaskPatchBody = {
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
+            editor_payload: storagePayload,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -173,7 +178,7 @@ export default function ScheduleTaskForm({
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
+            editor_payload: storagePayload,
             run_immediately: runImmediately,
           };
           await createScheduledTask(body);
