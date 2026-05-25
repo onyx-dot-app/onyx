@@ -24,7 +24,6 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_broker_client
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
@@ -46,10 +45,7 @@ from onyx.background.indexing.checkpointing_utils import (
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import PERSISTENT_INDEXING
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
@@ -1673,14 +1669,6 @@ def _docprocessing_task(
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
-
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None

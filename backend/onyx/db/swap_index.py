@@ -3,7 +3,7 @@ import time
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
+from onyx.configs.app_configs import NUM_RETRIES_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
@@ -100,19 +100,19 @@ def _perform_index_swap(
 
     # This flow is for checking and possibly creating an index so we get all
     # indices.
-    document_indices = get_all_document_indices(new_search_settings, None, None)
+    document_indices = get_all_document_indices(new_search_settings, None)
 
     WAIT_SECONDS = 5
 
     for document_index in document_indices:
         success = False
-        for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
+        for x in range(NUM_RETRIES_ON_STARTUP):
             try:
                 logger.notice(
                     "Document index %s swap (attempt %s/%s)...",
                     document_index.__class__.__name__,
                     x + 1,
-                    VESPA_NUM_ATTEMPTS_ON_STARTUP,
+                    NUM_RETRIES_ON_STARTUP,
                 )
                 document_index.verify_and_create_index_if_necessary(
                     embedding_dim=new_search_settings.final_embedding_dim,
@@ -134,7 +134,7 @@ def _perform_index_swap(
             logger.error(
                 "Document index swap for %s did not succeed. Attempt limit reached. (%s)",
                 document_index.__class__.__name__,
-                VESPA_NUM_ATTEMPTS_ON_STARTUP,
+                NUM_RETRIES_ON_STARTUP,
             )
             return None
 

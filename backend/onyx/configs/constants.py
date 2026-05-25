@@ -298,11 +298,6 @@ class BlobType(str, Enum):
     OCI_STORAGE = "oci_storage"
 
 
-class DocumentIndexType(str, Enum):
-    COMBINED = "combined"  # Vespa
-    SPLIT = "split"  # Typesense + Qdrant
-
-
 class AuthType(str, Enum):
     BASIC = "basic"
     GOOGLE_OAUTH = "google_oauth"

@@ -206,13 +206,12 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
         else []
     )
     try:
-        logger.notice("Deleting information from Vespa and Postgres")
+        logger.notice("Deleting information from the document index and Postgres")
         active_search_settings = get_active_search_settings(db_session)
         # This flow is for deletion so we get all indices.
         document_indices = get_all_document_indices(
             active_search_settings.primary,
             active_search_settings.secondary,
-            None,
         )
 
         files_deleted_count = _unsafe_deletion(

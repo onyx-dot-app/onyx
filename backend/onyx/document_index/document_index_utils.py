@@ -8,7 +8,6 @@ from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
-from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import MultipassConfig
 from shared_configs.configs import MULTI_TENANT
@@ -61,9 +60,9 @@ def get_both_index_properties(
 
 
 def translate_boost_count_to_multiplier(boost: int) -> float:
-    """Mapping boost integer values to a multiplier according to a sigmoid curve
+    """Mapping boost integer values to a multiplier according to a sigmoid curve.
     Piecewise such that at many downvotes, its 0.5x the score and with many upvotes
-    it is 2x the score. This should be in line with the Vespa calculation."""
+    it is 2x the score."""
     # 3 in the equation below stretches it out to hit asymptotes slower
     if boost < 0:
         # 0.5 + sigmoid -> range of 0.5 to 1
@@ -71,65 +70,6 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
 
     # 2 x sigmoid -> range of 1 to 2
     return 2 / (1 + math.exp(-1 * boost / 3))
-
-
-# Assembles a list of Vespa chunk IDs for a document
-# given the required context. This can be used to directly query
-# Vespa's Document API.
-def get_document_chunk_ids(
-    enriched_document_info_list: list[EnrichedDocumentIndexingInfo],
-    tenant_id: str,
-    large_chunks_enabled: bool,
-) -> list[UUID]:
-    doc_chunk_ids = []
-
-    for enriched_document_info in enriched_document_info_list:
-        for chunk_index in range(
-            enriched_document_info.chunk_start_index,
-            enriched_document_info.chunk_end_index,
-        ):
-            if not enriched_document_info.old_version:
-                doc_chunk_ids.append(
-                    get_uuid_from_chunk_info(
-                        document_id=enriched_document_info.doc_id,
-                        chunk_id=chunk_index,
-                        tenant_id=tenant_id,
-                    )
-                )
-            else:
-                doc_chunk_ids.append(
-                    get_uuid_from_chunk_info_old(
-                        document_id=enriched_document_info.doc_id,
-                        chunk_id=chunk_index,
-                    )
-                )
-
-            if large_chunks_enabled and chunk_index % 4 == 0:
-                large_chunk_id = int(chunk_index / 4)
-                large_chunk_reference_ids = [
-                    large_chunk_id + i
-                    for i in range(4)
-                    if large_chunk_id + i < enriched_document_info.chunk_end_index
-                ]
-                if enriched_document_info.old_version:
-                    doc_chunk_ids.append(
-                        get_uuid_from_chunk_info_old(
-                            document_id=enriched_document_info.doc_id,
-                            chunk_id=large_chunk_id,
-                            large_chunk_reference_ids=large_chunk_reference_ids,
-                        )
-                    )
-                else:
-                    doc_chunk_ids.append(
-                        get_uuid_from_chunk_info(
-                            document_id=enriched_document_info.doc_id,
-                            chunk_id=large_chunk_id,
-                            tenant_id=tenant_id,
-                            large_chunk_id=large_chunk_id,
-                        )
-                    )
-
-    return doc_chunk_ids
 
 
 def get_uuid_from_chunk_info(

@@ -50,7 +50,6 @@ class OnyxRedisCommand(Enum):
     purge_documentset_taskset = "purge_documentset_taskset"
     purge_usergroup_taskset = "purge_usergroup_taskset"
     purge_locks_blocking_deletion = "purge_locks_blocking_deletion"
-    purge_vespa_syncing = "purge_vespa_syncing"
     purge_pidbox = "purge_pidbox"
     get_user_token = "get_user_token"
     delete_user_token = "delete_user_token"
@@ -139,10 +138,6 @@ def onyx_redis(
             f"{tenant_id}:{redis_connector.external_group_sync.fence_key}", dry_run, r
         )
         return 0
-    elif command == OnyxRedisCommand.purge_vespa_syncing:
-        return purge_by_match_and_type(
-            "*connectorsync:vespa_syncing*", "string", batch, dry_run, r
-        )
     elif command == OnyxRedisCommand.purge_pidbox:
         return purge_by_match_and_type(
             "*reply.celery.pidbox", "list", batch, dry_run, r
