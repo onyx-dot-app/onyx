@@ -13,7 +13,6 @@ import ScheduleTaskForm, {
 import type { ScheduledTaskDetail } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 import { decodeCronToPayload } from "@/app/craft/v1/tasks/schedule";
-import { getBrowserTimezone } from "@/app/craft/v1/tasks/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -92,6 +91,5 @@ function toFormInitial(detail: ScheduledTaskDetail): ScheduleTaskFormInitial {
     prompt: detail.prompt,
     mode,
     payload,
-    timezone: detail.timezone || getBrowserTimezone(),
   };
 }

@@ -13,7 +13,6 @@ import type {
   EditorPayload,
 } from "@/app/craft/v1/tasks/interfaces";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
-import { getBrowserTimezone } from "@/app/craft/v1/tasks/utils";
 
 const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([
   "interval",
@@ -56,7 +55,6 @@ export default function NewScheduledTaskPage() {
       prompt: promptParam ?? "",
       mode,
       payload,
-      timezone: getBrowserTimezone(),
     };
   }, [searchParams]);
 

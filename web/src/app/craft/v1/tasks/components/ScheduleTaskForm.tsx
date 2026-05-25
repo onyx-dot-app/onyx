@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, Divider } from "@opal/components";
+import { Button } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
@@ -30,8 +29,6 @@ import {
 import {
   formatAbsolute,
   formatRelativeShort,
-  getBrowserTimezone,
-  getCommonTimezones,
 } from "@/app/craft/v1/tasks/utils";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 
@@ -42,7 +39,6 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  timezone: string;
 }
 
 interface ScheduleTaskFormProps {
@@ -60,7 +56,6 @@ export default function ScheduleTaskForm({
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [timezone, setTimezone] = useState(initial.timezone);
   const [saving, setSaving] = useState(false);
 
   // `/` skill picker state for the prompt field. Scoped to the trigger
@@ -138,13 +133,12 @@ export default function ScheduleTaskForm({
     [prompt]
   );
 
-  const timezones = useMemo(() => getCommonTimezones(), []);
   const compiled = compileToCron(mode, payload);
 
   const nextRuns = useMemo(() => {
     if (!compiled.ok) return [];
-    return computeNextRuns(compiled.cron, timezone, 3);
-  }, [compiled, timezone]);
+    return computeNextRuns(compiled.cron, 3);
+  }, [compiled]);
 
   const trimmedName = name.trim();
   const trimmedPrompt = prompt.trim();
@@ -152,11 +146,9 @@ export default function ScheduleTaskForm({
   // Validation states surfaced to the user.
   const nameError = trimmedName.length === 0 ? "Name is required." : null;
   const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
-  const tzError = !timezone ? "Timezone is required." : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
-  const canSubmit =
-    !nameError && !promptError && !tzError && !scheduleError && !saving;
+  const canSubmit = !nameError && !promptError && !scheduleError && !saving;
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
@@ -169,7 +161,6 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: payload,
-            timezone,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -183,7 +174,6 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: payload,
-            timezone,
             run_immediately: runImmediately,
           };
           await createScheduledTask(body);
@@ -209,7 +199,6 @@ export default function ScheduleTaskForm({
       mode,
       payload,
       router,
-      timezone,
       trimmedName,
       trimmedPrompt,
     ]
@@ -284,27 +273,6 @@ export default function ScheduleTaskForm({
           onPayloadChange={setPayload}
           error={scheduleError}
         />
-        <Divider />
-        <Text mainUiAction text05>
-          Timezone
-        </Text>
-        <div className="w-full max-w-[28rem]">
-          <InputSelect value={timezone} onValueChange={setTimezone}>
-            <InputSelect.Trigger placeholder="Select a timezone..." />
-            <InputSelect.Content>
-              {timezones.map((tz) => (
-                <InputSelect.Item key={tz} value={tz}>
-                  {tz}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-        </div>
-        {tzError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {tzError}
-          </Text>
-        )}
       </Card>
 
       {/* Next runs preview */}
@@ -329,7 +297,7 @@ export default function ScheduleTaskForm({
                   {idx + 1}. {formatAbsolute(iso)}
                 </Text>
                 <Text secondaryBody text03>
-                  {formatRelativeShort(iso)} ({timezone})
+                  {formatRelativeShort(iso)}
                 </Text>
               </li>
             ))}
@@ -378,6 +346,5 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
-    timezone: getBrowserTimezone(),
   };
 }

@@ -33,7 +33,6 @@ export interface StarterPrompt {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  timezone?: string; // falls back to user's TZ if absent
 }
 
 export const STARTER_PROMPTS: StarterPrompt[] = [

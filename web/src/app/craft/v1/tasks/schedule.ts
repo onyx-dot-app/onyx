@@ -185,9 +185,8 @@ function expandField(field: string, min: number, max: number): number[] | null {
 }
 
 /**
- * Compute the next ``count`` fires of ``cron`` in the given IANA timezone,
- * starting strictly after ``after`` (default: now). Returns ISO strings in
- * UTC.
+ * Compute the next ``count`` UTC fires of ``cron``, starting strictly after
+ * ``after`` (default: now). Returns ISO strings.
  *
  * Returns an empty array if the cron expression cannot be parsed by our
  * tiny client-side parser.
@@ -198,12 +197,9 @@ function expandField(field: string, min: number, max: number): number[] | null {
  *    matching *either* constraint. When one is ``*``, only the other is
  *    enforced.
  *  - Months follow 1-12 indexing.
- *  - Timezone handling uses ``Intl.DateTimeFormat`` to map a UTC instant
- *    into local components in the target zone.
  */
 export function computeNextRuns(
   cron: string,
-  timezone: string,
   count: number,
   after: Date = new Date()
 ): string[] {
@@ -228,8 +224,7 @@ export function computeNextRuns(
   const domRestricted = domF !== "*";
   const dowRestricted = dowF !== "*";
 
-  // Iterate UTC minutes; for each candidate, derive the local components in
-  // the target timezone and test the cron fields against those.
+  // Iterate UTC minutes and test each candidate against the cron fields.
   const startUtc = new Date(after.getTime());
   // round up to the next whole minute so we never re-fire on the current
   // second.
@@ -237,27 +232,6 @@ export function computeNextRuns(
   startUtc.setUTCMinutes(startUtc.getUTCMinutes() + 1);
 
   const SAFETY_LIMIT_MINUTES = 60 * 24 * 366 * 2; // ~2 years
-
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    weekday: "short",
-  });
-
-  const weekdayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
 
   const minutesSet = new Set(minutes);
   const hoursSet = new Set(hours);
@@ -269,20 +243,11 @@ export function computeNextRuns(
   const cursor = new Date(startUtc.getTime());
 
   for (let i = 0; i < SAFETY_LIMIT_MINUTES && results.length < count; i++) {
-    const parts = fmt.formatToParts(cursor);
-    const get = (type: string): string =>
-      parts.find((p) => p.type === type)?.value ?? "";
-
-    const minute = Number(get("minute"));
-    const hour = Number(get("hour"));
-    const day = Number(get("day"));
-    const month = Number(get("month"));
-    const weekdayValue = weekdayMap[get("weekday")];
-    if (weekdayValue === undefined) {
-      // Unknown weekday from the Intl formatter — skip this candidate.
-      cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
-      continue;
-    }
+    const minute = cursor.getUTCMinutes();
+    const hour = cursor.getUTCHours();
+    const day = cursor.getUTCDate();
+    const month = cursor.getUTCMonth() + 1;
+    const weekdayValue = cursor.getUTCDay();
 
     let dayOk: boolean;
     if (domRestricted && dowRestricted) {
