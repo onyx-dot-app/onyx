@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import STABLE_VERSION_PATTERN
+from onyx.document_index.opensearch.constants import OPENSEARCH_IMAGE
 from onyx.main import fetch_versioned_implementation
 from onyx.utils.logger import setup_logger
 
@@ -153,7 +154,7 @@ def test_versions_endpoint(client: TestClient) -> None:
     # Verify migration has expected values
     assert migration["onyx"] == "airgapped-intfloat-nomic-migration"
     assert migration["relational_db"] == "postgres:15.2-alpine"
-    assert migration["index"] == "vespaengine/vespa:8.277.17"
+    assert migration["index"] == OPENSEARCH_IMAGE
     assert migration["nginx"] == "nginx:1.25.5-alpine"
 
     # Verify versions are different between stable and dev

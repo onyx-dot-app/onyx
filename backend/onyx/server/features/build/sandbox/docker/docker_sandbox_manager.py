@@ -202,7 +202,7 @@ _COMPOSE_INTERNAL_HOSTNAMES = {
     "indexing_model_server",
     "inference_model_server",
     "web_server",
-    "vespa",
+    "opensearch",
 }
 
 
