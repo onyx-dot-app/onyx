@@ -106,8 +106,8 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "check-for-vespa-sync",
-        "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+        "name": "check-for-document-index-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_DOCUMENT_INDEX_SYNC_TASK,
         "schedule": timedelta(seconds=20),
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
@@ -270,14 +270,13 @@ if SCHEDULED_EVAL_DATASET_NAMES:
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-indexing",
     "check-for-connector-deletion",
-    "check-for-vespa-sync",
+    "check-for-document-index-sync",
     "check-for-pruning",
     "check-for-hierarchy-fetching",
     "check-for-checkpoint-cleanup",
     "check-for-index-attempt-cleanup",
     "check-for-doc-permissions-sync",
     "check-for-external-group-sync",
-    "migrate-chunks-from-vespa-to-opensearch",
 }
 
 if DISABLE_VECTOR_DB:

@@ -15,20 +15,28 @@ from tenacity import RetryError
 
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    DOCUMENT_SYNC_FENCE_KEY,
+)
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    get_document_sync_payload,
+)
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    get_document_sync_remaining,
+)
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    reset_document_sync,
+)
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    try_generate_stale_document_sync_tasks,
+)
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_FENCE_KEY
-from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_payload
-from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_remaining
-from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
-from onyx.background.celery.tasks.vespa.document_sync import (
-    try_generate_stale_document_sync_tasks,
-)
+from onyx.configs.app_configs import DOCUMENT_INDEX_SYNC_MAX_TASKS
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import VESPA_SYNC_MAX_TASKS
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import CELERY_DOCUMENT_INDEX_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
@@ -70,22 +78,20 @@ logger = setup_logger()
 
 # celery auto associates tasks created inside another task,
 # which bloats the result metadata considerably. trail=False prevents this.
-# TODO(andrei): Rename all these kinds of functions from *vespa* to a more
-# generic *document_index*.
 @shared_task(
-    name=OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+    name=OnyxCeleryTask.CHECK_FOR_DOCUMENT_INDEX_SYNC_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
     bind=True,
 )
-def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
+def check_for_document_index_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
 
     # Useful for debugging timing issues with reacquisitions.
     # TODO: remove once more generalized logging is in place
-    task_logger.info("check_for_vespa_sync_task started")
+    task_logger.info("check_for_document_index_sync_task started")
 
     time_start = time.monotonic()
 
@@ -93,8 +99,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     r_replica = get_redis_replica_client()
 
     lock_beat: RedisLock = r.lock(
-        OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK,
-        timeout=CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+        OnyxRedisLocks.CHECK_DOCUMENT_INDEX_SYNC_BEAT_LOCK,
+        timeout=CELERY_DOCUMENT_INDEX_SYNC_BEAT_LOCK_TIMEOUT,
     )
 
     # these tasks should never overlap
@@ -105,7 +111,12 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
         # 1/3: KICKOFF
         with get_session_with_current_tenant() as db_session:
             try_generate_stale_document_sync_tasks(
-                self.app, VESPA_SYNC_MAX_TASKS, db_session, r, lock_beat, tenant_id
+                self.app,
+                DOCUMENT_INDEX_SYNC_MAX_TASKS,
+                db_session,
+                r,
+                lock_beat,
+                tenant_id,
             )
 
         # region document set scan
@@ -180,7 +191,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
             elif key_str.startswith(RedisUserGroup.FENCE_PREFIX):
                 monitor_usergroup_taskset = (
                     fetch_versioned_implementation_with_fallback(
-                        "onyx.background.celery.tasks.vespa.tasks",
+                        "onyx.background.celery.tasks.document_index_sync.tasks",
                         "monitor_usergroup_taskset",
                         noop_fallback,
                     )
@@ -193,18 +204,22 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
             "Soft time limit exceeded, task is being terminated gracefully."
         )
     except Exception:
-        task_logger.exception("Unexpected exception during vespa metadata sync")
+        task_logger.exception(
+            "Unexpected exception during document index metadata sync"
+        )
     finally:
         if lock_beat.owned():
             lock_beat.release()
         else:
             task_logger.error(
-                f"check_for_vespa_sync_task - Lock not owned on completion: tenant={tenant_id}"
+                f"check_for_document_index_sync_task - Lock not owned on completion: tenant={tenant_id}"
             )
             redis_lock_dump(lock_beat, r)
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
+    task_logger.debug(
+        f"check_for_document_index_sync_task finished: elapsed={time_elapsed:.2f}"
+    )
     return True
 
 
@@ -252,7 +267,7 @@ def try_generate_document_set_sync_tasks(
 
     # Add all documents that need to be updated into the queue
     result = rds.generate_tasks(
-        VESPA_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
+        DOCUMENT_INDEX_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
     )
     if result is None:
         return None
@@ -327,7 +342,7 @@ def try_generate_user_group_sync_tasks(
         f"RedisUserGroup.generate_tasks starting. usergroup_id={usergroup.id}"
     )
     result = rug.generate_tasks(
-        VESPA_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
+        DOCUMENT_INDEX_SYNC_MAX_TASKS, celery_app, db_session, r, lock_beat, tenant_id
     )
     if result is None:
         return None
@@ -474,7 +489,7 @@ def document_index_metadata_sync_task(
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
-                httpx_client=HttpxPool.get("vespa"),
+                httpx_client=HttpxPool.get("document_index"),
             )
 
             retry_document_indices: list[RetryDocumentIndex] = [

@@ -126,7 +126,7 @@ def _flush_batch(
     document_indices = get_all_document_indices(
         search_settings,
         None,
-        httpx_client=HttpxPool.get("vespa"),
+        httpx_client=HttpxPool.get("document_index"),
     )
     metadata = IndexAttemptMetadata(
         attempt_id=attempt.id,

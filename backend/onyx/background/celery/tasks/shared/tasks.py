@@ -154,7 +154,7 @@ def document_by_cc_pair_cleanup_task(
         document_indices = get_all_document_indices(
             primary_search_settings,
             secondary_search_settings,
-            httpx_client=HttpxPool.get("vespa"),
+            httpx_client=HttpxPool.get("document_index"),
         )
         retry_document_indices: list[RetryDocumentIndex] = [
             RetryDocumentIndex(document_index) for document_index in document_indices

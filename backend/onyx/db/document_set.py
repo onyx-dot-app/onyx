@@ -320,8 +320,8 @@ def update_document_set(
     user: User,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     """If successful, this sets document_set_row.is_up_to_date = False.
-    That will be processed via Celery in check_for_vespa_sync_task
-    and trigger a long running background sync to Vespa.
+    That will be processed via Celery in check_for_document_index_sync_task
+    and trigger a long running background sync to the document index.
     """
     # Check if we have either CC pairs or federated connectors (or both)
     if (

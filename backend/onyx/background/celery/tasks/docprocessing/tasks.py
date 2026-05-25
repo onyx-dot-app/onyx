@@ -1779,7 +1779,7 @@ def _docprocessing_task(
             document_indices = get_all_document_indices(
                 index_attempt.search_settings,
                 None,
-                httpx_client=HttpxPool.get("vespa"),
+                httpx_client=HttpxPool.get("document_index"),
             )
 
             # Set up metadata for this batch
