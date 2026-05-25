@@ -9,16 +9,12 @@ Create Date: 2025-06-20 14:44:54.241159
 from alembic import op
 import sqlalchemy as sa
 from urllib.parse import urlparse, urlunparse
-from httpx import HTTPStatusError
-import httpx
 from onyx.db.search_settings import SearchSettings
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa.shared_utils.utils import (
-    replace_invalid_doc_id_characters,
-)
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
 import os
+
+# NOTE: Vespa-side document-id backfill was removed in the Vespa removal phase.
+# This migration's Vespa update path is now a no-op; DB-side cleanup still runs.
 
 logger = setup_logger()
 
@@ -270,118 +266,27 @@ def update_document_id_in_database(
     # print(f"Successfully deleted document {old_doc_id} from database")
 
 
-def _visit_chunks(
-    *,
-    http_client: httpx.Client,
-    index_name: str,
-    selection: str,
-    continuation: str | None = None,
-) -> tuple[list[dict], str | None]:
-    """Helper that calls the /document/v1 visit API once and returns (docs, next_token)."""
-
-    # Use the same URL as the document API, but with visit-specific params
-    base_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
-
-    params: dict[str, str] = {
-        "selection": selection,
-        "wantedDocumentCount": "1000",
-    }
-    if continuation:
-        params["continuation"] = continuation
-
-    # print(f"Visiting chunks for selection '{selection}' with params {params}")
-    resp = http_client.get(base_url, params=params, timeout=None)
-    # print(f"Visited chunks for document {selection}")
-    resp.raise_for_status()
-
-    payload = resp.json()
-    return payload.get("documents", []), payload.get("continuation")
-
-
 def delete_document_chunks_from_vespa(index_name: str, doc_id: str) -> None:
-    """Delete all chunks for *doc_id* from Vespa using continuation-token paging (no offset)."""
-
-    total_deleted = 0
-    # Use exact match instead of contains - Document Selector Language doesn't support contains
-    selection = f'{index_name}.document_id=="{doc_id}"'
-
-    with get_vespa_http_client() as http_client:
-        continuation: str | None = None
-        while True:
-            docs, continuation = _visit_chunks(
-                http_client=http_client,
-                index_name=index_name,
-                selection=selection,
-                continuation=continuation,
-            )
-
-            if not docs:
-                break
-
-            for doc in docs:
-                vespa_full_id = doc.get("id")
-                if not vespa_full_id:
-                    continue
-
-                vespa_doc_uuid = vespa_full_id.split("::")[-1]
-                delete_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_uuid}"
-
-                try:
-                    resp = http_client.delete(delete_url)
-                    resp.raise_for_status()
-                    total_deleted += 1
-                except Exception as e:
-                    print(f"Failed to delete chunk {vespa_doc_uuid}: {e}")
-
-            if not continuation:
-                break
+    """No-op stub. Vespa has been removed; document-index chunk cleanup is handled by
+    the post-removal indexing pipeline against OpenSearch."""
+    logger.warning(
+        "Skipping Vespa chunk deletion (Vespa removed): index_name=%s doc_id=%s",
+        index_name,
+        doc_id,
+    )
 
 
 def update_document_id_in_vespa(
     index_name: str, old_doc_id: str, new_doc_id: str
 ) -> None:
-    """Update all chunks' document_id field from *old_doc_id* to *new_doc_id* using continuation paging."""
-
-    clean_new_doc_id = replace_invalid_doc_id_characters(new_doc_id)
-
-    # Use exact match instead of contains - Document Selector Language doesn't support contains
-    selection = f'{index_name}.document_id=="{old_doc_id}"'
-
-    with get_vespa_http_client() as http_client:
-        continuation: str | None = None
-        while True:
-            # print(f"Visiting chunks for document {old_doc_id} -> {new_doc_id}")
-            docs, continuation = _visit_chunks(
-                http_client=http_client,
-                index_name=index_name,
-                selection=selection,
-                continuation=continuation,
-            )
-
-            if not docs:
-                break
-
-            for doc in docs:
-                vespa_full_id = doc.get("id")
-                if not vespa_full_id:
-                    continue
-
-                vespa_doc_uuid = vespa_full_id.split("::")[-1]
-                vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_uuid}"
-
-                update_request = {
-                    "fields": {"document_id": {"assign": clean_new_doc_id}}
-                }
-
-                try:
-                    resp = http_client.put(vespa_url, json=update_request)
-                    resp.raise_for_status()
-                except Exception as e:
-                    print(f"Failed to update chunk {vespa_doc_uuid}: {e}")
-                    raise
-
-            if not continuation:
-                break
+    """No-op stub. Vespa has been removed; the DB-side rename above still runs and
+    new indexing into OpenSearch will use the normalized ID going forward."""
+    logger.warning(
+        "Skipping Vespa document-id update (Vespa removed): index_name=%s old=%s new=%s",
+        index_name,
+        old_doc_id,
+        new_doc_id,
+    )
 
 
 def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
@@ -552,14 +457,6 @@ def upgrade() -> None:
             # print(f"Finished updating document {current_doc_id} -> {normalized_doc_id}")
         except Exception as e:
             print(f"Failed to update document {current_doc_id}: {e}")
-
-            if isinstance(e, HTTPStatusError):
-                print(f"HTTPStatusError: {e}")
-                print(f"Response: {e.response.text}")
-                print(f"Status: {e.response.status_code}")
-                print(f"Headers: {e.response.headers}")
-                print(f"Request: {e.request.url}")
-                print(f"Request headers: {e.request.headers}")
             # Note: Rollback is complex with copy-and-swap approach since the old document is already deleted
             # In case of failure, manual intervention may be required
             # Continue with other documents instead of failing the entire migration
