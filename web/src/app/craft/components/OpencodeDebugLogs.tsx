@@ -240,8 +240,8 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
     const text = filteredLines.map((l) => l.text).join("\n");
     try {
       await navigator.clipboard.writeText(text);
-    } catch {
-      // Fallback: silently no-op rather than crash on permission-denied.
+    } catch (error) {
+      console.error("Failed to copy visible opencode logs", error);
     }
   }, [filteredLines]);
 
