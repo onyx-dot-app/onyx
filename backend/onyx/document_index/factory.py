@@ -1,4 +1,3 @@
-import httpx
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
@@ -54,7 +53,6 @@ def get_default_document_index(
     search_settings: SearchSettings,
     secondary_search_settings: SearchSettings | None,
     db_session: Session,  # noqa: ARG001
-    httpx_client: httpx.Client | None = None,  # noqa: ARG001
 ) -> DocumentIndex:
     """Gets the default document index for retrieval.
 
@@ -71,7 +69,6 @@ def get_default_document_index(
 def get_all_document_indices(
     search_settings: SearchSettings,
     secondary_search_settings: SearchSettings | None,
-    httpx_client: httpx.Client | None = None,  # noqa: ARG001
 ) -> list[DocumentIndex]:
     """Gets every document index that should be written to."""
     if DISABLE_VECTOR_DB:

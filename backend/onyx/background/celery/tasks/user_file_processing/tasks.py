@@ -395,7 +395,6 @@ def _process_user_file_with_indexing(
         document_indices = get_all_document_indices(
             current_search_settings,
             None,
-            httpx_client=HttpxPool.get("document_index"),
         )
         adapter = UserFileIndexingAdapter(
             tenant_id=tenant_id,
@@ -722,7 +721,6 @@ def delete_user_file_impl(
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
                     secondary_search_settings=active_search_settings.secondary,
-                    httpx_client=HttpxPool.get("document_index"),
                 )
                 retry_document_indices = [
                     RetryDocumentIndex(document_index)
@@ -921,7 +919,6 @@ def project_sync_user_file_impl(
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
                     secondary_search_settings=active_search_settings.secondary,
-                    httpx_client=HttpxPool.get("document_index"),
                 )
                 retry_document_indices = [
                     RetryDocumentIndex(document_index)

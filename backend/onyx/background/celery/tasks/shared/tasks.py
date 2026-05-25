@@ -26,7 +26,6 @@ from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
@@ -154,7 +153,6 @@ def document_by_cc_pair_cleanup_task(
         document_indices = get_all_document_indices(
             primary_search_settings,
             secondary_search_settings,
-            httpx_client=HttpxPool.get("document_index"),
         )
         retry_document_indices: list[RetryDocumentIndex] = [
             RetryDocumentIndex(document_index) for document_index in document_indices
