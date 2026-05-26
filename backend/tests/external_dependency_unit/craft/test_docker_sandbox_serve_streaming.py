@@ -54,6 +54,7 @@ import onyx.server.features.build.configs as cfg
 import onyx.server.features.build.sandbox.base as sandbox_base
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as docker_mgr
 from onyx.server.features.build.configs import AgentTransport
+from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SandboxBackend
@@ -83,8 +84,18 @@ _SKIP_NO_SOCKET = pytest.mark.skipif(
     not os.path.exists(SANDBOX_DOCKER_SOCKET),
     reason=f"Docker socket missing at {SANDBOX_DOCKER_SOCKET}",
 )
+_SKIP_NO_API_SERVER_URL = pytest.mark.skipif(
+    not SANDBOX_API_SERVER_URL,
+    reason="docker-serve streaming tests require SANDBOX_API_SERVER_URL "
+    "(provision threads it into the container's ONYX_SERVER_URL)",
+)
 
-pytestmark = [_SKIP_WRONG_BACKEND, _SKIP_NO_SOCKET, _SKIP_MISSING_KEY]
+pytestmark = [
+    _SKIP_WRONG_BACKEND,
+    _SKIP_NO_SOCKET,
+    _SKIP_NO_API_SERVER_URL,
+    _SKIP_MISSING_KEY,
+]
 
 
 # ----------------------------------------------------------------------
