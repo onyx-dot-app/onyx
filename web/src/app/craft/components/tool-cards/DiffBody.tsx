@@ -23,6 +23,14 @@ function computeDiff(oldText: string, newText: string): DiffLine[] {
   const newLines = newText.split("\n");
   const result: DiffLine[] = [];
 
+  // Last-occurrence index per unique line, so the "exists later" check
+  // below is O(1) instead of O(n) via slice().includes() — the prior
+  // form made computeDiff O(n²) on large diffs.
+  const lastOldIdxOf = new Map<string, number>();
+  oldLines.forEach((l, i) => lastOldIdxOf.set(l, i));
+  const lastNewIdxOf = new Map<string, number>();
+  newLines.forEach((l, i) => lastNewIdxOf.set(l, i));
+
   let oldIdx = 0;
   let newIdx = 0;
   let oldLineNum = 1;
@@ -56,8 +64,8 @@ function computeDiff(oldText: string, newText: string): DiffLine[] {
       oldIdx++;
       newIdx++;
     } else {
-      const oldExistsLaterInNew = newLines.slice(newIdx + 1).includes(oldLine);
-      const newExistsLaterInOld = oldLines.slice(oldIdx + 1).includes(newLine);
+      const oldExistsLaterInNew = (lastNewIdxOf.get(oldLine) ?? -1) > newIdx;
+      const newExistsLaterInOld = (lastOldIdxOf.get(newLine) ?? -1) > oldIdx;
 
       if (!oldExistsLaterInNew && newExistsLaterInOld) {
         result.push({
@@ -123,20 +131,31 @@ function collapseUnchanged(
     }
   });
 
+  const pushSkippedHeader = (count: number) => {
+    if (count <= 0) return;
+    result.push({
+      type: "header",
+      content: `${count} unchanged line${count > 1 ? "s" : ""}`,
+    });
+  };
+
   let lastShownIdx = -1;
   lines.forEach((line, idx) => {
     if (showIndices.has(idx)) {
-      if (lastShownIdx !== -1 && idx - lastShownIdx > 1) {
-        const skipped = idx - lastShownIdx - 1;
-        result.push({
-          type: "header",
-          content: `${skipped} unchanged line${skipped > 1 ? "s" : ""}`,
-        });
+      // Leading skipped block when the first shown index is past line 0.
+      if (lastShownIdx === -1 && idx > 0) {
+        pushSkippedHeader(idx);
+      } else if (lastShownIdx !== -1 && idx - lastShownIdx > 1) {
+        pushSkippedHeader(idx - lastShownIdx - 1);
       }
       result.push(line);
       lastShownIdx = idx;
     }
   });
+  // Trailing skipped block when the last shown index is before the end.
+  if (lastShownIdx !== -1 && lastShownIdx < lines.length - 1) {
+    pushSkippedHeader(lines.length - 1 - lastShownIdx);
+  }
   return result;
 }
 
