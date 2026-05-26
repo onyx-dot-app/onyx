@@ -90,6 +90,9 @@ class CanvasPage(BaseModel):
     url: str
     title: str
     body: str | None = None
+    published: bool | None = None
+    unlock_at: str | None = None
+    lock_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     course_id: int
@@ -101,6 +104,9 @@ class CanvasPage(BaseModel):
             url=payload["url"],
             title=payload["title"],
             body=payload.get("body"),
+            published=payload.get("published"),
+            unlock_at=payload.get("unlock_at"),
+            lock_at=payload.get("lock_at"),
             created_at=payload.get("created_at"),
             updated_at=payload.get("updated_at"),
             course_id=course_id,
@@ -113,6 +119,9 @@ class CanvasAssignment(BaseModel):
     description: str | None = None
     html_url: str
     course_id: int
+    published: bool | None = None
+    unlock_at: str | None = None
+    lock_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     due_at: str | None = None
@@ -125,6 +134,9 @@ class CanvasAssignment(BaseModel):
             description=payload.get("description"),
             html_url=payload["html_url"],
             course_id=course_id,
+            published=payload.get("published"),
+            unlock_at=payload.get("unlock_at"),
+            lock_at=payload.get("lock_at"),
             created_at=payload.get("created_at"),
             updated_at=payload.get("updated_at"),
             due_at=payload.get("due_at"),
@@ -137,6 +149,7 @@ class CanvasAnnouncement(BaseModel):
     message: str | None = None
     html_url: str
     posted_at: str | None = None
+    delayed_post_at: str | None = None
     course_id: int
 
     @classmethod
@@ -147,6 +160,7 @@ class CanvasAnnouncement(BaseModel):
             message=payload.get("message"),
             html_url=payload["html_url"],
             posted_at=payload.get("posted_at"),
+            delayed_post_at=payload.get("delayed_post_at"),
             course_id=course_id,
         )
 
@@ -158,6 +172,10 @@ class CanvasFile(BaseModel):
     url: str  # direct download URL
     content_type: str | None = None
     size: int | None = None
+    hidden: bool | None = None
+    locked: bool | None = None
+    unlock_at: str | None = None
+    lock_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     course_id: int
@@ -171,6 +189,10 @@ class CanvasFile(BaseModel):
             url=payload.get("url", ""),
             content_type=payload.get("content-type") or payload.get("mime_class"),
             size=payload.get("size"),
+            hidden=payload.get("hidden"),
+            locked=payload.get("locked"),
+            unlock_at=payload.get("unlock_at"),
+            lock_at=payload.get("lock_at"),
             created_at=payload.get("created_at"),
             updated_at=payload.get("updated_at"),
             course_id=course_id,
@@ -182,6 +204,8 @@ class CanvasModule(BaseModel):
     name: str
     position: int | None = None
     published: bool | None = None
+    unlock_at: str | None = None
+    workflow_state: str | None = None
     course_id: int
 
     @classmethod
@@ -191,6 +215,8 @@ class CanvasModule(BaseModel):
             name=payload.get("name", ""),
             position=payload.get("position"),
             published=payload.get("published"),
+            unlock_at=payload.get("unlock_at"),
+            workflow_state=payload.get("workflow_state"),
             course_id=course_id,
         )
 
@@ -202,6 +228,7 @@ class CanvasModuleItem(BaseModel):
     content_id: int | None = None  # numeric id of the linked content
     html_url: str | None = None
     external_url: str | None = None
+    published: bool | None = None
     module_id: int
     course_id: int
 
@@ -216,6 +243,7 @@ class CanvasModuleItem(BaseModel):
             content_id=payload.get("content_id"),
             html_url=payload.get("html_url"),
             external_url=payload.get("external_url"),
+            published=payload.get("published"),
             module_id=module_id,
             course_id=course_id,
         )
@@ -229,6 +257,8 @@ class CanvasQuiz(BaseModel):
     quiz_type: str | None = None
     question_count: int | None = None
     published: bool | None = None
+    unlock_at: str | None = None
+    lock_at: str | None = None
     course_id: int
     created_at: str | None = None
     updated_at: str | None = None  # Canvas quizzes don't always have updated_at
@@ -243,6 +273,8 @@ class CanvasQuiz(BaseModel):
             quiz_type=payload.get("quiz_type"),
             question_count=payload.get("question_count"),
             published=payload.get("published"),
+            unlock_at=payload.get("unlock_at"),
+            lock_at=payload.get("lock_at"),
             course_id=course_id,
             created_at=payload.get("created_at"),
             updated_at=payload.get("updated_at"),
@@ -257,6 +289,8 @@ class CanvasDiscussion(BaseModel):
     posted_at: str | None = None
     course_id: int
     published: bool | None = None
+    delayed_post_at: str | None = None
+    lock_at: str | None = None
 
     @classmethod
     def from_api(cls, payload: dict[str, Any], course_id: int) -> "CanvasDiscussion":
@@ -268,7 +302,85 @@ class CanvasDiscussion(BaseModel):
             posted_at=payload.get("posted_at"),
             course_id=course_id,
             published=payload.get("published"),
+            delayed_post_at=payload.get("delayed_post_at"),
+            lock_at=payload.get("lock_at"),
         )
+
+
+_RELEASED_WORKFLOW_STATES: set[str] = {"active", "available"}
+
+
+def _optional_bool_field(canvas_object: BaseModel, field_name: str) -> bool | None:
+    value = getattr(canvas_object, field_name, None)
+    return value if isinstance(value, bool) else None
+
+
+def _optional_str_field(canvas_object: BaseModel, field_name: str) -> str | None:
+    value = getattr(canvas_object, field_name, None)
+    return value if isinstance(value, str) else None
+
+
+def _parse_canvas_datetime(datetime_str: str) -> datetime:
+    return datetime.fromisoformat(datetime_str.replace("Z", "+00:00")).astimezone(
+        timezone.utc
+    )
+
+
+def _passes_canvas_published_state(canvas_object: BaseModel) -> bool:
+    published = _optional_bool_field(canvas_object, "published")
+    if published is False:
+        return False
+
+    workflow_state = _optional_str_field(canvas_object, "workflow_state")
+    if workflow_state is not None and workflow_state not in _RELEASED_WORKFLOW_STATES:
+        return False
+
+    return True
+
+
+def _is_released(
+    canvas_object: BaseModel,
+    release_check_time: datetime,
+    parent_module: CanvasModule | None = None,
+    respect_release_dates: bool = True,
+) -> bool:
+    if not _passes_canvas_published_state(canvas_object):
+        return False
+    if parent_module is not None and not _is_released(
+        parent_module,
+        release_check_time,
+        respect_release_dates=respect_release_dates,
+    ):
+        return False
+    if not respect_release_dates:
+        return True
+
+    if _optional_bool_field(canvas_object, "hidden") is True:
+        return False
+    if _optional_bool_field(canvas_object, "locked") is True:
+        return False
+
+    unlock_at = _optional_str_field(canvas_object, "unlock_at")
+    delayed_post_at = _optional_str_field(canvas_object, "delayed_post_at")
+    release_at = unlock_at or delayed_post_at
+    if release_at and _parse_canvas_datetime(release_at) > release_check_time:
+        return False
+
+    lock_at = _optional_str_field(canvas_object, "lock_at")
+    if lock_at and _parse_canvas_datetime(lock_at) <= release_check_time:
+        return False
+
+    return True
+
+
+def _parse_respect_release_dates(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in {"false", "0", "no", "off"}
+    return bool(value)
 
 
 CanvasStage: TypeAlias = Literal[
@@ -353,11 +465,14 @@ class CanvasConnector(
         self.canvas_base_url = canvas_base_url.rstrip("/").removesuffix("/api/v1")
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
+        self._respect_release_dates = True
+        self._release_check_time: datetime | None = None
         self._course_permissions_cache: dict[int, ExternalAccess | None] = {}
         # Maps course_id -> {(doc_type, content_id): module_id}.
         # Populated lazily on first use per course; persists for the lifetime
         # of the connector instance.
         self._module_membership_cache: dict[int, dict[tuple[str, int], int]] = {}
+        self._unreleased_module_content_cache: dict[int, set[tuple[str, int]]] = {}
         # Cache CanvasCourse objects so hierarchy emission has the proper
         # display name without an extra round trip per call.
         self._courses_by_id: dict[int, CanvasCourse] = {}
@@ -385,6 +500,33 @@ class CanvasConnector(
             )
         return self._course_permissions_cache[course_id]
 
+    def _get_release_check_time(self) -> datetime:
+        if self._release_check_time is None:
+            self._release_check_time = datetime.now(timezone.utc)
+        return self._release_check_time
+
+    def _canvas_object_is_released(
+        self,
+        canvas_object: BaseModel,
+        parent_module: CanvasModule | None = None,
+    ) -> bool:
+        return _is_released(
+            canvas_object,
+            release_check_time=self._get_release_check_time(),
+            parent_module=parent_module,
+            respect_release_dates=self._respect_release_dates,
+        )
+
+    def _content_is_released_for_module_membership(
+        self, course_id: int, doc_type: str, content_id: int
+    ) -> bool:
+        membership = self._get_module_membership_map(course_id)
+        if (doc_type, content_id) in membership:
+            return True
+        return (doc_type, content_id) not in self._unreleased_module_content_cache.get(
+            course_id, set()
+        )
+
     def _build_module_membership_map(
         self, course_id: int
     ) -> dict[tuple[str, int], int]:
@@ -395,10 +537,12 @@ class CanvasConnector(
         module; we sort modules by position).
         """
         mapping: dict[tuple[str, int], int] = {}
+        content_in_unreleased_modules: set[tuple[str, int]] = set()
         try:
-            modules = self._list_modules(course_id)
+            modules = self._list_all_modules(course_id)
         except Exception as e:
             logger.warning(f"Failed to list modules for course {course_id}: {e}")
+            self._unreleased_module_content_cache[course_id] = set()
             return mapping
 
         modules_sorted = sorted(
@@ -406,8 +550,9 @@ class CanvasConnector(
         )
 
         for module in modules_sorted:
+            module_is_released = self._canvas_object_is_released(module)
             try:
-                items = self._list_module_items(course_id, module.id)
+                items = self._list_all_module_items(course_id, module.id)
             except Exception as e:
                 logger.warning(
                     f"Failed to list items for module {module.id} "
@@ -419,8 +564,17 @@ class CanvasConnector(
                 if doc_type is None or item.content_id is None:
                     continue
                 key = (doc_type, item.content_id)
+                if not module_is_released:
+                    content_in_unreleased_modules.add(key)
+                    continue
+                if not self._canvas_object_is_released(item, parent_module=module):
+                    content_in_unreleased_modules.add(key)
+                    continue
                 if key not in mapping:
                     mapping[key] = module.id
+        self._unreleased_module_content_cache[course_id] = (
+            content_in_unreleased_modules - set(mapping)
+        )
         return mapping
 
     def _get_module_membership_map(self, course_id: int) -> dict[tuple[str, int], int]:
@@ -627,7 +781,10 @@ class CanvasConnector(
             f"courses/{course_id}/pages",
             params={"per_page": "100", "include[]": "body", "published": "true"},
         ):
-            pages.extend(CanvasPage.from_api(p, course_id=course_id) for p in page)
+            for p in page:
+                canvas_page = CanvasPage.from_api(p, course_id=course_id)
+                if self._canvas_object_is_released(canvas_page):
+                    pages.append(canvas_page)
         return pages
 
     @retry(tries=3, delay=1, backoff=2)
@@ -640,9 +797,10 @@ class CanvasConnector(
             f"courses/{course_id}/assignments",
             params={"per_page": "100", "published": "true"},
         ):
-            assignments.extend(
-                CanvasAssignment.from_api(a, course_id=course_id) for a in page
-            )
+            for a in page:
+                assignment = CanvasAssignment.from_api(a, course_id=course_id)
+                if self._canvas_object_is_released(assignment):
+                    assignments.append(assignment)
         return assignments
 
     @retry(tries=3, delay=1, backoff=2)
@@ -659,9 +817,10 @@ class CanvasConnector(
                 "active_only": "true",
             },
         ):
-            announcements.extend(
-                CanvasAnnouncement.from_api(a, course_id=course_id) for a in page
-            )
+            for a in page:
+                announcement = CanvasAnnouncement.from_api(a, course_id=course_id)
+                if self._canvas_object_is_released(announcement):
+                    announcements.append(announcement)
         return announcements
 
     @retry(tries=3, delay=1, backoff=2)
@@ -674,12 +833,15 @@ class CanvasConnector(
             f"courses/{course_id}/files",
             params={"per_page": "100"},
         ):
-            files.extend(CanvasFile.from_api(f, course_id=course_id) for f in page)
+            for f in page:
+                file = CanvasFile.from_api(f, course_id=course_id)
+                if self._canvas_object_is_released(file):
+                    files.append(file)
         return files
 
     @retry(tries=3, delay=1, backoff=2)
-    def _list_modules(self, course_id: int) -> list[CanvasModule]:
-        """Fetch all published modules for a given course."""
+    def _list_all_modules(self, course_id: int) -> list[CanvasModule]:
+        """Fetch all modules for a given course."""
         logger.debug(f"Fetching modules for course {course_id}")
 
         modules: list[CanvasModule] = []
@@ -687,18 +849,23 @@ class CanvasConnector(
             f"courses/{course_id}/modules",
             params={"per_page": "100"},
         ):
-            for m in page:
-                module = CanvasModule.from_api(m, course_id=course_id)
-                if module.published is False:
-                    continue
-                modules.append(module)
+            modules.extend(CanvasModule.from_api(m, course_id=course_id) for m in page)
         return modules
 
     @retry(tries=3, delay=1, backoff=2)
-    def _list_module_items(
+    def _list_modules(self, course_id: int) -> list[CanvasModule]:
+        """Fetch all released modules for a given course."""
+        return [
+            module
+            for module in self._list_all_modules(course_id)
+            if self._canvas_object_is_released(module)
+        ]
+
+    @retry(tries=3, delay=1, backoff=2)
+    def _list_all_module_items(
         self, course_id: int, module_id: int
     ) -> list[CanvasModuleItem]:
-        """Fetch all published items for a given module."""
+        """Fetch all items for a given module."""
         logger.debug(
             f"Fetching module items for module {module_id} in course {course_id}"
         )
@@ -716,6 +883,17 @@ class CanvasConnector(
         return items
 
     @retry(tries=3, delay=1, backoff=2)
+    def _list_module_items(
+        self, course_id: int, module_id: int
+    ) -> list[CanvasModuleItem]:
+        """Fetch all released items for a given module."""
+        return [
+            item
+            for item in self._list_all_module_items(course_id, module_id)
+            if self._canvas_object_is_released(item)
+        ]
+
+    @retry(tries=3, delay=1, backoff=2)
     def _list_quizzes(self, course_id: int) -> list[CanvasQuiz]:
         """Fetch all published quizzes for a given course."""
         logger.debug(f"Fetching quizzes for course {course_id}")
@@ -727,7 +905,7 @@ class CanvasConnector(
         ):
             for q in page:
                 quiz = CanvasQuiz.from_api(q, course_id=course_id)
-                if quiz.published is False:
+                if not self._canvas_object_is_released(quiz):
                     continue
                 quizzes.append(quiz)
         return quizzes
@@ -744,7 +922,7 @@ class CanvasConnector(
         ):
             for d in page:
                 disc = CanvasDiscussion.from_api(d, course_id=course_id)
-                if disc.published is False:
+                if not self._canvas_object_is_released(disc):
                     continue
                 # Skip announcement-type discussions (already fetched separately)
                 if d.get("is_announcement"):
@@ -1011,6 +1189,9 @@ class CanvasConnector(
         access_token = credentials.get("canvas_access_token")
         if not access_token:
             raise ConnectorMissingCredentialError("Canvas")
+        self._respect_release_dates = _parse_respect_release_dates(
+            credentials.get("respect_release_dates", True)
+        )
 
         try:
             client = CanvasApiClient(
@@ -1034,6 +1215,11 @@ class CanvasConnector(
         include_permissions: bool = False,
     ) -> CheckpointOutput[CanvasConnectorCheckpoint]:
         """Shared implementation for load_from_checkpoint and load_from_checkpoint_with_perm_sync."""
+        if not checkpoint.course_ids:
+            self._release_check_time = datetime.now(timezone.utc)
+        else:
+            self._get_release_check_time()
+
         new_checkpoint = checkpoint.model_copy(deep=True)
 
         # First call: materialize the list of course IDs
@@ -1049,11 +1235,14 @@ class CanvasConnector(
             new_checkpoint.stage = "pages"
             logger.info(f"Found {len(courses)} Canvas courses to process")
             new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
+            if not new_checkpoint.has_more:
+                self._release_check_time = None
             return new_checkpoint
 
         # All courses done
         if new_checkpoint.current_course_index >= len(new_checkpoint.course_ids):
             new_checkpoint.has_more = False
+            self._release_check_time = None
             return new_checkpoint
 
         course_id = new_checkpoint.course_ids[new_checkpoint.current_course_index]
@@ -1126,6 +1315,8 @@ class CanvasConnector(
                 new_checkpoint.has_more = new_checkpoint.current_course_index < len(
                     new_checkpoint.course_ids
                 )
+                if not new_checkpoint.has_more:
+                    self._release_check_time = None
                 return new_checkpoint
 
             if syllabus_body:
@@ -1149,6 +1340,8 @@ class CanvasConnector(
             new_checkpoint.has_more = new_checkpoint.current_course_index < len(
                 new_checkpoint.course_ids
             )
+            if not new_checkpoint.has_more:
+                self._release_check_time = None
             return new_checkpoint
 
         # --- Modules stage: fetch modules + items (not paginated via stage_config) ---
@@ -1246,6 +1439,12 @@ class CanvasConnector(
             try:
                 if stage == "pages":
                     page = CanvasPage.from_api(item, course_id=course_id)
+                    if not self._canvas_object_is_released(page):
+                        continue
+                    if not self._content_is_released_for_module_membership(
+                        course_id, "page", page.page_id
+                    ):
+                        continue
                     if not page.updated_at or not _in_time_window(page.updated_at):
                         continue
                     doc = self._convert_page_to_document(page)
@@ -1253,6 +1452,12 @@ class CanvasConnector(
 
                 elif stage == "assignments":
                     assignment = CanvasAssignment.from_api(item, course_id=course_id)
+                    if not self._canvas_object_is_released(assignment):
+                        continue
+                    if not self._content_is_released_for_module_membership(
+                        course_id, "assignment", assignment.id
+                    ):
+                        continue
                     if not assignment.updated_at or not _in_time_window(
                         assignment.updated_at
                     ):
@@ -1264,6 +1469,8 @@ class CanvasConnector(
                     announcement = CanvasAnnouncement.from_api(
                         item, course_id=course_id
                     )
+                    if not self._canvas_object_is_released(announcement):
+                        continue
                     if not announcement.posted_at:
                         logger.debug(
                             f"Skipping announcement {announcement.id} in "
@@ -1277,6 +1484,12 @@ class CanvasConnector(
 
                 elif stage == "files":
                     file = CanvasFile.from_api(item, course_id=course_id)
+                    if not self._canvas_object_is_released(file):
+                        continue
+                    if not self._content_is_released_for_module_membership(
+                        course_id, "file", file.id
+                    ):
+                        continue
                     if not file.updated_at or not _in_time_window(file.updated_at):
                         continue
                     doc = self._convert_file_to_document(file)
@@ -1284,7 +1497,11 @@ class CanvasConnector(
 
                 elif stage == "quizzes":
                     quiz = CanvasQuiz.from_api(item, course_id=course_id)
-                    if quiz.published is False:
+                    if not self._canvas_object_is_released(quiz):
+                        continue
+                    if not self._content_is_released_for_module_membership(
+                        course_id, "quiz", quiz.id
+                    ):
                         continue
                     if not quiz.updated_at or not _in_time_window(quiz.updated_at):
                         continue
@@ -1293,7 +1510,11 @@ class CanvasConnector(
 
                 elif stage == "discussions":
                     disc = CanvasDiscussion.from_api(item, course_id=course_id)
-                    if disc.published is False:
+                    if not self._canvas_object_is_released(disc):
+                        continue
+                    if not self._content_is_released_for_module_membership(
+                        course_id, "discussion", disc.id
+                    ):
                         continue
                     if item.get("is_announcement"):
                         continue
@@ -1347,6 +1568,8 @@ class CanvasConnector(
         new_checkpoint.has_more = new_checkpoint.current_course_index < len(
             new_checkpoint.course_ids
         )
+        if not new_checkpoint.has_more:
+            self._release_check_time = None
         return new_checkpoint
 
     @override
@@ -1428,6 +1651,7 @@ class CanvasConnector(
         A type folder is only emitted if at least one slim doc actually hangs
         from it.
         """
+        self._release_check_time = datetime.now(timezone.utc)
         batch: list[SlimDocument | HierarchyNode] = []
         courses = self._list_courses()
 
@@ -1479,10 +1703,18 @@ class CanvasConnector(
             # mid-fetch failure must abort the whole sync rather than risk
             # generic_doc_sync mass-revoking permissions.
             for page in self._list_pages(course_id):
+                if not self._content_is_released_for_module_membership(
+                    course_id, "page", page.page_id
+                ):
+                    continue
                 yield from _emit_slim(
                     "page", f"canvas-page-{course_id}-{page.page_id}", page.page_id
                 )
             for assignment in self._list_assignments(course_id):
+                if not self._content_is_released_for_module_membership(
+                    course_id, "assignment", assignment.id
+                ):
+                    continue
                 yield from _emit_slim(
                     "assignment",
                     f"canvas-assignment-{course_id}-{assignment.id}",
@@ -1495,14 +1727,26 @@ class CanvasConnector(
                     None,
                 )
             for file in self._list_files(course_id):
+                if not self._content_is_released_for_module_membership(
+                    course_id, "file", file.id
+                ):
+                    continue
                 yield from _emit_slim(
                     "file", f"canvas-file-{course_id}-{file.id}", file.id
                 )
             for quiz in self._list_quizzes(course_id):
+                if not self._content_is_released_for_module_membership(
+                    course_id, "quiz", quiz.id
+                ):
+                    continue
                 yield from _emit_slim(
                     "quiz", f"canvas-quiz-{course_id}-{quiz.id}", quiz.id
                 )
             for disc in self._list_discussions(course_id):
+                if not self._content_is_released_for_module_membership(
+                    course_id, "discussion", disc.id
+                ):
+                    continue
                 yield from _emit_slim(
                     "discussion",
                     f"canvas-discussion-{course_id}-{disc.id}",
@@ -1522,3 +1766,4 @@ class CanvasConnector(
 
         if batch:
             yield batch
+        self._release_check_time = None
