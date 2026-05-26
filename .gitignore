@@ -60,6 +60,9 @@ node_modules
 # plans
 plans/
 
+# docs
+docs/
+
 # Added context for LLMs
 .claude/CLAUDE.md
 .claude/settings.local.json
