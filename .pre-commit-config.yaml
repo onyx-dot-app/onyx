@@ -60,8 +60,6 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        # --no-project skips syncing the backend's full dep tree; the Go-based
-        # `ods check-lazy-imports` only needs the `ods` binary from onyx-devtools.
         args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
