@@ -239,6 +239,118 @@ test.describe("Index Settings Page @exclusive", () => {
       ).toBeVisible({ timeout: 10000 });
     }
   });
+
+  // Regression test for issue #11298 — after defining a LiteLLM embedding
+  // model via "Add Configuration", the model must render as a selectable card
+  // and the submit path must send `provider_type=litellm` (not the CUSTOM
+  // fallback of `null`, which routes to the local model server).
+  test("adding a LiteLLM configuration stages a selectable model and submits provider_type=litellm", async ({
+    page,
+  }) => {
+    const litellmModelName = "my-litellm-model";
+
+    // Toggle the GET response so the provider list shows LiteLLM as configured
+    // after the PUT lands. This drives `isConfigured` in the ProviderGroup.
+    let providerSaved = false;
+
+    await page.route(TEST_EMBEDDING_API, async (route) => {
+      await route.fulfill({ status: 200, body: JSON.stringify({}) });
+    });
+    await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+      const method = route.request().method();
+      if (method === "PUT") {
+        providerSaved = true;
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify({ provider_type: "litellm" }),
+        });
+      } else if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          body: JSON.stringify(
+            providerSaved
+              ? [
+                  {
+                    provider_type: "litellm",
+                    api_key: "***",
+                    api_url: "https://litellm.example.com",
+                    api_version: null,
+                    deployment_name: null,
+                  },
+                ]
+              : []
+          ),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // Capture the request body sent to /set-new-search-settings so we can
+    // assert provider_type is "litellm".
+    const setNewSettingsBody = new Promise<Record<string, unknown>>(
+      (resolve) => {
+        void page.route(SET_NEW_SETTINGS_API, async (route) => {
+          resolve(
+            JSON.parse(route.request().postData() ?? "{}") as Record<
+              string,
+              unknown
+            >
+          );
+          await route.fulfill({ status: 200, body: JSON.stringify({}) });
+        });
+      }
+    );
+
+    await navigateToIndexSettings(page);
+    await expandModelPicker(page);
+    await switchToCloudTab(page);
+
+    // LiteLLM's registry list is empty, so it shows "Add Configuration" rather
+    // than per-model "Connect" buttons.
+    const addConfigButton = page
+      .getByRole("button", { name: /add configuration/i })
+      .first();
+    await expect(addConfigButton).toBeVisible({ timeout: 10000 });
+    await addConfigButton.click();
+
+    const modal = page.getByRole("dialog", {
+      name: /set up litellm|manage litellm/i,
+    });
+    await expect(modal).toBeVisible({ timeout: 10000 });
+
+    await modal.getByLabel(/api base url/i).fill("https://litellm.example.com");
+    await modal.getByLabel(/api key/i).fill("sk-litellm-placeholder");
+    await modal.getByLabel(/model name/i).fill(litellmModelName);
+    await modal.getByLabel(/model dimension/i).fill("1536");
+
+    const submitButton = modal.getByRole("button", {
+      name: /^(connect|update)$/i,
+    });
+    await expect(submitButton).toBeEnabled({ timeout: 5000 });
+    await submitButton.click();
+    await expect(modal).not.toBeVisible({ timeout: 10000 });
+
+    // The freshly-defined model should render as a card and be staged as
+    // "Selected" — proving the user can actually pick it (the original bug
+    // was that only "Disconnect LiteLLM" was reachable).
+    await expect(page.getByText(litellmModelName, { exact: false })).toBeVisible(
+      { timeout: 10000 }
+    );
+    await expect(
+      page.getByRole("button", { name: /^selected$/i }).first()
+    ).toBeVisible({ timeout: 5000 });
+
+    // Apply the change and verify provider_type propagates as "litellm".
+    const applyButton = page.getByRole("button", { name: "Apply & Re-index" });
+    await expect(applyButton).toBeEnabled({ timeout: 5000 });
+    await applyButton.click();
+
+    const body = await setNewSettingsBody;
+    expect(body.provider_type).toBe("litellm");
+    expect(body.model_name).toBe(litellmModelName);
+    expect(body.model_dim).toBe(1536);
+  });
 });
 
 // ---------------------------------------------------------------------------

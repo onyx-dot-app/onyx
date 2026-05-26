@@ -311,10 +311,18 @@ interface ProviderGroupProps {
   /**
    * Camel-cased spec of the active embedding model when it belongs to THIS
    * provider — passed straight through to `ProviderCredentialsModal` so
-   * `LiteLLMProviderModal` can preload its model-spec fields on edit.
+   * `LiteLLMProviderModal` can preload its model-spec fields on edit, and
+   * surfaced as a selectable card for providers whose registry list is empty
+   * (LiteLLM, Azure).
    */
   existingModel?: EmbeddingModel;
-  onSelectModel: (modelName: string) => void;
+  /**
+   * `customModel` is set when the staged model isn't in the static registry —
+   * e.g. a LiteLLM model defined via the providerCreationModal. The page
+   * threads it into Formik's `custom_model` so the submit path can use the
+   * full spec directly.
+   */
+  onSelectModel: (modelName: string, customModel?: EmbeddingModel) => void;
   onDeselectModel: () => void;
 }
 
@@ -328,7 +336,6 @@ function ProviderGroup({
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
-  const models = provider.embeddingModels;
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
   const connectModal = useCreateModal();
@@ -336,7 +343,31 @@ function ProviderGroup({
   const providerCreationModal = useCreateModal();
   const [pendingConnectModel, setPendingConnectModel] =
     useState<EmbeddingModel | null>(null);
-  const providerGroupContainsCurrentModelName = models.some(
+  /**
+   * Models defined in-page via the "Add Configuration" / edit-credentials
+   * modal for providers whose registry list is empty (LiteLLM today). The
+   * backend doesn't persist per-provider model specs, so these live in
+   * component state until the user applies them via the form.
+   */
+  const [sessionDefinedModels, setSessionDefinedModels] = useState<
+    EmbeddingModel[]
+  >([]);
+
+  /**
+   * Models surfaced for THIS provider: static registry entries, the active
+   * backend model when it belongs here, and anything defined in-session via
+   * the credentials modal. De-duplicated by `modelName`; later entries win,
+   * so a freshly-defined model overrides its prior registry/existing copy.
+   */
+  const displayedModels = useMemo(() => {
+    const byName = new Map<string, EmbeddingModel>();
+    for (const m of provider.embeddingModels) byName.set(m.modelName, m);
+    if (existingModel) byName.set(existingModel.modelName, existingModel);
+    for (const m of sessionDefinedModels) byName.set(m.modelName, m);
+    return Array.from(byName.values());
+  }, [provider.embeddingModels, existingModel, sessionDefinedModels]);
+
+  const providerGroupContainsCurrentModelName = displayedModels.some(
     (m) => m.modelName === currentModelName
   );
 
@@ -347,6 +378,7 @@ function ProviderGroup({
       toast.success(`Disconnected ${provider.displayName}`);
       await mutate(SWR_KEYS.embeddingProviders);
       onDeselectModel();
+      setSessionDefinedModels([]);
       disconnectModal.toggle(false);
     } catch {
       toast.error(`Failed to disconnect ${provider.displayName}`);
@@ -451,8 +483,25 @@ function ProviderGroup({
       <providerCreationModal.Provider>
         <ProviderCredentialsModal
           provider={provider}
-          onSubmit={async () => {
+          existingCredentials={existingCredentials}
+          existingModel={existingModel}
+          onSubmit={async (req) => {
             await mutate(SWR_KEYS.embeddingProviders);
+            if (req?.modelName) {
+              const newModel: EmbeddingModel = {
+                modelName: req.modelName,
+                modelDim: req.modelDim ?? null,
+                normalize: req.normalize,
+                queryPrefix: req.queryPrefix ?? "",
+                passagePrefix: req.passagePrefix ?? "",
+                description: "",
+              };
+              setSessionDefinedModels((prev) => [
+                ...prev.filter((m) => m.modelName !== newModel.modelName),
+                newModel,
+              ]);
+              onSelectModel(newModel.modelName, newModel);
+            }
             providerCreationModal.toggle(false);
           }}
         />
@@ -509,7 +558,7 @@ function ProviderGroup({
           </GeneralLayouts.Section>
         </div>
 
-        {models.length === 0 ? (
+        {displayedModels.length === 0 ? (
           <SelectCard
             state="filled"
             rounding="md"
@@ -535,7 +584,7 @@ function ProviderGroup({
             />
           </SelectCard>
         ) : (
-          models.map((model) => {
+          displayedModels.map((model) => {
             const state = getModelState(model);
             const isPrioritized =
               state === "selected" ||
@@ -666,13 +715,23 @@ function EmbeddingModelCard({
 interface IndexSettingsFormValues {
   model_name: string;
   /**
-   * Populated when the staged model came from the "Add Custom Model" modal
-   * — i.e. it's not in `CLOUD_BASED_PROVIDERS` / `SELF_HOSTED_PROVIDERS`.
-   * The submit path uses this directly instead of looking the name up in
-   * the static registry. Cleared whenever the user selects a registered
-   * model.
+   * Populated when the staged model isn't in `CLOUD_BASED_PROVIDERS` /
+   * `SELF_HOSTED_PROVIDERS` — e.g. from the "Add Custom Model" modal or a
+   * LiteLLM model defined via the provider credentials modal. The submit
+   * path uses this directly instead of looking the name up in the static
+   * registry. Cleared whenever the user selects a registered model.
    */
   custom_model: EmbeddingModel | null;
+  /**
+   * Provider type for a staged non-registry `custom_model` that DOES belong
+   * to a cloud provider (e.g. LiteLLM, whose registry list is empty so its
+   * models live outside the registry). Submit path passes this to
+   * `resolveProviderName` so the backend receives `provider_type=litellm`
+   * instead of falling through to `CUSTOM` (which would route to the local
+   * model server). Null for registry models and for true `CUSTOM`-provider
+   * self-hosted models.
+   */
+  staged_provider_type: EmbeddingProviderName | null;
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
 }
@@ -840,6 +899,7 @@ export default function IndexSettingsPage() {
     () => ({
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
+      staged_provider_type: null,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
@@ -937,7 +997,10 @@ export default function IndexSettingsPage() {
                 toast.error("Could not find the selected model");
                 return;
               }
-              const providerName = resolveProviderName(values.model_name, null);
+              const providerName = resolveProviderName(
+                values.model_name,
+                values.staged_provider_type
+              );
 
               const response = await setNewSearchSettings({
                 model: stagedModel,
@@ -986,6 +1049,7 @@ export default function IndexSettingsPage() {
                             customModel.modelName
                           );
                           void setFieldValue("custom_model", customModel);
+                          void setFieldValue("staged_provider_type", null);
                         }
                         customModelModal.toggle(false);
                       }}
@@ -1170,14 +1234,23 @@ export default function IndexSettingsPage() {
                                                     undefined)
                                                   : undefined
                                               }
-                                              onSelectModel={(name) => {
+                                              onSelectModel={(
+                                                name,
+                                                customModel
+                                              ) => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   name
                                                 );
                                                 void setFieldValue(
                                                   "custom_model",
-                                                  null
+                                                  customModel ?? null
+                                                );
+                                                void setFieldValue(
+                                                  "staged_provider_type",
+                                                  customModel
+                                                    ? provider.providerName
+                                                    : null
                                                 );
                                               }}
                                               onDeselectModel={() => {
@@ -1187,6 +1260,10 @@ export default function IndexSettingsPage() {
                                                 );
                                                 void setFieldValue(
                                                   "custom_model",
+                                                  null
+                                                );
+                                                void setFieldValue(
+                                                  "staged_provider_type",
                                                   null
                                                 );
                                               }}
@@ -1232,6 +1309,10 @@ export default function IndexSettingsPage() {
                                                   "custom_model",
                                                   null
                                                 );
+                                                void setFieldValue(
+                                                  "staged_provider_type",
+                                                  null
+                                                );
                                               }}
                                               onDeselectModel={() => {
                                                 void setFieldValue(
@@ -1240,6 +1321,10 @@ export default function IndexSettingsPage() {
                                                 );
                                                 void setFieldValue(
                                                   "custom_model",
+                                                  null
+                                                );
+                                                void setFieldValue(
+                                                  "staged_provider_type",
                                                   null
                                                 );
                                               }}
