@@ -1012,6 +1012,131 @@ def test_paginate_url_504_halves_multiple_times(
     assert "limit=5" in mock_get_call_paths[3]
 
 
+def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for #4129: Confluence Server/DC silently caps
+    ``rest/api/space`` page size at the admin-configured maximum when the
+    requested ``limit`` is larger. The pagination loop must NOT terminate
+    just because ``len(results) < requested_limit`` -- doing so causes
+    spaces beyond the cap to be invisible to permission sync, which in
+    turn breaks ``get_all_space_permissions`` and crashes
+    ``generic_doc_sync`` with "No external access found for document ID".
+
+    Here we request limit=5000 but the server caps responses at 3 per
+    page. The real end-of-data is signaled by ``_links.next`` being
+    absent on the last data-bearing page (the canonical Atlassian
+    contract).
+    """
+    requested_limit = 5000
+    server_cap = 3
+    all_keys = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH"]
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        # Honor whatever ``start`` the loop asks for; default 0 on the
+        # initial call (no start param).
+        start_token = "start="
+        start = 0
+        if start_token in path:
+            start = int(path.split(start_token, 1)[1].split("&", 1)[0])
+
+        keys_on_page = all_keys[start : start + server_cap]
+        has_more = (start + server_cap) < len(all_keys)
+        # Atlassian's canonical end-of-pagination signal: emit
+        # ``_links.next`` only when more data follows. The loop must
+        # terminate when this is absent -- NOT when
+        # ``len(results) < limit``.
+        links: dict[str, str] = {}
+        if has_more:
+            links["next"] = (
+                f"/rest/api/space?limit={requested_limit}&start={start + server_cap}"
+            )
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": k} for k in keys_on_page],
+                "size": len(keys_on_page),
+                "_links": links,
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(
+        confluence_server_client.retrieve_confluence_spaces(limit=requested_limit)
+    )
+
+    assert [s["key"] for s in returned] == all_keys
+    # 8 keys / 3 per page = 3 data pages. The third response carries no
+    # ``_links.next``, so we must NOT make a fourth probe call.
+    assert len(mock_get_call_paths) == 3
+    assert all(f"limit={requested_limit}" in p for p in mock_get_call_paths)
+
+
+def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for CONFSERVER-95272 / CONFSERVER-95312 (DC 8.5.8,
+    7.19.21, 8.9.0): when ``start`` exceeds the true total,
+    ``rest/api/space`` keeps returning records instead of an empty page.
+    A loop that terminated only on empty ``results`` would run unbounded
+    on these versions.
+
+    We must honor ``_links.next`` absence as the canonical end signal.
+    This test simulates the bug -- every call returns a record -- and
+    confirms that absence of ``_links.next`` is enough to stop the
+    loop after a finite number of calls.
+    """
+    mock_get_call_paths: list[str] = []
+    page_counter = {"n": 0}
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+        page_counter["n"] += 1
+        is_first_page = page_counter["n"] == 1
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": f"SPACE{page_counter['n']}"}],
+                "size": 1,
+                "_links": (
+                    {"next": "/rest/api/space?limit=5000&start=1"}
+                    if is_first_page
+                    else {}
+                ),
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(confluence_server_client.retrieve_confluence_spaces(limit=5000))
+
+    assert [s["key"] for s in returned] == ["SPACE1", "SPACE2"]
+    assert len(mock_get_call_paths) == 2
+
+
 def test_jsonrpc_websudo_html_response_raises_validation_error(
     confluence_server_client: OnyxConfluence,
 ) -> None:
