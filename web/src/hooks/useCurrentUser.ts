@@ -6,15 +6,17 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 /**
  * Fetches the current authenticated user via SWR (`/api/me`).
  *
- * This hook is intentionally configured with conservative revalidation
- * settings to avoid hammering the backend on every focus/reconnect event:
+ * The hook is mounted in the root `UserProvider`, so every route mount
+ * across the app touches this key. Conservative revalidation keeps the
+ * fan-out manageable:
  *
  * - `revalidateOnFocus: false`      — tab switches won't trigger a refetch
  * - `revalidateOnReconnect: false`   — network recovery won't trigger a refetch
- * - `dedupingInterval: 30_000`       — duplicate requests within 30 s are deduped
+ * - `dedupingInterval: 300_000`      — duplicate requests within 5 min are deduped
  *
- * The returned `mutateUser` handle lets callers imperatively refetch (e.g.
- * after a token refresh) without changing the global SWR config.
+ * Mutations that change the user (profile updates, token refresh, signout)
+ * call `mutateUser()` explicitly, so the 5 min window does not hide
+ * those state transitions.
  *
  * @example
  * ```ts
@@ -36,7 +38,7 @@ export function useCurrentUser(): {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: false,
-      dedupingInterval: 30_000,
+      dedupingInterval: 300_000,
     }
   );
 
