@@ -42,13 +42,12 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         has_users = user_count > 0
 
     # Cache only after bootstrap; the first user flow depends on a live
-    # has_users flag so avoid serving a stale redirect. Set an explicit
-    # no-store in that case so an intermediate CDN with a default TTL
-    # doesn't pin has_users=false past the first signup.
-    if has_users:
-        response.headers["Cache-Control"] = "public, max-age=60"
-    else:
-        response.headers["Cache-Control"] = "no-store"
+    # has_users flag so avoid serving a stale redirect. no-store in that
+    # case prevents an intermediate CDN with a default TTL from pinning
+    # has_users=false past the first signup.
+    response.headers["Cache-Control"] = (
+        "public, max-age=60" if has_users else "no-store"
+    )
 
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
