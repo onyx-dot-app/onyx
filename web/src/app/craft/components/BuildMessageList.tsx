@@ -4,7 +4,8 @@ import { useRef, useEffect } from "react";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
-import ToolCallPill from "@/app/craft/components/ToolCallPill";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import WorkingPill from "@/app/craft/components/WorkingPill";
 import UserMessage from "@/app/craft/components/UserMessage";
@@ -15,16 +16,6 @@ import {
   ToolCallState,
 } from "@/app/craft/types/displayTypes";
 import { isWorkingToolCall } from "@/app/craft/utils/streamItemHelpers";
-
-/**
- * BlinkingDot - Pulsing gray circle for loading state
- * Matches the main chat UI's loading indicator
- */
-function BlinkingDot() {
-  return (
-    <span className="animate-pulse flex-none bg-theme-primary-05 inline-block rounded-full h-3 w-3 ml-2 mt-2" />
-  );
-}
 
 /**
  * Group consecutive working tool calls into WorkingGroup items.
@@ -107,14 +98,6 @@ export default function BuildMessageList({
   const showStreamingArea =
     hasStreamItems || (isStreaming && lastMessageIsUser);
 
-  // Check for active tools (for "Working..." state)
-  const hasActiveTools = streamItems.some(
-    (item) =>
-      item.type === "tool_call" &&
-      (item.toolCall.status === "in_progress" ||
-        item.toolCall.status === "pending")
-  );
-
   // Helper to render stream items with grouping (used for both saved messages and current streaming)
   const renderStreamItems = (items: StreamItem[], isCurrentStream = false) => {
     const grouped = groupStreamItems(items);
@@ -127,7 +110,13 @@ export default function BuildMessageList({
     return grouped.map((item, index) => {
       switch (item.type) {
         case "text":
-          return <TextChunk key={item.id} content={item.content} />;
+          return (
+            <TextChunk
+              key={item.id}
+              content={item.content}
+              isStreaming={isCurrentStream && item.isStreaming}
+            />
+          );
         case "thinking":
           return (
             <ThinkingCard
@@ -138,7 +127,13 @@ export default function BuildMessageList({
           );
         case "tool_call":
           // Only task/subagent tools reach here (non-working tools)
-          return <ToolCallPill key={item.id} toolCall={item.toolCall} />;
+          return (
+            <CraftToolCard
+              key={item.id}
+              toolCall={item.toolCall}
+              density="comfortable"
+            />
+          );
         case "todo_list":
           return (
             <TodoListCard
@@ -206,18 +201,9 @@ export default function BuildMessageList({
             </div>
             <div className="flex-1 flex flex-col gap-3 min-w-0">
               {!hasStreamItems ? (
-                // Loading state - no content yet, show blinking dot like main chat
-                <BlinkingDot />
+                <BlinkingBar addMargin />
               ) : (
-                <>
-                  {/* Render stream items in FIFO order */}
-                  {renderStreamItems(streamItems, true)}
-
-                  {/* Streaming indicator when actively streaming text */}
-                  {isStreaming && hasStreamItems && !hasActiveTools && (
-                    <BlinkingDot />
-                  )}
-                </>
+                renderStreamItems(streamItems, true)
               )}
             </div>
           </div>

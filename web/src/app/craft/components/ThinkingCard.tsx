@@ -7,6 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import { Text } from "@opal/components";
 import { SvgChevronDown, SvgBubbleText } from "@opal/icons";
 
 interface ThinkingCardProps {
@@ -14,21 +15,32 @@ interface ThinkingCardProps {
   isStreaming: boolean;
 }
 
+const APPROX_CHARS_PER_TOKEN = 4;
+
+function estimateTokens(content: string): number {
+  return Math.max(1, Math.round(content.length / APPROX_CHARS_PER_TOKEN));
+}
+
 /**
- * ThinkingCard - Expandable card for agent thinking content
+ * ThinkingCard - Expandable card for agent thinking content.
  *
- * Starts open and stays open. User can manually toggle.
+ * Starts collapsed (shows just an "N tokens of thinking" summary). Stays
+ * open while actively streaming so the user can watch the thought roll in.
  */
 export default function ThinkingCard({
   content,
   isStreaming,
 }: ThinkingCardProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (!content) return null;
 
+  const summary = isStreaming
+    ? "Thinking..."
+    : `Thinking - ~${estimateTokens(content)} tokens`;
+
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible open={isOpen || isStreaming} onOpenChange={setIsOpen}>
       <div
         className={cn(
           "w-full border-[0.5px] rounded-lg overflow-hidden transition-colors",
@@ -45,31 +57,33 @@ export default function ThinkingCard({
               "transition-colors text-left"
             )}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <SvgBubbleText
                 className={cn(
-                  "size-4",
+                  "size-4 shrink-0",
                   isStreaming ? "stroke-theme-blue-05" : "stroke-text-03"
                 )}
               />
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  isStreaming ? "text-theme-blue-05" : "text-text-04"
-                )}
-              >
-                Thinking
+              <span className={isStreaming ? "text-theme-blue-05" : ""}>
+                <Text
+                  font="main-ui-action"
+                  color={isStreaming ? "inherit" : "text-04"}
+                >
+                  {summary}
+                </Text>
               </span>
               {isStreaming && (
-                <span className="text-xs text-theme-blue-04 animate-pulse">
-                  ...
+                <span className="text-theme-blue-04 animate-pulse">
+                  <Text font="main-ui-muted" color="inherit">
+                    ...
+                  </Text>
                 </span>
               )}
             </div>
             <SvgChevronDown
               className={cn(
                 "size-4 stroke-text-03 transition-transform duration-150",
-                !isOpen && "-rotate-90"
+                !(isOpen || isStreaming) && "-rotate-90"
               )}
             />
           </button>
@@ -79,15 +93,14 @@ export default function ThinkingCard({
           <div className="px-3 pb-3 pt-0">
             <div
               className={cn(
-                "p-3 rounded-08 text-sm",
-                "bg-background-neutral-02 text-text-03",
-                "max-h-48 overflow-y-auto",
-                "italic"
+                "p-3 rounded-08 italic",
+                "bg-background-neutral-02 max-h-48 overflow-y-auto",
+                "whitespace-pre-wrap wrap-break-word"
               )}
             >
-              <p className="whitespace-pre-wrap wrap-break-word m-0">
+              <Text as="p" font="main-content-muted" color="text-03">
                 {content}
-              </p>
+              </Text>
             </div>
           </div>
         </CollapsibleContent>

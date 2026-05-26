@@ -7,9 +7,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import { Text } from "@opal/components";
 import { SvgChevronDown, SvgPencilRuler } from "@opal/icons";
 import { ToolCallState } from "@/app/craft/types/displayTypes";
-import WorkingLine from "@/app/craft/components/WorkingLine";
+import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 
 interface WorkingPillProps {
   toolCalls: ToolCallState[];
@@ -20,28 +21,27 @@ interface WorkingPillProps {
 /**
  * WorkingPill - Consolidates multiple tool calls into a single expandable container.
  *
- * Features:
- * - Auto-expanded by default when isLatest
- * - Auto-collapses when a newer Working pill appears (isLatest becomes false)
- * - Each action renders as an expandable WorkingLine
+ * Stays open while any contained tool is actively running. As soon as all
+ * tools settle into terminal status, the pill auto-collapses so a completed
+ * turn doesn't leave a noisy expanded list behind. The user can still expand
+ * it manually for review.
  */
 export default function WorkingPill({
   toolCalls,
   isLatest = true,
 }: WorkingPillProps) {
-  const [isOpen, setIsOpen] = useState(true); // Auto-expanded by default
-
-  // Auto-collapse when this is no longer the latest working group
-  useEffect(() => {
-    if (!isLatest) {
-      setIsOpen(false);
-    }
-  }, [isLatest]);
-
-  // Check if any tool is in progress (for background color)
   const hasInProgress = toolCalls.some(
     (tc) => tc.status === "pending" || tc.status === "in_progress"
   );
+
+  const [isOpen, setIsOpen] = useState(hasInProgress);
+
+  // Auto-collapse when work finishes or when this is no longer the latest group.
+  useEffect(() => {
+    if (!isLatest || !hasInProgress) {
+      setIsOpen(false);
+    }
+  }, [isLatest, hasInProgress]);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -62,11 +62,10 @@ export default function WorkingPill({
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {/* Static icon */}
               <SvgPencilRuler className="size-4 stroke-text-03 shrink-0" />
-
-              {/* Title */}
-              <span className="text-sm font-medium text-text-04">Working</span>
+              <Text font="main-ui-action" color="text-04">
+                Working
+              </Text>
             </div>
 
             {/* Expand arrow */}
@@ -82,7 +81,11 @@ export default function WorkingPill({
         <CollapsibleContent>
           <div className="pl-5 pr-3 pb-3 pt-0 space-y-1">
             {toolCalls.map((toolCall) => (
-              <WorkingLine key={toolCall.id} toolCall={toolCall} />
+              <CraftToolCard
+                key={toolCall.id}
+                toolCall={toolCall}
+                density="compact"
+              />
             ))}
           </div>
         </CollapsibleContent>

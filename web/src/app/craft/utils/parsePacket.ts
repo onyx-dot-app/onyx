@@ -63,6 +63,31 @@ export function parsePacket(raw: unknown): ParsedPacket {
   }
 }
 
+// ─── Skill Detection ──────────────────────────────────────────────
+
+/**
+ * Detect skill-namespaced tool invocations. Opencode emits skill calls with
+ * raw names like "skills.brainstorming" or "superpowers:test-driven-development".
+ * Returns the skill's leaf name (everything after the last separator) or null.
+ */
+function detectSkillName(
+  p: Record<string, unknown>,
+  toolName: ToolName
+): string | null {
+  if (toolName !== "unknown") return null;
+  const rawName = getToolNameRaw(p);
+  if (!rawName) return null;
+  // Match "namespace:skill" or "namespace.skill" patterns
+  const match = rawName.match(/^(skills?|superpowers)[.:]([\w-]+)$/);
+  if (match?.[2]) return match[2];
+  // More permissive: any string with one separator and a known skill namespace
+  const sep = rawName.match(/^([\w-]+)[.:]([\w-]+)$/);
+  if (sep && (sep[1] === "skill" || sep[1] === "skills")) {
+    return sep[2] ?? null;
+  }
+  return null;
+}
+
 // ─── Tool Name Resolution ─────────────────────────────────────────
 
 const NAME_MAP: Record<string, ToolName> = {
@@ -512,6 +537,11 @@ function parseToolCallProgress(
   const subagentType = (ri?.subagent_type ?? ri?.subagentType ?? null) as
     | string
     | null;
+
+  // ── Skill detection ───────────────────────────────────────────
+  // Skill-namespaced tool calls arrive with raw names like
+  // "skills.brainstorming" or "superpowers:test-driven-development".
+  const skillName = detectSkillName(p, toolName);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)
@@ -530,6 +560,7 @@ function parseToolCallProgress(
     rawOutput,
     filePath,
     subagentType,
+    skillName,
     isNewFile:
       diffData.oldText || diffData.newText
         ? diffData.isNewFile

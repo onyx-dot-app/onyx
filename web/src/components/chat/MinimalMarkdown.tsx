@@ -25,6 +25,8 @@ interface MinimalMarkdownProps {
    * Any renderer not provided will fall back to this component's defaults.
    */
   components?: MinimalMarkdownComponentOverrides;
+  /** Skip rehype-highlight while content is mid-stream. Flip false on completion. */
+  streaming?: boolean;
 }
 
 export default function MinimalMarkdown({
@@ -32,7 +34,12 @@ export default function MinimalMarkdown({
   className = "",
   showHeader = true,
   components,
+  streaming = false,
 }: MinimalMarkdownProps) {
+  const rehypePlugins = useMemo(
+    () => (streaming ? [rehypeKatex] : [rehypeHighlight, rehypeKatex]),
+    [streaming]
+  );
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,
@@ -68,7 +75,7 @@ export default function MinimalMarkdown({
         className
       )}
       components={markdownComponents}
-      rehypePlugins={[rehypeHighlight, rehypeKatex]}
+      rehypePlugins={rehypePlugins}
       remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
       urlTransform={transformLinkUri}
     >

@@ -43,9 +43,24 @@ export type ToolCallStatus =
   | "failed"
   | "cancelled";
 
+export type ToolCallName =
+  | "glob"
+  | "grep"
+  | "read"
+  | "write"
+  | "edit"
+  | "bash"
+  | "task"
+  | "todowrite"
+  | "webfetch"
+  | "websearch"
+  | "unknown";
+
 export interface ToolCallState {
   id: string;
   kind: ToolCallKind;
+  /** Specific tool name (used to disambiguate within a kind, e.g. websearch vs grep) */
+  toolName?: ToolCallName;
   title: string;
   description: string; // "Listing output directory" or task description
   command: string; // "ls outputs/" or task prompt for task kind
@@ -53,6 +68,10 @@ export interface ToolCallState {
   rawOutput: string; // Full output for expanded view
   /** For task tool calls: the subagent type (e.g., "explore", "plan") */
   subagentType?: string;
+  /** For task tool calls: the subagent's final output once completed */
+  taskOutput?: string;
+  /** For skill-namespaced tool calls: the skill name (sans namespace prefix) */
+  skillName?: string;
   /** For edit operations: whether this is a new file (write) or edit of existing */
   isNewFile?: boolean;
   /** For edit operations: the old content before the edit (empty for new files) */

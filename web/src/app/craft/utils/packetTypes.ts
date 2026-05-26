@@ -99,6 +99,7 @@ export interface ParsedToolCallProgress {
   rawOutput: string;
   filePath: string; // Session-relative
   subagentType: string | null;
+  skillName: string | null;
   // Edit-specific
   isNewFile: boolean;
   oldContent: string;
