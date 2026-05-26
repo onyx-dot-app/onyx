@@ -6,20 +6,29 @@ set -o allexport
 source .env.nginx
 set +o allexport
 
-# Function to determine correct docker compose command
+# Function to determine correct docker compose command. Prefers the V2 plugin
+# (`docker compose`) since V1 (`docker-compose`) was EOL'd by Docker in 2023
+# and does not support the `--wait` / `--wait-timeout` flags used below.
 docker_compose_cmd() {
-  if command -v docker-compose >/dev/null 2>&1; then
-    echo "docker-compose"
-  elif command -v docker compose >/dev/null 2>&1; then
+  if docker compose version >/dev/null 2>&1; then
     echo "docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    echo "docker-compose"
   else
-    echo 'Error: docker-compose or docker compose is not installed.' >&2
+    echo 'Error: docker compose (V2 plugin) or docker-compose is not installed.' >&2
     exit 1
   fi
 }
 
 # Assign appropriate Docker Compose command
 COMPOSE_CMD=$(docker_compose_cmd)
+
+# `--wait` / `--wait-timeout` are V2-only. Drop them on V1 so the script
+# still runs (without gating on the nginx healthcheck) on legacy hosts.
+WAIT_ARGS=(--wait --wait-timeout 300)
+if [[ "$COMPOSE_CMD" == "docker-compose" ]]; then
+  WAIT_ARGS=()
+fi
 
 # Only add www to domain list if domain wasn't explicitly set as a subdomain
 if [[ ! $DOMAIN == www.* ]]; then
@@ -61,7 +70,7 @@ echo
 
 
 echo "### Starting nginx ..."
-$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d --wait --wait-timeout 300 nginx
+$COMPOSE_CMD -f docker-compose.prod.yml up --force-recreate -d "${WAIT_ARGS[@]}" nginx
 echo
 
 echo "### Deleting dummy certificate for $domains ..."
