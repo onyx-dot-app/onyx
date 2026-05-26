@@ -69,18 +69,30 @@ function StatusDot({ status, paused }: StatusDotProps) {
             ? "bg-status-success-05"
             : "bg-status-warning-05"; // connecting
 
-  // Pulse only while actively streaming — paused/error/connecting are
-  // steady so the eye doesn't get yanked away from the log content.
+  // Halo color for the soft outer ring — same hue, lighter shade, only
+  // visible when actively streaming.
+  const halo = status === "streaming" && !paused ? "bg-status-success-02" : "";
+
+  // Pulse only while actively streaming. The dot is large enough now
+  // (10px) that the pulse animation is actually legible.
   const shouldPulse = status === "streaming" && !paused;
   return (
-    <span
-      className={cn(
-        "inline-block h-2 w-2 rounded-full shrink-0",
-        color,
-        shouldPulse && "animate-pulse"
+    <span className="relative inline-flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+      {halo && (
+        <span
+          className={cn(
+            "absolute inset-[-3px] rounded-full opacity-60",
+            halo,
+            shouldPulse && "animate-ping"
+          )}
+          aria-hidden="true"
+        />
       )}
-      aria-hidden="true"
-    />
+      <span
+        className={cn("relative h-2.5 w-2.5 rounded-full", color)}
+        aria-hidden="true"
+      />
+    </span>
   );
 }
 
@@ -253,7 +265,10 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   }, []);
 
   return (
-    <div className="flex flex-col h-full gap-3">
+    // No vertical gap — the top hairline on LogContent is the separator,
+    // and we want toolbar + log to read as one continuous surface (the
+    // toolbar being the "chrome" of the terminal it controls).
+    <div className="flex flex-col h-full">
       <StatusBar
         status={status}
         paused={!follow}
@@ -314,72 +329,85 @@ function StatusBar({
   onCopy,
   onResume,
 }: StatusBarProps) {
-  const filtered = filter && visibleLines !== totalLines;
-  const statusText =
+  const filtered = !!filter && visibleLines !== totalLines;
+  const stateLabel =
     status === "error"
       ? (errorMessage ?? "Error")
       : status === "closed"
-        ? `Stream closed · ${totalLines.toLocaleString()} lines`
+        ? "Closed"
         : status === "connecting"
-          ? "Connecting…"
+          ? "Connecting"
           : paused
-            ? `Paused · ${totalLines.toLocaleString()} lines`
-            : `Streaming · ${totalLines.toLocaleString()} lines`;
+            ? "Paused"
+            : "Streaming";
 
+  // Single-line toolbar: status pill (state + count) on the left, filter
+  // input expanding through the middle, action icons on the right. This
+  // collapses what was a two-row status+filter layout into one continuous
+  // rhythm — matches the density of a devtools panel.
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <StatusDot status={status} paused={paused} />
-          <Text secondaryBody nowrap>
-            {statusText}
-          </Text>
-          {filtered && (
+    <div className="flex items-center gap-3 px-3 py-2">
+      <div className="flex items-center gap-2 shrink-0">
+        <StatusDot status={status} paused={paused} />
+        <Text secondaryBody nowrap>
+          {stateLabel}
+        </Text>
+        {status !== "connecting" && status !== "error" && (
+          <>
+            <span
+              className="h-3 w-px bg-border-02 shrink-0"
+              aria-hidden="true"
+            />
             <Text secondaryBody nowrap>
-              · {visibleLines.toLocaleString()} match
-              {visibleLines === 1 ? "" : "es"}
+              {filtered
+                ? `${visibleLines.toLocaleString()} / ${totalLines.toLocaleString()} lines`
+                : `${totalLines.toLocaleString()} lines`}
             </Text>
-          )}
-          {paused && newSincePaused > 0 && (
-            <button
-              type="button"
-              onClick={onResume}
-              className={cn(
-                "rounded-full px-2 py-0.5 text-xs",
-                "bg-status-warning-01 text-status-warning-05",
-                "hover:bg-status-warning-02 transition-colors"
-              )}
-            >
-              {newSincePaused.toLocaleString()} new — jump to bottom
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="default"
-            prominence="tertiary"
-            size="sm"
-            icon={SvgCopy}
-            onClick={onCopy}
-            tooltip="Copy visible lines"
-          />
-          <Button
-            variant="default"
-            prominence="tertiary"
-            size="sm"
-            icon={SvgTrash}
-            onClick={onClear}
-            tooltip="Clear buffer"
-          />
-        </div>
+          </>
+        )}
+        {paused && newSincePaused > 0 && (
+          <button
+            type="button"
+            onClick={onResume}
+            className={cn(
+              "rounded-full px-2 py-0.5 text-xs font-medium nowrap",
+              "bg-status-warning-01 text-status-warning-05",
+              "hover:bg-status-warning-02 transition-colors"
+            )}
+          >
+            +{newSincePaused.toLocaleString()} new · jump
+          </button>
+        )}
       </div>
-      <InputTypeIn
-        leftSearchIcon
-        placeholder="Filter lines (substring match)…"
-        value={filter}
-        onChange={(e) => onFilterChange(e.target.value)}
-        onClear={() => onFilterChange("")}
-      />
+
+      <div className="flex-1 min-w-0">
+        <InputTypeIn
+          leftSearchIcon
+          placeholder="Filter…"
+          value={filter}
+          onChange={(e) => onFilterChange(e.target.value)}
+          onClear={() => onFilterChange("")}
+        />
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0">
+        <Button
+          variant="default"
+          prominence="tertiary"
+          size="sm"
+          icon={SvgCopy}
+          onClick={onCopy}
+          tooltip="Copy visible"
+        />
+        <Button
+          variant="default"
+          prominence="tertiary"
+          size="sm"
+          icon={SvgTrash}
+          onClick={onClear}
+          tooltip="Clear"
+        />
+      </div>
     </div>
   );
 }
@@ -392,17 +420,25 @@ interface LogContentProps {
 }
 
 function LogContent({ scrollRef, onScroll, lines, empty }: LogContentProps) {
+  // The log surface is intentionally the visual focal point: it takes the
+  // full body height, sits a half-step darker than the toolbar above it
+  // (subtle elevation inversion — terminals are inset, not raised), and
+  // is separated by a single top hairline rather than a four-side bordered
+  // card. Empty state is plain centered text on the same surface — no
+  // nested container — so the "I am a terminal" affordance is preserved
+  // even when there's nothing to show.
   return (
     <div
       ref={scrollRef}
       onScroll={onScroll}
       className={cn(
-        "flex-1 overflow-auto rounded-md border border-border-02",
-        "bg-background-neutral-01 px-3 py-2 font-mono text-xs leading-relaxed"
+        "flex-1 overflow-auto border-t border-border-02",
+        "bg-background-neutral-01 px-4 py-3",
+        "font-mono text-xs leading-relaxed"
       )}
     >
       {empty !== null ? (
-        <div className="flex h-full items-center justify-center">
+        <div className="flex h-full items-center justify-center select-none">
           <Text secondaryBody>{empty}</Text>
         </div>
       ) : (
