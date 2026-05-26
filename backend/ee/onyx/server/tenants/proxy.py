@@ -36,7 +36,11 @@ from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.utils.license import is_license_valid
 from ee.onyx.utils.license import verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+
+BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
+BILLING_INFO_CACHE_TTL_SEC = 300
 
 logger = setup_logger()
 
@@ -363,6 +367,11 @@ async def proxy_billing_information(
     """Proxy billing information request to control plane.
 
     Auth: Valid (non-expired) license required.
+
+    Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SEC.
+    The frontend polls this endpoint on a tight loop, but Stripe-backed
+    billing state doesn't change second-to-second, so a short shared cache
+    eliminates almost all control-plane round trips.
     """
     # tenant_id is a required field in LicensePayload (Pydantic validates this),
     # but we check explicitly for defense in depth
@@ -370,6 +379,11 @@ async def proxy_billing_information(
         raise HTTPException(status_code=401, detail="License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
+    redis_client = get_redis_client(tenant_id=tenant_id)
+
+    cached = redis_client.get(BILLING_INFO_CACHE_KEY)
+    if cached is not None:
+        return BillingInformationResponse.model_validate_json(cached)
 
     result = await forward_to_control_plane(
         "GET", "/billing-information", params={"tenant_id": tenant_id}
@@ -377,7 +391,13 @@ async def proxy_billing_information(
     # Add tenant_id from license if not in response (control plane may not include it)
     if "tenant_id" not in result:
         result["tenant_id"] = tenant_id
-    return BillingInformationResponse(**result)
+    billing_info = BillingInformationResponse(**result)
+    redis_client.setex(
+        BILLING_INFO_CACHE_KEY,
+        BILLING_INFO_CACHE_TTL_SEC,
+        billing_info.model_dump_json(),
+    )
+    return billing_info
 
 
 class LicenseFetchResponse(BaseModel):
