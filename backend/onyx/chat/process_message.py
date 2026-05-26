@@ -57,6 +57,7 @@ from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.app_configs import KNOWLEDGE_AGENT_MODE
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -611,6 +612,26 @@ def build_chat_turn(
     persona = chat_session.persona
     message_text = new_msg_req.message
 
+    # ── Knowledge Agent MVP: regex input guardrail ───────────────────────────
+    # Block obvious secrets / oversized prompts; log_only prompt-injection
+    # attempts so we can iterate without false-positive blocks.
+    from onyx.error_handling.error_codes import OnyxErrorCode
+    from onyx.error_handling.exceptions import OnyxError
+    from onyx.guardrails import check_input
+    from onyx.guardrails.models import GuardAction
+
+    _input_decision = check_input(message_text)
+    if _input_decision.action == GuardAction.BLOCK:
+        raise OnyxError(
+            OnyxErrorCode.GUARDRAIL_BLOCKED,
+            f"Input rejected by guardrail: {_input_decision.rule}",
+        )
+    if (
+        _input_decision.action == GuardAction.REDACT
+        and _input_decision.redacted_text is not None
+    ):
+        message_text = _input_decision.redacted_text
+
     user_identity = LLMUserIdentity(
         user_id=llm_user_identifier, session_id=str(chat_session.id)
     )
@@ -1118,7 +1139,14 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            # Deep research is out-of-scope for the Knowledge Agent MVP, so when
+            # KNOWLEDGE_AGENT_MODE is on we always take the standard loop branch.
+            deep_research_requested = (
+                n_models == 1
+                and setup.new_msg_req.deep_research
+                and not KNOWLEDGE_AGENT_MODE
+            )
+            if deep_research_requested:
                 if setup.chat_session.project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(

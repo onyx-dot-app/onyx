@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import KNOWLEDGE_AGENT_MODE
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
@@ -40,6 +41,9 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileRea
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
+)
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -50,6 +54,16 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Tool class names hidden when KNOWLEDGE_AGENT_MODE is on. Code stays in
+# the repo; only the product surface is gated. Compared by __name__ so the
+# filter aligns with how _construct_tools_impl dispatches further below.
+_KNOWLEDGE_AGENT_OOS_TOOL_NAMES = {
+    PythonTool.__name__,
+    CodingAgentTool.__name__,
+    ImageGenerationTool.__name__,
+    KnowledgeGraphTool.__name__,
+}
 
 
 class SearchToolConfig(BaseModel):
@@ -221,6 +235,17 @@ def _construct_tools_impl(
             if not tool_is_available:
                 logger.debug(
                     "Skipping tool %s because it is not available",
+                    tool_cls.__name__,
+                )
+                continue
+
+            # Hide out-of-scope tools when running in Knowledge Agent MVP mode.
+            if (
+                KNOWLEDGE_AGENT_MODE
+                and tool_cls.__name__ in _KNOWLEDGE_AGENT_OOS_TOOL_NAMES
+            ):
+                logger.debug(
+                    "Skipping tool %s in KNOWLEDGE_AGENT_MODE",
                     tool_cls.__name__,
                 )
                 continue

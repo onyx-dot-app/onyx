@@ -16,6 +16,7 @@ from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import GOOGLE_AI_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
@@ -46,6 +47,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
         BEDROCK_PROVIDER_NAME: [],  # Dynamic - fetched from AWS API
         ANTHROPIC_PROVIDER_NAME: get_anthropic_model_names(),
+        GOOGLE_AI_STUDIO_PROVIDER_NAME: get_google_ai_studio_model_names(),
         VERTEXAI_PROVIDER_NAME: get_vertexai_model_names(),
         OLLAMA_PROVIDER_NAME: [],  # Dynamic - fetched from Ollama API
         LM_STUDIO_PROVIDER_NAME: [],  # Dynamic - fetched from LM Studio API
@@ -85,7 +87,19 @@ def get_recommendations() -> LLMRecommendations:
             return _cached_recommendations
 
         recommendations_from_github = fetch_llm_recommendations_from_github()
-        result = recommendations_from_github or _load_bundled_recommendations()
+        bundled = _load_bundled_recommendations()
+        if recommendations_from_github is None:
+            result = bundled
+        else:
+            # Merge: prefer GitHub entries but fall back to bundled for providers
+            # GitHub doesn't yet know about (e.g. locally-added providers like
+            # Google AI Studio). This keeps upstream auto-updates flowing while
+            # still surfacing local additions.
+            merged_providers = dict(bundled.providers)
+            merged_providers.update(recommendations_from_github.providers)
+            result = recommendations_from_github.model_copy(
+                update={"providers": merged_providers}
+            )
 
         _cached_recommendations = result
         _cached_recommendations_time = time.monotonic()
@@ -196,6 +210,46 @@ def get_anthropic_model_names() -> list[str]:
             for model in litellm.anthropic_models
             if model not in _IGNORABLE_ANTHROPIC_MODELS
             and not is_obsolete_model(model, LlmProviderNames.ANTHROPIC)
+        ],
+        reverse=True,
+    )
+
+
+def get_google_ai_studio_model_names() -> list[str]:
+    """Get Google AI Studio (Gemini API key) chat model names from litellm.
+
+    Pulls keys in litellm.model_cost that start with the ``gemini/`` prefix
+    and keeps only chat-capable Gemini SKUs. Filters out non-chat modalities
+    (embeddings, image/video/audio/music, robotics), open-source siblings
+    (Gemma), and obsolete generations.
+    """
+    import litellm
+
+    gemini_models: set[str] = set()
+    for key in litellm.model_cost.keys():
+        if key.startswith("gemini/"):
+            model_name = key.replace("gemini/", "")
+            gemini_models.add(model_name)
+
+    return sorted(
+        [
+            model
+            for model in gemini_models
+            # Only keep gemini-named chat SKUs; drop sibling product lines.
+            if model.lower().startswith("gemini-")
+            and not model.lower().startswith("gemini-gemma")  # gemma wrapped in gemini namespace
+            and "embed" not in model.lower()
+            and "image" not in model.lower()
+            and "video" not in model.lower()
+            and "veo" not in model.lower()  # video generation
+            and "live" not in model.lower()  # live/streaming models
+            and "tts" not in model.lower()  # text-to-speech
+            and "audio" not in model.lower()
+            and "robotics" not in model.lower()
+            and "lyria" not in model.lower()  # music
+            and "learnlm" not in model.lower()  # research-only
+            and "/" not in model
+            and "gemini-1.0" not in model.lower()  # obsolete
         ],
         reverse=True,
     )
@@ -336,6 +390,7 @@ def get_provider_display_name(provider_name: str) -> str:
         ANTHROPIC_PROVIDER_NAME: "Claude (Anthropic)",
         AZURE_PROVIDER_NAME: "Azure OpenAI",
         BEDROCK_PROVIDER_NAME: "Amazon Bedrock",
+        GOOGLE_AI_STUDIO_PROVIDER_NAME: "Gemini (Google AI Studio)",
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",

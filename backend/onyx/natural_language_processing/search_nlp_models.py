@@ -428,39 +428,54 @@ class CloudEmbedding:
 
         resolved_model = model or DEFAULT_VERTEX_MODEL
 
-        service_account_info = json.loads(self.api_key)
-        credentials = service_account.Credentials.from_service_account_info(
-            service_account_info,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
-        project_id = service_account_info["project_id"]
-        location = (
-            service_account_info.get("location")
-            or os.environ.get("GOOGLE_CLOUD_LOCATION")
-            or "global"
-        )
+        # Two auth paths share this code:
+        # 1. Vertex AI: `self.api_key` is the JSON service-account blob
+        # 2. Google AI Studio (Gemini API key): `self.api_key` is a bare key
+        #    (e.g. "AIza..."). We detect by trying JSON parse first.
+        is_vertex_sa = False
+        service_account_info: dict[str, Any] | None = None
+        if self.api_key and self.api_key.lstrip().startswith("{"):
+            try:
+                service_account_info = json.loads(self.api_key)
+                is_vertex_sa = True
+            except (ValueError, TypeError):
+                is_vertex_sa = False
 
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location=location,
-            credentials=credentials,
-        )
+        if is_vertex_sa and service_account_info is not None:
+            credentials = service_account.Credentials.from_service_account_info(
+                service_account_info,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+            project_id = service_account_info["project_id"]
+            location = (
+                service_account_info.get("location")
+                or os.environ.get("GOOGLE_CLOUD_LOCATION")
+                or "global"
+            )
+            client = genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=location,
+                credentials=credentials,
+            )
+        else:
+            # Google AI Studio (Gemini API key) — works with `gemini-embedding-*`
+            # and other API-key-eligible embedding models without Vertex creds.
+            client = genai.Client(api_key=self.api_key)
 
         # gemini-embedding-2 rejects task_type; embedding intent is conveyed
         # via the instruction-formatted text instead. Older models continue
         # to use task_type.
-        if _is_gemini_embedding_2_model(resolved_model):
-            embed_config = genai_types.EmbedContentConfig(
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
-        else:
-            embed_config = genai_types.EmbedContentConfig(
-                task_type=embedding_type,
-                output_dimensionality=reduced_dimension,
-                auto_truncate=True,
-            )
+        # NOTE: ``auto_truncate`` is a Vertex-only knob — the Google AI Studio
+        # (API-key) endpoint rejects it entirely, so we only set it under Vertex.
+        config_kwargs: dict[str, Any] = {
+            "output_dimensionality": reduced_dimension,
+        }
+        if not _is_gemini_embedding_2_model(resolved_model):
+            config_kwargs["task_type"] = embedding_type
+        if is_vertex_sa:
+            config_kwargs["auto_truncate"] = True
+        embed_config = genai_types.EmbedContentConfig(**config_kwargs)
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [

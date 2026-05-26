@@ -44,6 +44,23 @@
         }
       ]
     },
+    "gemini": {
+      "default_model": "gemini-2.5-pro",
+      "additional_visible_models": [
+        {
+          "name": "gemini-2.5-pro",
+          "display_name": "Gemini 2.5 Pro"
+        },
+        {
+          "name": "gemini-2.5-flash",
+          "display_name": "Gemini 2.5 Flash"
+        },
+        {
+          "name": "gemini-2.0-flash",
+          "display_name": "Gemini 2.0 Flash"
+        }
+      ]
+    },
     "openrouter": {
       "default_model": "z-ai/glm-5.1",
       "additional_visible_models": [

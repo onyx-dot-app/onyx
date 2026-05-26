@@ -42,6 +42,7 @@ from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
+from onyx.configs.app_configs import KNOWLEDGE_AGENT_MODE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
@@ -531,7 +532,11 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
     include_router_with_global_prefix_prepended(application, skill_router)
-    include_router_with_global_prefix_prepended(application, skill_admin_router)
+    # Skill bundle admin routes are out-of-scope for the Knowledge Agent MVP
+    # (skills are delivered as instruction packs there). The read-only user
+    # skill router stays registered so existing personas keep working.
+    if not KNOWLEDGE_AGENT_MODE:
+        include_router_with_global_prefix_prepended(application, skill_admin_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)

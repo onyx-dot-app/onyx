@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { MinimalAgent } from "@/lib/agents/types";
+import { NEXT_PUBLIC_KNOWLEDGE_AGENT_MODE } from "@/lib/constants";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -481,8 +482,11 @@ const AppInputBar = React.memo(
     }, [currentMessageFiles]);
 
     // Check if the agent has search tools available (internal search or web search)
-    // AND if deep research is globally enabled in admin settings
+    // AND if deep research is globally enabled in admin settings.
+    // Deep Research is out-of-scope for the Knowledge Agent MVP — when the
+    // build is in KA mode we hide the toggle regardless of admin settings.
     const showDeepResearch = useMemo(() => {
+      if (NEXT_PUBLIC_KNOWLEDGE_AGENT_MODE) return false;
       const deepResearchGloballyEnabled =
         combinedSettings?.settings?.deep_research_enabled ?? true;
       const isProjectWorkflow = currentProjectId !== null;

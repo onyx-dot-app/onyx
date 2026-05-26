@@ -57,6 +57,13 @@ class LLMFlow(StrEnum):
     RERANK = "rerank"
     INTENT_CLASSIFICATION = "intent_classification"
 
+    # Guardrails (I/O safety checkpoints, see backend/onyx/guardrails/)
+    GUARDRAIL_INPUT = "guardrail_input"
+    GUARDRAIL_OUTPUT = "guardrail_output"
+
+    # External tools (non-LLM) that we want explicit spans for
+    TAVILY_SEARCH = "tavily_search"
+
     # Sentinels — emitted by the LLM auto-wrap fallback when a caller did not
     # tag the call. Showing up in dashboards is a signal to add an explicit
     # ``llm_generation_span`` at the call site with the right tag.

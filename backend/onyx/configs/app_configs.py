@@ -1395,3 +1395,13 @@ STRIPE_PUBLISHABLE_KEY_URL = (
 )
 # Override for local testing with Stripe test keys (pk_test_*)
 STRIPE_PUBLISHABLE_KEY_OVERRIDE = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+
+
+## Knowledge Agent MVP mode
+# When enabled, hides out-of-scope features (deep research, PythonTool,
+# CodingAgentTool, ImageGenerationTool, KnowledgeGraphTool, skill bundle
+# upload admin routes) so the product surface matches the Knowledge Agent
+# MVP scope. Code remains in the repo; only the surface is gated.
+KNOWLEDGE_AGENT_MODE = (
+    os.environ.get("KNOWLEDGE_AGENT_MODE", "false").lower() == "true"
+)

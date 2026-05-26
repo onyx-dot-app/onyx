@@ -95,6 +95,10 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
+      # Langfuse observability (no-op when keys are empty — see tracing/setup.py)
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse-server:3000}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -181,6 +185,10 @@ services:
       - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
       - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
       - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
+      # Langfuse observability (no-op when keys are empty)
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse-server:3000}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -437,7 +445,7 @@ services:
       # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
       # Xms is the starting size, Xmx is the maximum size. These should be the
       # same.
-      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
@@ -576,6 +584,154 @@ services:
   #       max-file: "6"
   #   entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
+  # ── Langfuse self-host stack (opt-in via `--profile langfuse`) ───────────────
+  # Bring up with: docker compose --profile langfuse up -d
+  # First boot: visit http://localhost:3001, create org + project, copy keys
+  # into root .env (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY), then restart
+  # api_server + background to start emitting traces.
+  langfuse-server:
+    image: langfuse/langfuse:3
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    ports:
+      - "${LANGFUSE_UI_PORT:-3001}:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/langfuse
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: 6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_UI_PORT:-3001}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-dev-only-change-in-prod-please}
+      SALT: ${LANGFUSE_SALT:-dev-only-change-in-prod-please}
+      # 32-byte hex; generate prod value with: openssl rand -hex 32
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "false"
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/langfuse
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: 6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      SALT: ${LANGFUSE_SALT:-dev-only-change-in-prod-please}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "false"
+
+  langfuse-postgres:
+    image: postgres:16
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: langfuse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - langfuse_pg_data:/var/lib/postgresql/data
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - langfuse_ch_data:/var/lib/clickhouse
+      - langfuse_ch_logs:/var/log/clickhouse-server
+
+  langfuse-redis:
+    image: redis:7-alpine
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  langfuse-minio:
+    image: minio/minio:latest
+    profiles: ["langfuse"]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+      MINIO_DEFAULT_BUCKETS: langfuse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${LANGFUSE_MINIO_CONSOLE_PORT:-9101}:9001"
+    volumes:
+      - langfuse_minio_data:/data
+
 volumes:
   # Necessary for persisting data for use
   db_volume:
@@ -594,3 +750,8 @@ volumes:
   file-system:
   # Persistent data for OpenSearch.
   opensearch-data:
+  # Langfuse self-host data (opt-in via `--profile langfuse`)
+  langfuse_pg_data:
+  langfuse_ch_data:
+  langfuse_ch_logs:
+  langfuse_minio_data:

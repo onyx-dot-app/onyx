@@ -26,6 +26,7 @@ import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
 import AzureModal from "@/sections/modals/languageModels/AzureModal";
 import BedrockModal from "@/sections/modals/languageModels/BedrockModal";
 import VertexAIModal from "@/sections/modals/languageModels/VertexAIModal";
+import GoogleAIStudioModal from "@/sections/modals/languageModels/GoogleAIStudioModal";
 import OpenRouterModal from "@/sections/modals/languageModels/OpenRouterModal";
 import CustomModal from "@/sections/modals/languageModels/CustomModal";
 import LMStudioModal from "@/sections/modals/languageModels/LMStudioModal";
@@ -54,6 +55,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     productName: "Claude",
     companyName: "Anthropic",
     Modal: AnthropicModal,
+  },
+  [LLMProviderName.GOOGLE_AI_STUDIO]: {
+    icon: SvgGemini,
+    productName: "Gemini",
+    companyName: "Google AI Studio",
+    Modal: GoogleAIStudioModal,
   },
   [LLMProviderName.VERTEX_AI]: {
     icon: SvgGemini,

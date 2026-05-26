@@ -7,6 +7,7 @@ export enum LLMProviderName {
   LM_STUDIO = "lm_studio",
   AZURE = "azure",
   OPENROUTER = "openrouter",
+  GOOGLE_AI_STUDIO = "gemini",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
   LITELLM = "litellm",

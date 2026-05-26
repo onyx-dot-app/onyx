@@ -45,6 +45,8 @@ class OnyxErrorCode(Enum):
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
     QUERY_REJECTED = ("QUERY_REJECTED", 400)
+    GUARDRAIL_BLOCKED = ("GUARDRAIL_BLOCKED", 400)
+    GUARDRAIL_OUTPUT_REJECTED = ("GUARDRAIL_OUTPUT_REJECTED", 422)
 
     # ------------------------------------------------------------------
     # Not Found (404)

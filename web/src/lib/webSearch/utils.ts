@@ -60,6 +60,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     helper: "Connect to SearXNG to set up web search.",
     logo: SvgSearxng,
   },
+  tavily: {
+    label: "Tavily",
+    subtitle: "Tavily.com",
+    helper: "Connect to Tavily to set up web search.",
+    apiKeyUrl: "https://app.tavily.com/home",
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -114,6 +120,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
     requiredConfigKeys: ["searxng_base_url"],
     storedConfigAliases: { searxng_base_url: ["searxng_base_url"] },
   },
+  tavily: { requiresApiKey: true, requiredConfigKeys: [] },
 };
 
 const DEFAULT_SEARCH_CAPABILITIES: SearchProviderCapabilities = {

@@ -81,6 +81,12 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
+// Knowledge Agent MVP deployment mode. When true, the UI hides features
+// that fall outside the MVP scope (deep research toggle, skill bundle
+// admin pages, etc.). Pairs with the backend KNOWLEDGE_AGENT_MODE flag.
+export const NEXT_PUBLIC_KNOWLEDGE_AGENT_MODE =
+  process.env.NEXT_PUBLIC_KNOWLEDGE_AGENT_MODE?.toLowerCase() === "true";
+
 // Cookie controlling the per-character typewriter reveal in chat.
 // "false" disables smooth streaming — chunks render as they arrive.
 export const SMOOTH_STREAMING_COOKIE_NAME = "smoothStreamingEnabled";
