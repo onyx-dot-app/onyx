@@ -551,6 +551,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  JiraServiceManagement = "jira_service_management",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",
@@ -693,3 +694,4 @@ export interface IndexingStatusRequest {
   source?: ValidSources;
   get_all_connectors?: boolean;
 }
+
