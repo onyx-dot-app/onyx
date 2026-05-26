@@ -237,6 +237,12 @@ class GateAddon:
             return
 
         gate_target = self._resolve_and_match(flow)
+        # Strip the in-band session tag so it never reaches the origin on a
+        # forwarded request. mitmproxy does NOT strip `Proxy-Authorization`
+        # from plain-HTTP requests in regular mode; HTTPS carries it on the
+        # CONNECT only (consumed before this point), so this is a no-op there.
+        # Safe here: `_resolve_and_match` has already read it.
+        flow.request.headers.pop("Proxy-Authorization", None)
         if gate_target is None:
             return
         ctx, match = gate_target
