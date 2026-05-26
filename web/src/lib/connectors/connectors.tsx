@@ -756,7 +756,7 @@ export const connectorConfigs: Record<
   },
   jira_service_management: {
     description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management tickets to index. You can index everything or specify a particular project.`,
+    subtext: `Configure which Jira Service Management tickets to index. If Jira is also connected for the same site, scope this connector to a JSM project key or JSM-only JQL to avoid indexing duplicate issues.`,
     values: [
       {
         type: "text",
@@ -790,7 +790,7 @@ export const connectorConfigs: Record<
                 label: "Everything",
                 name: "everything",
                 description:
-                  "This connector will index all tickets the provided credentials have access to!",
+                  "This connector will index all Jira issues the provided credentials have access to, which can include non-JSM projects. To avoid duplicates with a Jira connector, prefer a JSM project key or JSM-only JQL.",
               },
             ],
           },
@@ -819,6 +819,7 @@ export const connectorConfigs: Record<
                 name: "jql_query",
                 description:
                   "A custom JQL query to filter Jira Service Management tickets." +
+                  "\n\nIf a Jira connector is also configured for this site, use a JSM-only JQL so the two connectors do not index the same issues." +
                   "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
                   "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
               },
