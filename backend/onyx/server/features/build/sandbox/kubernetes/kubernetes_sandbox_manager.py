@@ -137,6 +137,12 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 AGENT_PORT = 8081
 PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
+# After k8s reports the pod Ready, opencode-serve still has to finish its
+# own boot (config parse, provider registry init, HTTP server bind on :4096).
+# Empirically 1–3s warm, up to ~15s cold. Budget 30s so a slow boot fails
+# loudly here instead of as a downstream "stream did not become ready".
+OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
+OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
 # Progressive poll cadence: short intervals up front (pods usually become
 # Ready in 12–18s, so we want to catch the transition quickly), then back
 # off so a stuck pod doesn't hammer the API server. Each tuple is
@@ -1124,6 +1130,11 @@ class KubernetesSandboxManager(SandboxManager):
                     f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
                 )
 
+            if not self._wait_for_opencode_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready in existing sandbox pod {pod_name}"
+                )
+
             logger.info(
                 "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
             )
@@ -1206,6 +1217,12 @@ class KubernetesSandboxManager(SandboxManager):
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
+                )
+
+            # 4. Wait for opencode-serve to bind :4096 (no-op under ACP).
+            if not self._wait_for_opencode_serve_ready(sandbox_id):
+                raise RuntimeError(
+                    f"opencode-serve never became ready in sandbox pod {pod_name}"
                 )
 
             logger.info(
@@ -2175,6 +2192,54 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             f"http://{service_name}.{self._namespace}.svc.cluster.local"
             f":{OPENCODE_SERVE_PORT}"
         )
+
+    def _wait_for_opencode_serve_ready(
+        self,
+        sandbox_id: UUID,
+        timeout: float = OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+    ) -> bool:
+        """Block until opencode-serve answers ``GET /doc`` with 200.
+
+        k8s pod readiness only proves the container's health probes pass.
+        opencode-serve binds ``:4096`` a few hundred ms to a few seconds
+        later, after it finishes config parse and provider registry init.
+        Returning ``RUNNING`` before that means the first prompt's bus
+        subscribe races a cold opencode — connection refused or stale-auth
+        401 burns the bus's reconnect budget and surfaces to the user as
+        ``stream did not become ready``.
+
+        No-op under AGENT_TRANSPORT=acp.
+        """
+        if AGENT_TRANSPORT != AgentTransport.SERVE:
+            return True
+
+        password = self._read_opencode_password(sandbox_id)
+        auth = httpx.BasicAuth(OPENCODE_SERVER_USERNAME, password) if password else None
+        base_url = self._serve_base_url(sandbox_id)
+        deadline = time.time() + timeout
+        last_err: str | None = None
+        while time.time() < deadline:
+            try:
+                with httpx.Client(base_url=base_url, auth=auth, timeout=2.0) as client:
+                    r = client.get("/doc")
+                    if r.status_code == 200:
+                        logger.info(
+                            "[SANDBOX-SERVE] opencode-serve ready for sandbox %s",
+                            sandbox_id,
+                        )
+                        return True
+                    last_err = f"HTTP {r.status_code}"
+            except httpx.HTTPError as e:
+                last_err = f"{type(e).__name__}: {e}"
+            time.sleep(OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS)
+        logger.error(
+            "[SANDBOX-SERVE] opencode-serve never became ready for sandbox %s "
+            "after %.0fs (last error: %s)",
+            sandbox_id,
+            timeout,
+            last_err,
+        )
+        return False
 
     def _get_or_create_event_bus(self, sandbox_id: UUID) -> "PodEventBus":
         """Lazily build the per-pod :class:`PodEventBus`. Refuses to
