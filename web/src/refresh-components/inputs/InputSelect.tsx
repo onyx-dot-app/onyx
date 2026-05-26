@@ -14,7 +14,7 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
-import { Separator, type SeparatorProps } from "@opal/components";
+import { Divider } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 
 // ============================================================================
@@ -448,42 +448,6 @@ function InputSelectLabel({
 }
 
 // ============================================================================
-// InputSelect Separator
-// ============================================================================
-
-/**
- * InputSelect Separator Component
- *
- * A visual divider between items in the dropdown.
- * Uses the app's standard Separator component with appropriate defaults for dropdown menus.
- *
- * @example
- * ```tsx
- * <InputSelect.Content>
- *   <InputSelect.Item value="1">Option 1</InputSelect.Item>
- *   <InputSelect.Separator />
- *   <InputSelect.Item value="2">Option 2</InputSelect.Item>
- * </InputSelect.Content>
- * ```
- */
-function InputSelectSeparator({
-  noPadding = true,
-  ref,
-  ...props
-}: WithoutStyles<SeparatorProps> & {
-  ref?: React.Ref<React.ComponentRef<typeof Separator>>;
-}) {
-  return (
-    <Separator
-      ref={ref}
-      noPadding={noPadding}
-      className="px-2 py-1"
-      {...props}
-    />
-  );
-}
-
-// ============================================================================
 // Exports
 // ============================================================================
 
@@ -526,7 +490,7 @@ export default Object.assign(InputSelectRoot, {
   Item: InputSelectItem,
   Group: InputSelectGroup,
   Label: InputSelectLabel,
-  Separator: InputSelectSeparator,
+  Separator: Divider,
 });
 
 export {
