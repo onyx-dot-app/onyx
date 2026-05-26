@@ -50,5 +50,7 @@
 2. Verify queued runs without a session and skipped runs remain non-openable with clear disabled affordances.
 3. Verify the live run view shows the scheduled-run banner, disables the normal chat input while the run is active, and receives live progress without a page reload.
 4. Verify the live subscription stops or settles after the run reaches a terminal status, and the normal chat input is available again for follow-up messages.
-5. Verify scheduled-origin sessions still do not appear in the normal Craft sidebar history.
-6. Run the focused frontend type check and the relevant scheduled-task backend/API test slice.
+5. Verify refreshing after the live subscription ends loads and uses the Postgres-based saved messages rather than Redis-delivered live events.
+6. Verify a new message can be sent after the scheduled run finishes, and the response streams as a normal Craft follow-up.
+7. Verify scheduled-origin sessions still do not appear in the normal Craft sidebar history.
+8. Run the focused frontend type check and the relevant scheduled-task backend/API test slice.
