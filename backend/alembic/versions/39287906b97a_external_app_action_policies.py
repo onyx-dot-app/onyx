@@ -1,19 +1,18 @@
-"""External app action policies
+"""external app action policies
 
-Adds the per-action policy table for external-app egress governance.
-
-Revision ID: f1a2b3c4d5e6
-Revises: 7f5b159041be
-Create Date: 2026-05-25 00:00:00.000000
+Revision ID: 39287906b97a
+Revises: f1a2b3c4d5e6
+Create Date: 2026-05-26 12:01:05.260678
 
 """
 
 from alembic import op
 import sqlalchemy as sa
 
+
 # revision identifiers, used by Alembic.
-revision = "f1a2b3c4d5e6"
-down_revision = "7f5b159041be"
+revision = "39287906b97a"
+down_revision = "f1a2b3c4d5e6"
 branch_labels = None
 depends_on = None
 
