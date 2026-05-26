@@ -754,6 +754,33 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext:
+      "Configure which JSM projects to index. You can specify particular project keys.",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query:
+          "Enter project keys to index (comma-separated, leave empty for all):",
+        label: "Project Keys",
+        name: "jsm_project_keys",
+        optional: true,
+        description:
+          "Optional. Comma-separated list of Jira Service Management project keys to index (e.g., 'HELPDESK,SUPPORT'). Leave empty to index all accessible JSM projects.",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2139,3 +2166,4 @@ export interface ImapConfig {
   port?: number;
   mailboxes?: string[];
 }
+
