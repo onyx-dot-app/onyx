@@ -4,6 +4,7 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import contextlib
 import hashlib
 import io
 import json
@@ -63,6 +64,9 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
+from onyx.server.features.build.db.build_session import (
+    fetch_all_build_mode_llm_providers,
+)
 from onyx.server.features.build.db.build_session import (
     fetch_llm_provider_by_type_for_build_mode,
 )
@@ -419,18 +423,46 @@ class SessionManager:
         tenant_id: str,
         llm_config: LLMProviderConfig,
     ) -> None:
-        """Ensure PAT exists and provision the sandbox pod."""
+        """Ensure PAT, then provision the pod with every configured
+        provider pre-loaded so per-prompt model overrides can cross
+        providers without a pod restart."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
+        all_llm_configs = self._get_all_llm_configs(default=llm_config)
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
             user_id=user_id,
             tenant_id=tenant_id,
             llm_config=llm_config,
             onyx_pat=onyx_pat,
+            all_llm_configs=all_llm_configs,
         )
         update_sandbox_status__no_commit(
             self._db_session, sandbox.id, sandbox_info.status
         )
+
+    def _get_all_llm_configs(
+        self, default: LLMProviderConfig
+    ) -> list[LLMProviderConfig]:
+        """``default`` first, then every other ``build-mode-*`` provider
+        with a visible model."""
+        configs: list[LLMProviderConfig] = [default]
+        seen_providers: set[str] = {default.provider}
+        for provider in fetch_all_build_mode_llm_providers(self._db_session):
+            if provider.provider in seen_providers:
+                continue
+            seen_providers.add(provider.provider)
+            visible_models = [m for m in provider.model_configurations if m.is_visible]
+            if not visible_models:
+                continue
+            configs.append(
+                LLMProviderConfig(
+                    provider=provider.provider,
+                    model_name=visible_models[0].name,
+                    api_key=provider.api_key,
+                    api_base=provider.api_base,
+                )
+            )
+        return configs
 
     def ensure_sandbox_running(
         self,
@@ -641,6 +673,8 @@ class SessionManager:
             self._db_session,
             name=name,
             origin=origin,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
         )
         build_session.nextjs_port = nextjs_port
         self._db_session.flush()
@@ -1359,16 +1393,146 @@ class SessionManager:
     ) -> Generator[Any, None, None]:
         """Drain the CLI agent to completion, yielding raw ACP events.
 
-        Pure ACP generator — no DB writes, no SSE formatting. Callers compose
-        this with `_persist_acp_event` (to apply persistence side effects)
+        Pure ACP generator — minimal DB work (one preflight on first
+        message under AGENT_TRANSPORT=serve to resolve+persist the
+        opencode session id). No SSE formatting. Callers compose this
+        with `_persist_acp_event` (to apply persistence side effects)
         and, in the SSE case, an SSE serializer.
 
         The events include `SSEKeepalive` markers from the sandbox client;
         callers should pass them through (interactive) or drop them
         (headless).
         """
+        opencode_session_id = self._ensure_opencode_session_id(sandbox_id, session_id)
+        agent_provider, agent_model = self._get_session_agent_selection(session_id)
+
+        def _persist_resolved_id(new_id: str) -> None:
+            # Pod restart / eviction / 404 → the persisted opencode_session_id
+            # was stale and the transport had to mint a new one. Write the
+            # new id back so the next turn doesn't 404 the same stale id
+            # and orphan another fresh opencode session (which would drop
+            # the conversation history).
+            self._persist_opencode_session_id(session_id, new_id)
+
         yield from self._sandbox_manager.send_message(
-            sandbox_id, session_id, user_message_content
+            sandbox_id,
+            session_id,
+            user_message_content,
+            opencode_session_id=opencode_session_id,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
+            on_opencode_session_resolved=_persist_resolved_id,
+        )
+
+    def _get_session_agent_selection(
+        self, session_id: UUID
+    ) -> tuple[str | None, str | None]:
+        """``(agent_provider, agent_model)`` from the BuildSession row;
+        ``(None, None)`` for pre-migration rows."""
+        row = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if row is None:
+            return None, None
+        return row.agent_provider, row.agent_model
+
+    def _ensure_opencode_session_id(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> str | None:
+        """Return BuildSession.opencode_session_id; lazily populate on
+        first turn under ``AGENT_TRANSPORT=serve``.
+
+        Returns ``None`` for the ACP transport (the sandbox manager
+        ignores the value in that mode)."""
+        from onyx.server.features.build.configs import AGENT_TRANSPORT
+        from onyx.server.features.build.configs import AgentTransport
+
+        if AGENT_TRANSPORT != AgentTransport.SERVE:
+            return None
+
+        build_session = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if build_session is None:
+            logger.warning(
+                "[SESSION-LIFECYCLE] preflight: BuildSession %s not found",
+                session_id,
+            )
+            return None
+        if build_session.opencode_session_id:
+            logger.info(
+                "[SESSION-LIFECYCLE] preflight: reusing persisted opencode_session_id=%s "
+                "for build_session=%s (no DB write, no /session call)",
+                build_session.opencode_session_id,
+                session_id,
+            )
+            return build_session.opencode_session_id
+
+        logger.info(
+            "[SESSION-LIFECYCLE] preflight: BuildSession %s has no opencode_session_id; "
+            "calling sandbox_manager.ensure_opencode_session",
+            session_id,
+        )
+        new_id = self._sandbox_manager.ensure_opencode_session(sandbox_id, session_id)
+        if new_id is None:
+            # Sandbox manager declined (shouldn't happen in serve mode).
+            logger.warning(
+                "[SESSION-LIFECYCLE] preflight: ensure_opencode_session returned None "
+                "for build_session=%s; returning None",
+                session_id,
+            )
+            return None
+        build_session.opencode_session_id = new_id
+        self._db_session.commit()
+        logger.info(
+            "[SESSION-LIFECYCLE] preflight: persisted new opencode_session_id=%s "
+            "for build_session=%s (first-turn create)",
+            new_id,
+            session_id,
+        )
+        return new_id
+
+    def _persist_opencode_session_id(self, session_id: UUID, new_id: str) -> None:
+        """Write a freshly-resolved opencode_session_id back to the
+        BuildSession row. Called from the transport's
+        ``on_opencode_session_resolved`` callback when the persisted id
+        was stale (404) or absent."""
+        build_session = (
+            self._db_session.query(BuildSession)
+            .filter(BuildSession.id == session_id)
+            .first()
+        )
+        if build_session is None:
+            logger.warning(
+                "[SESSION-LIFECYCLE] callback: BuildSession %s vanished before "
+                "we could persist new opencode_session_id=%s",
+                session_id,
+                new_id,
+            )
+            return
+        if build_session.opencode_session_id == new_id:
+            logger.info(
+                "[SESSION-LIFECYCLE] callback: opencode_session_id=%s already "
+                "matches DB for build_session=%s; no-op",
+                new_id,
+                session_id,
+            )
+            return
+        old_id = build_session.opencode_session_id
+        build_session.opencode_session_id = new_id
+        self._db_session.commit()
+        logger.warning(
+            "[SESSION-LIFECYCLE] callback: rewrote opencode_session_id %s -> %s "
+            "for build_session=%s (stale id replaced)",
+            old_id,
+            new_id,
+            session_id,
         )
 
     def _persist_acp_event(
@@ -1542,6 +1706,8 @@ class SessionManager:
 
         events_emitted = 0
         state = BuildStreamingState(turn_index=0)
+        # Set inside the SERVE-transport block below; released in finally.
+        prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
 
         try:
             # Verify session exists and belongs to user
@@ -1566,6 +1732,41 @@ class SessionManager:
 
             # Update last activity timestamp
             update_session_activity(session_id, self._db_session)
+
+            # Acquire a per-build-session lock BEFORE we touch the opencode
+            # session id (preflight + persist + transport). Keying on
+            # build_session_id (not opencode_session_id) is deliberate:
+            # the opencode id can rotate mid-turn via the
+            # on_opencode_session_resolved callback, so a key based on it
+            # would let a concurrent request acquire a DIFFERENT lock and
+            # bypass serialization on exactly the recovery path. It also
+            # blocks first-turn races where two simultaneous prompts on a
+            # fresh build session would each mint their own opencode
+            # session. See SandboxManager.prompt_slot for the full
+            # rationale.
+            #
+            # The slot is released in the matching `finally` at the
+            # bottom of this try/except block.
+            candidate_cm = self._sandbox_manager.prompt_slot(sandbox.id, session_id)
+            if not candidate_cm.__enter__():
+                # Release the no-op exit so the context manager's
+                # contract is respected, then surface a clean error
+                # without persisting any user_message or contacting
+                # opencode.
+                candidate_cm.__exit__(None, None, None)
+                error_packet = ErrorPacket(
+                    message=(
+                        "This session is busy with a previous turn. "
+                        "Please wait for it to finish before sending "
+                        "another message."
+                    )
+                )
+                packet_logger.log("error", error_packet.model_dump())
+                yield self._format_packet_event(error_packet)
+                return
+            # Slot acquired — hand off ownership to the outer finally,
+            # which releases on every exit path.
+            prompt_slot_cm = candidate_cm
 
             # Calculate turn_index BEFORE saving user message
             # turn_index = count of existing USER messages (this will be the Nth user message)
@@ -1787,9 +1988,19 @@ class SessionManager:
             )
             logger.exception("Unexpected error in build message streaming")
             yield self._format_packet_event(error_packet)
+        finally:
+            # Release the per-opencode-session lock acquired above (if any).
+            # Runs on every exit path including bare returns, GeneratorExit,
+            # and exception flow — without this a long-running turn would
+            # leak the lock and permanently block follow-up turns on the
+            # same session.
+            if prompt_slot_cm is not None:
+                prompt_slot_cm.__exit__(None, None, None)
 
-    def _get_event_type(self, acp_event: Any) -> str:
-        """Get the event type string for an ACP event."""
+    @staticmethod
+    def _get_event_type(acp_event: Any) -> str:
+        """SSE ``type`` string for an ACP event. ACP schema classes
+        don't expose ``.type`` directly, so callers go through here."""
         if isinstance(acp_event, AgentMessageChunk):
             return "agent_message_chunk"
         elif isinstance(acp_event, AgentThoughtChunk):

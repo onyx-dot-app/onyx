@@ -5302,6 +5302,12 @@ class BuildSession(Base):
         default=SessionOrigin.INTERACTIVE,
         server_default="INTERACTIVE",
     )
+    # opencode-serve session id (populated lazily on first message
+    # under AGENT_TRANSPORT=serve) + user's LLM choice (sent as the
+    # per-prompt model override on opencode's prompt_async).
+    opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])

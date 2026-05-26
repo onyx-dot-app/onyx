@@ -641,6 +641,7 @@ class TestStreamingPersistence:
             sandbox_id: UUID,  # noqa: ARG001
             session_id: UUID,  # noqa: ARG001
             message: str,  # noqa: ARG001
+            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
         ) -> Generator[Any, None, None]:
             yield _text_chunk("buffered ")
             yield _text_chunk("partial")
@@ -732,6 +733,7 @@ class TestStreamErrorSemantics:
             sandbox_id: UUID,  # noqa: ARG001
             session_id: UUID,  # noqa: ARG001
             message: str,  # noqa: ARG001
+            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
         ) -> Generator[Any, None, None]:
             yield _text_chunk("starting")
             raise RuntimeError("upstream model crashed")
@@ -770,6 +772,7 @@ class TestStreamErrorSemantics:
             sandbox_id: UUID,  # noqa: ARG001
             session_id: UUID,  # noqa: ARG001
             message: str,  # noqa: ARG001
+            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
         ) -> Generator[Any, None, None]:
             # Generator-with-raise is how the K8s client surfaces timeouts.
             if False:

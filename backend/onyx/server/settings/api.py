@@ -125,11 +125,17 @@ def fetch_settings(
     # Check if Onyx Craft is enabled for this user (used for server-side redirects)
     onyx_craft_enabled_for_user = is_onyx_craft_enabled(user) if user else False
 
+    # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same
+    # check happens on the SSE endpoint so flipping the env var off
+    # immediately closes the surface, not just the UI.
+    from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
+
     return UserSettings(
         **general_settings.model_dump(),
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
+        opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,

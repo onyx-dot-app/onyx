@@ -101,7 +101,8 @@ RUN chown -R sandbox:sandbox /workspace
 USER sandbox
 WORKDIR /workspace
 
-# 3000: Next.js dev server, 8081: OpenCode ACP, 8731: push daemon
-EXPOSE 3000 8081 8731
+# 3000: Next.js dev server, 4096: opencode serve, 8081: reserved
+# (legacy ACP port; still declared on the K8s Service), 8731: push daemon
+EXPOSE 3000 4096 8081 8731
 
 ENTRYPOINT ["/workspace/entrypoint.sh"]
