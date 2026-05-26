@@ -195,7 +195,7 @@ async def create_checkout_session(
     # Build redirect URL for after checkout completion
     redirect_url = f"{WEB_DOMAIN}/admin/billing?checkout=success"
 
-    return await create_checkout_service(
+    result = await create_checkout_service(
         billing_period=billing_period,
         seats=seats,
         email=email,
@@ -203,6 +203,12 @@ async def create_checkout_session(
         redirect_url=redirect_url,
         tenant_id=tenant_id,
     )
+
+    # Force the next /billing-information read to hit the live service so the
+    # post-checkout subscription snapshot isn't delayed by the cache.
+    _invalidate_billing_cache()
+
+    return result
 
 
 @router.post("/create-customer-portal-session")
