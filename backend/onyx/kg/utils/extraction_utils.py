@@ -1,4 +1,5 @@
 import json
+from collections.abc import Generator
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCallTypes
@@ -27,7 +28,6 @@ from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import make_relationship_type_id
-from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llm
 from onyx.llm.models import UserMessage
 from onyx.llm.utils import llm_response_to_string
@@ -41,6 +41,24 @@ from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+# Quarantined: see backend/onyx/kg/legacy/vespa_interactions.py.
+# Until an OpenSearch chunk-read path exists, deep extraction yields nothing.
+def get_document_chunk_contents(
+    document_id: str,
+    index_name: str,  # noqa: ARG001 — kept for caller-shape parity until OpenSearch port lands
+    tenant_id: str,
+    batch_size: int = 8,  # noqa: ARG001
+) -> Generator[list[KGChunkFormat], None, None]:
+    logger.warning(
+        "KG deep extraction skipped: no OpenSearch chunk-read implementation "
+        "(document_id=%s, tenant_id=%s).",
+        document_id,
+        tenant_id,
+    )
+    return
+    yield  # unreachable; keeps the function a generator
 
 
 def get_entity_types_str(active: bool | None = None) -> str:
@@ -346,7 +364,7 @@ def kg_deep_extraction(
     relationship_types_str = get_relationship_types_str(active=True)
 
     for i, chunk_batch in enumerate(
-        get_document_vespa_contents(document_id, index_name, tenant_id)
+        get_document_chunk_contents(document_id, index_name, tenant_id)
     ):
         # use first batch for classification
         if i == 0 and metadata.classification_enabled:

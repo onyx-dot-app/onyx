@@ -15,17 +15,31 @@ from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
-from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
+from onyx.utils.logger import setup_logger
+
+# NOTE: KG-Vespa reset is quarantined in backend/onyx/kg/legacy/reset_vespa.py.
+# No OpenSearch port exists yet — document-index KG fields are not cleared.
+# DB-level KG cleanup below still runs.
+
+logger = setup_logger()
 
 
 def reset_source_kg_index(
-    source_name: str | None, tenant_id: str, index_name: str, lock: RedisLock
+    source_name: str | None,
+    tenant_id: str,
+    index_name: str,  # noqa: ARG001 — kept for caller compat until OpenSearch port lands
+    lock: RedisLock,  # noqa: ARG001 — kept for caller compat until OpenSearch port lands
 ) -> None:
     """
     Resets the knowledge graph index and vespa for a source.
     """
-    # reset vespa for the source
-    reset_vespa_kg_index(tenant_id, index_name, lock, source_name)
+    logger.warning(
+        "KG reset: document-index field cleanup is a no-op (Vespa-backed "
+        "implementation quarantined to kg/legacy/, no OpenSearch port). "
+        "Continuing with DB cleanup for tenant=%s source=%s.",
+        tenant_id,
+        source_name,
+    )
 
     with get_session_with_current_tenant() as db_session:
         if source_name is None:
