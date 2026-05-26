@@ -2356,7 +2356,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         with self._build_serve_client(sandbox_id) as client:
             return client.ensure_session(
                 None,
-                cwd=session_path,
+                directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
 
@@ -2452,7 +2452,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             )
             resolved_session_id = client.ensure_session(
                 opencode_session_id,
-                cwd=session_path,
+                directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
             if resolved_session_id != opencode_session_id:
@@ -2487,6 +2487,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                 for event in client.send_message(
                     resolved_session_id,
                     message,
+                    directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
                 ):
@@ -2511,7 +2512,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                     events_count,
                 )
                 try:
-                    client.abort(resolved_session_id)
+                    client.abort(resolved_session_id, directory=session_path)
                 except Exception as abort_err:
                     logger.warning(
                         "[SANDBOX-SERVE] abort failed on GeneratorExit: %s",
@@ -2532,7 +2533,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
                     e,
                 )
                 try:
-                    client.abort(resolved_session_id)
+                    client.abort(resolved_session_id, directory=session_path)
                 except Exception as abort_err:
                     logger.warning(
                         "[SANDBOX-SERVE] abort failed on Exception: %s",
