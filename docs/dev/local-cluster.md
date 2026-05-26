@@ -209,12 +209,12 @@ you want to add a new worktree.
 Destructive commands are intentionally **not** wired into VSCode tasks:
 
 ```bash
-deployment/helm/dev/dev.sh nuke worktree           # drop THIS worktree's DB+bucket+namespaces
-deployment/helm/dev/dev.sh nuke worktree --slug X  # specific worktree
-deployment/helm/dev/dev.sh nuke all                # delete cluster + registry + all worktree state
+deployment/helm/dev/dev.sh destroy worktree           # drop THIS worktree's DB+bucket+namespaces
+deployment/helm/dev/dev.sh destroy worktree --slug X  # specific worktree
+deployment/helm/dev/dev.sh destroy all                # delete cluster + registry + all worktree state
 ```
 
-Each prompts for confirmation. Reach for `nuke` only when you actually
+Each prompts for confirmation. Reach for `destroy` only when you actually
 want to lose data — for clean app-pod restarts the Tilt UI's "Restart"
 button is what you want.
 
@@ -229,7 +229,7 @@ button is what you want.
 | `backend/requirements/*.txt` or `backend/Dockerfile` | Tilt rebuilds the backend image. **p50 30–90 s.** |
 | `web/package.json` or `web/Dockerfile.dev` | Tilt rebuilds the web-dev image. |
 | Helm chart templates / values | Restart the `onyx-<slug>` resource in the Tilt UI (or Ctrl-C and re-run `dev.sh up`). |
-| Chart subchart versions or infra config | `dev.sh nuke all && dev.sh up` (the only path that re-runs the infra install). |
+| Chart subchart versions or infra config | `dev.sh destroy all && dev.sh up` (the only path that re-runs the infra install). |
 
 ### Logs
 
@@ -280,7 +280,7 @@ service keeps running either way.
 
 ```
 deployment/helm/dev/
-└── dev.sh                One-script orchestrator: up / stop / start / status / nuke
+└── dev.sh                One-script orchestrator: up / stop / start / status / destroy
 
 deployment/helm/charts/onyx/
 ├── values-dev-infra.yaml   onyx-infra overlay (subcharts on, app pods off)
@@ -295,7 +295,7 @@ web/Dockerfile.dev      Node 24 + bun image; `bun run dev` entrypoint for HMR
 
 Per-worktree state lives in `~/.config/onyx-dev/<slug>.json` (allocation
 record) and `~/.config/onyx-dev/<slug>.values.yaml` (rendered helm
-overlay). Both are blown away by `dev.sh nuke worktree --slug <slug>`.
+overlay). Both are blown away by `dev.sh destroy worktree --slug <slug>`.
 
 ---
 

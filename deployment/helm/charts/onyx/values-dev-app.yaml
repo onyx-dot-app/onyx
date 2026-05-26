@@ -145,11 +145,11 @@ api:
       value: "5678"
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 500m
+      memory: 1Gi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 3Gi
 
 webserver:
   replicaCount: 1
@@ -165,16 +165,18 @@ webserver:
     - "-c"
     - "bun run dev"
   workingDir: "/app"
-  # `next dev` with Turbopack on initial compile of the full Onyx web tree
-  # peaks around 3 GiB. 4 GiB limit gives headroom against OOMKill during
-  # the first cold start.
+  # `next dev` with Turbopack compiling the full Onyx web tree on a cold
+  # route peaks well above 4 GiB and pegs all available cores. Under-sizing
+  # this causes OOMKill loops that wipe the .next cache on every restart,
+  # so each page load is a cold compile. 8 GiB / 6 CPUs leaves headroom on
+  # a 16 GB / 14 CPU host.
   resources:
     requests:
-      cpu: 200m
-      memory: 1Gi
+      cpu: 500m
+      memory: 2Gi
     limits:
-      cpu: 2000m
-      memory: 4Gi
+      cpu: 6000m
+      memory: 8Gi
 
 # Each celery worker runs through the watchfiles-based
 # dev_celery_reload.py helper for hot-reload on source change. Debugpy is

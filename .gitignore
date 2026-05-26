@@ -3,6 +3,7 @@
 !/.vscode/env_template.txt
 !/.vscode/env.web_template.txt
 !/.vscode/.env.k8s.template
+!/.vscode/.env.k3d.template
 !/.vscode/launch.json
 !/.vscode/tasks.json
 .zed

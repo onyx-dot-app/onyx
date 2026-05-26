@@ -16,9 +16,9 @@
 #
 #   # Destructive subcommands. These are intentionally NOT exposed as VSCode
 #   # tasks so they can't be invoked with one click.
-#   deployment/helm/dev/dev.sh nuke worktree           # destroy THIS worktree's DB/bucket/ns
-#   deployment/helm/dev/dev.sh nuke worktree --slug X  # destroy a specific worktree
-#   deployment/helm/dev/dev.sh nuke all                # destroy the cluster + ALL worktree state
+#   deployment/helm/dev/dev.sh destroy worktree           # destroy THIS worktree's DB/bucket/ns
+#   deployment/helm/dev/dev.sh destroy worktree --slug X  # destroy a specific worktree
+#   deployment/helm/dev/dev.sh destroy all                # destroy the cluster + ALL worktree state
 #
 # Flags accepted by `up`:
 #   --slug <name>             override the slug (default: derive from git branch)
@@ -27,7 +27,7 @@
 #   --no-browser              don't open the Tilt UI in the browser after launch
 #   --opensearch-password <p> set OpenSearch admin password on first install
 #
-# Flags accepted by `nuke worktree`:
+# Flags accepted by `destroy worktree`:
 #   --slug <name>   override the slug (default: derive from git branch)
 #   --keep-data     uninstall pods but preserve postgres DB + minio bucket
 #
@@ -138,6 +138,49 @@ infra_ready() {
     >/dev/null 2>&1
 }
 
+# Grant the app namespace's default ServiceAccount permission to manage
+# sandbox pods/services in the worktree's sandbox namespace. Craft's api
+# server + celery workers create these at runtime (Onyx Sandbox / Craft).
+#
+# The onyx Helm chart does NOT ship this RBAC — in prod it's managed
+# out-of-band (see cloud-deployment-yamls: danswer/role/api-server-role +
+# rolebinding). For local dev we apply the equivalent here rather than
+# patching the stable chart. Idempotent: re-applied on every `up`.
+ensure_sandbox_rbac() {
+  local app_ns="$1" sandbox_ns="$2"
+  kubectl apply -f - >/dev/null <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: onyx-sandbox-manager
+  namespace: ${sandbox_ns}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: onyx-sandbox-manager
+  namespace: ${sandbox_ns}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: onyx-sandbox-manager
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: ${app_ns}
+EOF
+}
+
 # ====================================================================
 # Cluster + infra bring-up (idempotent)
 # ====================================================================
@@ -154,8 +197,16 @@ ensure_cluster() {
     log "k3d cluster '${CLUSTER_NAME}' already exists"
   else
     log "creating k3d cluster '${CLUSTER_NAME}'"
+    # -p maps host :13000 -> the serverlb -> nodePort 30080, which the
+    # ingress-nginx controller Service exposes (NodePort in
+    # values-dev-infra.yaml). The browser reaches <slug>.onyx.localhost:13000
+    # through this path — no kubectl port-forward, which dropped long-lived
+    # dev HMR/SSE connections. To add this mapping to an already-created
+    # cluster without recreating it:
+    #   k3d cluster edit ${CLUSTER_NAME} --port-add "13000:30080@loadbalancer"
     k3d cluster create "${CLUSTER_NAME}" \
       --api-port 6550 \
+      -p "13000:30080@loadbalancer" \
       --registry-use "${REGISTRY_NAME}:${REGISTRY_PORT}" \
       --k3s-arg "--disable=traefik@server:0" \
       --k3s-arg "--disable=servicelb@server:0"
@@ -405,6 +456,39 @@ write_worktree_values() {
   [[ -n "${opensearch_password}" ]] \
     || die "couldn't read onyx-opensearch Secret from ${INFRA_NS}; is the infra release deployed?"
 
+  # Surface .vscode/.env.k3d into the worktree's configMap so per-developer
+  # settings (LLM API keys, password policy, log levels, integrations) flow
+  # into the pods. The file is curated to contain only keys the cluster
+  # should accept — chart-managed keys (connection hosts, infra creds,
+  # per-worktree slugs) live in values-dev-{infra,app}.yaml. See
+  # .vscode/.env.k3d.template for the canonical key list.
+  local env_k3d="${REPO_ROOT}/.vscode/.env.k3d"
+  local env_k3d_yaml=""
+  if [[ -f "${env_k3d}" ]]; then
+    env_k3d_yaml=$(/usr/bin/awk -F= '
+      /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+      !/=/ { next }
+      {
+        key=$1
+        sub(/^export /, "", key)
+        gsub(/[[:space:]]/, "", key)
+        value=$0
+        sub(/^[^=]*=/, "", value)
+        # Skip explicit unsets so chart defaults win.
+        if (value == "") next
+        # Strip surrounding quotes if present.
+        if (value ~ /^".*"$/ || value ~ /^\x27.*\x27$/) { value=substr(value, 2, length(value)-2) }
+        # YAML-quote (escape backslashes + double quotes).
+        gsub(/\\/, "\\\\", value)
+        gsub(/"/, "\\\"", value)
+        printf "  %s: \"%s\"\n", key, value
+      }
+    ' "${env_k3d}")
+    if [[ -n "${env_k3d_yaml}" ]]; then
+      log "merging $(echo "${env_k3d_yaml}" | /usr/bin/wc -l | tr -d ' ') entries from .vscode/.env.k3d into worktree values"
+    fi
+  fi
+
   cat > "${out}" <<EOF
 # Auto-generated by dev.sh for slug '${slug}'.
 # Re-running 'dev.sh up' overwrites this file.
@@ -417,6 +501,7 @@ configMap:
   REDIS_DB_NUMBER_CELERY: "$((redis_base + 2))"
   SANDBOX_NAMESPACE: "${sandbox_ns}"
   SANDBOX_API_SERVER_URL: "http://${app_release}-api-service.${app_ns}.svc.cluster.local:8080"
+${env_k3d_yaml}
 
 # Mirror the actually-deployed OpenSearch admin password so worktree
 # pods can authenticate to the shared OpenSearch in onyx-infra.
@@ -510,6 +595,8 @@ cmd_up() {
   kubectl annotate namespace "${sandbox_ns}" meta.helm.sh/release-name="${app_release}" --overwrite >/dev/null
   kubectl annotate namespace "${sandbox_ns}" meta.helm.sh/release-namespace="${app_ns}" --overwrite >/dev/null
 
+  ensure_sandbox_rbac "${app_ns}" "${sandbox_ns}"
+
   provision_pg_database "${db_name}"
   provision_minio_bucket "${bucket_name}"
   write_worktree_values "${slug}" "${db_name}" "${bucket_name}" "${redis_base}"
@@ -583,12 +670,12 @@ cmd_start() {
 }
 
 # ====================================================================
-# Subcommand: nuke  (destructive — NOT exposed as a VSCode task)
+# Subcommand: destroy  (destructive — NOT exposed as a VSCode task)
 # ====================================================================
 #
 # Two scopes:
-#   `nuke worktree`  — drop this worktree's helm release / DB / bucket / namespaces
-#   `nuke all`       — also delete the k3d cluster + local registry + ~/.config/onyx-dev
+#   `destroy worktree`  — drop this worktree's namespaces / DB / bucket / state
+#   `destroy all`       — also delete the k3d cluster + local registry + ~/.config/onyx-dev
 #
 # Both prompt for confirmation since they are unrecoverable.
 
@@ -601,18 +688,18 @@ confirm() {
   esac
 }
 
-cmd_nuke() {
+cmd_destroy() {
   local scope="${1:-}"
   shift || true
   case "${scope}" in
-    worktree) nuke_worktree "$@" ;;
-    all)      nuke_all "$@" ;;
-    "")       die "usage: dev.sh nuke {worktree|all}" ;;
-    *)        die "unknown nuke scope: ${scope} (try: worktree, all)" ;;
+    worktree) destroy_worktree "$@" ;;
+    all)      destroy_all "$@" ;;
+    "")       die "usage: dev.sh destroy {worktree|all}" ;;
+    *)        die "unknown destroy scope: ${scope} (try: worktree, all)" ;;
   esac
 }
 
-nuke_worktree() {
+destroy_worktree() {
   local slug="" keep_data=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -625,26 +712,22 @@ nuke_worktree() {
   [[ -n "${slug}" ]] || slug="$(derive_slug 2>/dev/null || true)"
   [[ -n "${slug}" ]] || die "couldn't derive slug; pass --slug"
 
-  confirm "About to DESTROY worktree '${slug}' (helm release, postgres DB, minio bucket, namespaces). Continue?" || return 1
+  confirm "About to DESTROY worktree '${slug}' (postgres DB, minio bucket, namespaces). Continue?" || return 1
 
   require_tool kubectl
-  require_tool helm
   ensure_local_context
 
   local app_ns="onyx-${slug}"
   local sandbox_ns="onyx-${slug}-sandboxes"
-  local app_release="onyx-${slug}"
   local db_name="postgres_${slug//-/_}"
   local bucket_name="onyx-${slug}"
   local state_file="${STATE_DIR}/${slug}.json"
   local values_file="${STATE_DIR}/${slug}.values.yaml"
 
-  log "nuking worktree: ${slug}"
+  log "destroying worktree: ${slug}"
 
-  if helm -n "${app_ns}" status "${app_release}" >/dev/null 2>&1; then
-    log "uninstalling helm release ${app_release}"
-    helm -n "${app_ns}" uninstall "${app_release}" --wait --timeout 3m || true
-  fi
+  # Tilt applies the app chart via `helm template` + k8s_yaml (no Helm
+  # release object), so teardown is just deleting the namespaces below.
 
   if [[ "${keep_data}" -eq 0 ]]; then
     drop_pg_database "${db_name}"
@@ -658,7 +741,7 @@ nuke_worktree() {
   log "worktree '${slug}' destroyed."
 }
 
-nuke_all() {
+destroy_all() {
   confirm "About to DESTROY the entire k3d cluster '${CLUSTER_NAME}', the local registry, and ALL worktree state under ${STATE_DIR}. Continue?" || return 1
 
   require_tool k3d
@@ -750,7 +833,7 @@ case "$1" in
   stop)    shift; cmd_stop "$@" ;;
   start)   shift; cmd_start "$@" ;;
   status)  shift; cmd_status "$@" ;;
-  nuke)    shift; cmd_nuke "$@" ;;
+  destroy) shift; cmd_destroy "$@" ;;
   -h|--help|help) usage ;;
   *)       die "unknown subcommand: $1 (try: up, down, status)" ;;
 esac

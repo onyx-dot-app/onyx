@@ -124,10 +124,18 @@ indexCapability:
 nginx:
   enabled: true
   controller:
-    # kind/k3d has no LoadBalancer provider. Tilt port-forwards from
-    # localhost:13000 -> this Service.
+    # k3d has no cloud LoadBalancer provider, but prod fronts this
+    # controller with a Service of type LoadBalancer (values.yaml) — which
+    # is itself a NodePort plus a cloud LB. We use NodePort here so the
+    # k3d serverlb can map a host port (13000 -> nodePort 30080) straight
+    # to the controller, matching prod's request path (host -> nodePort ->
+    # ingress-nginx -> Ingress) without the flaky `kubectl port-forward`
+    # tunnel, which drops long-lived dev HMR/SSE connections. The port
+    # mapping is declared in dev.sh's `k3d cluster create -p` flag.
     service:
-      type: ClusterIP
+      type: NodePort
+      nodePorts:
+        http: 30080
 
     # Override the chart's default `containerPort.http: 1024` back to 80.
     # The chart's default ships a custom server block at :1024 with hard-
