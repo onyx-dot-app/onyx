@@ -38,6 +38,7 @@ from onyx.sandbox_proxy.action_matcher import ActionMatch
 from onyx.sandbox_proxy.action_matcher import ActionMatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
@@ -47,6 +48,11 @@ logger = setup_logger()
 # fail-closed: a real DoS attempt against the matcher or exfiltration
 # wouldn't show up in summary/payload anyway.
 PARSER_MAX_BODY_BYTES = 1_048_576
+
+# flow.metadata flag set in `requestheaders` once a flow is confirmed to
+# be tenant-scoped snapshot egress, so `request` skips the body cap +
+# matcher and lets the streamed upload through.
+_SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
 class _Resolver(Protocol):
@@ -109,12 +115,14 @@ class GateAddon:
         db_session_factory: DBSessionFactory,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
+        snapshot_policy: SnapshotEgressPolicy | None = None,
     ) -> None:
         self._identity = identity
         self._action_matcher = action_matcher
         self._db_session_factory = db_session_factory
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
+        self._snapshot_policy = snapshot_policy
         # Invariant: `_persist_approval_row` is the only writer;
         # `_await_decision`'s finally is the only remover.
         self._parked = ParkedApprovals()
@@ -127,11 +135,66 @@ class GateAddon:
     # mitmproxy hook
     # ------------------------------------------------------------------
 
+    async def requestheaders(self, flow: http.HTTPFlow) -> None:
+        """Opt a tenant-scoped snapshot upload into unbuffered streaming.
+
+        Must run here, not in `request`: mitmproxy only honors
+        `flow.request.stream = True` while headers are in hand and the
+        body hasn't been read yet. Host/path/tenant are all available
+        at this point, so the flow stays inspectable — only the opaque
+        `tar.gz` body is left unbuffered.
+
+        Anything not confirmed as the resolving tenant's own snapshot
+        egress is left untouched and falls through to `request`'s
+        normal cap + matcher path (so a mismatched tenant / host still
+        hits the fail-closed body cap).
+        """
+        policy = self._snapshot_policy
+        if policy is None:
+            return
+        if not policy.host_matches(flow.request.host):
+            return
+
+        src_ip = self._extract_src_ip(flow)
+        if src_ip is None:
+            return
+        try:
+            sandbox = self._identity.resolve_sandbox(src_ip)
+        except Exception:
+            # Let `request` re-resolve and fail closed on the DB error.
+            return
+        if sandbox is None:
+            return
+
+        if not policy.should_stream(
+            host=flow.request.host,
+            port=flow.request.port,
+            path_components=tuple(flow.request.path_components),
+            tenant_id=sandbox.tenant_id,
+        ):
+            return
+
+        flow.request.stream = True
+        flow.metadata[_SNAPSHOT_STREAM_FLAG] = True
+        logger.info(
+            "gate.snapshot_stream sandbox_id=%s tenant_id=%s host=%s method=%s",
+            sandbox.sandbox_id,
+            sandbox.tenant_id,
+            flow.request.host,
+            flow.request.method,
+        )
+
     async def request(self, flow: http.HTTPFlow) -> None:
         task = asyncio.current_task()
         if task is not None:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
+
+        if flow.metadata.get(_SNAPSHOT_STREAM_FLAG):
+            # Identity + tenant-scoped prefix already validated in
+            # `requestheaders`; the body is streaming, so there's
+            # nothing to cap, match, or gate. Forward unchanged.
+            return
 
         gate_target = self._resolve_and_match(flow)
         if gate_target is None:

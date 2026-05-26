@@ -1,7 +1,7 @@
 """Create action_approval table
 
 Revision ID: 366c05b6f485
-Revises: db87b27e93ef
+Revises: b02d7b35e48b
 Create Date: 2026-05-21 09:30:00.000000
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "366c05b6f485"
-down_revision = "db87b27e93ef"
+down_revision = "b02d7b35e48b"
 branch_labels = None
 depends_on = None
 

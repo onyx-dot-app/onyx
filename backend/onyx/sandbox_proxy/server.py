@@ -24,6 +24,7 @@ from onyx.sandbox_proxy.ca_k8s import K8sSecretCAStore
 from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.identity_k8s import K8sInformerLookup
+from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
 from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
@@ -216,6 +217,13 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
+        snapshot_policy = SnapshotEgressPolicy.from_env()
+        if snapshot_policy is not None:
+            logger.info(
+                "snapshot egress streaming enabled bucket=%s endpoint_host=%s",
+                snapshot_policy.bucket,
+                snapshot_policy.endpoint_host,
+            )
         gate = GateAddon(
             identity=identity,
             action_matcher=SlackPostMessageMatcher(),
@@ -224,6 +232,7 @@ def main() -> int:
             ),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
+            snapshot_policy=snapshot_policy,
         )
 
         # DumpMaster's constructor binds to the running event loop.
