@@ -51,15 +51,22 @@ import {
   SvgThumbsDown,
   SvgThumbsUp,
 } from "@opal/icons";
-function QueryHistoryTableRow({
+export function QueryHistoryTableRow({
   chatSessionMinimal,
+  href,
+  onSelect,
+  showUser = true,
 }: {
   chatSessionMinimal: ChatSessionMinimal;
+  href?: Route;
+  onSelect?: () => void;
+  showUser?: boolean;
 }) {
   return (
     <TableRow
       key={chatSessionMinimal.id}
       className="hover:bg-accent-background cursor-pointer relative select-none"
+      onClick={onSelect}
     >
       <TableCell className="max-w-xs">
         <Text className="whitespace-normal line-clamp-5">
@@ -76,25 +83,27 @@ function QueryHistoryTableRow({
       <TableCell>
         <FeedbackBadge feedback={chatSessionMinimal.feedback_type} />
       </TableCell>
-      <TableCell>{chatSessionMinimal.user_email || "-"}</TableCell>
+      {showUser && (
+        <TableCell>{chatSessionMinimal.user_email || "-"}</TableCell>
+      )}
       <TableCell>{chatSessionMinimal.assistant_name || "Unknown"}</TableCell>
       <TableCell>
         {timestampToReadableDate(chatSessionMinimal.time_created)}
       </TableCell>
-      {/* Wrapping in <td> to avoid console warnings */}
-      <td className="w-0 p-0">
-        <Link
-          href={
-            `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
-          }
-          className="absolute w-full h-full left-0 top-0"
-        ></Link>
-      </td>
+      {href && (
+        // Wrapping in <td> to avoid console warnings.
+        <td className="w-0 p-0">
+          <Link
+            href={href}
+            className="absolute w-full h-full left-0 top-0"
+          ></Link>
+        </td>
+      )}
     </TableRow>
   );
 }
 
-function SelectFeedbackType({
+export function SelectFeedbackType({
   value,
   onValueChange,
 }: {
@@ -356,6 +365,9 @@ export function QueryHistoryTable() {
                   <QueryHistoryTableRow
                     key={chatSessionMinimal.id}
                     chatSessionMinimal={chatSessionMinimal}
+                    href={
+                      `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
+                    }
                   />
                 ))}
               </TableBody>

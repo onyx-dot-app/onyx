@@ -35,7 +35,7 @@ export interface MessageSnapshot {
 }
 
 export interface ChatSessionSnapshot {
-  id: number;
+  id: string;
   user_email: string | null;
   name: string | null;
   messages: MessageSnapshot[];
@@ -46,7 +46,7 @@ export interface ChatSessionSnapshot {
 }
 
 export interface ChatSessionMinimal {
-  id: number;
+  id: string;
   user_email: string | null;
   name: string | null;
   first_user_message: string;

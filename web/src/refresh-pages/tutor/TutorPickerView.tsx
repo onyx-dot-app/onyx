@@ -17,6 +17,7 @@ import { useUser } from "@/providers/UserProvider";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
+import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
 
 interface TutorPickerViewProps {
   ltiContextId: string;
@@ -32,6 +33,7 @@ export default function TutorPickerView({
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
   const isInstructor = isAdmin || isCurator;
+  const isEmbedded = useEmbeddedMode();
 
   const swrKey = `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
     ltiContextId
@@ -46,6 +48,7 @@ export default function TutorPickerView({
   const buildTutorChatUrl = useCallback(
     (agentId: number) => {
       const params = new URLSearchParams();
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
       params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(agentId));
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
       if (projectId !== null) {
@@ -59,7 +62,7 @@ export default function TutorPickerView({
       }
       return `/tutor?${params.toString()}`;
     },
-    [ltiContextId, projectId, ltiCanvasCourseNodeId]
+    [isEmbedded, ltiContextId, projectId, ltiCanvasCourseNodeId]
   );
 
   const buildEditTutorUrl = useCallback(
