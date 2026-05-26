@@ -79,13 +79,7 @@ function detectSkillName(
   if (!rawName) return null;
   // Match "namespace:skill" or "namespace.skill" patterns
   const match = rawName.match(/^(skills?|superpowers)[.:]([\w-]+)$/);
-  if (match?.[2]) return match[2];
-  // More permissive: any string with one separator and a known skill namespace
-  const sep = rawName.match(/^([\w-]+)[.:]([\w-]+)$/);
-  if (sep && (sep[1] === "skill" || sep[1] === "skills")) {
-    return sep[2] ?? null;
-  }
-  return null;
+  return match?.[2] ?? null;
 }
 
 // ─── Tool Name Resolution ─────────────────────────────────────────
