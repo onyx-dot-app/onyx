@@ -35,8 +35,8 @@ Codex, and the opencode TUI.
    stray `StreamItem` into the parent transcript
    (`useBuildStreaming.ts:287-296`). There's no way to view the subagent's
    own activity — its tool calls, thinking, and message stream are
-   invisible. The backend already exposes
-   `GET /sessions/{id}/subagents/{cid}/events`; we just don't consume it.
+   invisible. A subagent event-stream endpoint would let us render this
+   as a panel; that endpoint is not yet built.
 
 6. **Skills are not first-class.** Skill invocations currently look like any
    other tool call. There's no badge, no namespace hint, no visual cue that
@@ -97,9 +97,11 @@ Codex, and the opencode TUI.
 
 ### Backend hooks we'll lean on
 
-- `GET /sessions/{id}/subagents/{child_opencode_id}/events` (SSE) —
-  already shipped. Subagent panel consumes it. Each subagent has its own
-  opencode session ID stored alongside the parent's `tool_call`.
+- A subagent event-stream endpoint (e.g.
+  `GET /sessions/{id}/subagents/{child_opencode_id}/events`) is **not
+  yet built** — it's a prerequisite for the SubagentPanel work and is
+  flagged in the Deferred section below. The current `TaskBody` renders
+  the subagent prompt + final output inline without the live stream.
 - Skill invocations come through the same `tool_call_start` /
   `tool_call_progress` packets but with a `skills.<name>` tool name (or a
   similar namespacing convention — to confirm during Phase 1 by spot-
@@ -141,12 +143,13 @@ Lives under `web/src/app/craft/components/tool-cards/`:
 | `todowrite`          | (use existing `TodoListCard`, light polish) | Already specialized. Leave alone except for visual-token cleanup.                                                              |
 | `other` / `unknown`  | `GenericBody`    | Falls back to today's behavior (raw output block, no specialization). Safety net so we never render nothing.                                              |
 
-`SubagentPanel` (in `tool-cards/subagent/`) hosts its own
+`SubagentPanel` (in `tool-cards/subagent/`) would host its own
 `BuildMessageList` — recursive, since a subagent can itself spawn
-subagents. It subscribes to `GET /sessions/{id}/subagents/{cid}/events`
-via a new hook (e.g. `useSubagentStream`). `SubagentFooter` gives
-prev/next navigation across sibling subagents within the same parent
-turn, mirroring the opencode TUI.
+subagents. It would subscribe to a subagent event-stream endpoint
+via a new hook (e.g. `useSubagentStream`). `SubagentFooter` would
+give prev/next navigation across sibling subagents within the same
+parent turn, mirroring the opencode TUI. This is **deferred** until
+the backend endpoint exists.
 
 ### C. Cross-cutting polish
 
