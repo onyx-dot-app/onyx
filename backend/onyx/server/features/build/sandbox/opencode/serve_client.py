@@ -115,11 +115,10 @@ class _TurnState:
     assistant_message_ids: set[str] = field(default_factory=set)
     # PartID → "text" | "reasoning" | "tool" | ... (the delta routes on this).
     part_types: dict[str, str] = field(default_factory=dict)
-    # MessageIDs confirmed non-assistant — caches the negative hydrate result.
+    # MessageIDs we've ruled out as assistant (user role, malformed body,
+    # or fetch failed). Kept so subsequent deltas short-circuit without
+    # re-issuing the REST hydrate.
     user_message_ids: set[str] = field(default_factory=set)
-    # GET /session/{id}/message/{id} — hydrates role + parts when a delta
-    # arrives before message.updated (races by up to ~300ms in practice).
-    fetch_message: Callable[[str], dict[str, Any] | None] | None = None
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -266,17 +265,21 @@ def _wrap_raw_output(state: dict[str, Any]) -> dict[str, Any] | None:
     return {"output": str(out)}
 
 
-def _hydrate_message(state: _TurnState, msg_id: str) -> str | None:
+def _hydrate_message(
+    state: _TurnState,
+    msg_id: str,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> str | None:
     """REST-fetch a message, populate caches, return role (or None).
 
     Negative results (fetch failure or unknown role) are cached in
     ``user_message_ids`` so ``_is_assistant_message`` short-circuits on
     subsequent deltas instead of re-issuing REST calls.
     """
-    if state.fetch_message is None:
+    if fetch_message is None:
         state.user_message_ids.add(msg_id)
         return None
-    body = state.fetch_message(msg_id)
+    body = fetch_message(msg_id)
     if not body:
         logger.warning("hydrate(%s): empty/failed fetch", msg_id)
         state.user_message_ids.add(msg_id)
@@ -309,7 +312,11 @@ def _hydrate_message(state: _TurnState, msg_id: str) -> str | None:
     return role if isinstance(role, str) else None
 
 
-def _is_assistant_message(state: _TurnState, msg_id: str | None) -> bool:
+def _is_assistant_message(
+    state: _TurnState,
+    msg_id: str | None,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> bool:
     """True if msg_id is a known assistant message, hydrating once if needed."""
     if not isinstance(msg_id, str):
         return False
@@ -317,17 +324,20 @@ def _is_assistant_message(state: _TurnState, msg_id: str | None) -> bool:
         return True
     if msg_id in state.user_message_ids:
         return False
-    return _hydrate_message(state, msg_id) == "assistant"
+    return _hydrate_message(state, msg_id, fetch_message) == "assistant"
 
 
 # ---------------------------------------------------------------------------
-# translate_opencode_event — pure function (no I/O of its own; hydration
-# is delegated to ``state.fetch_message``).
+# translate_opencode_event — translation has no I/O of its own. Hydration of
+# unknown messageIDs (the delta-before-message.updated race) is delegated to
+# the optional ``fetch_message`` callable injected by the caller.
 # ---------------------------------------------------------------------------
 
 
 def translate_opencode_event(
-    raw: dict[str, Any], state: _TurnState
+    raw: dict[str, Any],
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None = None,
 ) -> Iterable[ACPEvent]:
     """Convert one opencode ``/event`` payload into zero-or-more ACPEvents.
 
@@ -367,7 +377,7 @@ def translate_opencode_event(
             return
         # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
         # _is_assistant_message hydrates via REST when the role is unknown.
-        if not _is_assistant_message(state, msg_id):
+        if not _is_assistant_message(state, msg_id, fetch_message):
             return
         if field_name != "text":
             # Non-text fields (e.g. tool input streaming, future extensions)
@@ -419,13 +429,13 @@ def translate_opencode_event(
             state.part_types[part_id_for_state] = part_type
 
         if part_type == "reasoning":
-            if not _is_assistant_message(state, part.get("messageID")):
+            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
             yield from _reconcile_reasoning_part(part, state)
             return
 
         if part_type == "text":
-            if not _is_assistant_message(state, part.get("messageID")):
+            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
             yield from _reconcile_text_part(part, state)
             return
@@ -919,10 +929,11 @@ class OpencodeServeClient:
                 "construct the client with event_bus=PodEventBus(...)"
             )
 
-        state = _TurnState(
-            session_id=opencode_session_id,
-            fetch_message=lambda mid: self.get_message(opencode_session_id, mid),
-        )
+        state = _TurnState(session_id=opencode_session_id)
+
+        def fetch_message(mid: str) -> dict[str, Any] | None:
+            return self.get_message(opencode_session_id, mid)
+
         sub = self._event_bus.subscribe(opencode_session_id)
         try:
             # Block until the bus reader has the stream open, else we'd
@@ -956,7 +967,9 @@ class OpencodeServeClient:
                 )
                 return
 
-            yield from self._consume_from_bus(sub, timeout, opencode_session_id, state)
+            yield from self._consume_from_bus(
+                sub, timeout, opencode_session_id, state, fetch_message
+            )
 
         except GeneratorExit:
             self.abort(opencode_session_id)
@@ -970,6 +983,7 @@ class OpencodeServeClient:
         timeout: float,
         opencode_session_id: str,
         state: _TurnState,
+        fetch_message: Callable[[str], dict[str, Any] | None],
     ) -> Generator[ACPEvent, None, None]:
         """Drain the bus queue, translate, yield until a
         :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
@@ -1010,7 +1024,7 @@ class OpencodeServeClient:
             if raw.get("type") == "server.connected":
                 continue
 
-            for acp_event in translate_opencode_event(raw, state):
+            for acp_event in translate_opencode_event(raw, state, fetch_message):
                 if isinstance(acp_event, PromptResponse):
                     terminated_locally = True
                 yield acp_event
