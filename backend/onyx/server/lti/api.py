@@ -53,6 +53,7 @@ from onyx.db.connector import fetch_canvas_cc_pair_for_lti_course
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
+from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingMode
@@ -64,6 +65,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import ConnectorBase
+from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import CredentialBase
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.lti.jwks import get_public_jwks
@@ -379,7 +381,26 @@ def _build_lti_course_connector_status(
             secondary_index=False,
             only_finished=False,
         )
-        total_docs_indexed = cc_pair.total_docs_indexed or 0
+        indexed_document_counts = get_document_counts_for_cc_pairs(
+            db_session=db_session,
+            cc_pairs=[
+                ConnectorCredentialPairIdentifier(
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                )
+            ],
+        )
+        indexed_document_count = (
+            indexed_document_counts[0][2] if indexed_document_counts else 0
+        )
+        latest_attempt_docs_indexed = (
+            latest_attempt.total_docs_indexed if latest_attempt else 0
+        ) or 0
+        total_docs_indexed = max(
+            cc_pair.total_docs_indexed or 0,
+            latest_attempt_docs_indexed,
+            indexed_document_count,
+        )
         status.update(
             {
                 "cc_pair_id": cc_pair.id,
@@ -389,7 +410,7 @@ def _build_lti_course_connector_status(
                 "indexing_status": latest_attempt.status if latest_attempt else None,
                 "indexing_trigger": cc_pair.indexing_trigger,
                 "total_docs_indexed": total_docs_indexed,
-                "has_indexed_documents": total_docs_indexed > 0,
+                "has_indexed_documents": indexed_document_count > 0,
                 "last_successful_index_time": cc_pair.last_successful_index_time,
             }
         )

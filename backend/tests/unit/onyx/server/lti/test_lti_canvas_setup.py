@@ -1,4 +1,6 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -109,3 +111,41 @@ def test_resolve_canvas_api_course_rejects_inaccessible_canvas_course_id() -> No
         api._resolve_canvas_api_course(canvas_client, launch_context)
 
     assert exc_info.value.error_code == OnyxErrorCode.CREDENTIAL_INVALID
+
+
+@patch("onyx.server.lti.api.get_document_counts_for_cc_pairs")
+@patch("onyx.server.lti.api.get_latest_index_attempt_for_cc_pair_id")
+@patch("onyx.server.lti.api.fetch_canvas_cc_pair_for_lti_course")
+def test_lti_course_connector_status_uses_indexed_document_relationship(
+    mock_fetch_cc_pair: MagicMock,
+    mock_latest_attempt: MagicMock,
+    mock_document_counts: MagicMock,
+) -> None:
+    mock_fetch_cc_pair.return_value = SimpleNamespace(
+        id=10,
+        connector_id=20,
+        credential_id=30,
+        status="ACTIVE",
+        indexing_trigger=None,
+        total_docs_indexed=0,
+        last_successful_index_time=None,
+    )
+    mock_latest_attempt.return_value = SimpleNamespace(
+        status="success",
+        total_docs_indexed=0,
+    )
+    mock_document_counts.return_value = [(20, 30, 1)]
+    launch_context = LtiLaunchContext(
+        course_id="opaque-lti-context",
+        roles=[],
+    )
+
+    status = api._build_lti_course_connector_status(
+        course_id="opaque-lti-context",
+        launch_context=launch_context,
+        db_session=MagicMock(),
+    )
+
+    assert status["has_connector"] is True
+    assert status["has_indexed_documents"] is True
+    assert status["total_docs_indexed"] == 1
