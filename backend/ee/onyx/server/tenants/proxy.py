@@ -27,6 +27,7 @@ from fastapi import Depends
 from fastapi import Header
 from fastapi import HTTPException
 from pydantic import BaseModel
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
@@ -394,7 +395,15 @@ async def proxy_billing_information(
         )
 
     if cached is not None:
-        return BillingInformationResponse.model_validate_json(cached)
+        try:
+            return BillingInformationResponse.model_validate_json(cached)
+        except ValidationError as exc:
+            # Stale schema or partial write — fall through to live proxy.
+            logger.warning(
+                "Billing info cache deserialize failed for tenant %s: %s",
+                tenant_id,
+                exc,
+            )
 
     result = await forward_to_control_plane(
         "GET", "/billing-information", params={"tenant_id": tenant_id}
