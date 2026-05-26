@@ -205,13 +205,9 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-h2==4.3.0
-    # via httpx
 hatchling==1.28.0
 hf-xet==1.4.3 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
-hpack==4.1.0
-    # via h2
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
@@ -227,8 +223,6 @@ httpx-sse==0.4.3
     #   mcp
 huggingface-hub==0.36.2
     # via tokenizers
-hyperframe==6.1.0
-    # via h2
 identify==2.6.15
     # via pre-commit
 idna==3.11
@@ -238,12 +232,7 @@ idna==3.11
     #   requests
     #   yarl
 importlib-metadata==8.7.0
-    # via
-    #   google-api-core
-    #   jupyter-client
-    #   litellm
-    #   sqlalchemy
-    #   virtualenv
+    # via litellm
 iniconfig==2.3.0
     # via pytest
 ipykernel==6.29.5
@@ -262,11 +251,10 @@ jmespath==1.0.1
     #   aiobotocore
     #   boto3
     #   botocore
-jsonschema==4.23.0
+jsonschema==4.25.1
     # via
     #   litellm
     #   mcp
-    #   onyx
 jsonschema-specifications==2025.9.1
     # via jsonschema
 jupyter-client==8.6.3
@@ -279,7 +267,7 @@ kiwisolver==1.4.9
     # via matplotlib
 kubernetes==31.0.0
     # via onyx
-litellm==1.83.14
+litellm==1.85.1
     # via onyx
 mako==1.3.11
     # via alembic
@@ -317,7 +305,7 @@ oauthlib==3.2.2
     #   kubernetes
     #   requests-oauthlib
 onyx-devtools==0.7.6
-openai==2.14.0
+openai==2.38.0
     # via
     #   litellm
     #   onyx
@@ -523,7 +511,7 @@ tenacity==9.1.2
     # via
     #   google-genai
     #   voyageai
-tiktoken==0.7.0
+tiktoken==0.8.0
     # via litellm
 tokenizers==0.22.2
     # via

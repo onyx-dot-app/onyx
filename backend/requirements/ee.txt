@@ -165,12 +165,8 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-h2==4.3.0
-    # via httpx
 hf-xet==1.4.3 ; platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
-hpack==4.1.0
-    # via h2
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
@@ -186,8 +182,6 @@ httpx-sse==0.4.3
     #   mcp
 huggingface-hub==0.36.2
     # via tokenizers
-hyperframe==6.1.0
-    # via h2
 idna==3.11
     # via
     #   anyio
@@ -195,9 +189,7 @@ idna==3.11
     #   requests
     #   yarl
 importlib-metadata==8.7.0
-    # via
-    #   google-api-core
-    #   litellm
+    # via litellm
 jinja2==3.1.6
     # via litellm
 jiter==0.12.0
@@ -207,16 +199,15 @@ jmespath==1.0.1
     #   aiobotocore
     #   boto3
     #   botocore
-jsonschema==4.23.0
+jsonschema==4.25.1
     # via
     #   litellm
     #   mcp
-    #   onyx
 jsonschema-specifications==2025.9.1
     # via jsonschema
 kubernetes==31.0.0
     # via onyx
-litellm==1.83.14
+litellm==1.85.1
     # via onyx
 markupsafe==3.0.3
     # via jinja2
@@ -235,7 +226,7 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-openai==2.14.0
+openai==2.38.0
     # via
     #   litellm
     #   onyx
@@ -371,7 +362,7 @@ tenacity==9.1.2
     # via
     #   google-genai
     #   voyageai
-tiktoken==0.7.0
+tiktoken==0.8.0
     # via litellm
 tokenizers==0.22.2
     # via
