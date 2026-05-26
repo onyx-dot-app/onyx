@@ -324,7 +324,7 @@ export default function TutorInstructorKnowledge() {
             tooltip={forceReindexTooltip}
             onClick={() => void handleForceReindex()}
           >
-            Force Re-Index
+            Sync Canvas
           </Button>
         }
       />

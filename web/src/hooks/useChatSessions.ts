@@ -24,6 +24,11 @@ interface ChatSessionsResponse {
   has_more: boolean;
 }
 
+export interface UseChatSessionsOptions {
+  projectId?: number | null;
+  onlyNonProjectChats?: boolean;
+}
+
 export interface PendingChatSessionParams {
   chatSessionId: string;
   personaId: number;
@@ -95,6 +100,51 @@ const pendingSessionsStore = {
 // Stable empty array for SSR
 const EMPTY_SESSIONS: ChatSession[] = [];
 
+function buildChatSessionsQueryParams({
+  pageSize,
+  before,
+  options,
+}: {
+  pageSize: number;
+  before?: string;
+  options?: UseChatSessionsOptions;
+}): URLSearchParams {
+  const params = new URLSearchParams({
+    page_size: pageSize.toString(),
+  });
+
+  if (before) {
+    params.set("before", before);
+  }
+
+  if (options?.projectId != null) {
+    params.set("project_id", options.projectId.toString());
+    params.set("only_non_project_chats", "false");
+  } else if (options?.onlyNonProjectChats !== undefined) {
+    params.set(
+      "only_non_project_chats",
+      options.onlyNonProjectChats.toString()
+    );
+  }
+
+  return params;
+}
+
+function chatSessionMatchesOptions(
+  session: ChatSession,
+  options?: UseChatSessionsOptions
+): boolean {
+  if (options?.projectId != null) {
+    return session.project_id === options.projectId;
+  }
+
+  if (options?.onlyNonProjectChats === false) {
+    return true;
+  }
+
+  return session.project_id == null;
+}
+
 function usePendingSessions(): ChatSession[] {
   return useSyncExternalStore(
     (callback) => pendingSessionsStore.subscribe(callback),
@@ -137,7 +187,9 @@ function useFindAgentForCurrentChatSession(
 // Main hook
 // ---------------------------------------------------------------------------
 
-export default function useChatSessions(): UseChatSessionsOutput {
+export default function useChatSessions(
+  options?: UseChatSessionsOptions
+): UseChatSessionsOutput {
   const getKey = (
     pageIndex: number,
     previousPageData: ChatSessionsResponse | null
@@ -147,7 +199,10 @@ export default function useChatSessions(): UseChatSessionsOutput {
 
     // First page — no cursor
     if (pageIndex === 0) {
-      return `${SWR_KEYS.chatSessions}?page_size=${PAGE_SIZE}`;
+      return `${SWR_KEYS.chatSessions}?${buildChatSessionsQueryParams({
+        pageSize: PAGE_SIZE,
+        options,
+      }).toString()}`;
     }
 
     // Subsequent pages — cursor from the last session of the previous page
@@ -155,9 +210,10 @@ export default function useChatSessions(): UseChatSessionsOutput {
       previousPageData!.sessions[previousPageData!.sessions.length - 1];
     if (!lastSession) return null;
 
-    const params = new URLSearchParams({
-      page_size: PAGE_SIZE.toString(),
+    const params = buildChatSessionsQueryParams({
+      pageSize: PAGE_SIZE,
       before: lastSession.time_updated,
+      options,
     });
     return `${SWR_KEYS.chatSessions}?${params.toString()}`;
   };
@@ -176,6 +232,13 @@ export default function useChatSessions(): UseChatSessionsOutput {
 
   const appFocus = useAppFocus();
   const pendingSessions = usePendingSessions();
+  const pendingSessionsForOptions = useMemo(
+    () =>
+      pendingSessions.filter((session) =>
+        chatSessionMatchesOptions(session, options)
+      ),
+    [options, pendingSessions]
+  );
 
   // Flatten all pages into a single session list
   const allFetchedSessions = useMemo(
@@ -219,12 +282,12 @@ export default function useChatSessions(): UseChatSessionsOutput {
   // (they now have messages and the server returns them)
   useEffect(() => {
     const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
-    pendingSessions.forEach((pending) => {
+    pendingSessionsForOptions.forEach((pending) => {
       if (fetchedIds.has(pending.id)) {
         pendingSessionsStore.remove(pending.id);
       }
     });
-  }, [allFetchedSessions, pendingSessions]);
+  }, [allFetchedSessions, pendingSessionsForOptions]);
 
   // Merge fetched sessions with pending sessions.
   // This ensures pending sessions persist across SWR revalidations.
@@ -232,13 +295,13 @@ export default function useChatSessions(): UseChatSessionsOutput {
     const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
 
     // Get pending sessions that are not yet in fetched data
-    const remainingPending = pendingSessions.filter(
+    const remainingPending = pendingSessionsForOptions.filter(
       (pending) => !fetchedIds.has(pending.id)
     );
 
     // Pending sessions go first (most recent), then fetched sessions
     return [...remainingPending, ...allFetchedSessions];
-  }, [allFetchedSessions, pendingSessions]);
+  }, [allFetchedSessions, pendingSessionsForOptions]);
 
   const currentChatSessionId = appFocus.isChat() ? appFocus.getId() : null;
   const currentChatSession =

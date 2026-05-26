@@ -61,7 +61,9 @@ import {
 } from "next/navigation";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { getExtensionContext } from "@/lib/extension/utils";
-import useChatSessions from "@/hooks/useChatSessions";
+import useChatSessions, {
+  type UseChatSessionsOptions,
+} from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/hooks/useAgents";
 import {
   useChatSessionStore,
@@ -116,6 +118,7 @@ interface UseChatControllerProps {
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
   setSelectedAgentFromId: (agentId: number | null) => void;
+  chatSessionsOptions?: UseChatSessionsOptions;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -140,12 +143,14 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
   setSelectedAgentFromId,
+  chatSessionsOptions,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useAppParams();
-  const { refreshChatSessions, addPendingChatSession } = useChatSessions();
+  const { refreshChatSessions, addPendingChatSession } =
+    useChatSessions(chatSessionsOptions);
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { agentPreferences } = useAgentPreferences();
   const { forcedToolIds } = useForcedTools();

@@ -11,10 +11,13 @@ import {
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import type { ChatSession } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import { useAgents } from "@/hooks/useAgents";
-import useChatSessions from "@/hooks/useChatSessions";
+import useChatSessions, {
+  type UseChatSessionsOptions,
+} from "@/hooks/useChatSessions";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useAgentController from "@/hooks/useAgentController";
@@ -108,16 +111,15 @@ export default function TutorChatPage() {
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
   // The set of tutors that belong to the current Canvas course. Used to scope
-  // the History panel to only conversations with this course's tutors.
+  // the History modal to only conversations with this course's tutors.
   const courseTutorsSwrKey = ltiContextId
     ? `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
         ltiContextId
       )}`
     : null;
-  const { data: courseTutors } = useSWR<MinimalPersonaSnapshot[]>(
-    courseTutorsSwrKey,
-    errorHandlingFetcher
-  );
+  const { data: courseTutors, isLoading: isLoadingCourseTutors } = useSWR<
+    MinimalPersonaSnapshot[]
+  >(courseTutorsSwrKey, errorHandlingFetcher);
   const courseConnectorStatusSwrKey = ltiContextId
     ? `/api/auth/lti/course/${encodeURIComponent(
         ltiContextId
@@ -143,6 +145,10 @@ export default function TutorChatPage() {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));
   }, [courseTutors]);
+  const courseTutorNameById = useMemo(() => {
+    if (!courseTutors) return null;
+    return new Map(courseTutors.map((t) => [t.id, t.name]));
+  }, [courseTutors]);
   const isFirstTutorSetupScreen =
     ltiContextId !== null &&
     assistantId === null &&
@@ -154,13 +160,29 @@ export default function TutorChatPage() {
   const isStudentWithSoleTutor =
     !canManageCourseTutors && courseTutors?.length === 1;
   const showTutorsSidebarTab = !isStudentWithSoleTutor;
+  const tutorChatSessionsOptions = useMemo<
+    UseChatSessionsOptions | undefined
+  >(() => {
+    if (projectId === null) {
+      return undefined;
+    }
+
+    return {
+      projectId,
+      onlyNonProjectChats: false,
+    };
+  }, [projectId]);
 
   const {
     chatSessions,
     refreshChatSessions,
     currentChatSession,
     currentChatSessionId,
-  } = useChatSessions();
+    isLoading: isLoadingChatSessions,
+    hasMore: hasMoreChatSessions,
+    isLoadingMore: isLoadingMoreChatSessions,
+    loadMore: loadMoreChatSessions,
+  } = useChatSessions(tutorChatSessionsOptions);
   const { currentMessageFiles, setCurrentMessageFiles } = useProjectsContext();
 
   // Find the tutor agent
@@ -202,6 +224,7 @@ export default function TutorChatPage() {
     searchParams,
     resetInputBar,
     setSelectedAgentFromId,
+    chatSessionsOptions: tutorChatSessionsOptions,
   });
 
   const { onMessageSelection, currentSessionFileTokenCount } =
@@ -298,12 +321,15 @@ export default function TutorChatPage() {
 
   // Select a session from history
   const handleSelectSession = useCallback(
-    (sessionId: string) => {
+    (session: ChatSession) => {
       const params = new URLSearchParams();
       if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
-      params.set(SEARCH_PARAM_NAMES.CHAT_ID, sessionId);
-      if (assistantId)
+      params.set(SEARCH_PARAM_NAMES.CHAT_ID, session.id);
+      if (session.persona_id) {
+        params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(session.persona_id));
+      } else if (assistantId) {
         params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(assistantId));
+      }
       if (projectId)
         params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
       if (ltiContextId)
@@ -354,7 +380,7 @@ export default function TutorChatPage() {
     });
   }, [messageHistory, onSubmit, currentMessageFiles]);
 
-  // Toggle history panel
+  // Toggle history modal
   const toggleHistory = useCallback(() => {
     setHistoryOpen((prev) => !prev);
   }, []);
@@ -538,121 +564,133 @@ export default function TutorChatPage() {
   const hasMessages = currentChatSessionId && messageHistory.length > 0;
   const hasStarterMessages =
     (effectiveAgent?.starter_messages?.length ?? 0) > 0;
+  const isHistoryLoading =
+    isLoadingChatSessions ||
+    (projectId === null && ltiContextId !== null && isLoadingCourseTutors);
 
   return renderWithInstructorShell(
-    <div className="flex h-full w-full">
-      {/* History panel (collapsible) */}
-      {historyOpen && (
-        <TutorHistoryPanel
-          sessions={chatSessions}
-          currentSessionId={currentChatSessionId}
-          allowedPersonaIds={courseTutorIds}
-          onSelectSession={handleSelectSession}
-          onClose={() => setHistoryOpen(false)}
-        />
-      )}
+    <>
+      <TutorHistoryPanel
+        open={historyOpen}
+        sessions={chatSessions}
+        currentSessionId={currentChatSessionId}
+        allowedPersonaIds={courseTutorIds}
+        personaNameById={courseTutorNameById}
+        isLoading={isHistoryLoading}
+        hasMore={hasMoreChatSessions}
+        isLoadingMore={isLoadingMoreChatSessions}
+        onLoadMore={loadMoreChatSessions}
+        onSelectSession={handleSelectSession}
+        onClose={() => setHistoryOpen(false)}
+      />
 
-      {/* Main chat area */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {!showTutorSidebar && (
-          <TutorChatHeader
-            agent={effectiveAgent ?? null}
-            courseName={courseName}
-            onNewConversation={handleNewConversation}
-            onToggleHistory={toggleHistory}
-            historyOpen={historyOpen}
-            onManageTutors={
-              canManageCourseTutors && ltiContextId ? handleManageTutors : null
-            }
-          />
-        )}
+      <div className="flex h-full w-full">
+        {/* Main chat area */}
+        <div className="flex flex-col flex-1 min-w-0">
+          {!showTutorSidebar && (
+            <TutorChatHeader
+              agent={effectiveAgent ?? null}
+              courseName={courseName}
+              onNewConversation={handleNewConversation}
+              onToggleHistory={toggleHistory}
+              historyOpen={historyOpen}
+              onManageTutors={
+                canManageCourseTutors && ltiContextId
+                  ? handleManageTutors
+                  : null
+              }
+            />
+          )}
 
-        <Dropzone
-          onDrop={(files) => handleMessageSpecificFileUpload(files)}
-          noClick
-        >
-          {({ getRootProps }) => (
-            <div
-              className={`flex-1 flex flex-col items-center min-h-0 outline-none ${
-                showTutorSidebar ? "pt-3" : ""
-              }`}
-              {...getRootProps({ tabIndex: -1 })}
-            >
-              {/* Chat messages or suggestions */}
-              <div className="flex-1 w-full min-h-0 flex flex-col items-center">
-                {hasMessages && effectiveAgent ? (
-                  <ChatScrollContainer
-                    ref={scrollContainerRef}
-                    sessionId={currentChatSessionId!}
-                    anchorSelector={anchorSelector}
-                    autoScroll={autoScrollEnabled}
-                    isStreaming={isStreaming}
-                    onScrollButtonVisibilityChange={setShowScrollButton}
-                  >
-                    <ChatUI
-                      liveAgent={effectiveAgent}
-                      llmManager={llmManager}
-                      deepResearchEnabled={false}
-                      currentMessageFiles={currentMessageFiles}
-                      setPresentingDocument={() => {}}
-                      onSubmit={onSubmit}
-                      onMessageSelection={onMessageSelection}
-                      stopGenerating={stopGenerating}
-                      onResubmit={handleResubmit}
-                      anchorNodeId={anchorNodeId}
-                    />
-                  </ChatScrollContainer>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-end w-full max-w-[720px] mx-auto pb-4">
-                    {hasStarterMessages && effectiveAgent && (
-                      <TutorSuggestions
-                        agent={effectiveAgent}
+          <Dropzone
+            onDrop={(files) => handleMessageSpecificFileUpload(files)}
+            noClick
+          >
+            {({ getRootProps }) => (
+              <div
+                className={`flex-1 flex flex-col items-center min-h-0 outline-none ${
+                  showTutorSidebar ? "pt-3" : ""
+                }`}
+                {...getRootProps({ tabIndex: -1 })}
+              >
+                {/* Chat messages or suggestions */}
+                <div className="flex-1 w-full min-h-0 flex flex-col items-center">
+                  {hasMessages && effectiveAgent ? (
+                    <ChatScrollContainer
+                      ref={scrollContainerRef}
+                      sessionId={currentChatSessionId!}
+                      anchorSelector={anchorSelector}
+                      autoScroll={autoScrollEnabled}
+                      isStreaming={isStreaming}
+                      onScrollButtonVisibilityChange={setShowScrollButton}
+                    >
+                      <ChatUI
+                        liveAgent={effectiveAgent}
+                        llmManager={llmManager}
+                        deepResearchEnabled={false}
+                        currentMessageFiles={currentMessageFiles}
+                        setPresentingDocument={() => {}}
                         onSubmit={onSubmit}
+                        onMessageSelection={onMessageSelection}
+                        stopGenerating={stopGenerating}
+                        onResubmit={handleResubmit}
+                        anchorNodeId={anchorNodeId}
                       />
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Input bar */}
-              <div className="w-full flex flex-col items-center px-4 pb-3">
-                <div className="relative w-full max-w-[720px]">
-                  {/* Scroll to bottom button */}
-                  {hasMessages && showScrollButton && (
-                    <div className="absolute top-[-3.5rem] self-center left-1/2 -translate-x-1/2">
-                      <Button
-                        icon={SvgChevronDown}
-                        onClick={handleScrollToBottom}
-                        aria-label="Scroll to bottom"
-                        prominence="secondary"
-                      />
+                    </ChatScrollContainer>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-end w-full max-w-[720px] mx-auto pb-4">
+                      {hasStarterMessages && effectiveAgent && (
+                        <TutorSuggestions
+                          agent={effectiveAgent}
+                          onSubmit={onSubmit}
+                        />
+                      )}
                     </div>
                   )}
-                  <AppInputBar
-                    ref={chatInputBarRef}
-                    deepResearchEnabled={false}
-                    toggleDeepResearch={() => {}}
-                    filterManager={filterManager}
-                    llmManager={llmManager}
-                    stopGenerating={stopGenerating}
-                    onSubmit={handleSubmit}
-                    chatState={currentChatState}
-                    currentSessionFileTokenCount={currentSessionFileTokenCount}
-                    availableContextTokens={availableContextTokens}
-                    selectedAgent={effectiveAgent}
-                    handleFileUpload={handleMessageSpecificFileUpload}
-                    setPresentingDocument={() => {}}
-                    disabled={
-                      !llmManager.isLoadingProviders &&
-                      llmManager.hasAnyProvider === false
-                    }
-                  />
+                </div>
+
+                {/* Input bar */}
+                <div className="w-full flex flex-col items-center px-4 pb-3">
+                  <div className="relative w-full max-w-[720px]">
+                    {/* Scroll to bottom button */}
+                    {hasMessages && showScrollButton && (
+                      <div className="absolute top-[-3.5rem] self-center left-1/2 -translate-x-1/2">
+                        <Button
+                          icon={SvgChevronDown}
+                          onClick={handleScrollToBottom}
+                          aria-label="Scroll to bottom"
+                          prominence="secondary"
+                        />
+                      </div>
+                    )}
+                    <AppInputBar
+                      ref={chatInputBarRef}
+                      deepResearchEnabled={false}
+                      toggleDeepResearch={() => {}}
+                      filterManager={filterManager}
+                      llmManager={llmManager}
+                      stopGenerating={stopGenerating}
+                      onSubmit={handleSubmit}
+                      chatState={currentChatState}
+                      currentSessionFileTokenCount={
+                        currentSessionFileTokenCount
+                      }
+                      availableContextTokens={availableContextTokens}
+                      selectedAgent={effectiveAgent}
+                      handleFileUpload={handleMessageSpecificFileUpload}
+                      setPresentingDocument={() => {}}
+                      disabled={
+                        !llmManager.isLoadingProviders &&
+                        llmManager.hasAnyProvider === false
+                      }
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </Dropzone>
+            )}
+          </Dropzone>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
