@@ -123,6 +123,8 @@ export default function TutorChatPage() {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));
   }, [courseTutors]);
+  const canManageCourseTutors =
+    isInstructor || Boolean(courseConnectorStatus?.setup);
 
   const {
     chatSessions,
@@ -360,6 +362,7 @@ export default function TutorChatPage() {
           ltiContextId={ltiContextId}
           projectId={projectId}
           ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+          canManageTutors={canManageCourseTutors}
         />
       );
     }
@@ -399,7 +402,7 @@ export default function TutorChatPage() {
           onToggleHistory={toggleHistory}
           historyOpen={historyOpen}
           onManageTutors={
-            isInstructor && ltiContextId ? handleManageTutors : null
+            canManageCourseTutors && ltiContextId ? handleManageTutors : null
           }
         />
 
