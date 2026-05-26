@@ -4,53 +4,24 @@ Revision ID: c7bc8cc2921d
 Revises: b02d7b35e48b
 Create Date: 2026-05-26 13:00:00.000000
 
-Drop a set of unused database indexes from each tenant schema.
+Drop unused secondary indexes from KG tables and the redundant index
+on ``chunk_stats.id`` (already covered by its primary key).
 
-Motivation
-----------
-The ``managed_services`` cluster's primary RDS instance hit the EXT4
-htree directory limit on its data volume because the multi-tenant
-deployment (>6,000 tenant schemas) creates the same set of indexes per
-schema, multiplying every redundant index by the tenant count. The
-Knowledge Graph (KG) feature is not in active use on
-``managed_services``: across 6,134 tenants we observed zero index
-scans on the KG indexes (``pg_stat_user_indexes.idx_scan = 0``) over a
-3+ day observation window. We are dropping their non-PK, non-unique
-indexes here.
+These secondary indexes have no observed usage and are not used by
+current queries. Dropping them reduces per-tenant schema size and
+catalog overhead in multi-tenant deployments.
 
-Also included: ``ix_chunk_stats_id``, a redundant b-tree on
-``chunk_stats.id`` that duplicates the primary key index.
+Out of scope: the ``kg_*`` tables themselves, their primary keys, and
+their unique constraints (``uq_*``) are unchanged.
 
-Out of scope: the underlying ``kg_*`` tables and their unique
-constraints (``uq_kg_*``) remain — only secondary indexes are dropped.
-If KG is re-enabled later, the corresponding ``CREATE INDEX``
-statements will need to be reintroduced via a follow-up migration.
+``upgrade()`` is idempotent — each ``DROP INDEX`` uses ``IF EXISTS``.
 
-Manual cleanup already performed
---------------------------------
-The DB-side ``DROP INDEX`` was run manually across all existing tenant
-schemas on 2026-05-26, before this migration shipped. This migration's
-job is to:
-
-  (a) catch any new tenants that received these indexes during
-      provisioning windows that overlapped the manual cleanup, and
-  (b) keep schema state matching the model definitions in this PR (so
-      that ``alembic upgrade head`` on a fresh tenant doesn't leave
-      orphan indexes that don't exist in ``models.py``).
-
-``IF EXISTS`` makes each DROP idempotent.
-
-Downgrade
----------
-``downgrade()`` is intentionally a no-op. These indexes were determined
-to be unused and we don't want to restore them on rollback. If KG
-re-enablement is required, write a forward migration that recreates
-only the indexes that are actually needed for the new workload.
+``downgrade()`` is intentionally a no-op. If KG is reactivated, the
+needed indexes should be reintroduced via a forward migration tailored
+to the new workload rather than blindly restored.
 """
 
 from alembic import op
-import sqlalchemy as sa  # noqa: F401  (kept for alembic template consistency)
-
 
 # revision identifiers, used by Alembic.
 revision = "c7bc8cc2921d"
@@ -59,9 +30,8 @@ branch_labels = None
 depends_on = None
 
 
-# 51 indexes dropped per tenant schema. Alembic runs with
-# schema_translate_map, so the unqualified index names below resolve to
-# the current tenant's schema for each invocation.
+# Alembic runs per-tenant via SET search_path in env.py, so unqualified
+# index names below resolve to the current tenant's schema.
 INDEXES_TO_DROP = [
     "idx_kg_entity_clustering_trigrams",
     "idx_kg_entity_normalization_trigrams",
@@ -123,9 +93,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Intentional no-op. These indexes were determined unused (zero
-    # index scans across thousands of tenants over multiple days) and
-    # we do not restore them on rollback. If KG is re-enabled, write a
-    # forward migration that recreates only the indexes that the new
-    # workload actually needs.
     pass
