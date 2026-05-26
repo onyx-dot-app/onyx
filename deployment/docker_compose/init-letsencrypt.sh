@@ -6,9 +6,6 @@ set -o allexport
 source .env.nginx
 set +o allexport
 
-# Function to determine correct docker compose command. Prefers the V2 plugin
-# (`docker compose`) since V1 (`docker-compose`) was EOL'd by Docker in 2023
-# and does not support the `--wait` / `--wait-timeout` flags used below.
 docker_compose_cmd() {
   if docker compose version >/dev/null 2>&1; then
     echo "docker compose"
@@ -20,15 +17,11 @@ docker_compose_cmd() {
   fi
 }
 
-# Assign appropriate Docker Compose command
 COMPOSE_CMD=$(docker_compose_cmd)
 
-# `--wait` / `--wait-timeout` are V2-only. Drop them on V1 so the script
-# still runs (without gating on the nginx healthcheck) on legacy hosts.
+# --wait/--wait-timeout are V2-only.
 WAIT_ARGS=(--wait --wait-timeout 300)
-if [[ "$COMPOSE_CMD" == "docker-compose" ]]; then
-  WAIT_ARGS=()
-fi
+[[ "$COMPOSE_CMD" == "docker-compose" ]] && WAIT_ARGS=()
 
 # Only add www to domain list if domain wasn't explicitly set as a subdomain
 if [[ ! $DOMAIN == www.* ]]; then
