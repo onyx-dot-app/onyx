@@ -282,7 +282,15 @@ function buildDescription(
   ) {
     return ri.pattern as string;
   }
-  return buildTitle(toolName, kind, true);
+  // Webfetch: show URL
+  if (toolName === "webfetch" && ri?.url && typeof ri.url === "string") {
+    return ri.url as string;
+  }
+  // Websearch: show query
+  if (toolName === "websearch" && ri?.query && typeof ri.query === "string") {
+    return ri.query as string;
+  }
+  return "";
 }
 
 // ─── Title Builder ───────────────────────────────────────────────
