@@ -734,7 +734,7 @@ async def lti_launch(
     canvas_course_id = _canvas_course_id_from_lti_claims(claims)
 
     # Build redirect URL — send students to /tutor, not /app
-    redirect_params: dict[str, str] = {}
+    redirect_params: dict[str, str] = {"embedded": "true"}
 
     # The LTI `context.id` is the canonical, stable identifier we bind tutors
     # against. We always pass it through so the picker view and editor can

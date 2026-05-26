@@ -17,6 +17,7 @@ import { useUser } from "@/providers/UserProvider";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
+import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
 
 interface TutorPickerViewProps {
   ltiContextId: string;
@@ -33,6 +34,7 @@ export default function TutorPickerView({
 }: TutorPickerViewProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
+  const isEmbedded = useEmbeddedMode();
   const canManageCourseTutors = canManageTutors || isAdmin || isCurator;
 
   const swrKey = `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
@@ -48,6 +50,7 @@ export default function TutorPickerView({
   const buildTutorChatUrl = useCallback(
     (agentId: number) => {
       const params = new URLSearchParams();
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
       params.set(SEARCH_PARAM_NAMES.PERSONA_ID, String(agentId));
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
       if (projectId !== null) {
@@ -61,12 +64,13 @@ export default function TutorPickerView({
       }
       return `/tutor?${params.toString()}`;
     },
-    [ltiContextId, projectId, ltiCanvasCourseNodeId]
+    [isEmbedded, ltiContextId, projectId, ltiCanvasCourseNodeId]
   );
 
   const buildEditTutorUrl = useCallback(
     (agentId: number) => {
       const params = new URLSearchParams();
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
       if (ltiCanvasCourseNodeId) {
         params.set(
@@ -76,11 +80,12 @@ export default function TutorPickerView({
       }
       return `/tutor/edit/${agentId}?${params.toString()}`;
     },
-    [ltiContextId, ltiCanvasCourseNodeId]
+    [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]
   );
 
   const buildCreateTutorUrl = useCallback(() => {
     const params = new URLSearchParams();
+    if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
     params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
     if (ltiCanvasCourseNodeId) {
       params.set(
@@ -89,7 +94,7 @@ export default function TutorPickerView({
       );
     }
     return `/tutor/create?${params.toString()}`;
-  }, [ltiContextId, ltiCanvasCourseNodeId]);
+  }, [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]);
 
   const handleSelect = useCallback(
     (agentId: number) => {

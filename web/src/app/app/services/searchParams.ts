@@ -8,6 +8,8 @@ export const SEARCH_PARAM_NAMES = {
   PROJECT_ID: "projectId",
   LTI_CONTEXT_ID: "lti_context_id",
   LTI_CANVAS_COURSE_NODE_ID: "lti_canvas_course_node_id",
+  EMBEDDED: "embedded",
+  TUTOR_TAB: "tab",
   ALL_MY_DOCUMENTS: "allMyDocuments",
   // overrides
   TEMPERATURE: "temperature",

@@ -1,6 +1,9 @@
+import re
 import uuid
 from collections.abc import Generator
+from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from http import HTTPStatus
 from uuid import UUID
@@ -14,18 +17,29 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.db.query_history import get_all_query_history_export_tasks
+from ee.onyx.db.query_history import get_lti_project_daily_query_history_aggregates
+from ee.onyx.db.query_history import get_lti_project_feedback_aggregate
+from ee.onyx.db.query_history import get_lti_project_user_messages_for_theme_analysis
 from ee.onyx.db.query_history import get_page_of_chat_sessions
 from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
+from ee.onyx.server.query_history.models import LtiInstructorDailyTrend
+from ee.onyx.server.query_history.models import LtiInstructorThemeAnalysis
+from ee.onyx.server.query_history.models import LtiInstructorTrendsResponse
 from ee.onyx.server.query_history.models import MessageSnapshot
 from ee.onyx.server.query_history.models import QueryHistoryExport
 from onyx.auth.permissions import require_permission
+from onyx.auth.schemas import UserRole
+from onyx.auth.users import current_user
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
+from onyx.configs.constants import CELERY_QUERY_HISTORY_EXPORT_TASK_EXPIRES
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import MessageType
@@ -42,20 +56,36 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.enums import TaskStatus
 from onyx.db.file_record import get_query_history_export_files
+from onyx.db.lti import get_lti_course_project_for_user
 from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.db.tasks import get_task_with_id
 from onyx.db.tasks import register_task
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.factory import get_default_llm
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import SystemMessage
+from onyx.llm.models import UserMessage
+from onyx.llm.utils import llm_response_to_string
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
+from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import parse_llm_json_response
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
+logger = setup_logger()
 
 ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
+LTI_INSTRUCTOR_THEME_CACHE_TTL_SECONDS = 60 * 60
+LTI_INSTRUCTOR_THEME_MESSAGE_LIMIT = 200
+_EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 
 
 def ensure_query_history_is_enabled(
@@ -66,6 +96,227 @@ def ensure_query_history_is_enabled(
             status_code=HTTPStatus.FORBIDDEN,
             detail="Query history has been disabled by the administrator.",
         )
+
+
+def _ensure_lti_instructor_project_access(
+    project_id: int,
+    user: User,
+    db_session: Session,
+) -> None:
+    if user.role not in {UserRole.CURATOR, UserRole.ADMIN}:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only Canvas course instructors can access this query history.",
+        )
+
+    project = get_lti_course_project_for_user(
+        project_id=project_id,
+        user_id=user.id,
+        db_session=db_session,
+    )
+    if project is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "User does not manage this Canvas course project.",
+        )
+
+
+def _ensure_valid_time_range(start: datetime, end: datetime) -> None:
+    if start >= end:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Start time must come before end time.",
+        )
+
+
+def _redact_student_identifiers(text: str | None) -> str | None:
+    if text is None:
+        return None
+    return _EMAIL_RE.sub("[redacted email]", text)
+
+
+def _force_anonymized_minimal_session(
+    chat_session: ChatSessionMinimal,
+    redact_content: bool = False,
+) -> ChatSessionMinimal:
+    chat_session.user_email = ONYX_ANONYMIZED_EMAIL
+    if redact_content:
+        chat_session.name = _redact_student_identifiers(chat_session.name)
+        chat_session.first_user_message = (
+            _redact_student_identifiers(chat_session.first_user_message) or ""
+        )
+        chat_session.first_ai_message = (
+            _redact_student_identifiers(chat_session.first_ai_message) or ""
+        )
+    return chat_session
+
+
+def _force_anonymized_snapshot(
+    snapshot: ChatSessionSnapshot,
+    redact_content: bool = False,
+) -> ChatSessionSnapshot:
+    snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+    if redact_content:
+        snapshot.name = _redact_student_identifiers(snapshot.name)
+        for message in snapshot.messages:
+            message.message = _redact_student_identifiers(message.message) or ""
+            message.feedback_text = _redact_student_identifiers(message.feedback_text)
+    return snapshot
+
+
+def _theme_cache_key(project_id: int, start: datetime, end: datetime) -> str:
+    return (
+        "lti:instructor:query-history:themes:"
+        f"{project_id}:{start.isoformat()}:{end.isoformat()}"
+    )
+
+
+def _get_cached_theme_analysis(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+) -> LtiInstructorThemeAnalysis | None:
+    try:
+        cached = get_cache_backend().get(_theme_cache_key(project_id, start, end))
+    except CACHE_TRANSIENT_ERRORS as e:
+        logger.warning("Could not read cached LTI instructor themes: %s", e)
+        return None
+
+    if cached is None:
+        return None
+
+    cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+    try:
+        return LtiInstructorThemeAnalysis.model_validate_json(cached_str)
+    except ValueError as e:
+        logger.warning("Could not parse cached LTI instructor themes: %s", e)
+        return None
+
+
+def _set_cached_theme_analysis(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    analysis: LtiInstructorThemeAnalysis,
+) -> None:
+    try:
+        get_cache_backend().set(
+            _theme_cache_key(project_id, start, end),
+            analysis.model_dump_json(),
+            ex=LTI_INSTRUCTOR_THEME_CACHE_TTL_SECONDS,
+        )
+    except CACHE_TRANSIENT_ERRORS as e:
+        logger.warning("Could not cache LTI instructor themes: %s", e)
+
+
+def _generate_theme_analysis(
+    questions: list[str],
+) -> LtiInstructorThemeAnalysis:
+    if not questions:
+        return LtiInstructorThemeAnalysis()
+
+    redacted_questions = [
+        _redact_student_identifiers(question) or "" for question in questions
+    ]
+    numbered_questions = "\n".join(
+        f"{index + 1}. {question[:500]}"
+        for index, question in enumerate(redacted_questions)
+    )
+
+    system_prompt = SystemMessage(
+        content=(
+            "You summarize anonymized student tutor questions for an instructor. "
+            "Do not infer or expose student identity. Return only JSON with this "
+            'shape: {"summary": string|null, "clusters": [{"label": string, '
+            '"summary": string, "count": integer, "friction_score": integer, '
+            '"representative_question": string|null}]}. Keep labels short.'
+        )
+    )
+    user_prompt = UserMessage(
+        content=(
+            "Cluster these student questions into at most 6 themes. "
+            "Use higher friction_score values for themes with repeated confusion "
+            "or negative-feedback wording.\n\n"
+            f"{numbered_questions}"
+        )
+    )
+
+    try:
+        llm = get_default_llm()
+        with llm_generation_span(
+            llm=llm,
+            flow="lti_instructor_theme_analysis",
+            input_messages=[system_prompt, user_prompt],
+        ) as span_generation:
+            response = llm.invoke(
+                prompt=[system_prompt, user_prompt],
+                reasoning_effort=ReasoningEffort.OFF,
+                max_tokens=1200,
+                structured_response_format={"type": "json_object"},
+            )
+            record_llm_response(span_generation, response)
+
+        parsed_response = parse_llm_json_response(llm_response_to_string(response))
+        if parsed_response is None:
+            logger.warning("LTI instructor theme analysis returned non-JSON output")
+            return LtiInstructorThemeAnalysis()
+        return LtiInstructorThemeAnalysis.model_validate(parsed_response)
+    except Exception as e:
+        logger.warning("LTI instructor theme analysis failed: %s", e)
+        return LtiInstructorThemeAnalysis()
+
+
+def _get_or_generate_theme_analysis(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    db_session: Session,
+) -> LtiInstructorThemeAnalysis:
+    cached = _get_cached_theme_analysis(project_id, start, end)
+    if cached is not None:
+        return cached
+
+    questions = get_lti_project_user_messages_for_theme_analysis(
+        project_id=project_id,
+        start_time=start,
+        end_time=end,
+        db_session=db_session,
+        limit=LTI_INSTRUCTOR_THEME_MESSAGE_LIMIT,
+    )
+    analysis = _generate_theme_analysis(questions)
+    _set_cached_theme_analysis(project_id, start, end, analysis)
+    return analysis
+
+
+def _build_daily_trend_points(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    db_session: Session,
+) -> list[LtiInstructorDailyTrend]:
+    aggregates = get_lti_project_daily_query_history_aggregates(
+        project_id=project_id,
+        start_time=start,
+        end_time=end,
+        db_session=db_session,
+    )
+    aggregate_by_day = {aggregate.day: aggregate for aggregate in aggregates}
+
+    daily: list[LtiInstructorDailyTrend] = []
+    current_day: date = start.date()
+    end_day = end.date()
+    while current_day <= end_day:
+        aggregate = aggregate_by_day.get(current_day)
+        daily.append(
+            LtiInstructorDailyTrend(
+                date=current_day,
+                session_count=aggregate.session_count if aggregate else 0,
+                message_count=aggregate.message_count if aggregate else 0,
+            )
+        )
+        current_day += timedelta(days=1)
+
+    return daily
 
 
 def yield_snapshot_from_chat_session(
@@ -223,7 +474,7 @@ def get_chat_session_history(
     for chat_session in page_of_chat_sessions:
         minimal_chat_session = ChatSessionMinimal.from_chat_session(chat_session)
         if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-            minimal_chat_session.user_email = ONYX_ANONYMIZED_EMAIL
+            _force_anonymized_minimal_session(minimal_chat_session)
         minimal_chat_sessions.append(minimal_chat_session)
 
     return PaginatedReturn(
@@ -263,9 +514,160 @@ def get_chat_session_admin(
         )
 
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-        snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+        _force_anonymized_snapshot(snapshot)
 
     return snapshot
+
+
+@router.get("/lti/instructor/query-history")
+def get_lti_instructor_chat_session_history(
+    project_id: int,
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1),
+    feedback_type: QAFeedbackType | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[ChatSessionMinimal]:
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    _ensure_lti_instructor_project_access(
+        project_id=project_id,
+        user=user,
+        db_session=db_session,
+    )
+
+    page_of_chat_sessions = get_page_of_chat_sessions(
+        page_num=page_num,
+        page_size=page_size,
+        db_session=db_session,
+        start_time=start_time,
+        end_time=end_time,
+        feedback_filter=feedback_type,
+        project_id=project_id,
+    )
+
+    total_filtered_chat_sessions_count = get_total_filtered_chat_sessions_count(
+        db_session=db_session,
+        start_time=start_time,
+        end_time=end_time,
+        feedback_filter=feedback_type,
+        project_id=project_id,
+    )
+
+    return PaginatedReturn(
+        items=[
+            _force_anonymized_minimal_session(
+                ChatSessionMinimal.from_chat_session(chat_session),
+                redact_content=True,
+            )
+            for chat_session in page_of_chat_sessions
+        ],
+        total_items=total_filtered_chat_sessions_count,
+    )
+
+
+@router.get("/lti/instructor/query-history/{chat_session_id}")
+def get_lti_instructor_chat_session(
+    chat_session_id: UUID,
+    project_id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> ChatSessionSnapshot:
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    _ensure_lti_instructor_project_access(
+        project_id=project_id,
+        user=user,
+        db_session=db_session,
+    )
+
+    try:
+        chat_session = get_chat_session_by_id(
+            chat_session_id=chat_session_id,
+            user_id=None,
+            db_session=db_session,
+            include_deleted=True,
+        )
+    except ValueError:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND,
+            f"Chat session with id '{chat_session_id}' does not exist.",
+        )
+
+    if chat_session.project_id != project_id:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND,
+            f"Chat session with id '{chat_session_id}' does not exist.",
+        )
+
+    snapshot = snapshot_from_chat_session(
+        chat_session=chat_session, db_session=db_session
+    )
+    if snapshot is None:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"Could not create snapshot for chat session with id '{chat_session_id}'",
+        )
+
+    return _force_anonymized_snapshot(snapshot, redact_content=True)
+
+
+@router.get("/lti/instructor/trends")
+def get_lti_instructor_trends(
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    include_themes: bool = False,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> LtiInstructorTrendsResponse:
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    _ensure_valid_time_range(start, end)
+    _ensure_lti_instructor_project_access(
+        project_id=project_id,
+        user=user,
+        db_session=db_session,
+    )
+
+    daily = _build_daily_trend_points(
+        project_id=project_id,
+        start=start,
+        end=end,
+        db_session=db_session,
+    )
+    feedback = get_lti_project_feedback_aggregate(
+        project_id=project_id,
+        start_time=start,
+        end_time=end,
+        db_session=db_session,
+    )
+    theme_analysis = (
+        _get_or_generate_theme_analysis(
+            project_id=project_id,
+            start=start,
+            end=end,
+            db_session=db_session,
+        )
+        if include_themes
+        else None
+    )
+
+    return LtiInstructorTrendsResponse(
+        start=start,
+        end=end,
+        total_sessions=sum(point.session_count for point in daily),
+        total_messages=sum(point.message_count for point in daily),
+        daily=daily,
+        feedback_count=feedback.feedback_count,
+        thumbs_down_count=feedback.thumbs_down_count,
+        thumbs_down_rate=(
+            feedback.thumbs_down_count / feedback.feedback_count
+            if feedback.feedback_count
+            else 0.0
+        ),
+        themes=theme_analysis.clusters if theme_analysis else None,
+        summary=theme_analysis.summary if theme_analysis else None,
+    )
 
 
 @router.get("/admin/query-history/list")
@@ -331,6 +733,7 @@ def start_query_history_export(
         task_id=task_id,
         priority=OnyxCeleryPriority.MEDIUM,
         queue=OnyxCeleryQueues.CSV_GENERATION,
+        expires=CELERY_QUERY_HISTORY_EXPORT_TASK_EXPIRES,
         kwargs={
             "start": start,
             "end": end,

@@ -35,6 +35,7 @@ from onyx.configs.lti_configs import LTI_NONCE_TTL_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.lti import build_lti_course_project_description
 from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
@@ -390,7 +391,7 @@ async def get_or_create_lti_course_project(
     Returns the project ID.
     """
     # Use the Canvas course ID as a stable identifier in the description
-    stable_description = f"lti:canvas:course:{course_id}"
+    stable_description = build_lti_course_project_description(course_id)
     display_name = course_title or course_label or f"Course {course_id}"
     project_name = f"[Canvas] {display_name}"
 

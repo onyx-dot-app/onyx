@@ -46,12 +46,17 @@ def _mock_course(
     }
 
 
-def _build_connector(base_url: str = FAKE_BASE_URL) -> CanvasConnector:
+def _build_connector(
+    base_url: str = FAKE_BASE_URL,
+    credentials: dict[str, Any] | None = None,
+) -> CanvasConnector:
     """Build a connector with mocked credential validation."""
     with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
         mock_req.get.return_value = _mock_response(json_data=[_mock_course()])
         connector = CanvasConnector(canvas_base_url=base_url)
-        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+        connector.load_credentials(
+            {"canvas_access_token": FAKE_TOKEN, **(credentials or {})}
+        )
     return connector
 
 
@@ -2114,6 +2119,247 @@ class TestCheckpointNewStages:
 
         assert len(items) == 1
         assert items[0].id == "canvas-file-1-41"
+
+
+class TestReleasedMaterialsFiltering:
+    """Released-material filters must match between full-doc and slim-doc paths."""
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_with_future_unlock_at_is_excluded(
+        self, mock_requests: MagicMock
+    ) -> None:
+        page = _mock_page(10, updated_at="2025-06-15T12:00:00Z")
+        page["published"] = True
+        page["unlock_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_with_past_unlock_at_is_included(
+        self, mock_requests: MagicMock
+    ) -> None:
+        page = _mock_page(10, updated_at="2025-06-15T12:00:00Z")
+        page["published"] = True
+        page["unlock_at"] = "2025-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        docs = [item for item in items if isinstance(item, Document)]
+        assert len(docs) == 1
+        assert docs[0].id == "canvas-page-1-10"
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_with_past_lock_at_is_excluded(self, mock_requests: MagicMock) -> None:
+        page = _mock_page(10, updated_at="2025-06-15T12:00:00Z")
+        page["published"] = True
+        page["lock_at"] = "2025-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[page])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_unpublished_assignment_is_excluded(self, mock_requests: MagicMock) -> None:
+        assignment = _mock_assignment(20, updated_at="2025-06-15T12:00:00Z")
+        assignment["published"] = False
+        mock_requests.get.side_effect = _make_url_dispatcher(assignments=[assignment])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="assignments"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_hidden_and_locked_files_are_excluded(
+        self, mock_requests: MagicMock
+    ) -> None:
+        hidden_file = _mock_file(40, updated_at="2025-06-15T12:00:00Z")
+        hidden_file["hidden"] = True
+        locked_file = _mock_file(41, "locked.pdf", updated_at="2025-06-15T12:00:00Z")
+        locked_file["locked"] = True
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            files=[hidden_file, locked_file]
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="files"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_in_unpublished_module_is_excluded(
+        self, mock_requests: MagicMock
+    ) -> None:
+        module = _mock_module(70, "Draft Module")
+        module["published"] = False
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            modules=[module],
+            module_items=[
+                {"id": 500, "title": "Welcome", "type": "Page", "content_id": 10}
+            ],
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_page_in_future_locked_module_is_excluded(
+        self, mock_requests: MagicMock
+    ) -> None:
+        module = _mock_module(70, "Future Module")
+        module["unlock_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            pages=[_mock_page(10, updated_at="2025-06-15T12:00:00Z")],
+            modules=[module],
+            module_items=[
+                {"id": 500, "title": "Welcome", "type": "Page", "content_id": 10}
+            ],
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_delayed_announcement_is_excluded(self, mock_requests: MagicMock) -> None:
+        announcement = _mock_announcement(30, posted_at="2025-06-15T12:00:00Z")
+        announcement["delayed_post_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            announcements=[announcement]
+        )
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="announcements"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_quiz_with_past_lock_at_is_excluded(self, mock_requests: MagicMock) -> None:
+        quiz = _mock_quiz(50, updated_at="2025-06-15T12:00:00Z")
+        quiz["lock_at"] = "2025-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(quizzes=[quiz])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="quizzes"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_delayed_discussion_is_excluded(self, mock_requests: MagicMock) -> None:
+        discussion = _mock_discussion(60, posted_at="2025-06-15T12:00:00Z")
+        discussion["delayed_post_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(discussions=[discussion])
+        connector = _build_connector()
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="discussions"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        assert [item for item in items if isinstance(item, Document)] == []
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_slim_docs_skip_page_in_unpublished_module(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = None
+        module = _mock_module(70, "Draft Module")
+        module["published"] = False
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[_mock_page(10)],
+            modules=[module],
+            module_items=[
+                {"id": 500, "title": "Welcome", "type": "Page", "content_id": 10}
+            ],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_items = [item for batch in batches for item in batch]
+        slim_ids = {doc.id for doc in all_items if isinstance(doc, SlimDocument)}
+
+        assert "canvas-page-1-10" not in slim_ids
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_slim_docs_skip_future_locked_page(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = None
+        page = _mock_page(10)
+        page["published"] = True
+        page["unlock_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(1)],
+            pages=[page],
+        )
+        connector = _build_connector()
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_items = [item for batch in batches for item in batch]
+        slim_ids = {doc.id for doc in all_items if isinstance(doc, SlimDocument)}
+
+        assert "canvas-page-1-10" not in slim_ids
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_respect_release_dates_false_ignores_dates(
+        self, mock_requests: MagicMock
+    ) -> None:
+        page = _mock_page(10, updated_at="2025-06-15T12:00:00Z")
+        page["published"] = True
+        page["unlock_at"] = "2099-01-01T00:00:00Z"
+        mock_requests.get.side_effect = _make_url_dispatcher(pages=[page])
+        connector = _build_connector(credentials={"respect_release_dates": False})
+        cp = CanvasConnectorCheckpoint(
+            has_more=True, course_ids=[1], current_course_index=0, stage="pages"
+        )
+
+        items, _ = _run_checkpoint(connector, cp)
+
+        docs = [item for item in items if isinstance(item, Document)]
+        assert len(docs) == 1
+        assert docs[0].id == "canvas-page-1-10"
 
 
 class TestSlimDocsNewTypes:
