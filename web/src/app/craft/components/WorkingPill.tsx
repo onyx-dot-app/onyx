@@ -36,11 +36,11 @@ export default function WorkingPill({
 
   const [isOpen, setIsOpen] = useState(hasInProgress);
 
-  // Auto-collapse when work finishes or when this is no longer the latest group.
+  // Open while this is the latest group AND work is active; closed otherwise.
+  // Symmetric so a tool starting later (false→true on hasInProgress) reopens
+  // the pill instead of staying hidden.
   useEffect(() => {
-    if (!isLatest || !hasInProgress) {
-      setIsOpen(false);
-    }
+    setIsOpen(isLatest && hasInProgress);
   }, [isLatest, hasInProgress]);
 
   return (
