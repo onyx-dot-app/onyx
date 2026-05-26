@@ -228,6 +228,25 @@ def _get_user_emails(jira_project: str, user_holders: list[Holder]) -> list[str]
     return emails
 
 
+def _describe_actor(actor: object) -> object:
+    """Render a project-role actor for triage logs. `jira.resources.PropertyHolder`
+    inherits object's default repr (only the memory address); dump its populated
+    attributes one level deep so unsupported/empty-name cases are debuggable."""
+    if isinstance(actor, dict):
+        return actor
+    if not hasattr(actor, "__dict__"):
+        return repr(actor)
+    return {
+        k: (
+            {ik: iv for ik, iv in vars(v).items() if not ik.startswith("_")}
+            if hasattr(v, "__dict__")
+            else v
+        )
+        for k, v in vars(actor).items()
+        if not k.startswith("_")
+    }
+
+
 def _classify_role_actor(actor: object) -> _RoleActorCategory:
     """Categorize a project-role actor across Cloud v3's nested
     `actorGroup`/`actorUser` shape and DC/Server's flat `type=atlassian-*-role-actor`
@@ -377,6 +396,14 @@ def _get_user_emails_and_groups_from_project_roles(
 
         for actor in role.actors:
             category = _classify_role_actor(actor)
+            logger.debug(
+                "Jira project %s project role %s actor classified; "
+                "category=%s actor=%s",
+                jira_project,
+                role_id,
+                category.value,
+                _describe_actor(actor),
+            )
 
             if category is _RoleActorCategory.GROUP:
                 actor_group_seen_count += 1
