@@ -12,7 +12,7 @@ dependencies = [
     "cohere==5.6.1",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
-    "litellm[google]==1.83.14",
+    "litellm[google]==1.85.1",
     "openai==2.38.0",
     "pydantic==2.11.7",
     "prometheus_client>=0.21.1",
@@ -201,28 +201,9 @@ model_server = [
 [tool.uv]
 default-groups = ["backend", "dev", "ee", "model_server"]
 
-# litellm >=1.83.x switched from loose ranges to exact `==` pins on its
-# transitive dependencies (see https://github.com/BerriAI/litellm/issues/25280),
-# which forces downgrades of packages we already pin to newer versions and
-# regressions on transitively resolved packages. Replace those exact pins with
-# the loose ranges litellm declared prior to 1.83.1 so that uv's resolver is
-# free to pick versions consistent with our top-level pins (or newer).
+# Loosen mitmproxy's over-tight upper caps so the resolver keeps the
+# backend's newer versions.
 override-dependencies = [
-    "aiohttp>=3.10",
-    "click",
-    "fastuuid>=0.13.0",
-    "httpx[http2]>=0.23.0",
-    "importlib-metadata>=6.8.0",
-    "jinja2>=3.1.2,<4.0.0",
-    "jsonschema>=4.23.0,<5.0.0",
-    "openai",
-    "pydantic",
-    "python-dotenv",
-    "tiktoken",
-    "tokenizers",
-    "google-cloud-aiplatform>=1.38.0",
-    # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
-    # backend's newer versions.
     "brotli>=1.2.0,<2.0",
     "h11>=0.11,<1.0",
     "cryptography>=42.0,<50.0",
