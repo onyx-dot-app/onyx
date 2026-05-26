@@ -171,12 +171,32 @@ async def _fetch_jwks() -> dict:
     if not LTI_JWKS_URL:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "LTI_JWKS_URL is not configured")
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(LTI_JWKS_URL)
-        resp.raise_for_status()
-        _jwks_cache = resp.json()
-        _jwks_cache_time = time.time()
-        return _jwks_cache
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(LTI_JWKS_URL)
+            resp.raise_for_status()
+            jwks_data = resp.json()
+    except httpx.HTTPStatusError as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "LTI platform JWKS endpoint returned an error",
+            status_code_override=e.response.status_code,
+        ) from e
+    except (httpx.RequestError, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to load LTI platform JWKS: {e}",
+        ) from e
+
+    if not isinstance(jwks_data, dict):
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "LTI platform JWKS response must be a JSON object",
+        )
+
+    _jwks_cache = jwks_data
+    _jwks_cache_time = time.time()
+    return _jwks_cache
 
 
 def _extract_email_from_claims(claims: dict) -> str:
@@ -194,15 +214,17 @@ def _extract_email_from_claims(claims: dict) -> str:
 
     # Canvas sometimes nests email in the LTI 1.3 custom claims
     custom = claims.get("https://purl.imsglobal.org/spec/lti/claim/custom", {})
-    email = custom.get("email") or custom.get("user_email")
-    if email:
-        return str(email).strip().lower()
+    if isinstance(custom, dict):
+        email = custom.get("email") or custom.get("user_email")
+        if email:
+            return str(email).strip().lower()
 
     # Canvas extension: lis (Learning Information Services) person contact
     lis = claims.get("https://purl.imsglobal.org/spec/lti/claim/lis", {})
-    email = lis.get("person_contact_email_primary")
-    if email:
-        return str(email).strip().lower()
+    if isinstance(lis, dict):
+        email = lis.get("person_contact_email_primary")
+        if email:
+            return str(email).strip().lower()
 
     # Canvas-specific extension claims
     for key in [
@@ -319,7 +341,7 @@ async def upsert_lti_user(email: str, lti_roles: list[str]) -> User:
             async with get_user_manager_context(user_db) as um:
                 try:
                     user = await um.get_by_email(email)
-                    if not user.role.is_web_login():
+                    if not user.account_type.is_web_login():
                         raise exceptions.UserNotExists()
                     return user
                 except exceptions.UserNotExists:
@@ -369,10 +391,16 @@ def extract_lti_context(claims: dict) -> dict[str, str | None]:
     All values may be None if the context claim is missing.
     """
     context = claims.get("https://purl.imsglobal.org/spec/lti/claim/context", {})
+    if not isinstance(context, dict):
+        context = {}
     return {
-        "course_id": context.get("id"),
-        "course_label": context.get("label"),
-        "course_title": context.get("title"),
+        "course_id": str(context["id"]) if context.get("id") is not None else None,
+        "course_label": (
+            str(context["label"]) if context.get("label") is not None else None
+        ),
+        "course_title": (
+            str(context["title"]) if context.get("title") is not None else None
+        ),
     }
 
 

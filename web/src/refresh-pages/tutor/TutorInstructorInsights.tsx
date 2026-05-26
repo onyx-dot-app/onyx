@@ -20,6 +20,7 @@ import Modal from "@/refresh-components/Modal";
 import { PageSelector } from "@/components/PageSelector";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
+import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 import {
   ChatSessionMinimal,
   ChatSessionSnapshot,
@@ -384,19 +385,13 @@ export default function TutorInstructorInsights({
   const { data: selectedSession, isLoading: detailLoading } =
     useSWR<ChatSessionSnapshot>(detailKey, errorHandlingFetcher);
 
-  if (error) {
-    return (
-      <ErrorCallout
-        errorTitle="Error fetching query history"
-        errorMsg={error.message}
-      />
-    );
-  }
-
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-background-tint-01">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 md:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex h-full min-h-0 w-full flex-col bg-background-tint-01">
+      <TutorTabHeader
+        icon={SvgBarChart}
+        title="Insights"
+        description="Tutor activity and student friction"
+        rightChildren={
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
               <Text as="p" className="text-xs font-medium text-subtle">
@@ -418,86 +413,102 @@ export default function TutorInstructorInsights({
                 maxDate={new Date()}
               />
             </div>
+            <Button
+              prominence="secondary"
+              icon={SvgRefreshCw}
+              onClick={() => void refreshTrends()}
+            >
+              Refresh
+            </Button>
           </div>
-          <Button
-            prominence="secondary"
-            icon={SvgRefreshCw}
-            onClick={() => void refreshTrends()}
-          >
-            Refresh
-          </Button>
-        </div>
+        }
+      />
 
-        {trendsError && (
-          <ErrorCallout
-            errorTitle="Error fetching trends"
-            errorMsg={trendsError.message}
-          />
-        )}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 p-4 md:p-6">
+          {trendsError && (
+            <ErrorCallout
+              errorTitle="Error fetching trends"
+              errorMsg={trendsError.message}
+            />
+          )}
 
-        {trendsLoading || !trends ? (
-          <div className="flex h-48 items-center justify-center">
-            <ThreeDotsLoader />
-          </div>
-        ) : (
-          <>
-            <VolumeChart trends={trends} />
-            <ThemeCards themes={trends.themes} summary={trends.summary} />
-          </>
-        )}
+          {trendsLoading || !trends ? (
+            <div className="flex h-48 items-center justify-center">
+              <ThreeDotsLoader />
+            </div>
+          ) : (
+            <>
+              <VolumeChart trends={trends} />
+              <ThemeCards themes={trends.themes} summary={trends.summary} />
+            </>
+          )}
 
-        <div className="rounded-md border border-border bg-background p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <Text as="p" className="font-medium">
-              Query History
-            </Text>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>First User Message</TableHead>
-                <TableHead>First AI Response</TableHead>
-                <TableHead>Feedback</TableHead>
-                <TableHead>Persona</TableHead>
-                <TableHead>Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            {isLoading ? (
-              <TableBody>
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center">
-                    <ThreeDotsLoader />
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            ) : (
-              <TableBody>
-                {chatSessionData?.map((chatSessionMinimal) => (
-                  <QueryHistoryTableRow
-                    key={chatSessionMinimal.id}
-                    chatSessionMinimal={chatSessionMinimal}
-                    showUser={false}
-                    onSelect={() => setSelectedSessionId(chatSessionMinimal.id)}
-                  />
-                ))}
-                {chatSessionData?.length === 0 && (
+          {error ? (
+            <ErrorCallout
+              errorTitle="Error fetching query history"
+              errorMsg={error.message}
+            />
+          ) : (
+            <div className="rounded-md border border-border bg-background p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <Text as="p" className="font-medium">
+                  Query History
+                </Text>
+              </div>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-subtle">
-                      No sessions found.
-                    </TableCell>
+                    <TableHead>First User Message</TableHead>
+                    <TableHead>First AI Response</TableHead>
+                    <TableHead>Feedback</TableHead>
+                    <TableHead>Persona</TableHead>
+                    <TableHead>Date</TableHead>
                   </TableRow>
+                </TableHeader>
+                {isLoading ? (
+                  <TableBody>
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center">
+                        <ThreeDotsLoader />
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                ) : (
+                  <TableBody>
+                    {chatSessionData?.map((chatSessionMinimal) => (
+                      <QueryHistoryTableRow
+                        key={chatSessionMinimal.id}
+                        chatSessionMinimal={chatSessionMinimal}
+                        showUser={false}
+                        onSelect={() =>
+                          setSelectedSessionId(chatSessionMinimal.id)
+                        }
+                      />
+                    ))}
+                    {chatSessionData?.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center text-subtle"
+                        >
+                          No sessions found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
                 )}
-              </TableBody>
-            )}
-          </Table>
+              </Table>
 
-          {chatSessionData && (
-            <div className="mt-4">
-              <PageSelector
-                totalPages={totalPages}
-                currentPage={currentPage}
-                onPageChange={goToPage}
-              />
+              {chatSessionData && (
+                <div className="mt-4">
+                  <PageSelector
+                    totalPages={totalPages}
+                    currentPage={currentPage}
+                    onPageChange={goToPage}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

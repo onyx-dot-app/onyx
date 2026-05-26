@@ -148,9 +148,12 @@ export default function TutorChatPage() {
     assistantId === null &&
     courseTutors !== undefined &&
     courseTutors.length === 0;
-  const showTutorSidebar = ltiContextId !== null && !isFirstTutorSetupScreen;
   const canManageCourseTutors =
     isInstructor || Boolean(courseConnectorStatus?.setup);
+  const showTutorSidebar = ltiContextId !== null && !isFirstTutorSetupScreen;
+  const isStudentWithSoleTutor =
+    !canManageCourseTutors && courseTutors?.length === 1;
+  const showTutorsSidebarTab = !isStudentWithSoleTutor;
 
   const {
     chatSessions,
@@ -403,14 +406,16 @@ export default function TutorChatPage() {
             >
               History
             </SidebarTab>
-            <SidebarTab
-              folded
-              icon={SvgUsers}
-              selected={activeTutorTab === "chat" && assistantId === null}
-              onClick={handleManageTutors}
-            >
-              Tutors
-            </SidebarTab>
+            {showTutorsSidebarTab && (
+              <SidebarTab
+                folded
+                icon={SvgUsers}
+                selected={activeTutorTab === "chat" && assistantId === null}
+                onClick={handleManageTutors}
+              >
+                Tutors
+              </SidebarTab>
+            )}
             {showInstructorTabs && (
               <>
                 <SidebarTab
@@ -446,6 +451,7 @@ export default function TutorChatPage() {
       historyOpen,
       showInstructorTabs,
       showTutorSidebar,
+      showTutorsSidebarTab,
     ]
   );
 
@@ -567,7 +573,9 @@ export default function TutorChatPage() {
         >
           {({ getRootProps }) => (
             <div
-              className="flex-1 flex flex-col items-center min-h-0 outline-none"
+              className={`flex-1 flex flex-col items-center min-h-0 outline-none ${
+                showTutorSidebar ? "pt-3" : ""
+              }`}
               {...getRootProps({ tabIndex: -1 })}
             >
               {/* Chat messages or suggestions */}

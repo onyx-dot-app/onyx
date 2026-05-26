@@ -1,11 +1,11 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import useSWR from "swr";
 import { Button } from "@opal/components";
-import { SvgRefreshCw } from "@opal/icons";
+import { SvgBookOpen, SvgRefreshCw } from "@opal/icons";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus } from "@/components/Status";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import Title from "@/components/ui/title";
@@ -37,6 +37,7 @@ import {
   CCPairFullInfo,
   ConnectorCredentialPairStatus,
 } from "@/app/admin/connector/[ccPairId]/types";
+import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 
 const CANVAS_STATUS_KEY = "tutor-instructor-canvas-knowledge";
 
@@ -310,19 +311,12 @@ export default function TutorInstructorKnowledge() {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-background-tint-01">
-      <div className="mx-auto w-full max-w-[800px] p-4 md:p-6">
-        <div className="flex min-h-16 items-center justify-between gap-4 border-b border-neutral-200 pb-3 dark:border-neutral-600">
-          <div className="flex min-w-0 items-center gap-3">
-            <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
-            <div className="min-w-0">
-              <div className="truncate text-xl font-semibold text-text-default">
-                Canvas Knowledge
-              </div>
-              <div className="truncate text-sm text-subtle">{ccPair.name}</div>
-            </div>
-          </div>
-
+    <div className="flex h-full min-h-0 w-full flex-col bg-background-tint-01">
+      <TutorTabHeader
+        icon={SvgBookOpen}
+        title="Knowledge"
+        description={ccPair.name}
+        rightChildren={
           <Button
             prominence="secondary"
             icon={SvgRefreshCw}
@@ -332,62 +326,66 @@ export default function TutorInstructorKnowledge() {
           >
             Force Re-Index
           </Button>
-        </div>
+        }
+      />
 
-        <CanvasConnectorSelector
-          connectorStatuses={connectorStatuses}
-          selectedCcPairId={selectedCcPairId}
-          onSelect={setSelectedCcPairId}
-        />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl p-4 md:p-6">
+          <CanvasConnectorSelector
+            connectorStatuses={connectorStatuses}
+            selectedCcPairId={selectedCcPairId}
+            onSelect={setSelectedCcPairId}
+          />
 
-        {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
-          <div className="mt-6">
-            <Callout type="warning" title="Knowledge source needs attention">
-              This Canvas knowledge source cannot be re-indexed until its setup
-              is fixed.
-            </Callout>
+          {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
+            <div className="mt-6">
+              <Callout type="warning" title="Knowledge source needs attention">
+                This Canvas knowledge source cannot be re-indexed until its
+                setup is fixed.
+              </Callout>
+            </div>
+          )}
+
+          <Title className="mb-2 mt-6" size="md">
+            Knowledge Status
+          </Title>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <KnowledgeMetricCard
+              label="Documents Indexed"
+              value={ccPair.num_docs_indexed.toLocaleString()}
+              detail={
+                ccPair.status ===
+                  ConnectorCredentialPairStatus.INITIAL_INDEXING &&
+                ccPair.overall_indexing_speed !== null &&
+                ccPair.num_docs_indexed > 0
+                  ? `${ccPair.overall_indexing_speed.toFixed(1)} docs / min`
+                  : undefined
+              }
+            />
+
+            <KnowledgeMetricCard
+              label="Last Indexed"
+              value={formatLastIndexed(ccPair.last_indexed)}
+              detail={formatLastIndexedDetail(ccPair.last_indexed)}
+            />
+
+            <KnowledgeMetricCard
+              label="Status"
+              value={
+                <CCPairStatus
+                  ccPairStatus={ccPair.status}
+                  inRepeatedErrorState={ccPair.in_repeated_error_state}
+                  lastIndexAttemptStatus={selectedConnectorStatus?.last_status}
+                />
+              }
+              detail={
+                ccPair.indexing
+                  ? "Indexing is currently running"
+                  : "Ready for tutor retrieval"
+              }
+            />
           </div>
-        )}
-
-        <Title className="mb-2 mt-6" size="md">
-          Knowledge Status
-        </Title>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <KnowledgeMetricCard
-            label="Documents Indexed"
-            value={ccPair.num_docs_indexed.toLocaleString()}
-            detail={
-              ccPair.status ===
-                ConnectorCredentialPairStatus.INITIAL_INDEXING &&
-              ccPair.overall_indexing_speed !== null &&
-              ccPair.num_docs_indexed > 0
-                ? `${ccPair.overall_indexing_speed.toFixed(1)} docs / min`
-                : undefined
-            }
-          />
-
-          <KnowledgeMetricCard
-            label="Last Indexed"
-            value={formatLastIndexed(ccPair.last_indexed)}
-            detail={formatLastIndexedDetail(ccPair.last_indexed)}
-          />
-
-          <KnowledgeMetricCard
-            label="Status"
-            value={
-              <CCPairStatus
-                ccPairStatus={ccPair.status}
-                inRepeatedErrorState={ccPair.in_repeated_error_state}
-                lastIndexAttemptStatus={selectedConnectorStatus?.last_status}
-              />
-            }
-            detail={
-              ccPair.indexing
-                ? "Indexing is currently running"
-                : "Ready for tutor retrieval"
-            }
-          />
         </div>
       </div>
     </div>

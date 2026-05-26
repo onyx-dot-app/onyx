@@ -8,7 +8,6 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SvgEdit, SvgPlus, SvgUsers } from "@opal/icons";
 import type { Route } from "next";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
 import Text from "@/refresh-components/texts/Text";
 import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -18,6 +17,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
+import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 
 interface TutorPickerViewProps {
   ltiContextId: string;
@@ -157,8 +157,8 @@ export default function TutorPickerView({
   }
 
   return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header
+    <div className="flex h-full min-h-0 w-full flex-col bg-background-tint-01">
+      <TutorTabHeader
         icon={SvgUsers}
         title="Choose a tutor"
         description="Pick a virtual tutor to start a conversation. Multiple tutors may use different teaching styles."
@@ -173,20 +173,22 @@ export default function TutorPickerView({
           ) : undefined
         }
       />
-      <SettingsLayouts.Body>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {tutors.map((tutor) => (
-            <TutorPickerCard
-              key={tutor.id}
-              tutor={tutor}
-              showInstructorActions={canManageCourseTutors}
-              onSelect={() => handleSelect(tutor.id)}
-              onEdit={() => router.push(buildEditTutorUrl(tutor.id) as Route)}
-            />
-          ))}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl p-4 md:p-6">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {tutors.map((tutor) => (
+              <TutorPickerCard
+                key={tutor.id}
+                tutor={tutor}
+                showInstructorActions={canManageCourseTutors}
+                onSelect={() => handleSelect(tutor.id)}
+                onEdit={() => router.push(buildEditTutorUrl(tutor.id) as Route)}
+              />
+            ))}
+          </div>
         </div>
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+      </div>
+    </div>
   );
 }
 

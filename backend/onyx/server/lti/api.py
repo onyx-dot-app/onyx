@@ -606,7 +606,6 @@ async def lti_login(
 
     iss = str(params_dict.get("iss", ""))
     login_hint = str(params_dict.get("login_hint", ""))
-    str(params_dict.get("target_link_uri", ""))
     lti_message_hint = params_dict.get("lti_message_hint")
     if lti_message_hint is not None:
         lti_message_hint = str(lti_message_hint)
@@ -725,7 +724,9 @@ async def lti_launch(
     # Extract course context and create/find a project for it
     context = extract_lti_context(claims)
     custom_claims = claims.get("https://purl.imsglobal.org/spec/lti/claim/custom", {})
-    assistant_id = custom_claims.get("assistant_id")
+    assistant_id = (
+        custom_claims.get("assistant_id") if isinstance(custom_claims, dict) else None
+    )
     canvas_base_url = (
         _canvas_base_url_from_lti_claims(claims)
         or _canvas_base_url_from_request_headers(request)
