@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
+import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Modal from "@/refresh-components/Modal";
@@ -109,9 +109,11 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   // the user knows there's fresh content waiting.
   const [newSincePaused, setNewSincePaused] = useState<number>(0);
   const [filter, setFilter] = useState<string>("");
+  const [justCopied, setJustCopied] = useState<boolean>(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Refs mirror the state inside the SSE reader's hot loop without
   // forcing it to re-bind on every state change.
   const followRef = useRef<boolean>(follow);
@@ -252,10 +254,19 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
     const text = filteredLines.map((l) => l.text).join("\n");
     try {
       await navigator.clipboard.writeText(text);
+      setJustCopied(true);
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+      copyResetRef.current = setTimeout(() => setJustCopied(false), 1500);
     } catch (error) {
       console.error("Failed to copy visible opencode logs", error);
     }
   }, [filteredLines]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    };
+  }, []);
 
   const handleResumeFollow = useCallback(() => {
     setFollow(true);
@@ -280,6 +291,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
         onFilterChange={setFilter}
         onClear={handleClear}
         onCopy={handleCopyVisible}
+        copyJustSucceeded={justCopied}
         onResume={handleResumeFollow}
       />
       <LogContent
@@ -313,6 +325,7 @@ interface StatusBarProps {
   onFilterChange: (v: string) => void;
   onClear: () => void;
   onCopy: () => void;
+  copyJustSucceeded: boolean;
   onResume: () => void;
 }
 
@@ -327,6 +340,7 @@ function StatusBar({
   onFilterChange,
   onClear,
   onCopy,
+  copyJustSucceeded,
   onResume,
 }: StatusBarProps) {
   const filtered = !!filter && visibleLines !== totalLines;
@@ -395,9 +409,9 @@ function StatusBar({
           variant="default"
           prominence="tertiary"
           size="sm"
-          icon={SvgCopy}
+          icon={copyJustSucceeded ? SvgCheck : SvgCopy}
           onClick={onCopy}
-          tooltip="Copy visible"
+          tooltip={copyJustSucceeded ? "Copied" : "Copy visible"}
         />
         <Button
           variant="default"
