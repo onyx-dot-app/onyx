@@ -183,6 +183,12 @@ _PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
 # blocks DNS, so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
 
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# docker/Dockerfile). Registered pod-wide via OPENCODE_CONFIG_CONTENT only
+# when the proxy is enabled; tags each sandbox egress request with the
+# originating BuildSession id so the proxy routes approval cards exactly.
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+
 
 _PROXY_DNS_RETRY_ATTEMPTS = 5
 _PROXY_DNS_RETRY_BACKOFF_S = 0.5
@@ -1329,12 +1335,19 @@ class KubernetesSandboxManager(SandboxManager):
             # cross-provider per-prompt model overrides work without a
             # pod restart.
             providers = all_llm_configs or [llm_config]
+            # Register the per-session egress-tagging plugin only when the
+            # proxy is deployed; without it the plugin would no-op (no
+            # HTTP(S)_PROXY env to re-tag) but there's no reason to load it.
+            session_tag_plugins = (
+                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
+            )
             opencode_config_json = json.dumps(
                 build_multi_provider_opencode_config(
                     providers=providers,
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    plugins=session_tag_plugins,
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)

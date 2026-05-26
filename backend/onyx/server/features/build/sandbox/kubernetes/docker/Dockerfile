@@ -117,6 +117,13 @@ COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 COPY firewall-init.sh /workspace/firewall-init.sh
 RUN chmod +x /workspace/firewall-init.sh
 
+# Per-session egress tagging plugin for opencode-serve. Registered
+# pod-wide via OPENCODE_CONFIG_CONTENT; tags each sandbox egress request
+# with the originating BuildSession id so the approval proxy can route
+# cards to the exact session. Path must match
+# kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
+COPY opencode-plugins/ /workspace/opencode-plugins/
+
 # Set ownership
 RUN chown -R sandbox:sandbox /workspace
 

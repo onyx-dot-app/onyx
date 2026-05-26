@@ -174,3 +174,46 @@ def test_resolve_active_session_picks_most_recent(
     resolver = _resolver_with(None)
     found = resolver.resolve_active_session(user.id, POSTGRES_DEFAULT_SCHEMA)
     assert found == newer.id
+
+
+# ---------------------------------------------------------------------------
+# resolve_session_by_id — exact in-band tag, validated against the owner
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_session_by_id_returns_id_for_owning_user(
+    seeded_sandbox: tuple[UUID, UUID, UUID],
+) -> None:
+    _, user_id, active_session_id = seeded_sandbox
+    resolver = _resolver_with(None)
+    found = resolver.resolve_session_by_id(
+        active_session_id, user_id, POSTGRES_DEFAULT_SCHEMA
+    )
+    assert found == active_session_id
+
+
+def test_resolve_session_by_id_rejects_other_users_session(
+    db_session: Session,
+    seeded_sandbox: tuple[UUID, UUID, UUID],
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Cross-user guard: a tag naming another user's real session must
+    NOT resolve — the user_id from the (unforgeable) source IP wins."""
+    _, _owner_id, victim_session_id = seeded_sandbox
+    attacker = create_test_user(db_session, "tag_attacker")
+    db_session.commit()
+
+    resolver = _resolver_with(None)
+    found = resolver.resolve_session_by_id(
+        victim_session_id, attacker.id, POSTGRES_DEFAULT_SCHEMA
+    )
+    assert found is None
+
+
+def test_resolve_session_by_id_returns_none_for_unknown_session(
+    seeded_sandbox: tuple[UUID, UUID, UUID],
+) -> None:
+    _, user_id, _ = seeded_sandbox
+    resolver = _resolver_with(None)
+    found = resolver.resolve_session_by_id(uuid4(), user_id, POSTGRES_DEFAULT_SCHEMA)
+    assert found is None

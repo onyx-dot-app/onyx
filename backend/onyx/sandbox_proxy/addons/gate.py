@@ -19,6 +19,8 @@ sandbox checks are fail-closed. `ActionMatcher` exceptions and
 """
 
 import asyncio
+import base64
+import binascii
 import json
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -59,6 +61,10 @@ class _Resolver(Protocol):
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
 
     def resolve_active_session(self, user_id: UUID, tenant_id: str) -> UUID | None: ...
+
+    def resolve_session_by_id(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None: ...
 
 
 DBSessionFactory = Callable[[str], AbstractContextManager[Session]]
@@ -126,14 +132,48 @@ class GateAddon:
         # Invariant: `_persist_approval_row` is the only writer;
         # `_await_decision`'s finally is the only remover.
         self._parked = ParkedApprovals()
+        # client connection id -> in-band session tag (BuildSession id as a
+        # string) parsed from the CONNECT's Proxy-Authorization. Populated
+        # in `http_connect` (the only place the header is visible for
+        # MITM'd HTTPS), read in `request`, evicted on disconnect.
+        self._conn_session_tags: dict[str, str] = {}
         # Each running `request()` coroutine registers itself here so
         # the drain can `asyncio.wait` on real completion instead of
         # sleeping. Self-cleaning via `add_done_callback`.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
-    # mitmproxy hook
+    # mitmproxy hooks
     # ------------------------------------------------------------------
+
+    def http_connect(self, flow: http.HTTPFlow) -> None:
+        """Capture the per-session tag from the CONNECT's Proxy-Authorization.
+
+        For MITM'd HTTPS the `Proxy-Authorization` header rides on the
+        CONNECT, not the decrypted inner request, so this is the only
+        place it's visible. The opencode `session-proxy-tag` plugin puts
+        the originating BuildSession id in the basic-auth username. We key
+        it by client connection id; every curl/python subprocess opens its
+        own tunnel, so a connection maps to exactly one session. Evicted in
+        `client_disconnected`.
+
+        Best-effort: a missing/garbled header just means `request` falls
+        back to the most-recent-active heuristic.
+        """
+        conn_id = getattr(flow.client_conn, "id", None)
+        if conn_id is None:
+            return
+        tag = _parse_proxy_auth_username(
+            flow.request.headers.get("Proxy-Authorization")
+        )
+        if tag:
+            self._conn_session_tags[conn_id] = tag
+
+    def client_disconnected(self, client: object) -> None:
+        """Drop the connection's cached session tag to bound memory."""
+        conn_id = getattr(client, "id", None)
+        if conn_id is not None:
+            self._conn_session_tags.pop(conn_id, None)
 
     async def requestheaders(self, flow: http.HTTPFlow) -> None:
         """Opt a tenant-scoped snapshot upload into unbuffered streaming.
@@ -286,11 +326,11 @@ class GateAddon:
         if match is None:
             return None
 
-        # Gated — now we need a session to route the card to.
+        # Gated — now we need a session to route the card to. Prefer the
+        # exact in-band tag (Proxy-Authorization username); fall back to
+        # the most-recent-active heuristic when it's absent/unverifiable.
         try:
-            session_id = self._identity.resolve_active_session(
-                sandbox.user_id, sandbox.tenant_id
-            )
+            session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
             logger.exception(
                 "gate.session_lookup_error sandbox_id=%s user_id=%s host=%s",
@@ -608,6 +648,84 @@ class GateAddon:
         if not isinstance(addr, str):
             return None
         return addr
+
+    def _resolve_gated_session(
+        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
+    ) -> UUID | None:
+        """Exact in-band tag if verifiable, else most-recent-active heuristic.
+
+        DB errors propagate to the caller, which fails the request closed.
+        """
+        tag = self._extract_session_tag(flow)
+        if tag is not None:
+            try:
+                tagged_id = UUID(tag)
+            except ValueError:
+                tagged_id = None
+            if tagged_id is not None:
+                exact = self._identity.resolve_session_by_id(
+                    tagged_id, sandbox.user_id, sandbox.tenant_id
+                )
+                if exact is not None:
+                    logger.info(
+                        "gate.session_exact session_id=%s sandbox_id=%s host=%s",
+                        exact,
+                        sandbox.sandbox_id,
+                        flow.request.host,
+                    )
+                    return exact
+            # Tag present but doesn't resolve to one of this user's
+            # sessions (stale, foreign, or tampered). Don't trust it —
+            # fall back to the heuristic rather than 403.
+            logger.warning(
+                "gate.session_tag_unverified sandbox_id=%s user_id=%s host=%s",
+                sandbox.sandbox_id,
+                sandbox.user_id,
+                flow.request.host,
+            )
+        return self._identity.resolve_active_session(sandbox.user_id, sandbox.tenant_id)
+
+    def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
+        """The originating session tag, or None.
+
+        HTTPS: captured from the CONNECT in `http_connect`, keyed by
+        client connection. HTTP: read directly off the request, since
+        there's no CONNECT and the header rides on the request itself.
+        """
+        conn_id = getattr(flow.client_conn, "id", None)
+        if conn_id is not None:
+            cached = self._conn_session_tags.get(conn_id)
+            if cached:
+                return cached
+        return _parse_proxy_auth_username(
+            flow.request.headers.get("Proxy-Authorization")
+        )
+
+
+# -----------------------------------------------------------------------
+# Proxy-Authorization parsing
+# -----------------------------------------------------------------------
+
+
+def _parse_proxy_auth_username(header_value: str | None) -> str | None:
+    """Extract the basic-auth username from a `Proxy-Authorization` header.
+
+    The session-proxy-tag plugin encodes the BuildSession id as the
+    username with an empty password: `Basic base64("<session_id>:")`.
+    Returns the username, or None for a missing/malformed/non-basic
+    header. Never raises.
+    """
+    if not header_value:
+        return None
+    parts = header_value.split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "basic":
+        return None
+    try:
+        decoded = base64.b64decode(parts[1], validate=True).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return None
+    username = decoded.split(":", 1)[0]
+    return username or None
 
 
 # -----------------------------------------------------------------------

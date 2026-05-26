@@ -153,10 +153,36 @@ class IdentityResolver:
         """Most-recently-active `BuildSession` for the user, or None.
 
         Called only on gated requests, where we need a session_id to
-        route the approval card.
+        route the approval card. This is the fallback heuristic; prefer
+        `resolve_session_by_id` when the request carries an in-band tag.
         """
         with self._session_factory(tenant_id) as db:
             return self._fetch_active_session(db, user_id)
+
+    def resolve_session_by_id(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None:
+        """Validate a sandbox-supplied `BuildSession` id against its owner.
+
+        The session id arrives in-band as the `Proxy-Authorization`
+        username (set by the `session-proxy-tag` opencode plugin from the
+        session's workspace path). It is trusted only after confirming the
+        row exists AND its `user_id` matches the user resolved from the
+        source IP — which the sandbox cannot forge. This bounds a tampered
+        or stale tag to the same user (no cross-user routing); on any
+        mismatch the caller falls back to `resolve_active_session`.
+
+        Status is intentionally not filtered: this id came from the
+        session that actually originated the egress, so it is the correct
+        routing target regardless of its current status.
+        """
+        with self._session_factory(tenant_id) as db:
+            stmt = (
+                select(BuildSession.id)
+                .where(BuildSession.id == session_id)
+                .where(BuildSession.user_id == user_id)
+            )
+            return db.scalar(stmt)
 
     def _fetch_sandbox_user(self, db: Session, sandbox_id: UUID) -> UUID | None:
         stmt = select(Sandbox.user_id).where(Sandbox.id == sandbox_id)

@@ -17,6 +17,7 @@ Postgres row.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -57,13 +58,18 @@ class _StubResolver:
         sandbox_exc: Exception | None = None,
         session: Any = _SENTINEL,
         session_exc: Exception | None = None,
+        session_by_id: Any = _SENTINEL,
+        session_by_id_exc: Exception | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._sandbox_exc = sandbox_exc
         self._session = session
         self._session_exc = session_exc
+        self._session_by_id = session_by_id
+        self._session_by_id_exc = session_by_id_exc
         self.resolve_sandbox_calls = 0
         self.resolve_active_session_calls = 0
+        self.resolve_session_by_id_calls: list[tuple[UUID, UUID, str]] = []
 
     def resolve_sandbox(
         self,
@@ -83,6 +89,17 @@ class _StubResolver:
         if self._session_exc is not None:
             raise self._session_exc
         return None if self._session is _SENTINEL else self._session  # type: ignore[no-any-return]
+
+    def resolve_session_by_id(
+        self,
+        session_id: UUID,
+        user_id: UUID,
+        tenant_id: str,
+    ) -> UUID | None:
+        self.resolve_session_by_id_calls.append((session_id, user_id, tenant_id))
+        if self._session_by_id_exc is not None:
+            raise self._session_by_id_exc
+        return None if self._session_by_id is _SENTINEL else self._session_by_id  # type: ignore[no-any-return]
 
 
 class _StubMatcher:
@@ -162,10 +179,13 @@ def _flow(
     port: int = 443,
     method: str = "POST",
     path_components: tuple[str, ...] = (),
+    conn_id: str = "conn-default",
+    proxy_auth: str | None = None,
 ) -> http.HTTPFlow:
     flow = MagicMock(spec=http.HTTPFlow)
     flow.client_conn = MagicMock()
     flow.client_conn.peername = peername
+    flow.client_conn.id = conn_id
     flow.request = MagicMock()
     flow.request.host = host
     flow.request.port = port
@@ -173,6 +193,11 @@ def _flow(
     flow.request.path_components = path_components
     flow.request.raw_content = raw_content
     flow.request.stream = False
+    # Real dict so header lookups behave like mitmproxy's str|None `.get`,
+    # instead of a MagicMock that returns truthy magic objects.
+    flow.request.headers = (
+        {"Proxy-Authorization": proxy_auth} if proxy_auth is not None else {}
+    )
     flow.response = None
     # Real dict, not a MagicMock: `request` reads the snapshot-stream
     # flag off this, and a MagicMock `.get(...)` would be truthy.
@@ -373,6 +398,140 @@ def test_resolve_and_match_happy_path_promotes_session() -> None:
     assert ctx.tenant_id == sandbox.tenant_id
     assert ctx.sandbox_id == sandbox.sandbox_id
     assert flow.response is None
+
+
+# ---------------------------------------------------------------------------
+# In-band session tag — Proxy-Authorization parsing
+# ---------------------------------------------------------------------------
+
+
+def _basic_auth(username: str, password: str = "") -> str:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return f"Basic {token}"
+
+
+_TAG_UUID = "44444444-4444-4444-4444-444444444444"
+
+
+@pytest.mark.parametrize(
+    "header, expected",
+    [
+        (_basic_auth(_TAG_UUID), _TAG_UUID),  # id-only tag (empty password)
+        (_basic_auth(_TAG_UUID, "secret"), _TAG_UUID),  # password ignored
+        (
+            f"Basic {base64.b64encode(_TAG_UUID.encode()).decode()}",
+            _TAG_UUID,
+        ),  # no colon
+        (None, None),
+        ("", None),
+        ("Bearer abc", None),  # not basic
+        ("Basic !!!notbase64!!!", None),  # undecodable
+        ("Basic", None),  # missing token
+    ],
+)
+def test_parse_proxy_auth_username(header: str | None, expected: str | None) -> None:
+    assert gate_mod._parse_proxy_auth_username(header) == expected
+
+
+def test_http_connect_caches_tag_and_client_disconnected_evicts() -> None:
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    flow = _flow(conn_id="conn-xyz", proxy_auth=_basic_auth(_TAG_UUID))
+
+    addon.http_connect(flow)
+    assert addon._conn_session_tags == {"conn-xyz": _TAG_UUID}
+
+    addon.client_disconnected(flow.client_conn)
+    assert addon._conn_session_tags == {}
+
+
+def test_http_connect_ignores_missing_or_garbled_header() -> None:
+    addon = _build(resolver=_StubResolver(), matcher=_StubMatcher())
+    addon.http_connect(_flow(conn_id="c1"))  # no Proxy-Authorization
+    addon.http_connect(_flow(conn_id="c2", proxy_auth="Bearer nope"))
+    assert addon._conn_session_tags == {}
+
+
+# ---------------------------------------------------------------------------
+# _resolve_and_match — exact in-band session resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_and_match_exact_tag_on_http_request() -> None:
+    """Plain-HTTP request carries Proxy-Authorization directly; a verified
+    tag routes to that exact session and skips the heuristic."""
+    user_id = uuid4()
+    tagged_id = UUID(_TAG_UUID)
+    sandbox = _sandbox(user_id=user_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=tagged_id)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    result = addon._resolve_and_match(flow)
+
+    assert result is not None
+    ctx, _match = result
+    assert ctx.session_id == tagged_id
+    assert resolver.resolve_session_by_id_calls == [
+        (tagged_id, user_id, sandbox.tenant_id)
+    ]
+    # Exact match wins — the heuristic must NOT run.
+    assert resolver.resolve_active_session_calls == 0
+
+
+def test_resolve_and_match_exact_tag_on_https_connect() -> None:
+    """HTTPS: the tag rode on the CONNECT (captured via http_connect),
+    not the MITM'd request. It's read back off the connection."""
+    user_id = uuid4()
+    tagged_id = UUID(_TAG_UUID)
+    sandbox = _sandbox(user_id=user_id)
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=tagged_id)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+
+    connect_flow = _flow(conn_id="conn-1", proxy_auth=_basic_auth(_TAG_UUID))
+    addon.http_connect(connect_flow)
+    # The decrypted request has NO Proxy-Authorization header of its own.
+    request_flow = _flow(conn_id="conn-1")
+
+    result = addon._resolve_and_match(request_flow)
+
+    assert result is not None
+    ctx, _match = result
+    assert ctx.session_id == tagged_id
+    assert resolver.resolve_active_session_calls == 0
+
+
+def test_resolve_and_match_unverified_tag_falls_back_to_heuristic() -> None:
+    """Tag present but it doesn't resolve to one of this user's sessions
+    (stale / foreign / tampered) — fall back to the heuristic, not a 403."""
+    heuristic_id = uuid4()
+    sandbox = _sandbox()
+    resolver = _StubResolver(sandbox=sandbox, session_by_id=None, session=heuristic_id)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    flow = _flow(proxy_auth=_basic_auth(_TAG_UUID))
+
+    result = addon._resolve_and_match(flow)
+
+    assert result is not None
+    ctx, _match = result
+    assert ctx.session_id == heuristic_id
+    assert len(resolver.resolve_session_by_id_calls) == 1
+    assert resolver.resolve_active_session_calls == 1
+
+
+def test_resolve_and_match_malformed_tag_skips_lookup_and_falls_back() -> None:
+    """A non-UUID username never hits the DB; goes straight to heuristic."""
+    heuristic_id = uuid4()
+    resolver = _StubResolver(sandbox=_sandbox(), session=heuristic_id)
+    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
+    flow = _flow(proxy_auth=_basic_auth("not-a-uuid"))
+
+    result = addon._resolve_and_match(flow)
+
+    assert result is not None
+    ctx, _match = result
+    assert ctx.session_id == heuristic_id
+    assert resolver.resolve_session_by_id_calls == []
+    assert resolver.resolve_active_session_calls == 1
 
 
 # ---------------------------------------------------------------------------

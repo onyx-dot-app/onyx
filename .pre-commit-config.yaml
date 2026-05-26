@@ -149,6 +149,7 @@ repos:
         name: oxfmt
         entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _
         language: system
+        files: ^web/
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint
