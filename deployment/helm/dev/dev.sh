@@ -149,6 +149,12 @@ infra_ready() {
 ensure_sandbox_rbac() {
   local app_ns="$1" sandbox_ns="$2"
   kubectl apply -f - >/dev/null <<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandbox-file-sync
+  namespace: ${sandbox_ns}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -162,8 +168,14 @@ rules:
     resources: ["pods/exec"]
     verbs: ["create", "get"]
   - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
     resources: ["services"]
     verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "list", "watch", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -223,6 +235,12 @@ ensure_cluster() {
   current="$(kubectl config current-context)"
   [[ "${current}" == "${expected}" ]] \
     || die "current context is '${current}', expected '${expected}'"
+
+  # Craft sandbox pods carry nodeSelector onyx.app/workload=sandbox (prod
+  # schedules them on a dedicated node pool). The single k3d node isn't
+  # tainted, so labeling it lets sandbox pods schedule here while regular
+  # app pods (no selector) still land on the same node.
+  kubectl label nodes --all onyx.app/workload=sandbox --overwrite >/dev/null
 }
 
 ensure_operators() {
