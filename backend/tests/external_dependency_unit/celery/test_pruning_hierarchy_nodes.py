@@ -48,7 +48,6 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.models import HierarchyNodeByConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.kg.models import KGStage
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -240,7 +239,6 @@ def _create_test_documents(db_session: Session) -> list[DbDocument]:
         doc = DbDocument(
             id=doc_id,
             semantic_id=doc_id,
-            kg_stage=KGStage.NOT_STARTED,
         )
         db_session.add(doc)
         docs.append(doc)
@@ -601,7 +599,6 @@ def test_link_hierarchy_nodes_to_documents_for_confluence(
     doc = DbDocument(
         id=page_node_id,
         semantic_id="Test Page",
-        kg_stage=KGStage.NOT_STARTED,
     )
     db_session.add(doc)
     db_session.commit()

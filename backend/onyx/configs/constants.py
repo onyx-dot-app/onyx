@@ -122,7 +122,6 @@ KV_CUSTOMER_UUID_KEY = "customer_uuid"
 KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
-KV_KG_CONFIG_KEY = "kg_config"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -196,8 +195,6 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
-
-TMP_DRALPHA_PERSONA_NAME = "KG Beta"
 
 
 class DocumentSource(str, Enum):

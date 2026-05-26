@@ -33,12 +33,6 @@ EXPECTED_TOOLS = {
         in_code_tool_id="WebSearchTool",
         user_id=None,
     ),
-    "KnowledgeGraphTool": ToolSeedingExpectedResult(
-        name="run_kg_search",
-        display_name="Knowledge Graph Search",
-        in_code_tool_id="KnowledgeGraphTool",
-        user_id=None,
-    ),
     "PythonTool": ToolSeedingExpectedResult(
         name="python",
         display_name="Code Interpreter",
@@ -138,9 +132,6 @@ def test_tool_seeding_migration() -> None:
 
         # Check WebSearchTool
         validate_tool(EXPECTED_TOOLS["WebSearchTool"])
-
-        # Check KnowledgeGraphTool
-        validate_tool(EXPECTED_TOOLS["KnowledgeGraphTool"])
 
         # Check PythonTool
         validate_tool(EXPECTED_TOOLS["PythonTool"])

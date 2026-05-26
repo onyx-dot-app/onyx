@@ -22,7 +22,6 @@ from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
@@ -176,11 +175,6 @@ def document_by_cc_pair_cleanup_task(
         # Phase 3: write back to PG in a fresh transaction.
         if action == DocumentCleanupAction.DELETE:
             with get_session_with_current_tenant() as db_session:
-                delete_document_references_from_kg(
-                    db_session=db_session,
-                    document_id=document_id,
-                )
-
                 delete_documents_complete(
                     db_session=db_session,
                     document_ids=[document_id],

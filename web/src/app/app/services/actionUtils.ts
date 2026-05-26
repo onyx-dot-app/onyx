@@ -7,7 +7,6 @@ import {
   SvgImage,
   SvgLink,
   SvgSearch,
-  SvgServer,
   SvgTerminal,
 } from "@opal/icons";
 
@@ -31,13 +30,6 @@ const isImageGenerationTool = (tool: ToolSnapshot): boolean => {
   return (
     tool.in_code_tool_id === "ImageGenerationTool" ||
     tool.display_name?.toLowerCase().includes("image generation")
-  );
-};
-
-const isKnowledgeGraphTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "KnowledgeGraphTool" ||
-    tool.display_name?.toLowerCase().includes("knowledge graph")
   );
 };
 
@@ -71,7 +63,6 @@ export function getIconForAction(
   if (isSearchTool(action)) return SvgSearch;
   if (isWebSearchTool(action)) return SvgGlobe;
   if (isImageGenerationTool(action)) return SvgImage;
-  if (isKnowledgeGraphTool(action)) return SvgServer;
   if (isOpenUrlTool(action)) return SvgLink;
   if (isCodeInterpreterTool(action)) return SvgTerminal;
   if (isCodingAgentTool(action)) return SvgCpu;
