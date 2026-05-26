@@ -85,7 +85,7 @@ def mock_gpu_status() -> Iterator[None]:
 
 
 @pytest.fixture
-def mock_vespa_query() -> Iterator[None]:
+def mock_index_query() -> Iterator[None]:
     """Stub document-index hybrid retrieval to a safe empty response to avoid CI flakiness."""
     with patch(
         "onyx.document_index.opensearch.opensearch_document_index.OpenSearchIndexPair.hybrid_retrieval",
@@ -120,7 +120,7 @@ def mock_file_store() -> Iterator[None]:
 def mock_external_deps(
     mock_nlp_embeddings_post: None,  # noqa: ARG001
     mock_gpu_status: None,  # noqa: ARG001
-    mock_vespa_query: None,  # noqa: ARG001
+    mock_index_query: None,  # noqa: ARG001
     mock_file_store: None,  # noqa: ARG001
 ) -> Iterator[None]:
     """Convenience fixture to enable all common external dependency mocks."""

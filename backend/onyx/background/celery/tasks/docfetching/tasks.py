@@ -341,7 +341,7 @@ def docfetching_proxy_task(
     2) upserts documents to postgres (index_doc_batch_prepare)
     3) chunks each document (optionally adds context for contextual rag)
     4) embeds chunks (embed_chunks_with_failure_handling) via a call to the model server
-    5) write chunks to vespa (write_chunks_to_vector_db_with_backoff)
+    5) write chunks to the document index (write_chunks_to_vector_db_with_backoff)
     6) update document and indexing metadata in postgres
     7) pulls all document IDs from the source and compares those IDs to locally stored documents and deletes
     all locally stored IDs missing from the most recently pulled document ID list

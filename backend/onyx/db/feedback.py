@@ -173,7 +173,7 @@ def create_doc_retrieval_feedback(
     clicked: bool = False,
     feedback: SearchFeedbackType | None = None,
 ) -> None:
-    """Creates a new Document feedback row and updates the boost value in Postgres and Vespa"""
+    """Creates a new Document feedback row and updates the boost value in Postgres and the document index"""
     db_doc = _fetch_db_doc_by_id(document_id, db_session)
 
     retrieval_feedback = DocumentRetrievalFeedback(

@@ -31,7 +31,7 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Coordinates core background tasks and system-wide operations
    - Handles connector management, document sync, pruning, and periodic checks
    - Runs with 4 threads concurrency
-   - Tasks: connector deletion, vespa sync, pruning, LLM model updates, user file sync
+   - Tasks: connector deletion, document-index sync, pruning, LLM model updates, user file sync
 
 2. **Docfetching Worker** (`docfetching`)
 
@@ -46,14 +46,14 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - Upserts documents to PostgreSQL
      - Chunks documents and adds contextual information
      - Embeds chunks via model server
-     - Writes chunks to Vespa vector database
+     - Writes chunks to the OpenSearch vector database
      - Updates document metadata
    - Configurable concurrency (default from env)
 
 4. **Light Worker** (`light`)
 
    - Handles lightweight, fast operations
-   - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
+   - Tasks: document-index metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
    - Higher concurrency for quick tasks
 
 5. **Heavy Worker** (`heavy`)
@@ -81,7 +81,7 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Schedules tasks like:
      - Indexing checks (every 15 seconds)
      - Connector deletion checks (every 20 seconds)
-     - Vespa sync checks (every 20 seconds)
+     - Document-index sync checks (every 20 seconds)
      - Pruning checks (every 20 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
@@ -138,7 +138,7 @@ NOTE: Always make sure everything is strictly typed (both in Python and Typescri
 - **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
-- **Search**: Vespa vector database
+- **Search**: OpenSearch vector database
 - **Auth**: OAuth2, SAML, multi-provider support
 - **AI/ML**: LangChain, LiteLLM, multiple embedding models
 
@@ -151,7 +151,7 @@ backend/
 │   ├── chat/                    # Chat functionality & LLM interactions
 │   ├── connectors/              # Data source connectors
 │   ├── db/                      # Database models & operations
-│   ├── document_index/          # Vespa integration
+│   ├── document_index/          # OpenSearch integration
 │   ├── federated_connectors/    # External search connectors
 │   ├── llm/                     # LLM provider integrations
 │   └── server/                  # API endpoints & routers
@@ -214,7 +214,7 @@ pytest -xv backend/tests/unit
 ### External Dependency Unit Tests
 
 These tests assume that all external dependencies of Onyx are available and callable (e.g. Postgres, Redis,
-MinIO/S3, Vespa are running + OpenAI can be called + any request to the internet is fine + etc.).
+MinIO/S3, OpenSearch are running + OpenAI can be called + any request to the internet is fine + etc.).
 
 However, the actual Onyx containers are not running and with these tests we call the function to test directly.
 We can also mock components/calls at will.

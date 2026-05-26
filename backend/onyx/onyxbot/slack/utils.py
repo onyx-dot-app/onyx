@@ -415,7 +415,7 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
     return view_values
 
 
-def translate_vespa_highlight_to_slack(match_strs: list[str], used_chars: int) -> str:
+def translate_highlight_to_slack(match_strs: list[str], used_chars: int) -> str:
     def _replace_highlight(s: str) -> str:
         s = re.sub(r"(?<=[^\s])<hi>(.*?)</hi>", r"\1", s)
         s = s.replace("</hi>", "*").replace("<hi>", "*")

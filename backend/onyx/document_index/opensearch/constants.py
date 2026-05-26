@@ -6,6 +6,10 @@ from enum import Enum
 DEFAULT_MAX_CHUNK_SIZE = 512
 
 
+# Canonical OpenSearch container image this build of Onyx targets.
+OPENSEARCH_IMAGE = "opensearchproject/opensearch:3.6.0"
+
+
 # By default OpenSearch will only return a maximum of this many results in a
 # given search. This value is configurable in the index settings.
 DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW = 10_000

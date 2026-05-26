@@ -1,6 +1,6 @@
 # Vector DB Filter Semantics
 
-How `IndexFilters` fields combine into the final query filter. Applies to both Vespa and OpenSearch.
+How `IndexFilters` fields combine into the final query filter. Applies to OpenSearch.
 
 ## Filter categories
 
@@ -99,15 +99,15 @@ AND (acl contains ...)
 
 ## Field reference
 
-| Filter field | Vespa field | Vespa type | Purpose |
-|---|---|---|---|
-| `document_set` | `document_sets` | `weightedset<string>` | Connector doc sets attached to assistant |
-| `attached_document_ids` | `document_id` | `string` | Documents explicitly attached (OpenSearch only) |
-| `hierarchy_node_ids` | `ancestor_hierarchy_node_ids` | `array<int>` | Folder/space nodes (OpenSearch only) |
-| `persona_id_filter` | `personas` | `array<int>` | Persona tag for overflowing user files (**primary** trigger) |
-| `project_id_filter` | `user_project` | `array<int>` | Project tag for overflowing project files (**additive** only) |
-| `access_control_list` | `access_control_list` | `weightedset<string>` | ACL entries for the requesting user |
-| `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
-| `tags` | `metadata_list` | `array<string>` | Document metadata tags |
-| `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
-| `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |
+| Filter field | Index field | Purpose |
+|---|---|---|
+| `document_set` | `document_sets` | Connector doc sets attached to assistant |
+| `attached_document_ids` | `document_id` | Documents explicitly attached |
+| `hierarchy_node_ids` | `ancestor_hierarchy_node_ids` | Folder/space nodes |
+| `persona_id_filter` | `personas` | Persona tag for overflowing user files (**primary** trigger) |
+| `project_id_filter` | `user_project` | Project tag for overflowing project files (**additive** only) |
+| `access_control_list` | `access_control_list` | ACL entries for the requesting user |
+| `source_type` | `source_type` | Connector source type (e.g. `web`, `jira`) |
+| `tags` | `metadata_list` | Document metadata tags |
+| `time_cutoff` | `doc_updated_at` | Minimum document update timestamp |
+| `tenant_id` | `tenant_id` | Tenant isolation (multi-tenant) |

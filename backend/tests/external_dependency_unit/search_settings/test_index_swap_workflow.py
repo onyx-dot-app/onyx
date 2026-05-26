@@ -5,7 +5,7 @@ calls `delete_all_documents_for_connector_credential_pair` for each cc_pair.
 This test exercises that full workflow end-to-end and asserts that the
 attached `Document.file_id`s are also reaped — not just the document rows.
 
-Mocks Vespa (`get_all_document_indices`) since this is testing the postgres +
+Mocks the document index (`get_all_document_indices`) since this is testing the postgres +
 file_store side effects of the swap, not the document index integration.
 """
 
@@ -133,8 +133,8 @@ class TestInstantIndexSwap:
             status=IndexModelStatus.FUTURE,
         )
 
-        # Vespa is patched out — we're testing the postgres + file_store
-        # side effects, not the document-index integration.
+        # The document index is patched out — we're testing the postgres +
+        # file_store side effects, not the document-index integration.
         with patch(
             "onyx.db.swap_index.get_all_document_indices",
             return_value=[],

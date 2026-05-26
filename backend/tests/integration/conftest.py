@@ -353,7 +353,7 @@ instantiate the session directly within the test.
 
 
 @pytest.fixture
-def vespa_client() -> IndexFixture:
+def index_fixture() -> IndexFixture:
     with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
         return IndexFixture(index_name=search_settings.index_name)

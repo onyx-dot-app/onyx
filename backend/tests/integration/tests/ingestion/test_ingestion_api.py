@@ -12,7 +12,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def test_ingestion_api_crud(
     reset: None,  # noqa: ARG001
-    vespa_client: IndexFixture,
+    index_fixture: IndexFixture,
 ) -> None:
     """Test create, list, and delete via the ingestion API."""
     admin_user: DATestUser = UserManager.create(email="admin@onyx.app")
@@ -43,8 +43,8 @@ def test_ingestion_api_crud(
         assert doc_db is not None
         assert doc_db.from_ingestion_api is True
 
-    vespa_docs = vespa_client.get_documents_by_id([doc.id])["documents"]
-    assert len(vespa_docs) == 1
+    index_docs = index_fixture.get_documents_by_id([doc.id])["documents"]
+    assert len(index_docs) == 1
 
     # LIST
     docs_list = IngestionManager.list_all_ingestion_docs(api_key=api_key)
@@ -57,5 +57,5 @@ def test_ingestion_api_crud(
         doc_db = db_session.query(Document).filter(Document.id == doc.id).first()
         assert doc_db is None
 
-    vespa_docs = vespa_client.get_documents_by_id([doc.id])["documents"]
-    assert len(vespa_docs) == 0
+    index_docs = index_fixture.get_documents_by_id([doc.id])["documents"]
+    assert len(index_docs) == 0

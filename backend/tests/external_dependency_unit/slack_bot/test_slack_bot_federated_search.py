@@ -461,7 +461,7 @@ class TestSlackBotFederatedSearch:
     )
     def test_slack_bot_public_channel_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_index: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:
@@ -521,7 +521,7 @@ class TestSlackBotFederatedSearch:
     )
     def test_slack_bot_private_channel_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_index: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:
@@ -581,7 +581,7 @@ class TestSlackBotFederatedSearch:
     )
     def test_slack_bot_dm_filtering(
         self,
-        mock_vespa: Mock,  # noqa: ARG002
+        mock_index: Mock,  # noqa: ARG002
         mock_gpu_status: Mock,  # noqa: ARG002
         db_session: Session,
     ) -> None:

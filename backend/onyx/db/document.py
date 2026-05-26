@@ -1110,8 +1110,9 @@ def prepare_to_modify_documents(
 ) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
-    called ahead of any modification to Vespa. Locks should be released by the
-    caller as soon as updates are complete by finishing the transaction.
+    called ahead of any modification to the document index. Locks should be
+    released by the caller as soon as updates are complete by finishing the
+    transaction.
 
     NOTE: only one commit is allowed within the context manager returned by this function.
     Multiple commits will result in a sqlalchemy.exc.InvalidRequestError.

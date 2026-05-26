@@ -9,8 +9,8 @@ from onyx.document_index.interfaces_new import MetadataUpdateRequest
 
 
 class RetryDocumentIndex:
-    """A wrapper class to help with specific retries against Vespa involving
-    read timeouts.
+    """A wrapper class to help with specific retries against the document index
+    involving read timeouts.
 
     wait_random_exponential implements full jitter as per this article:
     https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/"""

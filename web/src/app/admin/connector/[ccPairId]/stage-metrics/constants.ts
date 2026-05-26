@@ -56,7 +56,8 @@ export const STAGE_DESCRIPTIONS: Record<IndexAttemptStage, string> = {
   CONTEXTUAL_RAG:
     "Optional LLM call that adds short contextual summaries to each chunk to improve retrieval quality.",
   EMBEDDING: "Calls the embedding model to produce vectors for each chunk.",
-  VECTOR_DB_WRITE: "Writes the embedded chunks and their metadata to Vespa.",
+  VECTOR_DB_WRITE:
+    "Writes the embedded chunks and their metadata to the vector index.",
   POST_INDEX_DB_UPDATE:
     "Updates Postgres with final document state after indexing (last-indexed timestamps, hashes, etc.).",
   COORDINATION_UPDATE:

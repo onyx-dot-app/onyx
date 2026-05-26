@@ -293,7 +293,7 @@ def reset_postgres(
             # Promote the FUTURE search-settings row (danswer_chunk_<model>) to
             # PRESENT so secondary_search_settings is None and the api_server
             # doesn't have to perform the swap mid-request. Previously this
-            # lived in reset_vespa(); when Vespa was deprecated the swap call
+            # lived in reset_index(); (historical) the swap call
             # needs to stay.
             check_and_perform_index_swap(db_session)
 

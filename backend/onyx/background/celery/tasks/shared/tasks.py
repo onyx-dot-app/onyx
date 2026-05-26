@@ -103,9 +103,8 @@ def document_by_cc_pair_cleanup_task(
 
     try:
         # Phase 1: read DB state, then release the connection before the
-        # document-index HTTP call (OpenSearch on cloud, Vespa on legacy
-        # deployments). Holding a pg transaction across the round-trip pins
-        # a pgbouncer slot for the duration and saturates the pool under
+        # OpenSearch HTTP call. Holding a pg transaction across the round-trip
+        # pins a pgbouncer slot for the duration and saturates the pool under
         # bulk-deletion fan-out across the light worker fleet.
         chunk_count: int | None = None
         update_request: MetadataUpdateRequest | None = None
@@ -255,7 +254,7 @@ def document_by_cc_pair_cleanup_task(
                 )
                 with get_session_with_current_tenant() as db_session:
                     # delete the cc pair relationship now and let reconciliation clean it up
-                    # in vespa
+                    # in the document index
                     delete_document_by_connector_credential_pair__no_commit(
                         db_session=db_session,
                         document_id=document_id,

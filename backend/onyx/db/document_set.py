@@ -445,7 +445,7 @@ def mark_document_set_as_to_be_deleted(
 ) -> None:
     """Cleans up all document_set -> cc_pair relationships and marks the document set
     as needing an update. The actual document set row will be deleted by the background
-    job which syncs these changes to Vespa."""
+    job which syncs these changes to the document index."""
 
     try:
         document_set_row = get_document_set_by_id_for_user(
@@ -470,7 +470,7 @@ def mark_document_set_as_to_be_deleted(
         )
 
         # delete all federated connector mappings so the cleanup task can fully
-        # remove the document set once the Vespa sync completes
+        # remove the document set once the document-index sync completes
         delete_stmt = delete(FederatedConnector__DocumentSet).where(
             FederatedConnector__DocumentSet.document_set_id == document_set_id
         )

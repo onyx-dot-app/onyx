@@ -75,7 +75,7 @@ def test_github_private_repo_permission_sync(
 
         # Use a longer timeout for GitHub permission sync operations
         # GitHub API operations can be slow, especially with rate limiting
-        # This accounts for document sync, group sync, and vespa sync operations
+        # This accounts for document sync, group sync, and document-index sync operations
         CCPairManager.wait_for_sync(
             cc_pair=github_cc_pair,
             user_performing_action=admin_user,

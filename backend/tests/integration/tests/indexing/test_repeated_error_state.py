@@ -24,7 +24,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def test_repeated_error_state_detection_and_recovery(
     mock_server_client: httpx.Client,
-    vespa_client: IndexFixture,
+    index_fixture: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that a connector is marked as in a repeated error state after
@@ -185,7 +185,7 @@ def test_repeated_error_state_detection_and_recovery(
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            index_fixture=index_fixture,
         )
     assert len(documents) == 1
     assert documents[0].id == test_doc.id

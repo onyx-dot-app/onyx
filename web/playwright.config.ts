@@ -56,7 +56,7 @@ export default defineConfig({
       workers: 1,
     },
     {
-      // runs against the Onyx Lite stack (DISABLE_VECTOR_DB=true, no Vespa/Redis)
+      // runs against the Onyx Lite stack (DISABLE_VECTOR_DB=true, no vector DB / Redis)
       name: "lite",
       use: {
         ...devices["Desktop Chrome"],

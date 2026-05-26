@@ -8,12 +8,12 @@ Validates that:
 
 2. The process_single_user_file_project_sync worker task reads persona
    associations from the DB, passes persona_ids to the document index via
-   VespaDocumentUserFields, and clears needs_persona_sync afterwards.
+   IndexDocumentUserFields, and clears needs_persona_sync afterwards.
 
 3. upsert_persona correctly marks affected UserFiles with
    needs_persona_sync=True when file associations change.
 
-Uses real Redis and PostgreSQL.  Document index (Vespa) calls are mocked
+Uses real Redis and PostgreSQL.  Document index (the index) calls are mocked
 since we only need to verify the arguments passed to update_single.
 """
 
@@ -349,7 +349,7 @@ class TestSyncTaskWritesPersonaIds:
         db_session: Session,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """A soft-deleted persona should NOT appear in the persona_ids sent to Vespa."""
+        """A soft-deleted persona should NOT appear in the persona_ids sent to the index."""
         user = create_test_user(db_session, "sync_deleted")
         uf = _create_completed_user_file(db_session, user, needs_persona_sync=True)
         persona = _create_test_persona(db_session, user)

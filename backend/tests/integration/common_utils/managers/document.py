@@ -165,7 +165,7 @@ class DocumentManager:
 
     @staticmethod
     def verify(
-        vespa_client: IndexFixture,
+        index_fixture: IndexFixture,
         cc_pair: DATestCCPair,
         doc_creating_user: DATestUser,
         # If None, will not check doc sets or groups
@@ -175,7 +175,7 @@ class DocumentManager:
         verify_deleted: bool = False,
     ) -> None:
         doc_ids = [document.id for document in cc_pair.documents]
-        retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+        retrieved_docs_dict = index_fixture.get_documents_by_id(doc_ids)["documents"]
 
         retrieved_docs = {
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
@@ -219,7 +219,7 @@ class DocumentManager:
     def fetch_documents_for_cc_pair(
         cc_pair_id: int,
         db_session: Session,
-        vespa_client: IndexFixture,
+        index_fixture: IndexFixture,
     ) -> list[SimpleTestDocument]:
         stmt = (
             select(DocumentByConnectorCredentialPair)
@@ -239,7 +239,7 @@ class DocumentManager:
             return []
 
         doc_ids = [document.id for document in documents]
-        retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
+        retrieved_docs_dict = index_fixture.get_documents_by_id(doc_ids)["documents"]
 
         final_docs: list[SimpleTestDocument] = []
         # NOTE: they are really chunks, but we're assuming that for these tests
@@ -247,7 +247,7 @@ class DocumentManager:
         for doc_dict in retrieved_docs_dict:
             doc_id = doc_dict["fields"]["document_id"]
             doc_content = doc_dict["fields"]["content"]
-            # still called `image_file_name` in Vespa for backwards compatibility
+            # still called `image_file_name` in the index for backwards compatibility
             image_file_id = doc_dict["fields"].get("image_file_name", None)
             final_docs.append(
                 SimpleTestDocument(

@@ -28,9 +28,9 @@ def ensure_full_deployment_setup(
 
     - Initializes DB engine and sets tenant context
     - Skips model warm-ups during setup
-    - Runs setup_onyx (Postgres defaults, Vespa indices)
+    - Runs setup_onyx (Postgres defaults, index)
     - Initializes file store (best-effort)
-    - Ensures Vespa indices exist
+    - Ensures index exist
     """
     global _SETUP_COMPLETE
     if _SETUP_COMPLETE:
@@ -81,7 +81,7 @@ def ensure_full_deployment_setup(
             )
             if not ok:
                 raise RuntimeError(
-                    "Vespa did not initialize within the specified timeout."
+                    "The document index did not initialize within the specified timeout."
                 )
 
         _SETUP_COMPLETE = True

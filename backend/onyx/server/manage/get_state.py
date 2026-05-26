@@ -16,6 +16,7 @@ from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.db.auth import get_user_count
+from onyx.document_index.opensearch.constants import OPENSEARCH_IMAGE
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -138,19 +139,19 @@ def get_versions() -> AllVersions:
         stable=ContainerVersions(
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=OPENSEARCH_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=OPENSEARCH_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=OPENSEARCH_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
     )

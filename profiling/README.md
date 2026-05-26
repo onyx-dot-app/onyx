@@ -29,7 +29,7 @@ docker compose up -d
 | `onyx-docfetching-worker`  | 9092  | Celery docfetching worker     |
 | `onyx-docprocessing-worker`| 9093  | Celery docprocessing worker   |
 | `onyx-heavy-worker`        | 9094  | Celery heavy worker (pruning, perm sync, group sync) |
-| `onyx-light-worker`        | 9095  | Celery light worker (vespa sync, deletion, permissions upsert) |
+| `onyx-light-worker`        | 9095  | Celery light worker (document-index sync, deletion, permissions upsert) |
 
 ## Environment variables
 

@@ -676,7 +676,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 # NOTE: Index filters includes metadata tags which were filtered
                 # for invalid unicode at indexing time. In theory it would be
                 # ideal to do filtering here as well, in practice we never did
-                # that in the Vespa codepath and have not seen issues in
+                # that on read, and have not seen issues in
                 # production, so we deliberately conform to the existing logic
                 # in order to not unknowningly introduce a possible bug.
                 index_filters=filters,
@@ -731,7 +731,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that on read, and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -779,7 +779,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that on read, and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -823,7 +823,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             # NOTE: Index filters includes metadata tags which were filtered
             # for invalid unicode at indexing time. In theory it would be
             # ideal to do filtering here as well, in practice we never did
-            # that in the Vespa codepath and have not seen issues in
+            # that on read, and have not seen issues in
             # production, so we deliberately conform to the existing logic
             # in order to not unknowningly introduce a possible bug.
             index_filters=filters,
@@ -879,24 +879,6 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         return inference_chunks
-
-    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
-        """Indexes raw document chunks into OpenSearch.
-
-        Used in the Vespa migration task. Can be deleted after migrations are
-        complete.
-        """
-        logger.debug(
-            "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
-            len(chunks),
-            self._index_name,
-        )
-        # Do not raise if the document already exists, just update. This is
-        # because the document may already have been indexed during the
-        # OpenSearch transition period.
-        self._client.bulk_index_documents(
-            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
-        )
 
 
 class OpenSearchIndexPair(DocumentIndex):

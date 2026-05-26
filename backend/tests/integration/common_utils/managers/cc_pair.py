@@ -546,8 +546,8 @@ class CCPairManager:
         number_of_updated_docs: int = 0,
         # Sometimes waiting for a group sync is not necessary
         should_wait_for_group_sync: bool = True,
-        # Sometimes waiting for a vespa sync is not necessary
-        should_wait_for_vespa_sync: bool = True,
+        # Sometimes waiting for a document-index sync is not necessary
+        should_wait_for_index_sync: bool = True,
     ) -> None:
         """after: The task register time must be after this time."""
         doc_synced = False
@@ -592,11 +592,11 @@ class CCPairManager:
         # this shouldnt be necessary but something is off with the timing for the sync jobs
         time.sleep(5)
 
-        if not should_wait_for_vespa_sync:
+        if not should_wait_for_index_sync:
             return
 
-        print("waiting for vespa sync")
-        # wait for the vespa sync to complete once the permission sync is complete
+        print("waiting for document-index sync")
+        # wait for the document-index sync to complete once the permission sync is complete
         start = time.monotonic()
         while True:
             doc_sync_statuses = CCPairManager.get_doc_sync_statuses(
@@ -621,11 +621,11 @@ class CCPairManager:
             elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
-                    f"Vespa sync was not completed within {timeout} seconds"
+                    f"Document-index sync was not completed within {timeout} seconds"
                 )
 
             print(
-                f"Waiting for vespa sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
+                f"Waiting for document-index sync to complete. elapsed={elapsed:.2f} timeout={timeout}"
             )
             time.sleep(5)
 

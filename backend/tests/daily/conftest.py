@@ -1,7 +1,7 @@
 import os
 
 # Daily tests run without a live backend; EE code paths that depend on
-# Redis/Vespa/etc are not available, so disable enforcement before any
+# Redis/the vector index/etc are not available, so disable enforcement before any
 # module-level imports below pull in EE versioned implementations.
 os.environ["LICENSE_ENFORCEMENT_ENABLED"] = "false"
 

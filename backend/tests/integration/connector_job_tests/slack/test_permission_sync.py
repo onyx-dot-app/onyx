@@ -36,7 +36,7 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
 )
 def test_slack_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: IndexFixture,  # noqa: ARG001
+    index_fixture: IndexFixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_perm_sync_test_setup
@@ -139,7 +139,7 @@ def test_slack_permission_sync(
         number_of_updated_docs=0,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     # Verify admin can see messages from both channels
@@ -206,7 +206,7 @@ def test_slack_permission_sync(
 )
 def test_slack_group_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: IndexFixture,  # noqa: ARG001
+    index_fixture: IndexFixture,  # noqa: ARG001
     slack_perm_sync_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     """
@@ -310,7 +310,7 @@ def test_slack_group_permission_sync(
         number_of_updated_docs=0,
         user_performing_action=admin_user,
         should_wait_for_group_sync=False,
-        should_wait_for_vespa_sync=False,
+        should_wait_for_index_sync=False,
     )
 
     # Verify admin can see the message
