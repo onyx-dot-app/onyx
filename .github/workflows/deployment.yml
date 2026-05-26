@@ -1598,93 +1598,53 @@ jobs:
         with:
           sarif_file: "trivy-results.sarif"
 
-  retag-cloud-as-edge:
-    needs:
-      - determine-builds
-      - merge-backend
-      - merge-model-server
+  deploy-edge-to-st-dev:
+    needs: determine-builds
     if: >-
-      always() && !cancelled() &&
       needs.determine-builds.outputs.is-cloud-tag == 'true' &&
-      needs.determine-builds.outputs.is-test-run != 'true' &&
-      needs.merge-backend.result == 'success' &&
-      needs.merge-model-server.result == 'success'
-    runs-on:
-      - runs-on
-      - runner=1cpu-linux-x64
-      - run-id=${{ github.run_id }}-retag-edge
-    timeout-minutes: 30
+      needs.determine-builds.outputs.is-test-run != 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 90
     environment: release
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
-
-      - name: Checkout (for local action)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
-        with:
-          secret-ids: |
-            DOCKER_USERNAME, deploy/docker-username
-            DOCKER_TOKEN, deploy/docker-token
-          parse-json-secrets: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
-
-      - name: Re-tag cloud images as :edge on non-cloud repos
-        env:
-          CLOUD_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          for IMG in onyx-backend onyx-model-server; do
-            echo "Re-tagging onyxdotapp/${IMG}-cloud:${CLOUD_TAG} -> onyxdotapp/${IMG}:edge"
-            docker buildx imagetools create \
-              -t "onyxdotapp/${IMG}:edge" \
-              "onyxdotapp/${IMG}-cloud:${CLOUD_TAG}"
-          done
-
-      - name: Mint GitHub App installation token for cloud-deployment-yamls
+      - name: Mint GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
         with:
           client-id: ${{ vars.CHERRY_PICK_APP_ID }}
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           owner: onyx-dot-app
-          repositories: cloud-deployment-yamls
+          repositories: onyx,cloud-deployment-yamls
+          permission-contents: write
           permission-actions: write
 
-      - name: Dispatch st-dev deploy with version_tag=edge
+      - name: Checkout with app token (for edge tag force-push)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: true
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # ratchet:astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.9.9"
+          enable-cache: false
+
+      - name: Run ods deploy edge
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          gh workflow run st-dev-deploy.yml \
-            --repo onyx-dot-app/cloud-deployment-yamls \
-            --ref main \
-            -f version_tag=edge
+        run: uv run --no-sync --with onyx-devtools ods deploy edge --yes
 
       - name: Notify Slack
         if: always()
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
-          title: ${{ job.status == 'success' && '🌀 Cloud tag re-tagged as :edge + st-dev deploy dispatched' || '❌ Cloud → edge re-tag or st-dev dispatch failed' }}
+          title: ${{ job.status == 'success' && '🌀 Cloud tag → ods deploy edge → st-dev deploy succeeded' || '❌ ods deploy edge for st-dev failed' }}
           ref-name: ${{ github.ref_name }}
-          details: "Cloud tag `${{ github.ref_name }}` retag + st-dev dispatch finished with status: ${{ job.status }}."
+          details: "Cloud tag `${{ github.ref_name }}` ods deploy edge finished with status: ${{ job.status }}."
 
   notify-slack-on-failure:
     needs:
@@ -1705,8 +1665,8 @@ jobs:
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
-      - retag-cloud-as-edge
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || (needs.determine-builds.outputs.build-backend-craft == 'true' && (needs.build-backend-craft-amd64.result == 'failure' || needs.build-backend-craft-arm64.result == 'failure' || needs.merge-backend-craft.result == 'failure')) || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.retag-cloud-as-edge.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - deploy-edge-to-st-dev
+    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || (needs.determine-builds.outputs.build-backend-craft == 'true' && (needs.build-backend-craft-amd64.result == 'failure' || needs.build-backend-craft-arm64.result == 'failure' || needs.merge-backend-craft.result == 'failure')) || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.deploy-edge-to-st-dev.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
