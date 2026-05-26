@@ -28,14 +28,14 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * ```
  */
 export function useCurrentUser(): {
-  /** The authenticated user, or `undefined` while loading. */
-  user: User | undefined;
+  /** The authenticated user, `null` when signed out, or `undefined` while loading. */
+  user: User | null | undefined;
   /** Imperatively revalidate / update the cached user. */
-  mutateUser: KeyedMutator<User>;
+  mutateUser: KeyedMutator<User | null>;
   /** The error thrown by the fetcher, if any. */
   userError: (Error & { status?: number }) | undefined;
 } {
-  const { data, mutate, error } = useSWR<User>(
+  const { data, mutate, error } = useSWR<User | null>(
     SWR_KEYS.me,
     errorHandlingFetcher,
     {
