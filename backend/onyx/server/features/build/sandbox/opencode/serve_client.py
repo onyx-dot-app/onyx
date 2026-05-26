@@ -775,21 +775,34 @@ class OpencodeServeClient:
         self,
         opencode_session_id: str | None,
         *,
-        cwd: str,
+        directory: str,
         title: str | None = None,
     ) -> str:
         """Return a valid opencode session id. Idempotent across replicas.
+
+        ``directory`` anchors the opencode Instance for this session.
+        Opencode-serve scopes its session store per-directory via the
+        ``?directory=`` query parameter on every route (the
+        ``Instance.provide`` middleware in ``server.ts``); the body field
+        is silently ignored. Without it, the session is created in the
+        server's launch cwd (``/workspace``) and every subsequent op must
+        also omit ``?directory=`` to find it — which silently breaks
+        per-session filesystem isolation.
 
         Tolerates a brief cold-pod window where the sandbox is K8s-Ready
         but opencode-serve hasn't bound :4096 yet — both connect failures
         and RemoteProtocolError ("server disconnected before sending a
         response") are retried with short backoff before bubbling up.
         """
+        directory_params = {"directory": directory}
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
             r = self._http_with_cold_pod_retry(
-                "GET", f"/session/{opencode_session_id}", idempotent=True
+                "GET",
+                f"/session/{opencode_session_id}",
+                params=directory_params,
+                idempotent=True,
             )
             if r.status_code == 200:
                 logger.info(
@@ -812,7 +825,7 @@ class OpencodeServeClient:
                 "[SESSION-LIFECYCLE] ensure_session: no caller-supplied id; creating"
             )
 
-        body: dict[str, Any] = {"directory": cwd}
+        body: dict[str, Any] = {}
         if title:
             body["title"] = title
         # POST /session is NOT idempotent — opencode mints a new session
@@ -821,7 +834,11 @@ class OpencodeServeClient:
         # RemoteProtocolError after a half-handled POST could leak an
         # orphan opencode session.
         r = self._http_with_cold_pod_retry(
-            "POST", "/session", json=body, idempotent=False
+            "POST",
+            "/session",
+            params=directory_params,
+            json=body,
+            idempotent=False,
         )
         _raise_for_status(r, "session create")
         data = r.json()
@@ -829,15 +846,18 @@ class OpencodeServeClient:
         if not isinstance(new_id, str):
             raise RuntimeError("opencode /session returned no id")
         logger.info(
-            "[SESSION-LIFECYCLE] ensure_session: POST /session -> id=%s (cwd=%s)",
+            "[SESSION-LIFECYCLE] ensure_session: POST /session -> id=%s (directory=%s)",
             new_id,
-            cwd,
+            directory,
         )
         return new_id
 
-    def delete_session(self, opencode_session_id: str) -> None:
+    def delete_session(self, opencode_session_id: str, *, directory: str) -> None:
         try:
-            r = self._http.delete(f"/session/{opencode_session_id}")
+            r = self._http.delete(
+                f"/session/{opencode_session_id}",
+                params={"directory": directory},
+            )
             if r.status_code not in (200, 204, 404):
                 logger.warning(
                     "opencode-serve: delete_session(%s) → HTTP %s",
@@ -851,7 +871,9 @@ class OpencodeServeClient:
                 e,
             )
 
-    def list_messages(self, opencode_session_id: str) -> list[dict[str, Any]]:
+    def list_messages(
+        self, opencode_session_id: str, *, directory: str
+    ) -> list[dict[str, Any]]:
         """Snapshot the assistant message accumulator. Returns the parsed
         JSON list directly — callers introspect via dict access.
 
@@ -859,16 +881,23 @@ class OpencodeServeClient:
         streaming and only populated post-terminator. Use this only for
         the post-terminator fallback in the reconnect path.
         """
-        r = self._http.get(f"/session/{opencode_session_id}/message")
+        r = self._http.get(
+            f"/session/{opencode_session_id}/message",
+            params={"directory": directory},
+        )
         _raise_for_status(r, "session messages")
         data = r.json()
         if isinstance(data, list):
             return cast(list[dict[str, Any]], data)
         return []
 
-    def abort(self, opencode_session_id: str) -> None:
+    def abort(self, opencode_session_id: str, *, directory: str) -> None:
         try:
-            self._http.post(f"/session/{opencode_session_id}/abort", json={})
+            self._http.post(
+                f"/session/{opencode_session_id}/abort",
+                params={"directory": directory},
+                json={},
+            )
         except httpx.HTTPError as e:
             logger.warning(
                 "opencode-serve: abort(%s) failed: %s",
@@ -877,13 +906,14 @@ class OpencodeServeClient:
             )
 
     def get_message(
-        self, opencode_session_id: str, message_id: str
+        self, opencode_session_id: str, message_id: str, *, directory: str
     ) -> dict[str, Any] | None:
         """GET /session/{id}/message/{id}. None on any failure (never raises)."""
         try:
             r = self._http_with_cold_pod_retry(
                 "GET",
                 f"/session/{opencode_session_id}/message/{message_id}",
+                params={"directory": directory},
                 idempotent=True,
             )
         except httpx.HTTPError as e:
@@ -914,11 +944,17 @@ class OpencodeServeClient:
         opencode_session_id: str,
         message: str,
         *,
+        directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
         timeout: float = ACP_MESSAGE_TIMEOUT,
     ) -> Generator[ACPEvent, None, None]:
         """Stream one turn of ACPEvents via the shared per-pod bus.
+
+        ``directory`` must match the one passed to :meth:`ensure_session`
+        — opencode-serve scopes its Instance (and therefore the session
+        store) per ``?directory=`` query param; calling with a different
+        directory will 404 the session.
 
         ``GeneratorExit`` (browser disconnect) → POST ``/abort``.
         Wall-clock timeout → POST ``/abort`` and yield :class:`Error`.
@@ -932,7 +968,7 @@ class OpencodeServeClient:
         state = _TurnState(session_id=opencode_session_id)
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
-            return self.get_message(opencode_session_id, mid)
+            return self.get_message(opencode_session_id, mid, directory=directory)
 
         sub = self._event_bus.subscribe(opencode_session_id)
         try:
@@ -951,7 +987,11 @@ class OpencodeServeClient:
 
             try:
                 self._post_prompt_async(
-                    opencode_session_id, message, model_provider, model_id
+                    opencode_session_id,
+                    message,
+                    model_provider,
+                    model_id,
+                    directory=directory,
                 )
             except httpx.HTTPStatusError as e:
                 yield Error.model_validate(
@@ -968,11 +1008,16 @@ class OpencodeServeClient:
                 return
 
             yield from self._consume_from_bus(
-                sub, timeout, opencode_session_id, state, fetch_message
+                sub,
+                timeout,
+                opencode_session_id,
+                state,
+                fetch_message,
+                directory=directory,
             )
 
         except GeneratorExit:
-            self.abort(opencode_session_id)
+            self.abort(opencode_session_id, directory=directory)
             raise
         finally:
             self._event_bus.unsubscribe(sub)
@@ -984,6 +1029,8 @@ class OpencodeServeClient:
         opencode_session_id: str,
         state: _TurnState,
         fetch_message: Callable[[str], dict[str, Any] | None],
+        *,
+        directory: str,
     ) -> Generator[ACPEvent, None, None]:
         """Drain the bus queue, translate, yield until a
         :class:`PromptResponse` is emitted. permission.asked → auto-allow."""
@@ -993,7 +1040,7 @@ class OpencodeServeClient:
         while True:
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
-                self.abort(opencode_session_id)
+                self.abort(opencode_session_id, directory=directory)
                 yield Error.model_validate(
                     {"code": -1, "message": "Timeout waiting for response"}
                 )
@@ -1030,7 +1077,7 @@ class OpencodeServeClient:
                 yield acp_event
 
             if raw.get("type") == "permission.asked":
-                self._handle_permission_ask(raw, state.session_id)
+                self._handle_permission_ask(raw, state.session_id, directory=directory)
 
             if terminated_locally:
                 return
@@ -1043,6 +1090,8 @@ class OpencodeServeClient:
         message: str,
         model_provider: str | None,
         model_id: str | None,
+        *,
+        directory: str,
     ) -> None:
         """POST /session/.../prompt_async.
 
@@ -1054,10 +1103,16 @@ class OpencodeServeClient:
         body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
         if model_provider and model_id:
             body["model"] = {"providerID": model_provider, "modelID": model_id}
-        r = self._http.post(f"/session/{opencode_session_id}/prompt_async", json=body)
+        r = self._http.post(
+            f"/session/{opencode_session_id}/prompt_async",
+            params={"directory": directory},
+            json=body,
+        )
         _raise_for_status(r, "prompt_async")
 
-    def _handle_permission_ask(self, evt: dict[str, Any], session_id: str) -> None:
+    def _handle_permission_ask(
+        self, evt: dict[str, Any], session_id: str, *, directory: str
+    ) -> None:
         """Auto-allow + telemetry per §Decisions #1.
 
         Production ``opencode.json`` should already cover every permission
@@ -1085,6 +1140,7 @@ class OpencodeServeClient:
         try:
             self._http.post(
                 f"/session/{session_id}/permissions/{perm_id}",
+                params={"directory": directory},
                 json={"response": "once"},
             )
         except httpx.HTTPError as e:

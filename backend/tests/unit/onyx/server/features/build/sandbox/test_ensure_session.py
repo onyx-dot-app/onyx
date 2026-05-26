@@ -22,6 +22,7 @@ HTTP-level contract so the higher-level test surface stays small.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -73,7 +74,7 @@ def test_ensure_session_reuses_valid_id_with_single_get() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD)
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
 
     assert resolved == _STALE_ID
     assert len(transport.requests) == 1
@@ -97,7 +98,9 @@ def test_ensure_session_creates_when_id_404s() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD, title="build-session-abc")
+    resolved = client.ensure_session(
+        _STALE_ID, directory=_CWD, title="build-session-abc"
+    )
 
     assert resolved == _FRESH_ID
     assert resolved != _STALE_ID  # MUST differ → triggers callback at caller
@@ -120,7 +123,7 @@ def test_ensure_session_creates_when_no_id_supplied() -> None:
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    resolved = client.ensure_session(None, cwd=_CWD)
+    resolved = client.ensure_session(None, directory=_CWD)
 
     assert resolved == _FRESH_ID
     assert len(transport.requests) == 1
@@ -142,7 +145,7 @@ def test_ensure_session_raises_on_5xx_lookup() -> None:
     client = _make_client(transport)
 
     try:
-        client.ensure_session(_STALE_ID, cwd=_CWD)
+        client.ensure_session(_STALE_ID, directory=_CWD)
     except httpx.HTTPStatusError as e:
         assert e.response.status_code == 500
         # Exactly one request: we did NOT fall through to POST.
@@ -174,13 +177,46 @@ def test_ensure_session_callback_contract_triggers_on_id_mismatch() -> None:
         persisted_ids.append(new_id)
 
     # Mirror _send_message_via_serve's logic.
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD)
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
     if resolved != _STALE_ID:
         on_resolved(resolved)
 
     assert persisted_ids == [_FRESH_ID], (
         "callback must fire exactly once with the new id when stale"
     )
+
+
+def test_ensure_session_passes_directory_as_query_string() -> None:
+    """opencode-serve scopes Instance (and the session store) per
+    ``?directory=`` query param — the body field is silently ignored
+    (it's not in ``Session.create.schema``). If we omit the query, every
+    session lands in the server's launch cwd (``/workspace``), defeating
+    per-session filesystem isolation. Lock the query-string contract on
+    both the GET-lookup and POST-create paths.
+    """
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(404)
+        if req.method == "POST" and req.url.path == "/session":
+            return httpx.Response(200, json={"id": _FRESH_ID})
+        raise AssertionError(f"unexpected {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    client.ensure_session(_STALE_ID, directory=_CWD)
+
+    assert len(transport.requests) == 2
+    get_req, post_req = transport.requests
+    # Both calls must carry ?directory=... — without it opencode falls
+    # back to process.cwd() and the session is anchored to /workspace.
+    assert get_req.url.params.get("directory") == _CWD
+    assert post_req.url.params.get("directory") == _CWD
+    # Body must NOT carry directory — opencode reads it from the query
+    # and the Session.create schema would silently drop it.
+    body = json.loads(post_req.content)
+    assert "directory" not in body
 
 
 def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:
@@ -201,7 +237,7 @@ def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:
     def on_resolved(new_id: str) -> None:
         persisted_ids.append(new_id)
 
-    resolved = client.ensure_session(_STALE_ID, cwd=_CWD)
+    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
     if resolved != _STALE_ID:
         on_resolved(resolved)
 
