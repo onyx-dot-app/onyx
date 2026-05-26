@@ -1,19 +1,9 @@
 """OpenAI voice provider for STT and TTS.
 
-OpenAI supports:
-- **STT (chunked HTTP)**: whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
-  via the `/v1/audio/transcriptions` endpoint. This is the path used by
-  `OpenAIVoiceProvider.transcribe()` for the provider's configured `stt_model`.
-- **STT (streaming)**: gpt-realtime-whisper via the GA Realtime API WebSocket.
-  Audio is sent as base64-encoded PCM16 at 24kHz mono. The streaming path
-  always uses `gpt-realtime-whisper` regardless of the provider's stored
-  `stt_model`; server-side VAD is unsupported by this model, so turn
-  boundaries are driven by an explicit `input_audio_buffer.commit` from
-  `OpenAIStreamingTranscriber.close()`.
-- **TTS**: HTTP streaming endpoint that returns audio chunks progressively.
-  Supported models: tts-1 (standard) and tts-1-hd (high quality).
-
-See https://platform.openai.com/docs for API reference.
+- STT chunked: `/v1/audio/transcriptions` with the provider's `stt_model`.
+- STT streaming: GA Realtime WS, always `gpt-realtime-whisper`. No server-side
+  VAD on this model, so `close()` sends an explicit `input_audio_buffer.commit`.
+- TTS: HTTP streaming, tts-1 / tts-1-hd.
 """
 
 import asyncio
@@ -41,15 +31,9 @@ if TYPE_CHECKING:
 DEFAULT_OPENAI_API_BASE = "https://api.openai.com"
 
 
-# OpenAI's GA Realtime WebSocket requires two model identifiers:
-#  - The *session* model in the URL's `?model=` query parameter. This is the
-#    speech-to-speech realtime model; even transcription-only sessions must
-#    specify one (the endpoint returns `missing_model` otherwise).
-#  - The *transcription* model, passed in-band via
-#    `audio.input.transcription.model` on `session.update`.
-# `whisper-1`, `gpt-4o-transcribe`, and `gpt-4o-mini-transcribe` are HTTP-only
-# and remain selectable for the chunked path; the streaming WS always uses
-# these constants regardless of the provider's stored `stt_model`.
+# GA Realtime WS needs two model slots: the realtime *session* model in the
+# URL `?model=` (omit → `missing_model`), and the *transcription* model in
+# `audio.input.transcription.model`. Other STT models stay HTTP-only.
 OPENAI_REALTIME_SESSION_MODEL = "gpt-realtime-1.5"
 OPENAI_REALTIME_STT_MODEL = "gpt-realtime-whisper"
 
@@ -104,23 +88,17 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._accumulated_transcript = ""  # Accumulated across all turns
         self._receive_task: asyncio.Task | None = None
         self._closed = False
-        # Captures the most recent `error` event from OpenAI so callers
-        # (e.g. tests, the WS handler) can detect a poisoned session even
-        # though OpenAI does not close the socket on protocol errors.
+        # OpenAI keeps the WS open on protocol errors, so we cache the last
+        # error event for callers to fail fast on a poisoned session.
         self._last_error: dict[str, Any] | None = None
 
     async def connect(self) -> None:
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
         self._session = aiohttp.ClientSession()
 
-        # GA Realtime API: `?model=` must be a realtime *session* model
-        # (e.g. `gpt-realtime-1.5`), not a transcription model — passing
-        # `gpt-realtime-whisper` here yields `invalid_model`, and omitting
-        # the parameter entirely yields `missing_model`. The transcription
-        # model is specified in-band via `audio.input.transcription.model`
-        # on `session.update` below. The Beta `?intent=transcription` form
-        # returns `beta_api_shape_disabled` and the `OpenAI-Beta` header is
-        # no longer required.
+        # `?model=` must be the realtime session model — a transcription
+        # model here yields `invalid_model`. The Beta `?intent=transcription`
+        # form now returns `beta_api_shape_disabled`.
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
         url = f"{ws_base}/v1/realtime?model={OPENAI_REALTIME_SESSION_MODEL}"
         headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -132,17 +110,13 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._logger.error("Failed to connect to OpenAI Realtime API: %s", e)
             raise
 
-        # GA shape: `session.update` (was `transcription_session.update`),
-        # with the session typed as `realtime` — *not* `transcription`.
-        # OpenAI's GA does not have a dedicated transcription-only session
-        # type on the WS; transcription is configured as a side-effect of
-        # a standard realtime session via `audio.input.transcription.model`.
-        # Sending `session.type: "transcription"` here yields:
-        #   "Passing a transcription session update event to a realtime
-        #    session is not allowed."
-        # `gpt-realtime-whisper` does not emit server-side VAD events; turn
-        # boundaries are driven by an explicit `input_audio_buffer.commit`
-        # from `close()` when the user stops recording.
+        # `session.type` must be `"realtime"`. GA has no transcription-only
+        # session type on the WS — transcription is a side-effect configured
+        # via `audio.input.transcription.model`. `"transcription"` here →
+        # "Passing a transcription session update event to a realtime
+        # session is not allowed". `turn_detection: None` because
+        # gpt-realtime-whisper has no server-side VAD; `close()` drives
+        # turn boundaries via `input_audio_buffer.commit`.
         config_message = {
             "type": "session.update",
             "session": {
@@ -174,26 +148,16 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     msg_type = data.get("type", "")
                     self._logger.debug("Received message type: %s", msg_type)
 
-                    # Handle errors. OpenAI does NOT close the WebSocket on
-                    # protocol errors (e.g. a malformed `session.update`),
-                    # so we capture the most recent error here for callers
-                    # to inspect — the test/handler can fail fast instead
-                    # of waiting on a session that will never produce a
-                    # transcript.
+                    # WS stays open on protocol errors — cache for callers.
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
                         self._last_error = error
                         self._logger.error("OpenAI error: %s", error)
                         continue
 
-                    # Audio-buffer lifecycle events. `gpt-realtime-whisper`
-                    # does not emit server-side VAD events, so the
-                    # speech_started/stopped branches are no-ops under the
-                    # current model; kept as defensive handlers in case
-                    # server VAD is later re-enabled or another Realtime
-                    # transcription model is used. `buffer_committed` does
-                    # fire — once per recording session in response to the
-                    # manual commit sent from `close()`.
+                    # speech_started/stopped are no-ops on gpt-realtime-whisper
+                    # (no server VAD) but kept defensively. buffer_committed
+                    # fires once per session from close()'s manual commit.
                     if msg_type == OpenAIRealtimeMessageType.SPEECH_STARTED:
                         self._logger.info("OpenAI: Speech started")
                         self._current_turn_transcript = ""
@@ -297,10 +261,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         """Close session and return final transcript."""
         self._closed = True
         if self._ws:
-            # `gpt-realtime-whisper` has no server-side VAD; this manual
-            # commit is the sole trigger for the final TRANSCRIPTION_COMPLETED
-            # event. Without it, the receive loop would never produce a
-            # final transcript on stop-recording.
+            # Sole trigger for the final TRANSCRIPTION_COMPLETED event
+            # (gpt-realtime-whisper has no server VAD).
             try:
                 await self._ws.send_str(
                     json.dumps({"type": "input_audio_buffer.commit"})
@@ -343,9 +305,8 @@ OPENAI_VOICES = [
     {"id": "shimmer", "name": "Shimmer"},
 ]
 
-# OpenAI available STT models for the chunked HTTP path. The streaming
-# WebSocket path is locked to `OPENAI_REALTIME_STT_MODEL`
-# (`gpt-realtime-whisper`) regardless of which model is selected here.
+# Models for the chunked HTTP path only — streaming is locked to
+# OPENAI_REALTIME_STT_MODEL regardless of selection.
 OPENAI_STT_MODELS = [
     {"id": "whisper-1", "name": "Whisper v1"},
     {"id": "gpt-4o-transcribe", "name": "GPT-4o Transcribe"},
@@ -568,21 +529,11 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return self._client
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
-        """
-        Transcribe audio using OpenAI Whisper.
-
-        Args:
-            audio_data: Raw audio bytes
-            audio_format: Audio format (e.g., "webm", "wav", "mp3", "pcm16")
-
-        Returns:
-            Transcribed text
-        """
+        """Transcribe audio via `/v1/audio/transcriptions`."""
         client = self._get_client()
 
-        # OpenAI's /v1/audio/transcriptions endpoint does not accept raw PCM;
-        # wrap PCM16 in a WAV container (24kHz mono — matches the browser
-        # capture format used by the streaming WebSocket fallback).
+        # /v1/audio/transcriptions doesn't accept raw PCM — wrap as WAV
+        # (24kHz mono matches the browser capture format).
         if audio_format == "pcm16":
             audio_data = _create_wav_header(len(audio_data)) + audio_data
             audio_format = "wav"
@@ -667,12 +618,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return OPENAI_TTS_MODELS.copy()
 
     def supports_streaming_stt(self) -> bool:
-        """OpenAI supports streaming via the GA Realtime API.
-
-        The streaming WebSocket always uses `gpt-realtime-whisper`
-        (`OPENAI_REALTIME_STT_MODEL`); the provider's configured
-        `stt_model` only governs the chunked HTTP path.
-        """
+        # Streaming WS is locked to OPENAI_REALTIME_STT_MODEL; stt_model
+        # only governs the chunked HTTP path.
         return True
 
     def supports_streaming_tts(self) -> bool:
@@ -682,13 +629,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
     async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
         self, _audio_format: str = "webm"
     ) -> OpenAIStreamingTranscriber:
-        """Create a streaming transcription session using Realtime API.
-
-        Note: streaming always uses `gpt-realtime-whisper`. The provider's
-        configured `stt_model` (whisper-1 / gpt-4o-transcribe / etc.) is only
-        used by the chunked HTTP transcription path; OpenAI's Realtime API
-        does not stream those models.
-        """
+        # Streaming always uses OPENAI_REALTIME_STT_MODEL — other STT models
+        # are not Realtime-streamable.
         if not self.api_key:
             raise ValueError("API key required for streaming transcription")
         transcriber = OpenAIStreamingTranscriber(
