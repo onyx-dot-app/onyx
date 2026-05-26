@@ -47,6 +47,10 @@ class _Resolver(Protocol):
         self, session_id: UUID, user_id: UUID, tenant_id: str
     ) -> UUID | None: ...
 
+    def resolve_session_by_id(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None: ...
+
 
 CacheFactory = Callable[[str], CacheBackend]
 
