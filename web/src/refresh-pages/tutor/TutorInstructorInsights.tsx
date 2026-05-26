@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Button } from "@opal/components";
 import { SvgBarChart, SvgEye, SvgRefreshCw, SvgThumbsDown } from "@opal/icons";
@@ -18,17 +18,13 @@ import Text from "@/refresh-components/texts/Text";
 import InputDatePicker from "@/refresh-components/inputs/InputDatePicker";
 import Modal from "@/refresh-components/Modal";
 import { PageSelector } from "@/components/PageSelector";
-import { Feedback } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import {
   ChatSessionMinimal,
   ChatSessionSnapshot,
 } from "@/app/ee/admin/performance/usage/types";
-import {
-  QueryHistoryTableRow,
-  SelectFeedbackType,
-} from "@/app/ee/admin/performance/query-history/QueryHistoryTable";
+import { QueryHistoryTableRow } from "@/app/ee/admin/performance/query-history/QueryHistoryTable";
 import { QueryHistorySessionDetail } from "@/app/ee/admin/performance/query-history/QueryHistorySessionDetail";
 
 const ITEMS_PER_PAGE = 12;
@@ -38,6 +34,8 @@ interface LtiInstructorDailyTrend {
   date: string;
   session_count: number;
   message_count: number;
+  positive_feedback_count: number;
+  negative_feedback_count: number;
 }
 
 interface LtiInstructorThemeCluster {
@@ -90,88 +88,153 @@ function formatDay(dateStr: string) {
   });
 }
 
-function StatBlock({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) {
+function ChartTooltip({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-md border border-border bg-background p-3">
-      <Text as="p" className="text-xs text-subtle">
-        {label}
-      </Text>
-      <Text as="p" className="mt-1 text-2xl font-semibold">
-        {value}
-      </Text>
+    <div className="pointer-events-none absolute left-1/2 top-1 z-20 hidden min-w-max -translate-x-1/2 rounded bg-neutral-950 px-2 py-1 text-xs font-medium text-white shadow-lg group-hover:block">
+      {children}
     </div>
   );
 }
 
-function VolumeChart({ daily }: { daily: LtiInstructorDailyTrend[] }) {
+function VolumeChart({ trends }: { trends: LtiInstructorTrendsResponse }) {
+  const daily = trends.daily;
+  const positiveFeedbackCount = Math.max(
+    0,
+    trends.feedback_count - trends.thumbs_down_count
+  );
+  const thumbsDownRate =
+    trends.feedback_count === 0
+      ? ""
+      : `, ${Math.round(trends.thumbs_down_rate * 100)}%`;
   const maxCount = Math.max(
     1,
-    ...daily.map((point) => Math.max(point.session_count, point.message_count))
+    ...daily.map((point) =>
+      Math.max(
+        point.session_count,
+        point.message_count,
+        point.positive_feedback_count + point.negative_feedback_count
+      )
+    )
   );
+  const getBarHeight = (count: number) =>
+    count === 0 ? 0 : `${Math.max(4, (count / maxCount) * 100)}%`;
+  const yAxisTicks =
+    maxCount === 1 ? [maxCount, 0] : [maxCount, Math.ceil(maxCount / 2), 0];
 
   return (
     <div className="rounded-md border border-border bg-background p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-center gap-2">
           <SvgBarChart size={18} />
           <Text as="p" className="font-medium">
             Volume
           </Text>
         </div>
-        <div className="flex items-center gap-3 text-xs text-subtle">
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-subtle">
           <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-sm bg-emerald-500" />
-            Sessions
+            <span className="h-2 w-2 rounded-sm bg-indigo-500" />
+            Sessions ({trends.total_sessions})
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="h-2 w-2 rounded-sm bg-sky-500" />
-            Messages
+            Messages ({trends.total_messages})
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-emerald-500" />
+            Positive feedback ({positiveFeedbackCount})
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-rose-500" />
+            Negative feedback ({`${trends.thumbs_down_count}${thumbsDownRate}`})
           </span>
         </div>
       </div>
-      <div className="flex h-44 items-end gap-3 overflow-x-auto border-b border-border pb-2">
-        {daily.map((point) => (
-          <div
-            key={point.date}
-            className="flex h-full min-w-12 flex-1 flex-col items-center justify-end gap-2"
-          >
-            <div className="flex h-32 w-full items-end justify-center gap-1">
-              <div
-                className="w-3 rounded-t bg-emerald-500"
-                style={{
-                  height:
-                    point.session_count === 0
-                      ? 0
-                      : `${Math.max(
-                          4,
-                          (point.session_count / maxCount) * 100
-                        )}%`,
-                }}
-                title={`${point.session_count} sessions`}
-              />
-              <div
-                className="w-3 rounded-t bg-sky-500"
-                style={{
-                  height:
-                    point.message_count === 0
-                      ? 0
-                      : `${Math.max(
-                          4,
-                          (point.message_count / maxCount) * 100
-                        )}%`,
-                }}
-                title={`${point.message_count} messages`}
-              />
-            </div>
-            <span className="text-xs text-subtle">{formatDay(point.date)}</span>
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3">
+        <div className="flex h-36 flex-col justify-between text-right text-xs text-subtle">
+          {yAxisTicks.map((tick) => (
+            <span key={tick}>{tick}</span>
+          ))}
+        </div>
+        <div className="relative overflow-x-auto border-b border-border pb-2">
+          <div className="pointer-events-none absolute left-0 right-0 top-0 flex h-36 flex-col justify-between">
+            {yAxisTicks.map((tick) => (
+              <span key={tick} className="border-t border-border" />
+            ))}
           </div>
-        ))}
+          <div className="relative flex h-52 min-w-full items-end gap-3">
+            {daily.map((point) => {
+              const feedbackCount =
+                point.positive_feedback_count + point.negative_feedback_count;
+              const positiveFeedbackHeight =
+                feedbackCount === 0
+                  ? 0
+                  : `${(point.positive_feedback_count / feedbackCount) * 100}%`;
+              const negativeFeedbackHeight =
+                feedbackCount === 0
+                  ? 0
+                  : `${(point.negative_feedback_count / feedbackCount) * 100}%`;
+
+              return (
+                <div
+                  key={point.date}
+                  className="flex h-full min-w-16 flex-1 flex-col items-center justify-end gap-2"
+                >
+                  <div className="flex h-36 w-full items-end justify-center gap-1.5">
+                    <div className="group relative flex h-full w-4 items-end justify-center">
+                      <ChartTooltip>
+                        {point.session_count} sessions
+                      </ChartTooltip>
+                      <div
+                        className="w-3 rounded-t bg-indigo-500"
+                        style={{ height: getBarHeight(point.session_count) }}
+                      />
+                    </div>
+                    <div className="group relative flex h-full w-4 items-end justify-center">
+                      <ChartTooltip>
+                        {point.message_count} messages
+                      </ChartTooltip>
+                      <div
+                        className="w-3 rounded-t bg-sky-500"
+                        style={{ height: getBarHeight(point.message_count) }}
+                      />
+                    </div>
+                    <div className="group relative flex h-full w-4 items-end justify-center">
+                      <ChartTooltip>
+                        <span>{feedbackCount} feedback</span>
+                        <span className="block">
+                          {point.positive_feedback_count} positive
+                        </span>
+                        <span className="block">
+                          {point.negative_feedback_count} negative
+                        </span>
+                      </ChartTooltip>
+                      <div
+                        className="flex w-3 flex-col justify-end overflow-hidden rounded-t"
+                        style={{ height: getBarHeight(feedbackCount) }}
+                      >
+                        {point.negative_feedback_count > 0 && (
+                          <div
+                            className="w-full bg-rose-500"
+                            style={{ height: negativeFeedbackHeight }}
+                          />
+                        )}
+                        {point.positive_feedback_count > 0 && (
+                          <div
+                            className="w-full bg-emerald-500"
+                            style={{ height: positiveFeedbackHeight }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs text-subtle">
+                    {formatDay(point.date)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -249,7 +312,6 @@ export default function TutorInstructorInsights({
 }) {
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(() => endOfDay(new Date()));
-  const [feedbackType, setFeedbackType] = useState<Feedback | "all">("all");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
@@ -278,11 +340,8 @@ export default function TutorInstructorInsights({
       start_time: startDate.toISOString(),
       end_time: endDate.toISOString(),
     };
-    if (feedbackType !== "all") {
-      nextFilters.feedback_type = feedbackType;
-    }
     return nextFilters;
-  }, [projectId, startDate, endDate, feedbackType]);
+  }, [projectId, startDate, endDate]);
 
   const trendParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -359,10 +418,6 @@ export default function TutorInstructorInsights({
                 maxDate={new Date()}
               />
             </div>
-            <SelectFeedbackType
-              value={feedbackType}
-              onValueChange={setFeedbackType}
-            />
           </div>
           <Button
             prominence="secondary"
@@ -386,16 +441,7 @@ export default function TutorInstructorInsights({
           </div>
         ) : (
           <>
-            <div className="grid gap-3 md:grid-cols-4">
-              <StatBlock label="Sessions" value={trends.total_sessions} />
-              <StatBlock label="Messages" value={trends.total_messages} />
-              <StatBlock
-                label="Thumbs-down rate"
-                value={`${Math.round(trends.thumbs_down_rate * 100)}%`}
-              />
-              <StatBlock label="Feedback" value={trends.feedback_count} />
-            </div>
-            <VolumeChart daily={trends.daily} />
+            <VolumeChart trends={trends} />
             <ThemeCards themes={trends.themes} summary={trends.summary} />
           </>
         )}

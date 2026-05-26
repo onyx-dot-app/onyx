@@ -33,6 +33,8 @@ class QueryHistoryDailyAggregate(NamedTuple):
     day: date
     session_count: int
     message_count: int
+    positive_feedback_count: int
+    negative_feedback_count: int
 
 
 class QueryHistoryFeedbackAggregate(NamedTuple):
@@ -167,13 +169,36 @@ def get_lti_project_daily_query_history_aggregates(
         select(
             day_expr,
             func.count(distinct(ChatSession.id)),
-            func.count(ChatMessage.id),
+            func.count(distinct(ChatMessage.id)),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ChatMessageFeedback.is_positive.is_(True), 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ChatMessageFeedback.is_positive.is_(False), 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
         )
         .select_from(ChatSession)
         .outerjoin(
             ChatMessage,
             (ChatMessage.chat_session_id == ChatSession.id)
             & (ChatMessage.message_type != MessageType.SYSTEM),
+        )
+        .outerjoin(
+            ChatMessageFeedback,
+            (ChatMessageFeedback.chat_message_id == ChatMessage.id)
+            & ChatMessageFeedback.is_positive.is_not(None),
         )
         .where(
             ChatSession.project_id == project_id,
@@ -189,6 +214,8 @@ def get_lti_project_daily_query_history_aggregates(
             day=row[0],
             session_count=int(row[1]),
             message_count=int(row[2]),
+            positive_feedback_count=int(row[3]),
+            negative_feedback_count=int(row[4]),
         )
         for row in db_session.execute(stmt).all()
     ]

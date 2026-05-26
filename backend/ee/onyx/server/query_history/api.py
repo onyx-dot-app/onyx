@@ -312,6 +312,12 @@ def _build_daily_trend_points(
                 date=current_day,
                 session_count=aggregate.session_count if aggregate else 0,
                 message_count=aggregate.message_count if aggregate else 0,
+                positive_feedback_count=(
+                    aggregate.positive_feedback_count if aggregate else 0
+                ),
+                negative_feedback_count=(
+                    aggregate.negative_feedback_count if aggregate else 0
+                ),
             )
         )
         current_day += timedelta(days=1)

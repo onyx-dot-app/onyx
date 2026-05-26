@@ -161,6 +161,8 @@ class LtiInstructorDailyTrend(BaseModel):
     date: date
     session_count: int
     message_count: int
+    positive_feedback_count: int
+    negative_feedback_count: int
 
 
 class LtiInstructorThemeCluster(BaseModel):

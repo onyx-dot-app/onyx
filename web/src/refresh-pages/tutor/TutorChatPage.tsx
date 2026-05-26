@@ -38,9 +38,17 @@ import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
 import TutorInstructorInsights from "@/refresh-pages/tutor/TutorInstructorInsights";
+import TutorInstructorKnowledge from "@/refresh-pages/tutor/TutorInstructorKnowledge";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Button, SidebarTab } from "@opal/components";
-import { SvgBarChart, SvgChevronDown, SvgUsers } from "@opal/icons";
+import {
+  SvgBarChart,
+  SvgBookOpen,
+  SvgChevronDown,
+  SvgHistory,
+  SvgPlus,
+  SvgUsers,
+} from "@opal/icons";
 import Dropzone from "react-dropzone";
 import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
 import { UserRole } from "@/lib/types";
@@ -64,8 +72,9 @@ export default function TutorChatPage() {
   const requestedTutorTab = searchParams?.get(SEARCH_PARAM_NAMES.TUTOR_TAB);
   const showInstructorTabs = isEmbedded && isInstructor && projectId !== null;
   const activeTutorTab =
-    showInstructorTabs && requestedTutorTab === "insights"
-      ? "insights"
+    showInstructorTabs &&
+    (requestedTutorTab === "insights" || requestedTutorTab === "knowledge")
+      ? requestedTutorTab
       : "chat";
 
   // State
@@ -100,6 +109,12 @@ export default function TutorChatPage() {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));
   }, [courseTutors]);
+  const isFirstTutorSetupScreen =
+    ltiContextId !== null &&
+    assistantId === null &&
+    courseTutors !== undefined &&
+    courseTutors.length === 0;
+  const showTutorSidebar = ltiContextId !== null && !isFirstTutorSetupScreen;
 
   const {
     chatSessions,
@@ -190,14 +205,6 @@ export default function TutorChatPage() {
   const handleScrollToBottom = useCallback(() => {
     scrollContainerRef.current?.scrollToBottom();
   }, []);
-
-  // Derive course name from project (strip "[Canvas] " prefix)
-  const courseName = useMemo(() => {
-    if (!currentChatSession?.project_id) return null;
-    // We don't have the project name readily available from chat sessions,
-    // so we'll just show the tutor name.
-    return null;
-  }, [currentChatSession]);
 
   // New conversation handler
   const handleNewConversation = useCallback(() => {
@@ -302,22 +309,29 @@ export default function TutorChatPage() {
   }, []);
 
   const handleTutorTabChange = useCallback(
-    (tab: "chat" | "insights") => {
+    (tab: "chat" | "insights" | "knowledge") => {
       const params = new URLSearchParams(searchParams?.toString());
       if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
-      if (tab === "insights") {
-        params.set(SEARCH_PARAM_NAMES.TUTOR_TAB, "insights");
-      } else {
+      if (tab === "chat") {
         params.delete(SEARCH_PARAM_NAMES.TUTOR_TAB);
+      } else {
+        params.set(SEARCH_PARAM_NAMES.TUTOR_TAB, tab);
       }
       router.replace(`/tutor?${params.toString()}`, { scroll: false });
     },
     [router, searchParams, isEmbedded]
   );
 
+  const handleHistoryFromSidebar = useCallback(() => {
+    if (activeTutorTab !== "chat") {
+      handleTutorTabChange("chat");
+    }
+    toggleHistory();
+  }, [activeTutorTab, handleTutorTabChange, toggleHistory]);
+
   const renderWithInstructorShell = useCallback(
     (content: ReactNode) => {
-      if (!showInstructorTabs) {
+      if (!showTutorSidebar) {
         return content;
       }
 
@@ -326,35 +340,88 @@ export default function TutorChatPage() {
           <div className="flex h-full w-[3.25rem] shrink-0 flex-col gap-2 border-r border-border-01 bg-background-tint-02 px-2 py-3">
             <SidebarTab
               folded
-              icon={SvgUsers}
-              selected={activeTutorTab === "chat"}
-              onClick={() => handleTutorTabChange("chat")}
+              icon={SvgPlus}
+              disabled={assistantId === null}
+              onClick={handleNewConversation}
             >
-              Tutors
+              New Chat
             </SidebarTab>
             <SidebarTab
               folded
-              icon={SvgBarChart}
-              selected={activeTutorTab === "insights"}
-              onClick={() => handleTutorTabChange("insights")}
+              icon={SvgHistory}
+              disabled={assistantId === null}
+              selected={historyOpen}
+              onClick={handleHistoryFromSidebar}
             >
-              Insights
+              History
             </SidebarTab>
+            <SidebarTab
+              folded
+              icon={SvgUsers}
+              selected={activeTutorTab === "chat" && assistantId === null}
+              onClick={handleManageTutors}
+            >
+              Tutors
+            </SidebarTab>
+            {showInstructorTabs && (
+              <>
+                <SidebarTab
+                  folded
+                  icon={SvgBookOpen}
+                  selected={activeTutorTab === "knowledge"}
+                  onClick={() => handleTutorTabChange("knowledge")}
+                >
+                  Knowledge
+                </SidebarTab>
+                <SidebarTab
+                  folded
+                  icon={SvgBarChart}
+                  selected={activeTutorTab === "insights"}
+                  onClick={() => handleTutorTabChange("insights")}
+                >
+                  Insights
+                </SidebarTab>
+              </>
+            )}
           </div>
           <div className="min-h-0 flex-1">{content}</div>
         </div>
       );
     },
-    [activeTutorTab, handleTutorTabChange, showInstructorTabs]
+    [
+      activeTutorTab,
+      assistantId,
+      handleHistoryFromSidebar,
+      handleManageTutors,
+      handleNewConversation,
+      handleTutorTabChange,
+      historyOpen,
+      showInstructorTabs,
+      showTutorSidebar,
+    ]
   );
 
   // Loading state
   if (!isReady) return <OnyxInitializingLoader />;
 
+  if (isFirstTutorSetupScreen && ltiContextId !== null) {
+    return (
+      <TutorPickerView
+        ltiContextId={ltiContextId}
+        projectId={projectId}
+        ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+      />
+    );
+  }
+
   if (activeTutorTab === "insights" && projectId !== null) {
     return renderWithInstructorShell(
       <TutorInstructorInsights projectId={projectId} />
     );
+  }
+
+  if (activeTutorTab === "knowledge" && projectId !== null) {
+    return renderWithInstructorShell(<TutorInstructorKnowledge />);
   }
 
   // No agentId chosen yet — render the picker if we know the course context,
@@ -398,16 +465,18 @@ export default function TutorChatPage() {
 
       {/* Main chat area */}
       <div className="flex flex-col flex-1 min-w-0">
-        <TutorChatHeader
-          agent={effectiveAgent ?? null}
-          courseName={courseName}
-          onNewConversation={handleNewConversation}
-          onToggleHistory={toggleHistory}
-          historyOpen={historyOpen}
-          onManageTutors={
-            isInstructor && ltiContextId ? handleManageTutors : null
-          }
-        />
+        {!showTutorSidebar && (
+          <TutorChatHeader
+            agent={effectiveAgent ?? null}
+            courseName={null}
+            onNewConversation={handleNewConversation}
+            onToggleHistory={toggleHistory}
+            historyOpen={historyOpen}
+            onManageTutors={
+              isInstructor && ltiContextId ? handleManageTutors : null
+            }
+          />
+        )}
 
         <Dropzone
           onDrop={(files) => handleMessageSpecificFileUpload(files)}
