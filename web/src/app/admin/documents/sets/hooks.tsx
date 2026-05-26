@@ -13,10 +13,11 @@ export function useDocumentSets(getEditable: boolean = false) {
     : SWR_KEYS.documentSets;
 
   const swrResponse = useSWR<DocumentSetSummary[]>(url, errorHandlingFetcher, {
-    // Only poll while at least one document set is still syncing. Steady-state
-    // admins keep this page open without re-fetching every 5 s.
+    // Fast poll while a set is syncing, slow background poll otherwise so we
+    // still pick up syncs kicked off in another admin tab without hammering
+    // the endpoint at 5 s intervals when nothing is happening.
     refreshInterval: (data) =>
-      data && data.some((ds) => !ds.is_up_to_date) ? 5000 : 0,
+      data && data.some((ds) => !ds.is_up_to_date) ? 5000 : 30000,
   });
 
   return {
