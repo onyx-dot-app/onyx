@@ -39,8 +39,6 @@ from uuid import uuid4
 
 import pytest
 
-import onyx.server.features.build.sandbox.base as sandbox_base
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -48,15 +46,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _serve_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force SERVE mode; lookup happens in the mixin module."""
-    from onyx.server.features.build.sandbox import serve_transport
-
-    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
-    monkeypatch.setattr(serve_transport, "AGENT_TRANSPORT", AgentTransport.SERVE)
 
 
 @pytest.fixture

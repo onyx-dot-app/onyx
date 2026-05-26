@@ -1,8 +1,8 @@
 # Drop the ACP layer
 
-Follow-up to [`opencode-serve-migration.md`](./opencode-serve-migration.md). Removes the now-dead Agent Client Protocol code from the tree once `opencode serve` is the only runtime path.
+> **Status (post-[`brutalize-acp.md`](./brutalize-acp.md)): deferred indefinitely.** Phase 5 of the serve migration deleted the opencode-acp transport — the per-message exec'd client, the `AGENT_TRANSPORT` selector, the entrypoint idle branch. What this doc proposes — renaming `acp.schema` to an Onyx-owned module and dropping the `agent-client-protocol` PyPI dep — is a real cleanup but is now *intentionally* on ice. `acp.schema` is the internal sandbox-event protocol that `OpencodeServeClient.translate_opencode_event` produces and that every consumer reads. It's also the abstraction boundary we want for a future in-house agent harness: that harness gets its own `translate_<harness>_event` function with the same return type, and nothing else in Onyx has to change. Owning the schema ourselves becomes worth doing when (a) we need to evolve fields the upstream package doesn't, or (b) the in-house harness work actually starts. Until then, the cost of one PyPI dep and a slightly misleading module name beats touching 30 consumer files for zero behavior change. The plan below is preserved as the reference design for that eventual PR.
 
-**Sequencing: do not start this until Phase 5 of the serve migration is complete and the `ACP_TRANSPORT` flag has been deleted.** Until then the ACP code is the rollback target.
+Follow-up to [`opencode-serve-migration.md`](./opencode-serve-migration.md). Removes the now-dead Agent Client Protocol code from the tree once `opencode serve` is the only runtime path.
 
 ## Issues to Address
 

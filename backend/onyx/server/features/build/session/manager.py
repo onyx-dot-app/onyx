@@ -1473,10 +1473,10 @@ class SessionManager:
         """Drain the CLI agent to completion, yielding raw ACP events.
 
         Pure ACP generator — minimal DB work (one preflight on first
-        message under AGENT_TRANSPORT=serve to resolve+persist the
-        opencode session id). No SSE formatting. Callers compose this
-        with `_persist_acp_event` (to apply persistence side effects)
-        and, in the SSE case, an SSE serializer.
+        message to resolve+persist the opencode session id). No SSE
+        formatting. Callers compose this with `_persist_acp_event` (to
+        apply persistence side effects) and, in the SSE case, an SSE
+        serializer.
 
         The events include `SSEKeepalive` markers from the sandbox client;
         callers should pass them through (interactive) or drop them
@@ -1523,16 +1523,7 @@ class SessionManager:
         session_id: UUID,
     ) -> str | None:
         """Return BuildSession.opencode_session_id; lazily populate on
-        first turn under ``AGENT_TRANSPORT=serve``.
-
-        Returns ``None`` for the ACP transport (the sandbox manager
-        ignores the value in that mode)."""
-        from onyx.server.features.build.configs import AGENT_TRANSPORT
-        from onyx.server.features.build.configs import AgentTransport
-
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return None
-
+        first turn."""
         build_session = (
             self._db_session.query(BuildSession)
             .filter(BuildSession.id == session_id)

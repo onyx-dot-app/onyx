@@ -246,7 +246,7 @@ Frontend wires a "stop" button to this. Scheduled tasks call it on timeout inste
 
 **Phase 4 — k8s backend behind a flag.** Swap `KubernetesSandboxManager.send_message` to use serve when `ACP_TRANSPORT=serve`. Default off in prod, default on in staging. Add `opencode_session_id` migration.
 
-**Phase 5 — cutover.** Flip default to `serve` in prod after one week of staging soak. Keep the ACP path callable for two weeks of safety net, then remove the `ACP_TRANSPORT={"acp","serve"}` flag and make serve the only runtime path. **The ACP code itself stays in the tree at the end of Phase 5** — `sandbox/acp/base.py`, the two `acp_exec_client.py` files, the `_try_resume_existing_session` heuristic, and the `agent-client-protocol` PyPI dep are all now dead, but deleting them is a deliberate follow-up so this migration PR isn't also a cross-cutting type/import rewrite. The cleanup is documented separately in [`drop-acp-layer.md`](./drop-acp-layer.md).
+**Phase 5 — cutover. (DONE.)** `AGENT_TRANSPORT` selector and the two `acp_exec_client.py` files are gone; opencode-serve is the only runtime transport on both backends. See [`brutalize-acp.md`](./brutalize-acp.md) for the deletion PR. **`sandbox/acp/base.py` and the `agent-client-protocol` PyPI dep stay in the tree** — `acp.schema` is now Onyx's internal sandbox-event protocol and the abstraction boundary for a future in-house agent harness. The further cleanup in [`drop-acp-layer.md`](./drop-acp-layer.md) is deliberately deferred indefinitely for that reason.
 
 Each phase is independently revertable.
 

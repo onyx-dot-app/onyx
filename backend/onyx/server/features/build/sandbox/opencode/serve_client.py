@@ -12,8 +12,9 @@ managers swap in one method call):
 - :class:`OpencodeServeClient`
 - :class:`ClientTimeouts`
 
-Phase 1 deliverable: the client library only — no sandbox-manager wire-up.
-Gated behind ``AGENT_TRANSPORT={"acp","serve"}`` in ``configs.py``.
+The sole transport for driving in-sandbox opencode. ACP-the-transport
+was removed in the brutalize-acp PR; the ACP schema types this module
+imports are now Onyx's internal sandbox-event protocol.
 """
 
 from __future__ import annotations

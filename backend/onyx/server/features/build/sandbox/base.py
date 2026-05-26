@@ -21,11 +21,17 @@ from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 from uuid import UUID
 
-from onyx.server.features.build.configs import AGENT_TRANSPORT
-from onyx.server.features.build.configs import AgentTransport
+from acp.schema import AgentMessageChunk
+from acp.schema import AgentPlanUpdate
+from acp.schema import AgentThoughtChunk
+from acp.schema import CurrentModeUpdate
+from acp.schema import Error
+from acp.schema import PromptResponse
+from acp.schema import ToolCallProgress
+from acp.schema import ToolCallStart
+
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.models import FatalWriteError
@@ -38,6 +44,7 @@ from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.serve_transport import _ServeMixin
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,10 +59,21 @@ logger = setup_logger()
 BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
 BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
-# ACPEvent is a union type defined in both local and kubernetes modules
-# Using Any here to avoid circular imports - the actual type checking
-# happens in the implementation modules
-ACPEvent = Any
+# Onyx's internal sandbox-event protocol. Named "ACP" for historical
+# reasons (the original Agent Client Protocol); Onyx no longer speaks
+# that protocol on any wire — this is the type contract between the
+# agent harness and everything downstream.
+ACPEvent = (
+    AgentMessageChunk
+    | AgentThoughtChunk
+    | ToolCallStart
+    | ToolCallProgress
+    | AgentPlanUpdate
+    | CurrentModeUpdate
+    | PromptResponse
+    | Error
+    | SSEKeepalive
+)
 
 
 class SandboxManager(_ServeMixin, ABC):
@@ -321,11 +339,8 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
     ) -> Generator[ACPEvent, None, None]:
-        """Stream typed ACP events for one user message. Dispatches on
-        ``AGENT_TRANSPORT`` — ``serve`` to ``_send_message_via_serve``,
-        ``acp`` (rollback) to ``_send_message_via_acp``.
-
-        Serve-only kwargs (ignored by ACP):
+        """Stream typed sandbox events for one user message via
+        opencode-serve.
 
         - ``opencode_session_id``: persistent serve session id; pass
           ``BuildSession.opencode_session_id`` or ``None`` to mint.
@@ -335,30 +350,15 @@ class SandboxManager(_ServeMixin, ABC):
           when it differs from the caller's. Caller persists it so later
           turns don't orphan a fresh session each time.
         """
-        if AGENT_TRANSPORT == AgentTransport.SERVE:
-            yield from self._send_message_via_serve(
-                sandbox_id,
-                session_id,
-                message,
-                opencode_session_id,
-                agent_provider,
-                agent_model,
-                on_opencode_session_resolved=on_opencode_session_resolved,
-            )
-            return
-        yield from self._send_message_via_acp(sandbox_id, session_id, message)
-
-    @abstractmethod
-    def _send_message_via_acp(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Rollback transport: exec ``opencode acp`` per message. Only
-        reached under ``AGENT_TRANSPORT=acp``; dropped once the rollback
-        window closes."""
-        ...
+        yield from self._send_message_via_serve(
+            sandbox_id,
+            session_id,
+            message,
+            opencode_session_id,
+            agent_provider,
+            agent_model,
+            on_opencode_session_resolved=on_opencode_session_resolved,
+        )
 
     @abstractmethod
     def list_directory(

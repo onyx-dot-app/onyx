@@ -80,9 +80,6 @@ from docker.models.containers import Container
 
 from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.api.packet_logger import get_packet_logger
-from onyx.server.features.build.configs import AGENT_TRANSPORT
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import ATTACHMENTS_DIRECTORY
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
@@ -94,13 +91,10 @@ from onyx.server.features.build.configs import SANDBOX_DOCKER_MEMORY_LIMIT
 from onyx.server.features.build.configs import SANDBOX_DOCKER_NETWORK
 from onyx.server.features.build.configs import SANDBOX_DOCKER_SOCKET
 from onyx.server.features.build.configs import SANDBOX_DOCKER_VOLUME_PREFIX
-from onyx.server.features.build.sandbox.acp.base import ACPEvent
+from onyx.server.features.build.sandbox.base import ACPEvent
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.docker.internal.acp_exec_client import (
-    DockerACPExecClient,
-)
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     run_in_container,
@@ -287,18 +281,6 @@ def build_sandbox_labels(
     return labels
 
 
-def _opencode_json_write_snippet(opencode_json: str | None, session_path: str) -> str:
-    """Shell line for the per-session opencode.json under ACP, or a
-    no-op comment under serve (where the file is redundant — opencode-serve
-    already loaded its provider config from OPENCODE_CONFIG_CONTENT)."""
-    if opencode_json is None:
-        return (
-            "# AGENT_TRANSPORT=serve: opencode.json is container-level "
-            "via OPENCODE_CONFIG_CONTENT"
-        )
-    return f"printf '%s' '{opencode_json}' > {session_path}/opencode.json"
-
-
 class ContainerCreateKwargs(TypedDict):
     """Kwargs we pass to ``DockerClient.containers.run``.
 
@@ -345,10 +327,8 @@ def build_container_create_kwargs(
     Sandbox isolation invariants enforced here (locked down by
     ``test_docker_manager_config.py``):
 
-    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus the
-      four serve-transport vars (``AGENT_TRANSPORT``,
-      ``OPENCODE_SERVE_PORT``, the password env named by
-      ``OPENCODE_SERVER_PASSWORD``, and ``OPENCODE_CONFIG_CONTENT``).
+    - **Env is a fixed allowlist**: ONYX_PAT, ONYX_SERVER_URL, plus
+      ``OPENCODE_SERVER_PASSWORD`` and ``OPENCODE_CONFIG_CONTENT``.
       No caller can inject anything else. No S3/MinIO/Postgres/Redis
       credentials. No compose service hostnames.
     - **No host mounts**: only the per-sandbox named volume mounted at
@@ -385,8 +365,6 @@ def build_container_create_kwargs(
     env = {
         "ONYX_PAT": onyx_pat,
         "ONYX_SERVER_URL": api_server_url,
-        "AGENT_TRANSPORT": AGENT_TRANSPORT.value,
-        "OPENCODE_SERVE_PORT": str(OPENCODE_SERVE_PORT),
         OPENCODE_SERVER_PASSWORD: opencode_password,
         "OPENCODE_CONFIG_CONTENT": opencode_config_json,
     }
@@ -703,7 +681,7 @@ class DockerSandboxManager(SandboxManager):
         state = (container.attrs or {}).get("State") or {}
         return state.get("Status") == "running"
 
-    def _render_session_files(
+    def _render_agents_md(
         self,
         *,
         llm_config: LLMProviderConfig,
@@ -711,11 +689,8 @@ class DockerSandboxManager(SandboxManager):
         skills_section: str,
         user_name: str | None = None,
         user_role: str | None = None,
-    ) -> tuple[str, str | None]:
-        """Return ``(agents_md, opencode_json)`` shell-escaped for
-        ``printf '%s' '...'``. ``opencode_json`` is ``None`` under serve
-        (config came from ``OPENCODE_CONFIG_CONTENT`` at container startup);
-        only ACP needs the per-session file."""
+    ) -> str:
+        """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
@@ -726,21 +701,7 @@ class DockerSandboxManager(SandboxManager):
             user_name=user_name,
             user_role=user_role,
         )
-        opencode_json: str | None = None
-        if AGENT_TRANSPORT == AgentTransport.ACP:
-            opencode_json = json.dumps(
-                build_opencode_config(
-                    provider=llm_config.provider,
-                    model_name=llm_config.model_name,
-                    api_key=llm_config.api_key or None,
-                    api_base=llm_config.api_base,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
-                )
-            )
-        return (
-            agent_instructions.replace("'", "'\\''"),
-            opencode_json.replace("'", "'\\''") if opencode_json is not None else None,
-        )
+        return agent_instructions.replace("'", "'\\''")
 
     def setup_session_workspace(
         self,
@@ -764,7 +725,7 @@ class DockerSandboxManager(SandboxManager):
 
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        agents_md, opencode_json = self._render_session_files(
+        agents_md = self._render_agents_md(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
@@ -777,7 +738,6 @@ class DockerSandboxManager(SandboxManager):
             if nextjs_port is not None
             else ""
         )
-        opencode_json_write = _opencode_json_write_snippet(opencode_json, session_path)
         setup_script = f"""
 set -e
 echo "Creating session directory: {session_path}"
@@ -805,7 +765,6 @@ else
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
-{opencode_json_write}
 {nextjs_start}
 echo "Session workspace setup complete"
 """
@@ -1067,24 +1026,19 @@ fi
         nextjs_port: int | None,
         skills_section: str,
     ) -> None:
-        """Rewrite AGENTS.md, opencode.json, and the skills symlink post-restore.
-
-        The snapshot tar only carries ``outputs/``, ``attachments/``, and
-        ``.opencode-data/`` — the symlink and config files are regenerated
-        here so restored sessions still see the pushed skill files.
-        """
-        agents_md, opencode_json = self._render_session_files(
+        """Rewrite AGENTS.md and the skills symlink post-restore. opencode.json
+        is not written — config lives at container scope via
+        OPENCODE_CONFIG_CONTENT."""
+        agents_md = self._render_agents_md(
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
         )
-        opencode_json_write = _opencode_json_write_snippet(opencode_json, session_path)
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
-{opencode_json_write}
 """
         try:
             run_in_container(container, ["/bin/sh", "-c", script])
@@ -1115,67 +1069,6 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             ),
             password=password,
         )
-
-    def _send_message_via_acp(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Original ACP path. Kept callable behind ``AGENT_TRANSPORT=acp``
-        as the rollback target for the serve migration."""
-        container = self._require_container(sandbox_id)
-        session_path = f"{SESSIONS_ROOT}/{session_id}"
-        packet_logger = get_packet_logger()
-
-        if container.name is None:
-            raise RuntimeError(f"sandbox container for {sandbox_id} has no name")
-        client = DockerACPExecClient(
-            docker_client=self._docker, container_name=container.name
-        )
-        client.start(cwd=session_path)
-
-        try:
-            acp_session_id = client.resume_or_create_session(cwd=session_path)
-            packet_logger.log_session_start(session_id, sandbox_id, message)
-
-            events_count = 0
-            try:
-                for event in client.send_message(message, session_id=acp_session_id):
-                    events_count += 1
-                    yield event
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
-            except GeneratorExit:
-                try:
-                    client.cancel(session_id=acp_session_id)
-                except Exception:
-                    pass
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error="GeneratorExit",
-                    events_count=events_count,
-                )
-                raise
-            except Exception as e:
-                try:
-                    client.cancel(session_id=acp_session_id)
-                except Exception:
-                    pass
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=str(e),
-                    events_count=events_count,
-                )
-                raise
-        finally:
-            try:
-                client.stop()
-            except Exception as e:
-                logger.warning("Failed to stop DockerACPExecClient: %s", e)
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str

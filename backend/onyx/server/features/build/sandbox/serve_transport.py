@@ -24,8 +24,6 @@ import httpx
 from acp.schema import PromptResponse
 
 from onyx.server.features.build.api.packet_logger import get_packet_logger
-from onyx.server.features.build.configs import AGENT_TRANSPORT
-from onyx.server.features.build.configs import AgentTransport
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
@@ -151,12 +149,8 @@ class _ServeMixin:
         assistant reply. Key on ``build_session_id`` (not
         ``opencode_session_id``) so the lock survives id rotation from
         ``on_opencode_session_resolved`` and bounds the dict to one entry
-        per build session. No-op under ACP.
+        per build session.
         """
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            yield True
-            return
-
         key = (sandbox_id, build_session_id)
         with self._prompt_locks_meta:
             lock = self._prompt_locks.get(key)
@@ -189,9 +183,7 @@ class _ServeMixin:
     ) -> str | None:
         """Idempotent preflight to mint (or look up) the opencode-serve
         session id for this build session. Caller persists it so later
-        turns hit the same session by id. Returns ``None`` under ACP."""
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return None
+        turns hit the same session by id."""
         session_path = self._session_directory(session_id)
         logger.info(
             "[SESSION-LIFECYCLE] sandbox.ensure_opencode_session: build_session=%s "
@@ -212,9 +204,7 @@ class _ServeMixin:
         sandbox_id: UUID,
         parent_opencode_session_id: str,
     ) -> list[str]:
-        """Child opencode session ids spawned under the parent. Empty under ACP."""
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return []
+        """Child opencode session ids spawned under the parent."""
         # Walk existing buses only — don't spin up a reader thread just to list.
         with self._event_buses_lock:
             buses = [
@@ -234,9 +224,6 @@ class _ServeMixin:
         """Block until opencode-serve answers ``GET /doc`` with 200. Backend
         Ready only proves the supervisor is up; opencode binds :4096 a few
         seconds later."""
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return True
-
         info = self._serve_connection_info(sandbox_id)
         # One client across all polls — saves connect-setup churn while the
         # server is actively refusing connections.
@@ -504,8 +491,6 @@ class _ServeMixin:
         via ``GeneratorExit``. ``directory`` is required: opencode-serve scopes
         its session store per-directory, so the hydrate REST call needs it.
         """
-        if AGENT_TRANSPORT != AgentTransport.SERVE:
-            return
         bus = self._get_or_create_event_bus(sandbox_id, directory)
         state = _TurnState(session_id=opencode_session_id)
         client = self._build_serve_client(sandbox_id, directory)
