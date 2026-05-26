@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@opal/utils";
 import { Text, Tag } from "@opal/components";
 import { SvgBubbleText } from "@opal/icons";
 import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interfaces";
@@ -8,10 +7,8 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
 /**
  * TaskBody - Renderer for the task (subagent) tool.
  *
- * Shows the subagent type badge, the prompt sent to the subagent, and the
- * final output when the task has completed. Replaces the previous behavior
- * of dumping the subagent output as a stray text item in the parent
- * transcript.
+ * Shows the subagent type badge, the prompt, and the final output. Each
+ * content block sits inside the card-wide quote-bar pattern.
  */
 export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const subagentType = toolCall.subagentType;
@@ -19,7 +16,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const output = toolCall.taskOutput;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="border-l border-border-02 pl-3 flex flex-col gap-3">
       {subagentType && (
         <div className="flex items-center gap-2">
           <Tag icon={SvgBubbleText} title={subagentType} color="purple" />
@@ -30,16 +27,11 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
       )}
 
       {prompt && (
-        <div
-          className={cn(
-            "rounded-08 border-[0.5px] bg-background-neutral-01 border-border-01",
-            "p-3 overflow-auto max-h-[14rem] whitespace-pre-wrap wrap-break-word"
-          )}
-        >
+        <div>
           <Text font="main-ui-muted" color="text-02">
             Prompt
           </Text>
-          <div className="mt-1">
+          <div className="mt-1 overflow-auto max-h-[14rem] whitespace-pre-wrap wrap-break-word">
             <Text as="p" font="secondary-body" color="text-04">
               {prompt}
             </Text>
@@ -48,16 +40,11 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
       )}
 
       {output && (
-        <div
-          className={cn(
-            "rounded-08 border-[0.5px] bg-background-neutral-01 border-border-01",
-            "p-3 overflow-auto max-h-[20rem] whitespace-pre-wrap wrap-break-word"
-          )}
-        >
+        <div>
           <Text font="main-ui-muted" color="text-02">
             Result
           </Text>
-          <div className="mt-1">
+          <div className="mt-1 overflow-auto max-h-[20rem] whitespace-pre-wrap wrap-break-word">
             <Text as="p" font="main-content-body" color="text-04">
               {output}
             </Text>

@@ -59,7 +59,7 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
 
   if (hits.length === 0) {
     return (
-      <div className="p-3 rounded-08 border-[0.5px] bg-background-neutral-01 border-border-01">
+      <div className="border-l border-border-02 pl-3">
         <Text font="main-ui-muted" color="text-02">
           No matches
         </Text>
@@ -68,20 +68,20 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
   }
 
   return (
-    <div className="rounded-08 border-[0.5px] bg-background-neutral-01 border-border-01 overflow-hidden">
-      <div className="overflow-auto max-h-[24rem] divide-y divide-border-01">
+    <div className="border-l border-border-02 pl-3 overflow-auto max-h-[24rem]">
+      <div className="divide-y divide-border-01">
         {hits.map((hit, idx) => (
           <div
             key={idx}
             className={cn(
-              "px-3 py-2 flex flex-col gap-1",
-              "hover:bg-background-tint-02 transition-colors"
+              "py-2 flex flex-col gap-1",
+              "hover:bg-background-tint-01 transition-colors"
             )}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <SvgFileText className="size-3.5 stroke-text-03 shrink-0" />
-              <span className="truncate min-w-0">
-                <Text font="secondary-mono" color="text-04" nowrap>
+            <div className="flex items-start gap-2 min-w-0">
+              <SvgFileText className="size-3.5 stroke-text-03 shrink-0 mt-0.5" />
+              <span className="min-w-0 wrap-break-word break-words">
+                <Text font="secondary-mono" color="text-04">
                   {hit.path}
                 </Text>
               </span>
@@ -94,8 +94,8 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
               )}
             </div>
             {hit.snippet && (
-              <div className="pl-5 truncate">
-                <Text font="secondary-mono" color="text-03" nowrap>
+              <div className="pl-5 wrap-break-word break-words">
+                <Text font="secondary-mono" color="text-03">
                   {hit.snippet}
                 </Text>
               </div>

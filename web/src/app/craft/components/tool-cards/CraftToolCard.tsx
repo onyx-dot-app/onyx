@@ -41,7 +41,7 @@ interface CraftToolCardProps {
   /**
    * Left-column variant. "rail" shows status icon + connector (top-level use),
    * "spacer" reserves the column width without rail (nested use under a parent
-   * rail), "none" omits the column entirely (e.g., inside WorkingPill).
+   * rail), "none" omits the column entirely.
    */
   railVariant?: TimelineRowRailVariant;
 }
@@ -129,7 +129,7 @@ export default function CraftToolCard({
               )}
             >
               <div className="flex items-center gap-2 min-w-0 w-full">
-                <Text font="main-ui-action" color="text-04" nowrap>
+                <Text font="main-ui-muted" color="text-04" nowrap>
                   {toolCall.title}
                 </Text>
                 {toolCall.description && (
@@ -148,8 +148,8 @@ export default function CraftToolCard({
                 />
               </div>
               {secondaryLine && (
-                <div className="pt-1">
-                  <Text font="main-ui-mono" color="text-03" nowrap>
+                <div className="pt-1 whitespace-pre-wrap wrap-break-word break-words">
+                  <Text font="secondary-mono" color="text-03">
                     {secondaryLine}
                   </Text>
                 </div>
@@ -157,7 +157,7 @@ export default function CraftToolCard({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="px-3 pb-3 pt-1">{renderBody(toolCall)}</div>
+            <div className="px-3 pb-2 pt-0">{renderBody(toolCall)}</div>
           </CollapsibleContent>
         </Collapsible>
       </TimelineSurface>
