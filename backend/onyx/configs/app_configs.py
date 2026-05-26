@@ -284,9 +284,15 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
 SMTP_PASS = os.environ.get("SMTP_PASS") or ""
 # Whether to issue STARTTLS on the SMTP connection. Default true preserves
-# behavior for hosted providers (Gmail / SendGrid / SES on port 587). Set to
-# false for internal/whitelisted relays that don't advertise STARTTLS.
-SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() == "true"
+# behavior for hosted providers (Gmail / SendGrid / SES on port 587). Only an
+# explicit opt-out disables it, so an empty value (e.g. an uncommented
+# `SMTP_STARTTLS=` in a .env file) doesn't silently drop credentials onto a
+# plaintext connection.
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
