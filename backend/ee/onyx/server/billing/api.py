@@ -88,7 +88,7 @@ BILLING_CIRCUIT_BREAKER_TTL_SECONDS = 3600
 # admin endpoint on every billing-page load, which in turn proxies to the
 # cloud data plane. A short shared Redis cache absorbs the polling without
 # affecting Stripe-driven invalidation (handled by /seats/update + webhooks).
-BILLING_INFO_CACHE_KEY = "billing-info:v1"
+BILLING_INFO_CACHE_KEY = "billing-information:v1"
 BILLING_INFO_CACHE_TTL_SECONDS = 300
 
 
