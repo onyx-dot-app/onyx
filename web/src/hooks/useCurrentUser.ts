@@ -12,11 +12,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  *
  * - `revalidateOnFocus: false`      — tab switches won't trigger a refetch
  * - `revalidateOnReconnect: false`   — network recovery won't trigger a refetch
- * - `dedupingInterval: 300_000`      — duplicate requests within 5 min are deduped
+ * - `dedupingInterval: 60_000`       — duplicate requests within 1 min are deduped
  *
- * Mutations that change the user (profile updates, token refresh, signout)
- * call `mutateUser()` explicitly, so the 5 min window does not hide
- * those state transitions.
+ * Callers that mutate user state (token refresh, profile update) call
+ * `mutateUser()` to refetch immediately. Some logout / admin-role-change
+ * paths still rely on the dedup window expiring; keep the window short
+ * enough that those stale-UI windows match existing behavior.
  *
  * @example
  * ```ts
@@ -38,7 +39,7 @@ export function useCurrentUser(): {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: false,
-      dedupingInterval: 300_000,
+      dedupingInterval: 60_000,
     }
   );
 
