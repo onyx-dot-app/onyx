@@ -177,5 +177,5 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 True when the sandbox proxy stack should render (Craft enabled + proxy enabled).
 */}}
 {{- define "onyx.sandboxProxyEnabled" -}}
-{{- and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") .Values.sandboxProxy.enabled -}}
+{{- and (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") (.Values.sandboxProxy | default dict).enabled -}}
 {{- end }}

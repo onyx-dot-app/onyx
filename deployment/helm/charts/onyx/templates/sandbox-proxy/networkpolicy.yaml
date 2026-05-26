@@ -24,5 +24,5 @@ spec:
               kubernetes.io/metadata.name: {{ $sandboxNs }}
       ports:
         - protocol: TCP
-          port: {{ .Values.sandboxProxy.containerPorts.proxy }}
+          port: {{ (((.Values.sandboxProxy | default dict).containerPorts | default dict).proxy | default 8080) }}
 {{- end }}
