@@ -86,9 +86,10 @@ def mock_gpu_status() -> Iterator[None]:
 
 @pytest.fixture
 def mock_vespa_query() -> Iterator[None]:
-    """Stub Vespa query to a safe empty response to avoid CI flakiness."""
+    """Stub document-index hybrid retrieval to a safe empty response to avoid CI flakiness."""
     with patch(
-        "onyx.document_index.vespa.vespa_document_index.query_vespa", return_value=[]
+        "onyx.document_index.opensearch.opensearch_document_index.OpenSearchIndexPair.hybrid_retrieval",
+        return_value=[],
     ):
         yield
 

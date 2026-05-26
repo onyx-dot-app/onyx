@@ -370,19 +370,8 @@ ONYX_SEARCH_UI_USES_OPENSEARCH_KEYWORD_SEARCH = (
     == "true"
 )
 
-VESPA_HOST = os.environ.get("VESPA_HOST") or "localhost"
-# NOTE: this is used if and only if the vespa config server is accessible via a
-# different host than the main vespa application
-VESPA_CONFIG_SERVER_HOST = os.environ.get("VESPA_CONFIG_SERVER_HOST") or VESPA_HOST
-VESPA_PORT = os.environ.get("VESPA_PORT") or "8081"
-VESPA_TENANT_PORT = os.environ.get("VESPA_TENANT_PORT") or "19071"
-# the number of times to try and connect to vespa on startup before giving up
-VESPA_NUM_ATTEMPTS_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 10)
-
-VESPA_CLOUD_URL = os.environ.get("VESPA_CLOUD_URL", "")
-
-VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
-VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
+# the number of times to try and connect to the document index on startup before giving up
+NUM_RETRIES_ON_STARTUP = int(os.environ.get("NUM_RETRIES_ON_STARTUP") or 10)
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
@@ -1016,11 +1005,6 @@ LOG_ONYX_MODEL_INTERACTIONS = (
 PROMPT_CACHE_CHAT_HISTORY = (
     os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
 )
-# If set to `true` will enable additional logs about Vespa query performance
-# (time spent on finding the right docs + time spent fetching summaries from disk)
-LOG_VESPA_TIMING_INFORMATION = (
-    os.environ.get("LOG_VESPA_TIMING_INFORMATION", "").lower() == "true"
-)
 LOG_ENDPOINT_LATENCY = os.environ.get("LOG_ENDPOINT_LATENCY", "").lower() == "true"
 LOG_POSTGRES_LATENCY = os.environ.get("LOG_POSTGRES_LATENCY", "").lower() == "true"
 LOG_POSTGRES_CONN_COUNTS = (
@@ -1071,22 +1055,6 @@ LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfus
 # Format: list of strings
 CUSTOM_ANSWER_VALIDITY_CONDITIONS = json.loads(
     os.environ.get("CUSTOM_ANSWER_VALIDITY_CONDITIONS", "[]")
-)
-
-VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
-# This is the timeout for the client side of the Vespa migration task. When
-# exceeded, an exception is raised in our code. This value should be higher than
-# VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT.
-VESPA_MIGRATION_REQUEST_TIMEOUT_S = int(
-    os.environ.get("VESPA_MIGRATION_REQUEST_TIMEOUT_S") or "120"
-)
-# This is the timeout Vespa uses on the server side to know when to wrap up its
-# traversal and try to report partial results. This differs from the client
-# timeout above which raises an exception in our code when exceeded. This
-# timeout allows Vespa to return gracefully. This value should be lower than
-# VESPA_MIGRATION_REQUEST_TIMEOUT_S. Formatted as <number of seconds>s.
-VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
-    "VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT", "110s"
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
@@ -1144,9 +1112,6 @@ AZURE_IMAGE_DEPLOYMENT_NAME = os.environ.get("AZURE_IMAGE_DEPLOYMENT_NAME")
 # configurable image model
 IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 IMAGE_MODEL_PROVIDER = os.environ.get("IMAGE_MODEL_PROVIDER", "openai")
-
-# Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
-MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
 
 ENABLE_EMAIL_INVITES = os.environ.get("ENABLE_EMAIL_INVITES", "").lower() == "true"
 
@@ -1338,10 +1303,6 @@ GCS_PROJECT_ID = os.environ.get("GCS_PROJECT_ID") or None
 GCS_SERVICE_ACCOUNT_KEY_PATH = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_PATH") or None
 # Service account key as inline JSON string (alternative to file path).
 GCS_SERVICE_ACCOUNT_KEY_JSON = os.environ.get("GCS_SERVICE_ACCOUNT_KEY_JSON") or None
-
-# Forcing Vespa Language
-# English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
-VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
 
 
 #####

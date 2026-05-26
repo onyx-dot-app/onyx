@@ -10,10 +10,6 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import on_celery_task_postrun
@@ -105,17 +101,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
         pool_size=sender.concurrency,  # ty: ignore[unresolved-attribute]
         max_overflow=EXTRA_CONCURRENCY,
     )
-
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY,  # ty: ignore[unresolved-attribute]
-            ssl_cert=VESPA_CLOUD_CERT_PATH,
-            ssl_key=VESPA_CLOUD_KEY_PATH,
-        )
-    else:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY  # ty: ignore[unresolved-attribute]
-        )
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)

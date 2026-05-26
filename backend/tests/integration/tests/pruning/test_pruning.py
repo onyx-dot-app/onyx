@@ -16,11 +16,11 @@ from fastapi.staticfiles import StaticFiles
 
 from onyx.server.documents.models import DocumentSource
 from onyx.utils.logger import setup_logger
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 logger = setup_logger()
 
@@ -100,7 +100,7 @@ def http_server_context(
 
 def test_web_pruning(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

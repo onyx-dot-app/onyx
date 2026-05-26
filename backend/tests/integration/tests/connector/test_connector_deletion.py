@@ -21,6 +21,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
@@ -30,12 +31,11 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_connector_deletion(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
@@ -234,7 +234,7 @@ def test_connector_deletion(
 
 def test_connector_deletion_for_overlapping_connectors(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     """Checks to make sure that connectors with overlapping documents work properly. Specifically, that the overlapping
     document (1) still exists and (2) has the right document set / group post-deletion of one of the connectors.

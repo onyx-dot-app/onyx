@@ -6,14 +6,11 @@ from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 from typing import Any
-from typing import cast
 from typing import TypeVar
 
-import httpx
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
-from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import BaseConnector
@@ -27,7 +24,6 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.metrics.pruning_metrics import inc_pruning_rate_limit_error
 from onyx.server.metrics.pruning_metrics import observe_pruning_enumeration_duration
@@ -242,28 +238,6 @@ def celery_is_worker_primary(worker: Any) -> bool:
         return True
 
     return False
-
-
-def httpx_init_vespa_pool(
-    max_keepalive_connections: int,
-    timeout: int = VESPA_REQUEST_TIMEOUT,
-    ssl_cert: str | None = None,
-    ssl_key: str | None = None,
-) -> None:
-    httpx_cert = None
-    httpx_verify = False
-    if ssl_cert and ssl_key:
-        httpx_cert = cast(tuple[str, str], (ssl_cert, ssl_key))
-        httpx_verify = True
-
-    HttpxPool.init_client(
-        name="vespa",
-        cert=httpx_cert,
-        verify=httpx_verify,
-        timeout=timeout,
-        http2=False,
-        limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
-    )
 
 
 def make_probe_path(probe: str, hostname: str) -> Path:

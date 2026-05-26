@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Tenant cleanup script that:
-1. Deletes all documents from Vespa
+1. Deletes all documents from the document index
 2. Drops the data plane PostgreSQL schema
 3. Clean up control plane (tenants, subscription table)
 
@@ -637,12 +637,12 @@ def main() -> None:
             if len(tenant_ids) > 5:
                 print(f"            ... and {len(tenant_ids) - 5} more")
 
-        print("Index Name: Will be fetched automatically when deleting Vespa documents")
+        print("Index Name: Will be fetched automatically when deleting index documents")
         print(
             f"Mode: {'FORCE (no confirmations)' if force else 'Interactive (will ask for confirmation at each step)'}"
         )
         print("\nThis will:")
-        print("  1. Delete ALL Vespa documents for this tenant")
+        print("  1. Delete ALL document-index entries for this tenant")
         print("  2. Drop the data plane PostgreSQL schema (CASCADE)")
         print("  3. Clean up control plane data:")
         print("     - Delete from tenant_notification table")

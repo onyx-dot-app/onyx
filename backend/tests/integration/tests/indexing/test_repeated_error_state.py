@@ -14,17 +14,17 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
 from tests.integration.common_utils.test_document_utils import create_test_document
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_repeated_error_state_detection_and_recovery(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that a connector is marked as in a repeated error state after

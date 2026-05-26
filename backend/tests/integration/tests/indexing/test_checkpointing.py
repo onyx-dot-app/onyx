@@ -14,6 +14,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
@@ -22,12 +23,11 @@ from tests.integration.common_utils.test_document_utils import (
     create_test_document_failure,
 )
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 def test_mock_connector_basic_flow(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that the mock connector can successfully process documents and failures"""
@@ -101,7 +101,7 @@ def test_mock_connector_basic_flow(
 
 def test_mock_connector_with_failures(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that the mock connector processes both successes and failures properly."""
@@ -177,7 +177,7 @@ def test_mock_connector_with_failures(
 
 def test_mock_connector_failure_recovery(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that a failed document can be successfully indexed in a subsequent attempt
@@ -337,7 +337,7 @@ def test_mock_connector_failure_recovery(
 
 def test_mock_connector_checkpoint_recovery(
     mock_server_client: httpx.Client,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
     admin_user: DATestUser,
 ) -> None:
     """Test that checkpointing works correctly when an unhandled exception occurs

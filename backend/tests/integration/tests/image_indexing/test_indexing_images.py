@@ -8,6 +8,7 @@ from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -17,7 +18,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "Sample.pdf"
 FILE_PATH = "tests/integration/common_utils/test_files"
@@ -27,7 +27,7 @@ DOCX_FILE_NAME = "three_images.docx"
 def test_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
@@ -119,7 +119,7 @@ def test_image_indexing(
 def test_docx_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: vespa_fixture,
+    vespa_client: IndexFixture,
 ) -> None:
     """Test that images from docx files are correctly extracted and indexed."""
     os.makedirs(FILE_PATH, exist_ok=True)

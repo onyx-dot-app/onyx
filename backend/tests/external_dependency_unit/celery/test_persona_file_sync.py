@@ -219,9 +219,6 @@ _PATCH_GET_SETTINGS = (
 _PATCH_GET_INDICES = (
     "onyx.background.celery.tasks.user_file_processing.tasks.get_all_document_indices"
 )
-_PATCH_HTTPX_INIT = (
-    "onyx.background.celery.tasks.user_file_processing.tasks.httpx_init_vespa_pool"
-)
 _PATCH_DISABLE_VDB = (
     "onyx.background.celery.tasks.user_file_processing.tasks.DISABLE_VECTOR_DB"
 )
@@ -252,7 +249,6 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
@@ -326,7 +322,6 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
@@ -374,7 +369,6 @@ class TestSyncTaskWritesPersonaIds:
 
         with (
             patch(_PATCH_DISABLE_VDB, False),
-            patch(_PATCH_HTTPX_INIT),
             patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):

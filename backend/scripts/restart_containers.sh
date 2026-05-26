@@ -6,8 +6,8 @@ COMPOSE_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.yml"
 COMPOSE_DEV_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.dev.yml"
 
 stop_and_remove_containers() {
-  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
-  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker stop onyx_postgres onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
+  docker rm onyx_postgres onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled rm -f opensearch 2>/dev/null || true
 }
@@ -21,7 +21,7 @@ cleanup() {
 trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 
 # Usage of the script with optional volume arguments
-# ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
+# ./restart_containers.sh [postgres_volume] [redis_volume]
 # [minio_volume] [--keep-opensearch-data]
 
 KEEP_OPENSEARCH_DATA=false
@@ -34,10 +34,9 @@ for arg in "$@"; do
     fi
 done
 
-VESPA_VOLUME=${POSITIONAL_ARGS[0]:-""}
-POSTGRES_VOLUME=${POSITIONAL_ARGS[1]:-""}
-REDIS_VOLUME=${POSITIONAL_ARGS[2]:-""}
-MINIO_VOLUME=${POSITIONAL_ARGS[3]:-""}
+POSTGRES_VOLUME=${POSITIONAL_ARGS[0]:-""}
+REDIS_VOLUME=${POSITIONAL_ARGS[1]:-""}
+MINIO_VOLUME=${POSITIONAL_ARGS[2]:-""}
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
@@ -49,14 +48,6 @@ if [[ -n "$POSTGRES_VOLUME" ]]; then
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d -v "$POSTGRES_VOLUME":/var/lib/postgresql/data postgres -c max_connections=250
 else
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d postgres -c max_connections=250
-fi
-
-# Start the Vespa container with optional volume
-echo "Starting Vespa container..."
-if [[ -n "$VESPA_VOLUME" ]]; then
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v "$VESPA_VOLUME":/opt/vespa/var vespaengine/vespa:8
-else
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
 
 # If OPENSEARCH_ADMIN_PASSWORD is not already set, try loading it from

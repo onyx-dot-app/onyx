@@ -12,14 +12,12 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 
 
-class vespa_fixture:
+class IndexFixture:
     """Test fixture for inspecting the document index.
 
-    Kept named ``vespa_fixture`` for backwards compatibility with the many
-    existing integration tests that take it as a parameter. Internally it is now
-    backed by OpenSearch, and it reshapes hits into the dict-of-keys layout that
-    the legacy Vespa assertions expect (``access_control_list`` and
-    ``document_sets`` as dicts; ``image_file_name`` mirrored from OpenSearch's
+    Backed by OpenSearch. Reshapes hits into the dict-of-keys layout that
+    legacy assertions expect (``access_control_list`` and ``document_sets``
+    as dicts; ``image_file_name`` mirrored from OpenSearch's
     ``image_file_id``; the ``public`` boolean folded back into the ACL as the
     ``"PUBLIC"`` entry).
 
@@ -31,8 +29,8 @@ class vespa_fixture:
     """
 
     def __init__(self, index_name: str | None = None) -> None:
-        # index_name is accepted for backwards compat with the prior Vespa
-        # fixture signature but ignored — see class docstring.
+        # index_name is accepted for backwards compat with the prior fixture
+        # signature but ignored — see class docstring.
         del index_name
         self._client = OpenSearch(
             hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_REST_API_PORT}],

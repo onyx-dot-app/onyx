@@ -17,6 +17,7 @@ from onyx.connectors.google_utils.shared_constants import (
 )
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
+from tests.integration.common_utils.index_fixture import IndexFixture
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -29,7 +30,6 @@ from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.google.google_drive_api_utils import (
     GoogleDriveManager,
 )
@@ -109,7 +109,7 @@ def google_drive_test_env_setup() -> Generator[
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")
 def test_google_permission_sync(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,  # noqa: ARG001
+    vespa_client: IndexFixture,  # noqa: ARG001
     google_drive_test_env_setup: tuple[
         GoogleDriveService, str, DATestCCPair, DATestUser, DATestUser, DATestUser
     ],
