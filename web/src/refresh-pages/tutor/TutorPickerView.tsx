@@ -74,7 +74,7 @@ export default function TutorPickerView({
           ltiCanvasCourseNodeId
         );
       }
-      return `/admin/tutor/edit/${agentId}?${params.toString()}`;
+      return `/tutor/edit/${agentId}?${params.toString()}`;
     },
     [ltiContextId, ltiCanvasCourseNodeId]
   );
@@ -88,7 +88,7 @@ export default function TutorPickerView({
         ltiCanvasCourseNodeId
       );
     }
-    return `/admin/tutor/create?${params.toString()}`;
+    return `/tutor/create?${params.toString()}`;
   }, [ltiContextId, ltiCanvasCourseNodeId]);
 
   const handleSelect = useCallback(
