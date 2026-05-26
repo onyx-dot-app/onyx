@@ -267,16 +267,24 @@ def _wrap_raw_output(state: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _hydrate_message(state: _TurnState, msg_id: str) -> str | None:
-    """REST-fetch a message, populate caches, return role (or None)."""
+    """REST-fetch a message, populate caches, return role (or None).
+
+    Negative results (fetch failure or unknown role) are cached in
+    ``user_message_ids`` so ``_is_assistant_message`` short-circuits on
+    subsequent deltas instead of re-issuing REST calls.
+    """
     if state.fetch_message is None:
+        state.user_message_ids.add(msg_id)
         return None
     body = state.fetch_message(msg_id)
     if not body:
         logger.warning("hydrate(%s): empty/failed fetch", msg_id)
+        state.user_message_ids.add(msg_id)
         return None
     info = body.get("info") or {}
     if not isinstance(info, dict):
         logger.warning("hydrate(%s): no info object", msg_id)
+        state.user_message_ids.add(msg_id)
         return None
     role = info.get("role")
     logger.info(
@@ -287,6 +295,7 @@ def _hydrate_message(state: _TurnState, msg_id: str) -> str | None:
     elif role == "user":
         state.user_message_ids.add(msg_id)
     else:
+        state.user_message_ids.add(msg_id)
         return None
     parts = body.get("parts") or []
     if isinstance(parts, list):

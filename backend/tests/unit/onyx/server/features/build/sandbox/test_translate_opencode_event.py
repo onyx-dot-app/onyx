@@ -1085,6 +1085,72 @@ def test_missing_properties_ignored() -> None:
     assert _drain(translate_opencode_event({"type": "message.updated"}, s)) == []
 
 
+# ───────────────────────── hydrate negative cache ─────────────────
+
+
+def test_hydrate_failure_cached_so_subsequent_deltas_skip_fetch() -> None:
+    """A failed hydrate (empty fetch, missing info, or unknown role) must
+    cache the msg_id as non-assistant so subsequent deltas don't issue
+    fresh REST calls — otherwise every delta for a problematic message
+    triggers a retry storm on the event-processing hot path."""
+    calls: list[str] = []
+
+    def fetch_empty(msg_id: str) -> dict[str, Any] | None:
+        calls.append(msg_id)
+        return None
+
+    s = _state()
+    s.fetch_message = fetch_empty
+    # Two consecutive deltas for the same problematic message id.
+    for _ in range(2):
+        _drain(
+            translate_opencode_event(
+                {
+                    "type": "message.part.delta",
+                    "properties": {
+                        "sessionID": SESS,
+                        "messageID": "msg_broken",
+                        "partID": "p1",
+                        "field": "text",
+                        "delta": "x",
+                    },
+                },
+                s,
+            )
+        )
+    assert calls == ["msg_broken"]
+    assert "msg_broken" in s.user_message_ids
+
+
+def test_hydrate_unknown_role_cached_negatively() -> None:
+    calls: list[str] = []
+
+    def fetch_unknown_role(msg_id: str) -> dict[str, Any] | None:
+        calls.append(msg_id)
+        return {"info": {"role": "system"}, "parts": []}
+
+    s = _state()
+    s.fetch_message = fetch_unknown_role
+    for _ in range(3):
+        _drain(
+            translate_opencode_event(
+                {
+                    "type": "message.part.delta",
+                    "properties": {
+                        "sessionID": SESS,
+                        "messageID": "msg_system",
+                        "partID": "p1",
+                        "field": "text",
+                        "delta": "x",
+                    },
+                },
+                s,
+            )
+        )
+    assert calls == ["msg_system"]
+    assert "msg_system" in s.user_message_ids
+
+
 def test_non_string_session_id_skips_match() -> None:
     """Defensive: properties.sessionID = None means "no session filter" — the
     event is still considered (some session-wide events have no id)."""
