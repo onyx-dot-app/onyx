@@ -122,7 +122,13 @@ def _pool_container() -> Generator[_PoolContainer, None, None]:
     manager = DockerSandboxManager()
     sandbox_id = uuid4()
     user_id = uuid4()
-    llm_config = default_llm_config(api_key=os.environ["OPENAI_API_KEY"])
+    # Override the helper's default model — gpt-5-mini is the project's
+    # cheap-and-fast tier for live-LLM tests. ``default_llm_config``'s
+    # built-in default is not appropriate here.
+    llm_config = default_llm_config(
+        api_key=os.environ["OPENAI_API_KEY"],
+        model_name="gpt-5-mini",
+    )
 
     info = manager.provision(
         sandbox_id=sandbox_id,
