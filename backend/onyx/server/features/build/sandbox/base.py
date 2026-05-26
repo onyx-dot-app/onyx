@@ -24,9 +24,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from typing import Any
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 import httpx
@@ -48,13 +46,19 @@ from onyx.server.features.build.sandbox.models import PushResult
 from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
+from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
+from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
+from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.opencode.serve_client import (
+    translate_opencode_event,
+)
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
-if TYPE_CHECKING:
-    from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
-    from onyx.server.features.build.sandbox.opencode.serve_client import (
-        OpencodeServeClient,
-    )
+# Re-export SSEKeepalive so existing ``from ...sandbox.base import
+# SSEKeepalive`` callers keep working after the move into sse.py.
+__all__ = ["SSEKeepalive"]
 
 logger = setup_logger()
 
@@ -85,20 +89,6 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 # "stream did not become ready".
 OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.5
-
-
-@dataclass
-class SSEKeepalive:
-    """Marker event yielded by sandbox-manager ACP clients when no real ACP
-    events have arrived for ``SSE_KEEPALIVE_INTERVAL`` seconds.
-
-    Defined here (rather than in any one backend's exec client) so every
-    backend yields the same class and ``isinstance`` checks in the
-    session-manager SSE pipeline work uniformly. Otherwise a Docker-emitted
-    keepalive would be a different class than a K8s-emitted keepalive and
-    one would fall through the manager's isinstance chain as "unrecognized"
-    and be silently dropped.
-    """
 
 
 class SandboxManager(ABC):
@@ -516,14 +506,6 @@ class SandboxManager(ABC):
         ``GeneratorExit``. Empty under ACP."""
         if AGENT_TRANSPORT != AgentTransport.SERVE:
             return
-        from onyx.server.features.build.sandbox.opencode.event_bus import (
-            BUS_CLOSED_SENTINEL,
-        )
-        from onyx.server.features.build.sandbox.opencode.serve_client import _TurnState
-        from onyx.server.features.build.sandbox.opencode.serve_client import (
-            translate_opencode_event,
-        )
-
         bus = self._get_or_create_event_bus(sandbox_id)
         state = _TurnState(session_id=opencode_session_id)
         sub = bus.subscribe(opencode_session_id)
@@ -563,7 +545,7 @@ class SandboxManager(ABC):
         if getattr(self, "_serve_state_initialized", False):
             return
         # One PodEventBus per sandbox, created lazily on first send_message.
-        self._event_buses: dict[UUID, "PodEventBus"] = {}
+        self._event_buses: dict[UUID, PodEventBus] = {}
         # Tombstone set: blocks late ``subscribe`` from re-creating a bus
         # for a sandbox whose terminate is in flight (leaks a reconnect
         # loop otherwise). Cleared on re-provision.
@@ -643,7 +625,7 @@ class SandboxManager(ABC):
         )
         return False
 
-    def _get_or_create_event_bus(self, sandbox_id: UUID) -> "PodEventBus":
+    def _get_or_create_event_bus(self, sandbox_id: UUID) -> PodEventBus:
         """Lazily build the per-sandbox :class:`PodEventBus`. Refuses to
         create one for a terminated sandbox (see ``_terminated_sandboxes``).
 
@@ -667,10 +649,6 @@ class SandboxManager(ABC):
                     f"Sandbox {sandbox_id} has been terminated; refusing to "
                     "create a new event bus against its (deleted) backend"
                 )
-            from onyx.server.features.build.sandbox.opencode.event_bus import (
-                PodEventBus,
-            )
-
             password = self._read_opencode_password(sandbox_id)
             if password is None:
                 logger.warning(
@@ -694,9 +672,7 @@ class SandboxManager(ABC):
             )
             return bus
 
-    def _build_serve_client(self, sandbox_id: UUID) -> "OpencodeServeClient":
-        from onyx.server.features.build.sandbox.opencode import OpencodeServeClient
-
+    def _build_serve_client(self, sandbox_id: UUID) -> OpencodeServeClient:
         password = self._read_opencode_password(sandbox_id)
         bus = self._get_or_create_event_bus(sandbox_id)
         return OpencodeServeClient(

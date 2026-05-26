@@ -42,7 +42,7 @@ from pydantic import ValidationError
 from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import ACP_MESSAGE_TIMEOUT
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.sandbox.base import SSEKeepalive
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
