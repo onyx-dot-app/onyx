@@ -35,6 +35,10 @@ import TutorHistoryPanel from "@/refresh-pages/tutor/TutorHistoryPanel";
 import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
+import CanvasCourseSetupView, {
+  CanvasCoursePreparingView,
+  type LtiCourseConnectorStatus,
+} from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Button } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
@@ -84,6 +88,27 @@ export default function TutorChatPage() {
   const { data: courseTutors } = useSWR<MinimalPersonaSnapshot[]>(
     courseTutorsSwrKey,
     errorHandlingFetcher
+  );
+  const courseConnectorStatusSwrKey = ltiContextId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiContextId
+      )}/connector-status`
+    : null;
+  const {
+    data: courseConnectorStatus,
+    error: courseConnectorStatusError,
+    isLoading: isLoadingCourseConnectorStatus,
+    mutate: refreshCourseConnectorStatus,
+  } = useSWR<LtiCourseConnectorStatus>(
+    courseConnectorStatusSwrKey,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestStatus) => {
+        if (!latestStatus) return 0;
+        if (!latestStatus.has_connector) return 5000;
+        return latestStatus.has_indexed_documents ? 0 : 5000;
+      },
+    }
   );
   const courseTutorIds = useMemo(() => {
     if (!courseTutors) return null;
@@ -184,6 +209,10 @@ export default function TutorChatPage() {
     scrollContainerRef.current?.scrollToBottom();
   }, []);
 
+  const handleCanvasConnectorReady = useCallback(() => {
+    void refreshCourseConnectorStatus();
+  }, [refreshCourseConnectorStatus]);
+
   // Derive course name from project (strip "[Canvas] " prefix)
   const courseName = useMemo(() => {
     if (!currentChatSession?.project_id) return null;
@@ -279,6 +308,36 @@ export default function TutorChatPage() {
 
   // Loading state
   if (!isReady) return <OnyxInitializingLoader />;
+
+  if (ltiContextId && isLoadingCourseConnectorStatus) {
+    return <OnyxInitializingLoader />;
+  }
+
+  if (ltiContextId && courseConnectorStatusError) {
+    return <TutorNoAgent />;
+  }
+
+  if (ltiContextId && courseConnectorStatus) {
+    if (
+      !courseConnectorStatus.has_connector &&
+      courseConnectorStatus.setup?.can_setup
+    ) {
+      return (
+        <CanvasCourseSetupView
+          courseId={ltiContextId}
+          status={courseConnectorStatus}
+          onReady={handleCanvasConnectorReady}
+        />
+      );
+    }
+
+    if (
+      !courseConnectorStatus.has_connector ||
+      !courseConnectorStatus.has_indexed_documents
+    ) {
+      return <CanvasCoursePreparingView status={courseConnectorStatus} />;
+    }
+  }
 
   // No agentId chosen yet — render the picker if we know the course context,
   // otherwise fall back to the legacy no-agent state.

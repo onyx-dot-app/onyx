@@ -851,6 +851,34 @@ class TestLoadCredentials:
         assert result is None
         assert connector._canvas_client is not None
 
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_load_credentials_validates_configured_courses(
+        self, mock_requests: MagicMock
+    ) -> None:
+        mock_requests.get.return_value = _mock_response(json_data=_mock_course(2))
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL, course_ids=["2"])
+
+        result = connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        requested_url = mock_requests.get.call_args.args[0]
+        assert result is None
+        assert requested_url == f"{FAKE_BASE_URL}/api/v1/courses/2"
+        assert 2 in connector._courses_by_id
+
+    def test_rejects_non_numeric_course_id_filter(self) -> None:
+        with pytest.raises(ValueError, match="numeric course IDs"):
+            CanvasConnector(canvas_base_url=FAKE_BASE_URL, course_ids=["course-a"])
+
+    def test_accepts_lti_context_id_metadata(self) -> None:
+        connector = CanvasConnector(
+            canvas_base_url=FAKE_BASE_URL,
+            course_ids=["2"],
+            lti_context_id="opaque-lti-context",
+        )
+
+        assert connector.course_ids == [2]
+        assert connector.lti_context_id == "opaque-lti-context"
+
     def test_canvas_client_raises_without_credentials(self) -> None:
         connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
 
@@ -1233,6 +1261,24 @@ class TestCheckpoint:
 
 
 class TestLoadFromCheckpoint:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_first_call_uses_configured_course_filter(
+        self, mock_requests: MagicMock
+    ) -> None:
+        """Configured course_ids should avoid materializing every visible course."""
+        mock_requests.get.return_value = _mock_response(json_data=_mock_course(2))
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL, course_ids=["2", 2])
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+        cp = connector.build_dummy_checkpoint()
+
+        items, new_cp = _run_checkpoint(connector, cp)
+
+        assert items == []
+        assert new_cp.course_ids == [2]
+        assert new_cp.current_course_index == 0
+        assert new_cp.stage == "pages"
+        assert new_cp.has_more is True
+
     @patch("onyx.connectors.canvas.client.rl_requests")
     def test_first_call_materializes_courses(self, mock_requests: MagicMock) -> None:
         """First call should populate course_ids and yield no documents."""
