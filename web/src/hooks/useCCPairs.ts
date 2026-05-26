@@ -70,7 +70,13 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 export default function useCCPairs(enabled: boolean = true) {
   const { data, error, isLoading, mutate } = useSWR<CCPairBasicInfo[]>(
     enabled ? SWR_KEYS.connectorStatus : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60_000,
+    }
   );
 
   return {
