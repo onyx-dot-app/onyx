@@ -41,9 +41,10 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         user_count = await get_user_count()
         has_users = user_count > 0
 
-    # Response only flips on auth-config change or first user signup, so a
-    # short browser cache is safe and cuts a hot pre-auth endpoint.
-    response.headers["Cache-Control"] = "public, max-age=60"
+    # Cache only after bootstrap; the first user flow depends on a live
+    # has_users flag so avoid serving a stale redirect.
+    if has_users:
+        response.headers["Cache-Control"] = "public, max-age=60"
 
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
