@@ -317,9 +317,39 @@ def test_event_for_other_session_filtered() -> None:
     assert s.local_text == {}
 
 
-def test_event_with_session_in_info_node_filtered_correctly() -> None:
+def test_message_updated_with_session_in_info_caches_role() -> None:
     s = _state()
-    # Some events nest sessionID inside properties.info
+    # Some events nest sessionID inside properties.info; verify the filter
+    # still recognizes the session AND that we cache role=assistant even
+    # though message.updated alone never yields a terminator.
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.updated",
+                "properties": {
+                    "info": {
+                        "sessionID": SESS,
+                        "id": "msg_abc",
+                        "role": "assistant",
+                        "time": {"completed": 1779000000000},
+                        "finish": "stop",
+                    }
+                },
+            },
+            s,
+        )
+    )
+    assert out == []
+    assert "msg_abc" in s.assistant_message_ids
+
+
+# ───────────────────────── turn terminators ───────────────────────
+
+
+def test_message_updated_alone_does_not_terminate() -> None:
+    # Opencode fires message.updated with time.completed at EVERY step end
+    # (tool-call step, text step, ...). It's not a turn-level signal.
+    s = _state()
     out = _drain(
         translate_opencode_event(
             {
@@ -336,72 +366,39 @@ def test_event_with_session_in_info_node_filtered_correctly() -> None:
             s,
         )
     )
-    assert len(out) == 1
-    assert isinstance(out[0], PromptResponse)
+    assert out == []
 
 
-# ───────────────────────── terminator (message.updated) ───────────
-
-
-def test_terminator_yields_prompt_response_once() -> None:
+def test_session_idle_terminates_once() -> None:
     s = _state()
     out1 = _drain(
         translate_opencode_event(
-            {
-                "type": "message.updated",
-                "properties": {
-                    "info": {
-                        "sessionID": SESS,
-                        "role": "assistant",
-                        "time": {"completed": 1779000000000},
-                        "finish": "stop",
-                    }
-                },
-            },
-            s,
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert len(out1) == 1
     assert isinstance(out1[0], PromptResponse)
-    assert out1[0].stop_reason == "end_turn"
 
-    # Backstop signals after the primary should be no-ops.
     out2 = _drain(
-        translate_opencode_event(
-            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
-        )
-    )
-    assert out2 == []
-    out3 = _drain(
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "idle"},
+                "properties": {"sessionID": SESS, "status": {"type": "idle"}},
             },
             s,
         )
     )
-    assert out3 == []
+    assert out2 == []
 
 
-def test_session_idle_acts_as_backstop_terminator() -> None:
-    s = _state()
-    out = _drain(
-        translate_opencode_event(
-            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
-        )
-    )
-    assert len(out) == 1
-    assert isinstance(out[0], PromptResponse)
-
-
-def test_session_status_idle_is_terminator() -> None:
+def test_session_status_idle_object_is_terminator() -> None:
+    # status is an object {type: "idle"|"busy"|...} — match on .type.
     s = _state()
     out = _drain(
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "idle"},
+                "properties": {"sessionID": SESS, "status": {"type": "idle"}},
             },
             s,
         )
@@ -416,7 +413,7 @@ def test_session_status_non_idle_is_noop() -> None:
         translate_opencode_event(
             {
                 "type": "session.status",
-                "properties": {"sessionID": SESS, "status": "busy"},
+                "properties": {"sessionID": SESS, "status": {"type": "busy"}},
             },
             s,
         )
@@ -465,8 +462,10 @@ def test_assistant_message_without_completed_is_noop() -> None:
 
 
 def test_finish_stop_maps_to_end_turn() -> None:
+    # Finish reason is recorded on message.updated and consumed by
+    # the terminator on the subsequent session.idle.
     s = _state()
-    out = _drain(
+    _drain(
         translate_opencode_event(
             {
                 "type": "message.updated",
@@ -474,12 +473,16 @@ def test_finish_stop_maps_to_end_turn() -> None:
                     "info": {
                         "sessionID": SESS,
                         "role": "assistant",
-                        "time": {"completed": 1779000000000},
                         "finish": "stop",
                     }
                 },
             },
             s,
+        )
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert isinstance(out[0], PromptResponse)
@@ -488,7 +491,7 @@ def test_finish_stop_maps_to_end_turn() -> None:
 
 def test_finish_max_tokens_passes_through() -> None:
     s = _state()
-    out = _drain(
+    _drain(
         translate_opencode_event(
             {
                 "type": "message.updated",
@@ -496,12 +499,16 @@ def test_finish_max_tokens_passes_through() -> None:
                     "info": {
                         "sessionID": SESS,
                         "role": "assistant",
-                        "time": {"completed": 1779000000000},
                         "finish": "max_tokens",
                     }
                 },
             },
             s,
+        )
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.idle", "properties": {"sessionID": SESS}}, s
         )
     )
     assert isinstance(out[0], PromptResponse)
