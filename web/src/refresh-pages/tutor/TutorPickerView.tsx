@@ -23,17 +23,19 @@ interface TutorPickerViewProps {
   ltiContextId: string;
   projectId: number | null;
   ltiCanvasCourseNodeId: string | null;
+  canManageTutors: boolean;
 }
 
 export default function TutorPickerView({
   ltiContextId,
   projectId,
   ltiCanvasCourseNodeId,
+  canManageTutors,
 }: TutorPickerViewProps) {
   const router = useRouter();
   const { isAdmin, isCurator } = useUser();
-  const isInstructor = isAdmin || isCurator;
   const isEmbedded = useEmbeddedMode();
+  const canManageCourseTutors = canManageTutors || isAdmin || isCurator;
 
   const swrKey = `/api/auth/lti/tutors-for-course?context_id=${encodeURIComponent(
     ltiContextId
@@ -68,6 +70,7 @@ export default function TutorPickerView({
   const buildEditTutorUrl = useCallback(
     (agentId: number) => {
       const params = new URLSearchParams();
+      if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
       params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
       if (ltiCanvasCourseNodeId) {
         params.set(
@@ -75,13 +78,14 @@ export default function TutorPickerView({
           ltiCanvasCourseNodeId
         );
       }
-      return `/admin/tutor/edit/${agentId}?${params.toString()}`;
+      return `/tutor/edit/${agentId}?${params.toString()}`;
     },
-    [ltiContextId, ltiCanvasCourseNodeId]
+    [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]
   );
 
   const buildCreateTutorUrl = useCallback(() => {
     const params = new URLSearchParams();
+    if (isEmbedded) params.set(SEARCH_PARAM_NAMES.EMBEDDED, "true");
     params.set(SEARCH_PARAM_NAMES.LTI_CONTEXT_ID, ltiContextId);
     if (ltiCanvasCourseNodeId) {
       params.set(
@@ -89,8 +93,8 @@ export default function TutorPickerView({
         ltiCanvasCourseNodeId
       );
     }
-    return `/admin/tutor/create?${params.toString()}`;
-  }, [ltiContextId, ltiCanvasCourseNodeId]);
+    return `/tutor/create?${params.toString()}`;
+  }, [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]);
 
   const handleSelect = useCallback(
     (agentId: number) => {
@@ -102,7 +106,7 @@ export default function TutorPickerView({
   // Students with exactly one tutor skip the picker and jump straight in.
   // Instructors always see the picker so they can manage their tutors.
   const soleStudentTutorId =
-    !isInstructor && tutors.length === 1 ? tutors[0]!.id : null;
+    !canManageCourseTutors && tutors.length === 1 ? tutors[0]!.id : null;
   useEffect(() => {
     if (soleStudentTutorId === null) return;
     router.replace(buildTutorChatUrl(soleStudentTutorId) as Route);
@@ -130,7 +134,7 @@ export default function TutorPickerView({
 
   // 0 tutors: instructors get a CTA, students see the no-agent state.
   if (tutors.length === 0) {
-    if (!isInstructor) {
+    if (!canManageCourseTutors) {
       return <TutorNoAgent />;
     }
     return (
@@ -159,7 +163,7 @@ export default function TutorPickerView({
         title="Choose a tutor"
         description="Pick a virtual tutor to start a conversation. Multiple tutors may use different teaching styles."
         rightChildren={
-          isInstructor ? (
+          canManageCourseTutors ? (
             <Button
               icon={SvgPlus}
               onClick={() => router.push(buildCreateTutorUrl() as Route)}
@@ -175,7 +179,7 @@ export default function TutorPickerView({
             <TutorPickerCard
               key={tutor.id}
               tutor={tutor}
-              showInstructorActions={isInstructor}
+              showInstructorActions={canManageCourseTutors}
               onSelect={() => handleSelect(tutor.id)}
               onEdit={() => router.push(buildEditTutorUrl(tutor.id) as Route)}
             />

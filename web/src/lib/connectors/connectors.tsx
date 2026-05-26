@@ -2055,6 +2055,8 @@ export interface ZulipConfig {
 
 export interface CanvasConfig {
   canvas_base_url: string;
+  course_ids?: number[];
+  lti_context_id?: string;
 }
 
 export interface CodaConfig {

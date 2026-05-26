@@ -37,6 +37,10 @@ import TutorHistoryPanel from "@/refresh-pages/tutor/TutorHistoryPanel";
 import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
+import CanvasCourseSetupView, {
+  CanvasCoursePreparingView,
+  type LtiCourseConnectorStatus,
+} from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import TutorInstructorInsights from "@/refresh-pages/tutor/TutorInstructorInsights";
 import TutorInstructorKnowledge from "@/refresh-pages/tutor/TutorInstructorKnowledge";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
@@ -52,6 +56,15 @@ import {
 import Dropzone from "react-dropzone";
 import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
 import { UserRole } from "@/lib/types";
+
+function BlankLtiStartupView() {
+  return (
+    <div
+      className="h-screen w-full bg-background-neutral-00"
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function TutorChatPage() {
   const router = useRouter();
@@ -105,6 +118,27 @@ export default function TutorChatPage() {
     courseTutorsSwrKey,
     errorHandlingFetcher
   );
+  const courseConnectorStatusSwrKey = ltiContextId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiContextId
+      )}/connector-status`
+    : null;
+  const {
+    data: courseConnectorStatus,
+    error: courseConnectorStatusError,
+    isLoading: isLoadingCourseConnectorStatus,
+    mutate: refreshCourseConnectorStatus,
+  } = useSWR<LtiCourseConnectorStatus>(
+    courseConnectorStatusSwrKey,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestStatus) => {
+        if (!latestStatus) return 0;
+        if (!latestStatus.has_connector) return 5000;
+        return latestStatus.has_indexed_documents ? 0 : 5000;
+      },
+    }
+  );
   const courseTutorIds = useMemo(() => {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));
@@ -115,6 +149,8 @@ export default function TutorChatPage() {
     courseTutors !== undefined &&
     courseTutors.length === 0;
   const showTutorSidebar = ltiContextId !== null && !isFirstTutorSetupScreen;
+  const canManageCourseTutors =
+    isInstructor || Boolean(courseConnectorStatus?.setup);
 
   const {
     chatSessions,
@@ -205,6 +241,18 @@ export default function TutorChatPage() {
   const handleScrollToBottom = useCallback(() => {
     scrollContainerRef.current?.scrollToBottom();
   }, []);
+
+  const handleCanvasConnectorReady = useCallback(() => {
+    void refreshCourseConnectorStatus();
+  }, [refreshCourseConnectorStatus]);
+
+  // Derive course name from project (strip "[Canvas] " prefix)
+  const courseName = useMemo(() => {
+    if (!currentChatSession?.project_id) return null;
+    // We don't have the project name readily available from chat sessions,
+    // so we'll just show the tutor name.
+    return null;
+  }, [currentChatSession]);
 
   // New conversation handler
   const handleNewConversation = useCallback(() => {
@@ -402,7 +450,40 @@ export default function TutorChatPage() {
   );
 
   // Loading state
-  if (!isReady) return <OnyxInitializingLoader />;
+  if (!isReady) {
+    if (ltiContextId) return <BlankLtiStartupView />;
+    return <OnyxInitializingLoader />;
+  }
+
+  if (ltiContextId && isLoadingCourseConnectorStatus) {
+    return <BlankLtiStartupView />;
+  }
+
+  if (ltiContextId && courseConnectorStatusError) {
+    return <TutorNoAgent />;
+  }
+
+  if (ltiContextId && courseConnectorStatus) {
+    if (
+      !courseConnectorStatus.has_connector &&
+      courseConnectorStatus.setup?.can_setup
+    ) {
+      return (
+        <CanvasCourseSetupView
+          courseId={ltiContextId}
+          status={courseConnectorStatus}
+          onReady={handleCanvasConnectorReady}
+        />
+      );
+    }
+
+    if (
+      !courseConnectorStatus.has_connector ||
+      !courseConnectorStatus.has_indexed_documents
+    ) {
+      return <CanvasCoursePreparingView status={courseConnectorStatus} />;
+    }
+  }
 
   if (isFirstTutorSetupScreen && ltiContextId !== null) {
     return (
@@ -410,6 +491,7 @@ export default function TutorChatPage() {
         ltiContextId={ltiContextId}
         projectId={projectId}
         ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+        canManageTutors={canManageCourseTutors}
       />
     );
   }
@@ -433,6 +515,7 @@ export default function TutorChatPage() {
           ltiContextId={ltiContextId}
           projectId={projectId}
           ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+          canManageTutors={canManageCourseTutors}
         />
       );
     }
@@ -468,12 +551,12 @@ export default function TutorChatPage() {
         {!showTutorSidebar && (
           <TutorChatHeader
             agent={effectiveAgent ?? null}
-            courseName={null}
+            courseName={courseName}
             onNewConversation={handleNewConversation}
             onToggleHistory={toggleHistory}
             historyOpen={historyOpen}
             onManageTutors={
-              isInstructor && ltiContextId ? handleManageTutors : null
+              canManageCourseTutors && ltiContextId ? handleManageTutors : null
             }
           />
         )}
