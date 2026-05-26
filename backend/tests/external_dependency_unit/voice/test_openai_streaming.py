@@ -48,9 +48,15 @@ def test_streaming_connect_uses_ga_realtime_shape(
     test_secrets: dict[TestSecret, str],
 ) -> None:
     """Connecting to the Realtime API with our session.update payload must
-    NOT return `beta_api_shape_disabled` or any error event before the
-    first audio chunk. Catches re-introduction of the Beta header / message
-    shape or any future endpoint-side deprecation of our handshake.
+    NOT produce an `error` event from OpenAI. Catches re-introduction of
+    the Beta header / message shape, wrong session.type, wrong audio
+    format field, or any future endpoint-side deprecation.
+
+    Note: OpenAI does *not* close the WebSocket when it rejects a
+    session.update — it sends an `error` event and leaves the socket
+    open. So we must check `_last_error`, not `_ws.closed`. (An earlier
+    version of this test only checked `_ws.closed` and silently passed
+    against a poisoned session.)
     """
 
     async def run() -> None:
@@ -61,11 +67,11 @@ def test_streaming_connect_uses_ga_realtime_shape(
         try:
             await transcriber.connect()
             # Give OpenAI a moment to send session.created / session.updated
-            # (or an error). We don't expect a transcript yet; we're
-            # validating that the handshake itself was accepted.
+            # (or an error event for a bad handshake).
             await asyncio.sleep(1.5)
-            # If the handshake was rejected, the receive loop would have
-            # closed the queue with a sentinel `None` already.
+            assert transcriber._last_error is None, (
+                f"OpenAI returned an error during handshake: {transcriber._last_error}"
+            )
             assert not transcriber._closed, "transcriber closed early"
             assert transcriber._ws is not None and not transcriber._ws.closed
         finally:
@@ -100,6 +106,10 @@ def test_streaming_accepts_pcm16_audio_chunks(
                 await asyncio.sleep(0.05)
         finally:
             final = await transcriber.close()
+        assert transcriber._last_error is None, (
+            f"OpenAI returned an error during the audio round-trip: "
+            f"{transcriber._last_error}"
+        )
         # We don't assert on transcript content — Whisper may return an
         # empty string for a pure tone. The fact that `close()` returned
         # without timing out on a hung receive loop proves the protocol

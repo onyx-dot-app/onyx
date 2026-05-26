@@ -22,6 +22,7 @@ import io
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
+from typing import Any
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -103,6 +104,10 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._accumulated_transcript = ""  # Accumulated across all turns
         self._receive_task: asyncio.Task | None = None
         self._closed = False
+        # Captures the most recent `error` event from OpenAI so callers
+        # (e.g. tests, the WS handler) can detect a poisoned session even
+        # though OpenAI does not close the socket on protocol errors.
+        self._last_error: dict[str, Any] | None = None
 
     async def connect(self) -> None:
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
@@ -127,15 +132,21 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._logger.error("Failed to connect to OpenAI Realtime API: %s", e)
             raise
 
-        # GA shape: `session.update` (was `transcription_session.update`), with
-        # the session typed as `transcription` and audio config nested under
-        # `audio.input`. `gpt-realtime-whisper` does not support server-side
-        # VAD — turn boundaries are driven by `input_audio_buffer.commit`
-        # which is sent from `close()` when the user stops recording.
+        # GA shape: `session.update` (was `transcription_session.update`),
+        # with the session typed as `realtime` — *not* `transcription`.
+        # OpenAI's GA does not have a dedicated transcription-only session
+        # type on the WS; transcription is configured as a side-effect of
+        # a standard realtime session via `audio.input.transcription.model`.
+        # Sending `session.type: "transcription"` here yields:
+        #   "Passing a transcription session update event to a realtime
+        #    session is not allowed."
+        # `gpt-realtime-whisper` does not emit server-side VAD events; turn
+        # boundaries are driven by an explicit `input_audio_buffer.commit`
+        # from `close()` when the user stops recording.
         config_message = {
             "type": "session.update",
             "session": {
-                "type": "transcription",
+                "type": "realtime",
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcm", "rate": 24000},
@@ -163,9 +174,15 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     msg_type = data.get("type", "")
                     self._logger.debug("Received message type: %s", msg_type)
 
-                    # Handle errors
+                    # Handle errors. OpenAI does NOT close the WebSocket on
+                    # protocol errors (e.g. a malformed `session.update`),
+                    # so we capture the most recent error here for callers
+                    # to inspect — the test/handler can fail fast instead
+                    # of waiting on a session that will never produce a
+                    # transcript.
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
+                        self._last_error = error
                         self._logger.error("OpenAI error: %s", error)
                         continue
 
