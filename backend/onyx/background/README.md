@@ -13,7 +13,7 @@ The background jobs take care of:
 | Worker                    | File                           | Queues                                                                                                               |
 | ------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
 | Primary                   | `apps/primary.py`              | `celery`                                                                                                             |
-| Light                     | `apps/light.py`                | `vespa_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup` |
+| Light                     | `apps/light.py`                | `document_index_metadata_sync`, `connector_deletion`, `doc_permissions_upsert`, `checkpoint_cleanup`, `index_attempt_cleanup` |
 | Heavy                     | `apps/heavy.py`                | `connector_pruning`, `connector_doc_permissions_sync`, `connector_external_group_sync`, `csv_generation`, `sandbox`  |
 | Docprocessing             | `apps/docprocessing.py`        | `docprocessing`                                                                                                      |
 | Docfetching               | `apps/docfetching.py`          | `connector_doc_fetching`                                                                                             |
@@ -55,7 +55,7 @@ Then it cycles through its tasks as scheduled by Celery Beat:
 | Task                              | Frequency | Description                                                                                |
 | --------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
 | `check_for_indexing`              | 15s       | Scans for connectors needing indexing → dispatches to `DOCFETCHING` queue                  |
-| `check_for_vespa_sync_task`       | 20s       | Finds stale documents/document sets → dispatches sync tasks to `VESPA_METADATA_SYNC` queue |
+| `check_for_document_index_sync_task` | 20s    | Finds stale documents/document sets → dispatches sync tasks to `DOCUMENT_INDEX_METADATA_SYNC` queue |
 | `check_for_pruning`               | 20s       | Finds connectors due for pruning → dispatches to `CONNECTOR_PRUNING` queue                 |
 | `check_for_connector_deletion`    | 20s       | Processes deletion requests → dispatches to `CONNECTOR_DELETION` queue                     |
 | `check_for_user_file_processing`  | 20s       | Checks for user uploads → dispatches to `USER_FILE_PROCESSING` queue                       |

@@ -165,7 +165,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     ("primary", "celery"),
     (
         "light",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
+        "document_index_metadata_sync,connector_deletion,doc_permissions_upsert,"
         "checkpoint_cleanup,index_attempt_cleanup",
     ),
     (
@@ -251,7 +251,7 @@ def _start_celery_workers(
         )
         processes.append((app_name, proc))
 
-    # Celery beat fires the periodic scans (check-for-vespa-sync,
+    # Celery beat fires the periodic scans (check-for-document-index-sync,
     # check-for-pruning, check-for-connector-deletion, ...) that user
     # group sync / pruning / deletion tests poll on. Without beat the
     # tests time out after 300s.

@@ -104,7 +104,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -1779,7 +1778,6 @@ def _docprocessing_task(
             document_indices = get_all_document_indices(
                 index_attempt.search_settings,
                 None,
-                httpx_client=HttpxPool.get("vespa"),
             )
 
             # Set up metadata for this batch

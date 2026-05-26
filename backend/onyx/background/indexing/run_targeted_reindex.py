@@ -39,7 +39,6 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import TargetedReindexJobTarget
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.document_index.factory import get_all_document_indices
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
@@ -126,7 +125,6 @@ def _flush_batch(
     document_indices = get_all_document_indices(
         search_settings,
         None,
-        httpx_client=HttpxPool.get("vespa"),
     )
     metadata = IndexAttemptMetadata(
         attempt_id=attempt.id,

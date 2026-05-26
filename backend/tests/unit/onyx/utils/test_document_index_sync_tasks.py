@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 from typing import Any
 
-from onyx.background.celery.tasks.vespa import tasks as vespa_tasks
+from onyx.background.celery.tasks.document_index_sync import (
+    tasks as document_index_sync_tasks,
+)
 
 
 class _StubRedisDocumentSet:
@@ -33,10 +35,12 @@ class _StubRedisDocumentSet:
 def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool]:
     calls: dict[str, bool] = {"deleted": False, "synced": False}
 
-    monkeypatch.setattr(vespa_tasks, "RedisDocumentSet", _StubRedisDocumentSet)
+    monkeypatch.setattr(
+        document_index_sync_tasks, "RedisDocumentSet", _StubRedisDocumentSet
+    )
 
     monkeypatch.setattr(
-        vespa_tasks,
+        document_index_sync_tasks,
         "get_document_set_by_id",
         lambda db_session, document_set_id, prefetch_relationships=False: document_set,  # noqa: ARG005
     )
@@ -44,15 +48,15 @@ def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool
     def _delete(document_set_row: Any, db_session: Any) -> None:  # noqa: ARG001
         calls["deleted"] = True
 
-    monkeypatch.setattr(vespa_tasks, "delete_document_set", _delete)
+    monkeypatch.setattr(document_index_sync_tasks, "delete_document_set", _delete)
 
     def _mark(document_set_id: Any, db_session: Any) -> None:  # noqa: ARG001
         calls["synced"] = True
 
-    monkeypatch.setattr(vespa_tasks, "mark_document_set_as_synced", _mark)
+    monkeypatch.setattr(document_index_sync_tasks, "mark_document_set_as_synced", _mark)
 
     monkeypatch.setattr(
-        vespa_tasks,
+        document_index_sync_tasks,
         "update_sync_record_status",
         lambda db_session, entity_id, sync_type, sync_status, num_docs_synced: None,  # noqa: ARG005
     )
@@ -68,7 +72,7 @@ def test_monitor_preserves_federated_only_document_set(monkeypatch: Any) -> None
 
     calls = _setup_common_patches(monkeypatch, document_set)
 
-    vespa_tasks.monitor_document_set_taskset(
+    document_index_sync_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_1",
         r=SimpleNamespace(  # ty: ignore[invalid-argument-type]
@@ -89,7 +93,7 @@ def test_monitor_deletes_document_set_with_no_connectors(monkeypatch: Any) -> No
 
     calls = _setup_common_patches(monkeypatch, document_set)
 
-    vespa_tasks.monitor_document_set_taskset(
+    document_index_sync_tasks.monitor_document_set_taskset(
         tenant_id="tenant",
         key_bytes=b"documentset_fence_2",
         r=SimpleNamespace(  # ty: ignore[invalid-argument-type]

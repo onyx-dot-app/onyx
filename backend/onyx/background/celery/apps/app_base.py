@@ -27,8 +27,12 @@ from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatt
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.celery_utils import make_probe_path
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
-from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    DOCUMENT_SYNC_PREFIX,
+)
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    DOCUMENT_SYNC_TASKSET_KEY,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
@@ -657,7 +661,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.docprocessing",
     "onyx.background.celery.tasks.docfetching",
     "onyx.background.celery.tasks.pruning",
-    "onyx.background.celery.tasks.vespa",
+    "onyx.background.celery.tasks.document_index_sync",
     "onyx.background.celery.tasks.doc_permission_syncing",
     "onyx.background.celery.tasks.hierarchyfetching",
     # EE modules that are vector-DB-dependent

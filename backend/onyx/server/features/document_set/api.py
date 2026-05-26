@@ -58,7 +58,7 @@ def create_document_set(
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
-            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            OnyxCeleryTask.CHECK_FOR_DOCUMENT_INDEX_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
         )
@@ -101,7 +101,7 @@ def patch_document_set(
 
     if not DISABLE_VECTOR_DB:
         client_app.send_task(
-            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            OnyxCeleryTask.CHECK_FOR_DOCUMENT_INDEX_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
         )
@@ -148,7 +148,7 @@ def delete_document_set(
         db_delete_document_set(document_set, db_session)
     else:
         client_app.send_task(
-            OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+            OnyxCeleryTask.CHECK_FOR_DOCUMENT_INDEX_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
         )

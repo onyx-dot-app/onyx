@@ -45,7 +45,7 @@ _QUEUE_LABEL_MAP: dict[str, str] = {
     OnyxCeleryQueues.PRIMARY: "primary",
     OnyxCeleryQueues.DOCPROCESSING: "docprocessing",
     OnyxCeleryQueues.CONNECTOR_DOC_FETCHING: "docfetching",
-    OnyxCeleryQueues.VESPA_METADATA_SYNC: "vespa_metadata_sync",
+    OnyxCeleryQueues.DOCUMENT_INDEX_METADATA_SYNC: "document_index_metadata_sync",
     OnyxCeleryQueues.CONNECTOR_DELETION: "connector_deletion",
     OnyxCeleryQueues.CONNECTOR_PRUNING: "connector_pruning",
     OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC: "permissions_sync",

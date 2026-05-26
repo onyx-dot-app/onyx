@@ -617,8 +617,9 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
 )
 
-# The maximum number of tasks that can be queued up to sync to Vespa in a single pass
-VESPA_SYNC_MAX_TASKS = 8192
+# The maximum number of tasks that can be queued up to sync to the document
+# index in a single pass.
+DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
 

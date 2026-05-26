@@ -19,7 +19,9 @@ from redis.lock import Lock as RedisLock
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
+from onyx.background.celery.tasks.document_index_sync.document_sync import (
+    reset_document_sync,
+)
 from onyx.configs.app_configs import CELERY_WORKER_PRIMARY_POOL_OVERFLOW
 from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
@@ -181,7 +183,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     # As currently designed, when this worker starts as "primary", we reinitialize redis
     # to a clean state (for our purposes, anyway)
-    r.delete(OnyxRedisLocks.CHECK_VESPA_SYNC_BEAT_LOCK)
+    r.delete(OnyxRedisLocks.CHECK_DOCUMENT_INDEX_SYNC_BEAT_LOCK)
 
     r.delete(OnyxRedisConstants.ACTIVE_FENCES)
 
@@ -355,7 +357,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.pruning",
             "onyx.background.celery.tasks.scheduled_tasks",
             "onyx.background.celery.tasks.shared",
-            "onyx.background.celery.tasks.vespa",
+            "onyx.background.celery.tasks.document_index_sync",
             "onyx.background.celery.tasks.llm_model_update",
             "onyx.background.celery.tasks.user_file_processing",
         ]
