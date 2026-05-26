@@ -237,16 +237,28 @@ def _billing_cache_client() -> TenantRedisClient | None:
 
     Cloud uses the tenant-prefixed client so cache entries are isolated per
     tenant. Self-hosted is single-tenant; the shared client is fine.
-    Returns None on Redis failure so the caller falls through to a live
-    fetch.
+    Returns None on any failure so the caller falls through to a live
+    fetch — matches the broad guard used by ``_is_billing_circuit_open``
+    in this same file.
     """
     try:
         if MULTI_TENANT:
             return get_redis_client(tenant_id=get_current_tenant_id())
         return get_shared_redis_client()
-    except RedisError as exc:
+    except Exception as exc:
         logger.warning("Billing info cache client unavailable: %s", exc)
         return None
+
+
+def _invalidate_billing_cache() -> None:
+    """Drop the cached /billing-information entry. Best-effort."""
+    redis_client = _billing_cache_client()
+    if redis_client is None:
+        return
+    try:
+        redis_client.delete(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning("Billing info cache invalidation failed: %s", exc)
 
 
 @router.get("/billing-information")
@@ -363,12 +375,7 @@ async def update_seats(
 
     # Bust the billing-info cache so the new seat count is visible on the
     # next /billing-information read.
-    redis_client = _billing_cache_client()
-    if redis_client is not None:
-        try:
-            redis_client.delete(BILLING_INFO_CACHE_KEY)
-        except RedisError as exc:
-            logger.warning("Billing info cache invalidation failed: %s", exc)
+    _invalidate_billing_cache()
 
     return result
 
@@ -393,7 +400,13 @@ async def end_trial(
         )
 
     tenant_id = _get_tenant_id()
-    return await end_trial_service(tenant_id=tenant_id)
+    result = await end_trial_service(tenant_id=tenant_id)
+
+    # Bust the billing-info cache so the post-trial subscription state is
+    # visible on the next /billing-information read.
+    _invalidate_billing_cache()
+
+    return result
 
 
 @router.get("/stripe-publishable-key")
