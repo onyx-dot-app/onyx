@@ -45,6 +45,15 @@ import { SvgChevronDown } from "@opal/icons";
 import Dropzone from "react-dropzone";
 import { cn } from "@/lib/utils";
 
+function BlankLtiStartupView() {
+  return (
+    <div
+      className="h-screen w-full bg-background-neutral-00"
+      aria-hidden="true"
+    />
+  );
+}
+
 export default function TutorChatPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -307,10 +316,13 @@ export default function TutorChatPage() {
   }, []);
 
   // Loading state
-  if (!isReady) return <OnyxInitializingLoader />;
+  if (!isReady) {
+    if (ltiContextId) return <BlankLtiStartupView />;
+    return <OnyxInitializingLoader />;
+  }
 
   if (ltiContextId && isLoadingCourseConnectorStatus) {
-    return <OnyxInitializingLoader />;
+    return <BlankLtiStartupView />;
   }
 
   if (ltiContextId && courseConnectorStatusError) {
