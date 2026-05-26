@@ -109,6 +109,35 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
+def get_all_build_mode_llm_configs(
+    db_session: DBSession,
+    default: LLMProviderConfig,
+) -> list[LLMProviderConfig]:
+    """``default`` first, then every other ``build-mode-*`` provider with a
+    visible model. Used at sandbox provision time so every configured
+    provider is pre-registered in opencode.json and per-prompt model
+    overrides can cross providers without a pod restart.
+    """
+    configs: list[LLMProviderConfig] = [default]
+    seen_providers: set[str] = {default.provider}
+    for provider in fetch_all_build_mode_llm_providers(db_session):
+        if provider.provider in seen_providers:
+            continue
+        seen_providers.add(provider.provider)
+        visible_models = [m for m in provider.model_configurations if m.is_visible]
+        if not visible_models:
+            continue
+        configs.append(
+            LLMProviderConfig(
+                provider=provider.provider,
+                model_name=visible_models[0].name,
+                api_key=provider.api_key,
+                api_base=provider.api_base,
+            )
+        )
+    return configs
+
+
 class UploadLimitExceededError(ValueError):
     """Raised when file upload limits are exceeded."""
 
@@ -427,7 +456,9 @@ class SessionManager:
         provider pre-loaded so per-prompt model overrides can cross
         providers without a pod restart."""
         onyx_pat = ensure_sandbox_pat(self._db_session, sandbox, user)
-        all_llm_configs = self._get_all_llm_configs(default=llm_config)
+        all_llm_configs = get_all_build_mode_llm_configs(
+            self._db_session, default=llm_config
+        )
         sandbox_info = self._sandbox_manager.provision(
             sandbox_id=sandbox.id,
             user_id=user_id,
@@ -439,30 +470,6 @@ class SessionManager:
         update_sandbox_status__no_commit(
             self._db_session, sandbox.id, sandbox_info.status
         )
-
-    def _get_all_llm_configs(
-        self, default: LLMProviderConfig
-    ) -> list[LLMProviderConfig]:
-        """``default`` first, then every other ``build-mode-*`` provider
-        with a visible model."""
-        configs: list[LLMProviderConfig] = [default]
-        seen_providers: set[str] = {default.provider}
-        for provider in fetch_all_build_mode_llm_providers(self._db_session):
-            if provider.provider in seen_providers:
-                continue
-            seen_providers.add(provider.provider)
-            visible_models = [m for m in provider.model_configurations if m.is_visible]
-            if not visible_models:
-                continue
-            configs.append(
-                LLMProviderConfig(
-                    provider=provider.provider,
-                    model_name=visible_models[0].name,
-                    api_key=provider.api_key,
-                    api_base=provider.api_base,
-                )
-            )
-        return configs
 
     def ensure_sandbox_running(
         self,
