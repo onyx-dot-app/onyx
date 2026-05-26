@@ -261,9 +261,7 @@ def send_email_with_smtplib(
     msg["Subject"] = subject
     msg["To"] = user_email
     if not mail_from:
-        raise ValueError(
-            "EMAIL_FROM must be set when SMTP_USER is not provided"
-        )
+        raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
     msg["From"] = mail_from
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="onyx.app")

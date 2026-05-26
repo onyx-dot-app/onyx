@@ -7,7 +7,6 @@ Verifies that:
 - Existing behavior is preserved when credentials are provided
 """
 
-from email.mime.text import MIMEText
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -109,9 +108,7 @@ class TestSmtpNoAuth:
     @patch("onyx.auth.email_utils.SMTP_SERVER", "smtp.example.com")
     @patch("onyx.auth.email_utils.SMTP_PORT", 587)
     @patch("onyx.auth.email_utils.EMAIL_FROM", "noreply@example.com")
-    def test_login_called_when_credentials_provided(
-        self, mock_smtp: MagicMock
-    ) -> None:
+    def test_login_called_when_credentials_provided(self, mock_smtp: MagicMock) -> None:
         """login() should still be called when credentials are provided."""
         from onyx.auth.email_utils import send_email_with_smtplib
 
