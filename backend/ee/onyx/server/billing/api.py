@@ -331,10 +331,10 @@ async def get_billing_information(
 
     if redis_client is not None:
         try:
-            redis_client.setex(
+            redis_client.set(
                 BILLING_INFO_CACHE_KEY,
-                BILLING_INFO_CACHE_TTL_SECONDS,
                 result.model_dump_json(),
+                ex=BILLING_INFO_CACHE_TTL_SECONDS,
             )
         except RedisError as exc:
             logger.warning("Billing info cache write failed: %s", exc)
