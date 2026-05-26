@@ -1,7 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { Text } from "@opal/components";
-import ToolCard from "@/app/craft/components/tool-cards/ToolCard";
+import { cn } from "@opal/utils";
+import { SvgChevronDown } from "@opal/icons";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/refresh-components/Collapsible";
+import {
+  TimelineRow,
+  TimelineRowRailVariant,
+} from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
+import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
+import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import BashBody from "@/app/craft/components/tool-cards/BashBody";
 import DiffBody from "@/app/craft/components/tool-cards/DiffBody";
 import ReadBody from "@/app/craft/components/tool-cards/ReadBody";
@@ -10,11 +23,30 @@ import WebSearchBody from "@/app/craft/components/tool-cards/WebSearchBody";
 import WebFetchBody from "@/app/craft/components/tool-cards/WebFetchBody";
 import TaskBody from "@/app/craft/components/tool-cards/TaskBody";
 import GenericBody from "@/app/craft/components/tool-cards/GenericBody";
-import type { ToolCardCommonProps } from "@/app/craft/components/tool-cards/interfaces";
+import {
+  getStatusDisplay,
+  getToolIcon,
+  SvgLoader,
+} from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
+interface CraftToolCardProps {
+  toolCall: ToolCallState;
+  /** Initial open state. Defaults to closed. */
+  defaultOpen?: boolean;
+  /** First card in a contiguous rail series — controls top connector. */
+  isFirstStep?: boolean;
+  /** Last card in a contiguous rail series — controls bottom connector. */
+  isLastStep?: boolean;
+  /**
+   * Left-column variant. "rail" shows status icon + connector (top-level use),
+   * "spacer" reserves the column width without rail (nested use under a parent
+   * rail), "none" omits the column entirely (e.g., inside WorkingPill).
+   */
+  railVariant?: TimelineRowRailVariant;
+}
+
 function renderBody(toolCall: ToolCallState) {
-  // toolName takes precedence over kind when it lets us pick a more specific body
   if (toolCall.toolName === "websearch") {
     return <WebSearchBody toolCall={toolCall} />;
   }
@@ -39,37 +71,96 @@ function renderBody(toolCall: ToolCallState) {
   }
 }
 
-function renderSecondaryLine(toolCall: ToolCallState) {
-  if (toolCall.kind === "execute" && toolCall.command) {
+function renderRailIcon(toolCall: ToolCallState) {
+  const statusDisplay = getStatusDisplay(toolCall.status);
+  const baseClass =
+    "h-(--timeline-icon-size) w-(--timeline-icon-size) shrink-0";
+  if (statusDisplay.showSpinner) {
     return (
-      <Text font="main-ui-mono" color="text-03" nowrap>
-        {toolCall.command}
-      </Text>
+      <SvgLoader
+        className={cn(baseClass, "stroke-status-info-05 animate-spin")}
+      />
     );
   }
-  return undefined;
+  const StatusIcon = statusDisplay.icon;
+  if (StatusIcon) {
+    return <StatusIcon className={cn(baseClass, statusDisplay.iconClass)} />;
+  }
+  const ToolIcon = getToolIcon(toolCall.kind);
+  return <ToolIcon className={cn(baseClass, "stroke-text-03")} />;
 }
 
 /**
  * CraftToolCard - The single entry point for rendering a tool call in the
- * Craft transcript. Routes to the per-tool body component, wires up the
- * secondary-line (when needed), and forwards density + open state to
- * the ToolCard base.
+ * Craft transcript. Composes the /app timeline primitives (TimelineRow +
+ * TimelineSurface) so Craft and the main chat share rail/connector identity,
+ * and slots in per-tool body components for the expanded view.
  */
 export default function CraftToolCard({
   toolCall,
-  density = "comfortable",
   defaultOpen,
-}: ToolCardCommonProps) {
+  isFirstStep = true,
+  isLastStep = true,
+  railVariant = "rail",
+}: CraftToolCardProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen ?? false);
+  const secondaryLine =
+    toolCall.kind === "execute" && toolCall.command ? toolCall.command : null;
+
   return (
-    <ToolCard
-      toolCall={toolCall}
-      density={density}
-      defaultOpen={defaultOpen}
-      secondaryLine={renderSecondaryLine(toolCall)}
-      skillName={toolCall.skillName}
+    <TimelineRow
+      railVariant={railVariant}
+      icon={renderRailIcon(toolCall)}
+      showIcon={railVariant === "rail"}
+      isFirst={isFirstStep}
+      isLast={isLastStep}
     >
-      {renderBody(toolCall)}
-    </ToolCard>
+      <TimelineSurface
+        className="flex flex-col"
+        roundedTop={isFirstStep}
+        roundedBottom={isLastStep}
+      >
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-md",
+                "transition-colors hover:bg-background-tint-02"
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0 w-full">
+                <Text font="main-ui-action" color="text-04" nowrap>
+                  {toolCall.title}
+                </Text>
+                {toolCall.description && (
+                  <span className="truncate min-w-0">
+                    <Text font="main-ui-body" color="text-03" nowrap>
+                      {toolCall.description}
+                    </Text>
+                  </span>
+                )}
+                {toolCall.skillName && <SkillBadge name={toolCall.skillName} />}
+                <SvgChevronDown
+                  className={cn(
+                    "size-4 stroke-text-03 transition-transform duration-150 shrink-0 ml-auto",
+                    !isOpen && "-rotate-90"
+                  )}
+                />
+              </div>
+              {secondaryLine && (
+                <div className="pt-1">
+                  <Text font="main-ui-mono" color="text-03" nowrap>
+                    {secondaryLine}
+                  </Text>
+                </div>
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-3 pb-3 pt-1">{renderBody(toolCall)}</div>
+          </CollapsibleContent>
+        </Collapsible>
+      </TimelineSurface>
+    </TimelineRow>
   );
 }

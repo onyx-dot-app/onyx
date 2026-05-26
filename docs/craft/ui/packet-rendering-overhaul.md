@@ -109,23 +109,24 @@ Codex, and the opencode TUI.
 
 ## Implementation Strategy
 
-### A. The `ToolCard` foundation
+### A. The `CraftToolCard` foundation
 
-Replace `ToolCallPill` + `WorkingLine` with one base component family:
+Replace `ToolCallPill` + `WorkingLine` with a single entry point that
+composes the main-chat timeline primitives:
 
-- `ToolCard` — collapsible container, controls open state, picks the
-  density variant.
-- `ToolCardHeader` — status icon, tool icon, title, description, optional
-  `SkillBadge`, expand chevron. Two density variants:
-  `density="compact"` (replaces `WorkingLine`'s tight row) and
-  `density="comfortable"` (replaces `ToolCallPill`'s full pill).
-- `ToolCardFooter` — optional slot for per-tool metadata: exit code,
-  duration, byte count, "+N -M" diff summary. Renders nothing when no
-  footer data is present.
+- `CraftToolCard` — composes `TimelineRow` + `TimelineSurface` from
+  `web/src/app/app/message/messageComponents/timeline/primitives/`,
+  renders a status-aware rail icon, an inline header (title +
+  description + optional `SkillBadge` + chevron), and a per-tool body
+  via a collapsible content slot. `railVariant` chooses between
+  `"rail"` (top-level, default), `"spacer"` (nested under a parent
+  rail), and `"none"` (no left column — used inside `WorkingPill`).
 - `SkillBadge` — small chip rendered in the header when `toolCall`
   originated from a skill namespace.
 
-The body of the card is a slot. Per-tool body components render into it.
+Callers (`BuildMessageList`, `WorkingPill`) wrap their card lists in
+`TimelineRoot` so the shared timeline CSS variables resolve. The body
+of the card is a slot; per-tool body components render into it.
 
 ### B. Per-tool body components
 
@@ -191,13 +192,23 @@ because unimplemented tools always fall back to `GenericBody`.
 
 **Landed in this branch:**
 
-- `web/src/app/craft/components/tool-cards/` — the full
-  `ToolCard` / `ToolCardHeader` / `SkillBadge` foundation plus body
+- `web/src/app/craft/components/tool-cards/` — `SkillBadge` plus body
   components: `BashBody`, `DiffBody`, `ReadBody`, `SearchBody`,
   `WebSearchBody`, `WebFetchBody`, `TaskBody`, `GenericBody`.
 - `CraftToolCard.tsx` as the single entry point. Routes on
   `toolName` first (to distinguish `websearch` / `webfetch` inside
   the broader `search` / `other` kinds), then on `kind`.
+- Tool-card chrome now composes the main-chat timeline primitives
+  (`TimelineRow` + `TimelineSurface` from
+  `web/src/app/app/message/messageComponents/timeline/primitives/`)
+  so Craft and `/app` share rail / connector visual identity.
+  `BuildMessageList` and `WorkingPill` wrap their children in
+  `TimelineRoot` so the timeline CSS variables resolve; top-level
+  cards default to `railVariant="rail"`, while children nested
+  inside the `WorkingPill` use `railVariant="none"` because the
+  pill provides its own visual container. The legacy
+  `ToolCard.tsx` and `ToolCardHeader.tsx` were retired in this
+  migration.
 - `parsePacket.ts` skill detection (`detectSkillName`) — matches
   `skills.X`, `skills:X`, `superpowers.X`, `superpowers:X`.
 - `ToolCallState` gained `toolName`, `taskOutput`, and `skillName`.
@@ -207,7 +218,8 @@ because unimplemented tools always fall back to `GenericBody`.
 - `ThinkingCard` defaults to collapsed with a token-count summary,
   auto-opens during streaming.
 - `WorkingPill` auto-collapses once all contained tools terminate.
-- Retired files: `ToolCallPill.tsx`, `WorkingLine.tsx`, `DiffView.tsx`.
+- Retired files: `ToolCallPill.tsx`, `WorkingLine.tsx`, `DiffView.tsx`,
+  `tool-cards/ToolCard.tsx`, `tool-cards/ToolCardHeader.tsx`.
 
 **Deferred:**
 
@@ -229,6 +241,26 @@ because unimplemented tools always fall back to `GenericBody`.
   rather than load-bearing for the overhaul.
 - **Turn-grouping visual rail**: optional polish from the original
   plan, left for a future iteration.
+- **`WorkingPill` as a `StepContainer`**: the pill itself could be
+  modeled as a parent rail row with nested children at
+  `railVariant="spacer"`. Today the pill stays a bordered container
+  and its children render with `railVariant="none"`. Worth doing
+  if/when we unify the working-pill chrome with the rest of the
+  timeline.
+
+### Rationale: bypassing `TimelineStepContent`
+
+`CraftToolCard` composes `TimelineRow` + `TimelineSurface` directly
+rather than going through `StepContainer` / `TimelineStepContent`.
+The primitive's header layout exposes collapse as a dedicated
+`Button onClick={onToggle}` chevron on the right, with only the
+button itself as the click target. Craft's interaction model is
+whole-row-click via Radix `Collapsible asChild` — wrapping the
+entire header in a `CollapsibleTrigger`'d `<button>`. Threading
+that through `TimelineStepContent` would require either changing
+the primitive's API or fighting against it; composing one level
+deeper keeps both interaction models intact without churn in
+shared code.
 
 ## Tests
 

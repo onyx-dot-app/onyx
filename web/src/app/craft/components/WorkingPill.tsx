@@ -9,6 +9,7 @@ import {
 } from "@/refresh-components/Collapsible";
 import { Text } from "@opal/components";
 import { SvgChevronDown, SvgPencilRuler } from "@opal/icons";
+import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
 import { ToolCallState } from "@/app/craft/types/displayTypes";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 
@@ -79,14 +80,16 @@ export default function WorkingPill({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="pl-5 pr-3 pb-3 pt-0 space-y-1">
-            {toolCalls.map((toolCall) => (
-              <CraftToolCard
-                key={toolCall.id}
-                toolCall={toolCall}
-                density="compact"
-              />
-            ))}
+          <div className="px-3 pb-3 pt-0 space-y-1">
+            <TimelineRoot>
+              {toolCalls.map((toolCall) => (
+                <CraftToolCard
+                  key={toolCall.id}
+                  toolCall={toolCall}
+                  railVariant="none"
+                />
+              ))}
+            </TimelineRoot>
           </div>
         </CollapsibleContent>
       </div>

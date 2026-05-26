@@ -5,6 +5,7 @@ import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import WorkingPill from "@/app/craft/components/WorkingPill";
@@ -125,15 +126,23 @@ export default function BuildMessageList({
               isStreaming={item.isStreaming}
             />
           );
-        case "tool_call":
-          // Only task/subagent tools reach here (non-working tools)
+        case "tool_call": {
+          // Only task/subagent tools reach here (non-working tools).
+          // Tag adjacency so the timeline rail connects contiguous cards
+          // rather than rendering each as a lone segment.
+          const prev = grouped[index - 1];
+          const next = grouped[index + 1];
+          const isFirstStep = !prev || prev.type !== "tool_call";
+          const isLastStep = !next || next.type !== "tool_call";
           return (
             <CraftToolCard
               key={item.id}
               toolCall={item.toolCall}
-              density="comfortable"
+              isFirstStep={isFirstStep}
+              isLastStep={isLastStep}
             />
           );
+        }
         case "todo_list":
           return (
             <TodoListCard
@@ -171,7 +180,7 @@ export default function BuildMessageList({
         <div className="flex-1 flex flex-col gap-3 min-w-0">
           {savedStreamItems && savedStreamItems.length > 0 ? (
             // Render full stream items (includes tool calls, thinking, etc.)
-            renderStreamItems(savedStreamItems)
+            <TimelineRoot>{renderStreamItems(savedStreamItems)}</TimelineRoot>
           ) : (
             // Fallback to text content only
             <TextChunk content={message.content} />
@@ -203,7 +212,9 @@ export default function BuildMessageList({
               {!hasStreamItems ? (
                 <BlinkingBar addMargin />
               ) : (
-                renderStreamItems(streamItems, true)
+                <TimelineRoot>
+                  {renderStreamItems(streamItems, true)}
+                </TimelineRoot>
               )}
             </div>
           </div>
