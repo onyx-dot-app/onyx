@@ -35,6 +35,22 @@ def _state() -> _TurnState:
     return _TurnState(session_id=SESS)
 
 
+def _state_with_fetch(responses: dict[str, dict[str, Any] | None]) -> _TurnState:
+    """State with a dict-backed ``fetch_message`` stub. Each lookup records
+    its call in ``state.fetch_calls`` (attached attribute) so tests can
+    assert hydrate happened exactly once per messageID."""
+    s = _state()
+    calls: list[str] = []
+
+    def fetch(msg_id: str) -> dict[str, Any] | None:
+        calls.append(msg_id)
+        return responses.get(msg_id)
+
+    s.fetch_message = fetch
+    setattr(s, "fetch_calls", calls)
+    return s
+
+
 def _drain(events: Any) -> list[Any]:
     """Translation returns an Iterable; flatten to list for assertions."""
     return list(events)
@@ -1085,7 +1101,56 @@ def test_missing_properties_ignored() -> None:
     assert _drain(translate_opencode_event({"type": "message.updated"}, s)) == []
 
 
-# ───────────────────────── hydrate negative cache ─────────────────
+# ───────────────────────── REST hydrate path ──────────────────────
+
+
+def _delta_event(msg_id: str, part_id: str = "p1", delta: str = "x") -> dict[str, Any]:
+    return {
+        "type": "message.part.delta",
+        "properties": {
+            "sessionID": SESS,
+            "messageID": msg_id,
+            "partID": part_id,
+            "field": "text",
+            "delta": delta,
+        },
+    }
+
+
+def test_delta_for_unknown_message_hydrates_as_assistant_and_emits() -> None:
+    """Happy path for the race fix: a delta arrives before message.updated,
+    fetch returns role=assistant, the chunk is emitted, and subsequent
+    deltas hit the cached set without re-fetching."""
+    s = _state_with_fetch(
+        {
+            "msg_new": {
+                "info": {"id": "msg_new", "role": "assistant"},
+                "parts": [{"id": "p1", "type": "text"}],
+            }
+        }
+    )
+    out1 = _drain(translate_opencode_event(_delta_event("msg_new", delta="hi "), s))
+    out2 = _drain(translate_opencode_event(_delta_event("msg_new", delta="there"), s))
+    assert len(out1) == 1 and isinstance(out1[0], AgentMessageChunk)
+    assert len(out2) == 1 and isinstance(out2[0], AgentMessageChunk)
+    assert "msg_new" in s.assistant_message_ids
+    assert s.part_types["p1"] == "text"
+    assert getattr(s, "fetch_calls") == ["msg_new"]
+
+
+def test_delta_for_unknown_message_hydrates_as_user_and_drops() -> None:
+    """Race fix negative path via role classification: fetch returns
+    role=user, the delta is dropped and the messageID is cached so the
+    next delta short-circuits without re-fetching."""
+    s = _state_with_fetch(
+        {"msg_user": {"info": {"id": "msg_user", "role": "user"}, "parts": []}}
+    )
+    out1 = _drain(translate_opencode_event(_delta_event("msg_user"), s))
+    out2 = _drain(translate_opencode_event(_delta_event("msg_user"), s))
+    assert out1 == [] and out2 == []
+    assert "msg_user" in s.user_message_ids
+    assert "msg_user" not in s.assistant_message_ids
+    assert getattr(s, "fetch_calls") == ["msg_user"]
 
 
 def test_hydrate_failure_cached_so_subsequent_deltas_skip_fetch() -> None:
@@ -1093,62 +1158,40 @@ def test_hydrate_failure_cached_so_subsequent_deltas_skip_fetch() -> None:
     cache the msg_id as non-assistant so subsequent deltas don't issue
     fresh REST calls — otherwise every delta for a problematic message
     triggers a retry storm on the event-processing hot path."""
-    calls: list[str] = []
-
-    def fetch_empty(msg_id: str) -> dict[str, Any] | None:
-        calls.append(msg_id)
-        return None
-
-    s = _state()
-    s.fetch_message = fetch_empty
-    # Two consecutive deltas for the same problematic message id.
+    s = _state_with_fetch({"msg_broken": None})
     for _ in range(2):
-        _drain(
-            translate_opencode_event(
-                {
-                    "type": "message.part.delta",
-                    "properties": {
-                        "sessionID": SESS,
-                        "messageID": "msg_broken",
-                        "partID": "p1",
-                        "field": "text",
-                        "delta": "x",
-                    },
-                },
-                s,
-            )
-        )
-    assert calls == ["msg_broken"]
+        _drain(translate_opencode_event(_delta_event("msg_broken"), s))
+    assert getattr(s, "fetch_calls") == ["msg_broken"]
     assert "msg_broken" in s.user_message_ids
 
 
 def test_hydrate_unknown_role_cached_negatively() -> None:
-    calls: list[str] = []
-
-    def fetch_unknown_role(msg_id: str) -> dict[str, Any] | None:
-        calls.append(msg_id)
-        return {"info": {"role": "system"}, "parts": []}
-
-    s = _state()
-    s.fetch_message = fetch_unknown_role
+    s = _state_with_fetch({"msg_system": {"info": {"role": "system"}, "parts": []}})
     for _ in range(3):
-        _drain(
-            translate_opencode_event(
-                {
-                    "type": "message.part.delta",
-                    "properties": {
-                        "sessionID": SESS,
-                        "messageID": "msg_system",
-                        "partID": "p1",
-                        "field": "text",
-                        "delta": "x",
-                    },
-                },
-                s,
-            )
-        )
-    assert calls == ["msg_system"]
+        _drain(translate_opencode_event(_delta_event("msg_system"), s))
+    assert getattr(s, "fetch_calls") == ["msg_system"]
     assert "msg_system" in s.user_message_ids
+
+
+def test_hydrate_missing_info_object_cached_negatively() -> None:
+    """Defensive: malformed body without an ``info`` dict still caches
+    negatively so we don't refetch."""
+    s = _state_with_fetch({"msg_malformed": {"parts": []}})
+    for _ in range(2):
+        _drain(translate_opencode_event(_delta_event("msg_malformed"), s))
+    assert getattr(s, "fetch_calls") == ["msg_malformed"]
+    assert "msg_malformed" in s.user_message_ids
+
+
+def test_no_fetch_callback_still_caches_to_avoid_repeated_attempts() -> None:
+    """If ``fetch_message`` is unset (e.g. legacy state construction),
+    the messageID is still cached as non-assistant so subsequent deltas
+    don't re-enter the hydrate path."""
+    s = _state()
+    assert s.fetch_message is None
+    _drain(translate_opencode_event(_delta_event("msg_no_fetch"), s))
+    _drain(translate_opencode_event(_delta_event("msg_no_fetch"), s))
+    assert "msg_no_fetch" in s.user_message_ids
 
 
 def test_non_string_session_id_skips_match() -> None:
