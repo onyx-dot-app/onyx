@@ -27,6 +27,7 @@ from fastapi import Depends
 from fastapi import Header
 from fastapi import HTTPException
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.server.billing.models import SeatUpdateRequest
@@ -37,6 +38,7 @@ from ee.onyx.utils.license import is_license_valid
 from ee.onyx.utils.license import verify_license_signature
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
@@ -379,9 +381,18 @@ async def proxy_billing_information(
         raise HTTPException(status_code=401, detail="License missing tenant_id")
 
     tenant_id = license_payload.tenant_id
-    redis_client = get_redis_client(tenant_id=tenant_id)
+    redis_client: TenantRedisClient | None = None
+    cached: bytes | None = None
+    try:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        cached = redis_client.get(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning(
+            "Billing info cache read failed for tenant %s: %s",
+            tenant_id,
+            exc,
+        )
 
-    cached = redis_client.get(BILLING_INFO_CACHE_KEY)
     if cached is not None:
         return BillingInformationResponse.model_validate_json(cached)
 
@@ -392,11 +403,19 @@ async def proxy_billing_information(
     if "tenant_id" not in result:
         result["tenant_id"] = tenant_id
     billing_info = BillingInformationResponse(**result)
-    redis_client.setex(
-        BILLING_INFO_CACHE_KEY,
-        BILLING_INFO_CACHE_TTL_SEC,
-        billing_info.model_dump_json(),
-    )
+    if redis_client is not None:
+        try:
+            redis_client.setex(
+                BILLING_INFO_CACHE_KEY,
+                BILLING_INFO_CACHE_TTL_SEC,
+                billing_info.model_dump_json(),
+            )
+        except RedisError as exc:
+            logger.warning(
+                "Billing info cache write failed for tenant %s: %s",
+                tenant_id,
+                exc,
+            )
     return billing_info
 
 
@@ -464,6 +483,15 @@ async def proxy_seat_update(
             "new_seat_count": request_body.new_seat_count,
         },
     )
+    try:
+        redis_client = get_redis_client(tenant_id=tenant_id)
+        redis_client.delete(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning(
+            "Billing info cache invalidation failed for tenant %s: %s",
+            tenant_id,
+            exc,
+        )
 
     # Return license in response - self-hosted instance stores it via /api/license/claim
     return SeatUpdateResponse(
