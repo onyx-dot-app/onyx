@@ -1,7 +1,7 @@
 # Egress Proxy ↔ Action-Policy Enforcement
 
 How the egress proxy reads the admin-configured action policies (shipped by the
-built-in slice; see `design.md`) and turns an arbitrary outbound request from a
+built-in slice; see `action-policies.md`) and turns an arbitrary outbound request from a
 Craft sandbox into a decision: **forward**, **hold for approval**, or **block**.
 
 This plan defines the **read + match + resolve contract** between the proxy and
@@ -55,7 +55,7 @@ deliberately left open — this plan keeps the contract independent of both.
   discriminated union, the proxy can consume them directly whether they come
   from code (built-in) or, later, from a stored row (custom apps re-add `match`
   as a serialised `MatchRule`). One matcher serves both.
-- **OPEN DECISION — default posture.** `design.md` originally specified built-in
+- **OPEN DECISION — default posture.** `action-policies.md` specifies built-in
   off-catalog → `DENY` (fail closed). The current implementation resolves
   everything unconfigured to `ASK`. The proxy workstream must choose: (a) keep
   uniform `ASK`, or (b) reintroduce a per-app fail-closed default for built-in
@@ -86,7 +86,7 @@ deliberately left open — this plan keeps the contract independent of both.
    `ALWAYS` → forward; `DENY` → block (structured `403`); `ASK` → hand off to the
    approval flow (event emission / hold mechanism owned by the approval
    workstream — out of scope here).
-5. **Resolve the doc overlap.** `plans/builtin-app-endpoint-policy-rules.md`
+5. **Resolve the doc overlap.** `../../../../plans/builtin-app-endpoint-policy-rules.md`
    already sketches a "proxy read contract" against the *old* schema
    (`default_for_unknown`, `external_app_endpoint_policy`, composite PK). Either
    supersede that section with this plan or update it to the current shape so

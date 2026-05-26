@@ -21,47 +21,47 @@ _ENDPOINTS: list[EndpointSpec] = [
         id="gcal.calendars.read",
         normalised_name="List calendars",
         description="List the calendars on the user's calendar list.",
-        matches=[
+        matches=(
             RestRoute(
-                method="GET", path_regex=r"^/calendar/v3/users/[^/]+/calendarList"
-            )
-        ],
+                method="GET", path_regex=r"^/calendar/v3/users/[^/]+/calendarList/?$"
+            ),
+        ),
     ),
     EndpointSpec(
         id="gcal.events.read",
         normalised_name="Read events",
         description="List events in a calendar or fetch a single event.",
-        matches=[
+        matches=(
             RestRoute(method="GET", path_regex=_EVENTS_COLLECTION),
             RestRoute(method="GET", path_regex=_EVENT_ITEM),
-        ],
+        ),
     ),
     EndpointSpec(
         id="gcal.freebusy.read",
         normalised_name="Query free/busy",
         description="Query busy intervals across calendars.",
-        matches=[RestRoute(method="POST", path_regex=r"^/calendar/v3/freeBusy$")],
+        matches=(RestRoute(method="POST", path_regex=r"^/calendar/v3/freeBusy$"),),
     ),
     EndpointSpec(
         id="gcal.events.create",
         normalised_name="Create an event",
         description="Create a new event on a calendar.",
-        matches=[RestRoute(method="POST", path_regex=_EVENTS_COLLECTION)],
+        matches=(RestRoute(method="POST", path_regex=_EVENTS_COLLECTION),),
     ),
     EndpointSpec(
         id="gcal.events.update",
         normalised_name="Update an event",
         description="Modify an existing event.",
-        matches=[
+        matches=(
             RestRoute(method="PUT", path_regex=_EVENT_ITEM),
             RestRoute(method="PATCH", path_regex=_EVENT_ITEM),
-        ],
+        ),
     ),
     EndpointSpec(
         id="gcal.events.delete",
         normalised_name="Delete an event",
         description="Permanently delete an event.",
-        matches=[RestRoute(method="DELETE", path_regex=_EVENT_ITEM)],
+        matches=(RestRoute(method="DELETE", path_regex=_EVENT_ITEM),),
     ),
 ]
 

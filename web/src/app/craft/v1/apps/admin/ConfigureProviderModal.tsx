@@ -223,7 +223,9 @@ export default function ConfigureProviderModal({
 
                 <InputSelect
                   value={bulkValue}
-                  onValueChange={(value) => applyBulk(value as EndpointPolicy)}
+                  onValueChange={(value) => {
+                    if (value === "ALWAYS" || value === "ASK") applyBulk(value);
+                  }}
                 >
                   <InputSelect.Trigger placeholder="Custom" />
                   <InputSelect.Content>

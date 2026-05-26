@@ -47,6 +47,6 @@ class EndpointSpec(BaseModel):
     id: str  # stable, namespaced: e.g. "slack.messages.read"
     normalised_name: str
     description: str
-    matches: list[MatchRule]
+    matches: tuple[MatchRule, ...]
     # Prior ids this action has had, so renames don't break stored admin rows.
-    aliases: list[str] = []
+    aliases: tuple[str, ...] = ()
