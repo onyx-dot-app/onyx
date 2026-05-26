@@ -75,7 +75,7 @@ export default function useCCPairs(enabled: boolean = true) {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
       revalidateIfStale: false,
-      dedupingInterval: 60_000,
+      dedupingInterval: 30_000,
     }
   );
 
