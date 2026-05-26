@@ -456,6 +456,16 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("get_upload_stats")
         return self.get_upload_stats_returns
 
+    def _serve_base_url(self, sandbox_id: UUID) -> str:
+        """Serve-transport base URL. Tests that don't exercise the serve
+        path can ignore this; the only callers are the base-class
+        ``_send_message_via_serve``/``_get_or_create_event_bus`` plumbing,
+        which these stubs don't touch."""
+        return f"http://stub-{str(sandbox_id)[:8]}:4096"
+
+    def _read_opencode_password(self, sandbox_id: UUID) -> str | None:  # noqa: ARG002
+        return None
+
     def write_files_to_sandbox(
         self,
         *,

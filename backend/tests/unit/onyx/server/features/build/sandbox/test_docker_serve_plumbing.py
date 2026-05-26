@@ -1,0 +1,337 @@
+"""Unit tests for ``DockerSandboxManager`` serve-transport wiring.
+
+These tests exercise the pure logic added by the
+docker-sandbox-serve port — no Docker engine required. We use
+``object.__new__(DockerSandboxManager)`` to bypass ``_initialize``
+(which would try to open the Docker socket) and verify:
+
+- ``_serve_base_url`` produces the expected container-name URL.
+- ``_read_opencode_password`` round-trips the cleartext password from a
+  mocked container's ``inspect.Config.Env``, returns ``None`` for legacy
+  containers, and returns ``None`` when the container is gone.
+- ``_render_session_files`` returns ``None`` for ``opencode.json`` under
+  ``AGENT_TRANSPORT=serve`` (so snapshots stay clean) and a JSON blob
+  under ``AGENT_TRANSPORT=acp``.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+from unittest.mock import MagicMock
+from uuid import UUID
+
+import pytest
+
+import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
+from onyx.server.features.build.configs import AgentTransport
+from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD_ENV
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    DockerSandboxManager,
+)
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
+
+_SBX = UUID("12345678-1234-1234-1234-1234567890ab")
+
+
+def _bare_manager() -> DockerSandboxManager:
+    """Build a DockerSandboxManager without touching the Docker socket.
+
+    Skips ``_initialize`` (which constructs ``DockerClient`` and opens
+    the socket). For tests that don't need ``_docker``, this avoids the
+    flaky "Docker not running" failure mode on contributors' boxes.
+    """
+    # Reset the singleton so each test gets a fresh stub manager.
+    DockerSandboxManager._instance = None
+    mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
+    # Path-dependent attributes used by methods under test.
+    mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
+        dsm.Path(dsm.__file__).parent.parent.parent / "AGENTS.template.md"
+    )
+    # State the base class would set up via _init_serve_state — we use the
+    # same method here so tests stay in sync with real state shape.
+    mgr._init_serve_state()
+    return mgr
+
+
+def test_serve_base_url_uses_container_name_and_port() -> None:
+    """Sandboxes are addressed by container name on the bridge network.
+    K8s does the same thing with a Service DNS name."""
+    mgr = _bare_manager()
+    url = mgr._serve_base_url(_SBX)
+    assert url == f"http://sandbox-12345678:{OPENCODE_SERVE_PORT}"
+
+
+def test_read_opencode_password_parses_from_container_env() -> None:
+    """The cleartext password lives in the container's env (Docker
+    Engine API). Decoded on every read; never persisted on disk."""
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {
+            "Env": [
+                "ONYX_PAT=pat-redacted",
+                "ONYX_SERVER_URL=http://api_server:8080",
+                f"{OPENCODE_SERVER_PASSWORD_ENV}=correct-horse-battery-staple",
+                "AGENT_TRANSPORT=serve",
+            ]
+        }
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    pw = mgr._read_opencode_password(_SBX)
+    assert pw == "correct-horse-battery-staple"
+
+
+def test_read_opencode_password_returns_none_for_legacy_container() -> None:
+    """A container provisioned before this code landed has no
+    ``OPENCODE_SERVER_PASSWORD`` in env. The bus then falls back to
+    no-auth and logs a warning."""
+    mgr = _bare_manager()
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {"Env": ["ONYX_PAT=pat", "ONYX_SERVER_URL=https://onyx.example.com"]}
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    assert mgr._read_opencode_password(_SBX) is None
+
+
+def test_read_opencode_password_returns_none_when_container_missing() -> None:
+    """terminate() races provision() — looking up a deleted container
+    should fail gracefully, not raise."""
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.side_effect = dsm.NotFound("gone")
+
+    assert mgr._read_opencode_password(_SBX) is None
+
+
+def test_read_opencode_password_handles_password_with_equals_sign() -> None:
+    """``token_urlsafe(32)`` can produce ``=`` chars at the tail. The
+    parser must split on the FIRST equals only."""
+    mgr = _bare_manager()
+    weird_password = "tail==padding=="
+    fake_container = MagicMock()
+    fake_container.attrs = {
+        "Config": {
+            "Env": [
+                f"{OPENCODE_SERVER_PASSWORD_ENV}={weird_password}",
+            ]
+        }
+    }
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._docker.containers.get.return_value = fake_container
+
+    assert mgr._read_opencode_password(_SBX) == weird_password
+
+
+@pytest.fixture
+def llm_config() -> LLMProviderConfig:
+    return LLMProviderConfig(
+        provider="openai",
+        model_name="gpt-4o",
+        api_key="sk-test",
+        api_base=None,
+    )
+
+
+def test_render_session_files_returns_none_for_opencode_json_under_serve(
+    monkeypatch: pytest.MonkeyPatch,
+    llm_config: LLMProviderConfig,
+) -> None:
+    """Under ``AGENT_TRANSPORT=serve`` the per-session ``opencode.json``
+    is redundant (opencode-serve loaded providers from
+    ``OPENCODE_CONFIG_CONTENT`` at startup) and would pollute snapshots."""
+    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    mgr = _bare_manager()
+    agents_md, opencode_json = mgr._render_session_files(
+        llm_config=llm_config,
+        nextjs_port=None,
+        skills_section="",
+    )
+    assert agents_md  # not empty
+    assert opencode_json is None
+
+
+def test_render_session_files_writes_opencode_json_under_acp(
+    monkeypatch: pytest.MonkeyPatch,
+    llm_config: LLMProviderConfig,
+) -> None:
+    """Under ``AGENT_TRANSPORT=acp`` (rollback) the per-session file is
+    still emitted because each exec'd ``opencode acp`` invocation reads it."""
+    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.ACP)
+    mgr = _bare_manager()
+    _, opencode_json = mgr._render_session_files(
+        llm_config=llm_config,
+        nextjs_port=None,
+        skills_section="",
+    )
+    assert opencode_json is not None
+    # Shell-escaped single quotes are present in the rendered form; the raw
+    # JSON should still round-trip after the substitution is reversed.
+    raw = opencode_json.replace("'\\''", "'")
+    parsed: Any = json.loads(raw)
+    assert "openai" in parsed.get("provider", {})
+
+
+def test_init_serve_state_is_idempotent() -> None:
+    """``_init_serve_state`` is called from ``_initialize``; provision
+    paths must not blow up if called twice."""
+    mgr = _bare_manager()
+    first_lock = mgr._event_buses_lock
+    mgr._init_serve_state()  # second call
+    assert mgr._event_buses_lock is first_lock
+    assert mgr._event_buses == {}
+    assert mgr._terminated_sandboxes == set()
+
+
+def test_prompt_slot_serializes_on_docker_under_serve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The K8s prompt_slot test asserts the lock contract for K8s; the
+    Docker manager inherits the same base impl, so the same invariant
+    must hold for Docker too. This catches a regression where Docker
+    forgot to call ``_init_serve_state`` and the lock dict would be
+    missing."""
+    import onyx.server.features.build.sandbox.base as sandbox_base
+
+    monkeypatch.setattr(sandbox_base, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    mgr = _bare_manager()
+
+    other_session = UUID("00000000-0000-0000-0000-000000000001")
+    with mgr.prompt_slot(_SBX, other_session) as outer:
+        assert outer is True
+        with mgr.prompt_slot(_SBX, other_session) as inner:
+            assert inner is False
+
+
+def test_provision_generates_fresh_password_and_injects_into_container_env(
+    monkeypatch: pytest.MonkeyPatch,
+    llm_config: LLMProviderConfig,
+) -> None:
+    """End-to-end verification that ``provision()`` mints a per-call
+    HTTP Basic password and threads it through ``build_container_create_kwargs``
+    into the Docker container's env. This is the load-bearing path the
+    Docker port adds: opencode-serve in the sandbox container reads the
+    password from env at startup; the api_server reads it back via
+    ``_read_opencode_password``. If they diverge, every request 401s."""
+    monkeypatch.setattr(dsm, "AGENT_TRANSPORT", AgentTransport.SERVE)
+    monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
+    # Skip the actual readiness HTTP probe — that needs a real container.
+    monkeypatch.setattr(
+        DockerSandboxManager,
+        "_wait_for_opencode_serve_ready",
+        lambda self, sandbox_id: True,  # noqa: ARG005 — patched callable
+    )
+
+    mgr = _bare_manager()
+    # Mock the Docker client surface used by provision().
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
+    mgr._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
+    mgr._memory_limit = "2g"  # type: ignore[attr-defined]
+    mgr._cpu_limit = 1.0  # type: ignore[attr-defined]
+    mgr._compose_project = None  # type: ignore[attr-defined]
+    # No existing container.
+    mgr._docker.containers.get.side_effect = dsm.NotFound("none")
+    # _ensure_sandbox_network — pretend it exists already.
+    mgr._docker.networks.get.return_value = MagicMock()
+    # _ensure_sandbox_volume — pretend it exists already.
+    mgr._docker.volumes.get.return_value = MagicMock()
+
+    # Capture the kwargs passed to containers.run.
+    fake_container = MagicMock()
+    fake_container.name = "sandbox-12345678"
+    fake_container.attrs = {"State": {"Status": "running"}}
+
+    run_calls: list[dict[str, Any]] = []
+
+    def _capture_run(**kwargs: Any) -> Any:
+        run_calls.append(kwargs)
+        return fake_container
+
+    mgr._docker.containers.run.side_effect = _capture_run
+
+    info = mgr.provision(
+        sandbox_id=_SBX,
+        user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        tenant_id="tenant-abc",
+        llm_config=llm_config,
+        onyx_pat="pat-redacted",
+    )
+
+    assert info.status.value == "running"
+    assert len(run_calls) == 1
+    env = run_calls[0]["environment"]
+    # All six required env vars are present.
+    assert set(env.keys()) == {
+        "ONYX_PAT",
+        "ONYX_SERVER_URL",
+        "AGENT_TRANSPORT",
+        "OPENCODE_SERVE_PORT",
+        OPENCODE_SERVER_PASSWORD_ENV,
+        "OPENCODE_CONFIG_CONTENT",
+    }
+    # AGENT_TRANSPORT mirrors the patched serve value.
+    assert env["AGENT_TRANSPORT"] == "serve"
+    # The password is a fresh token_urlsafe(32) — long-ish, no spaces.
+    pw = env[OPENCODE_SERVER_PASSWORD_ENV]
+    assert len(pw) >= 32
+    assert " " not in pw
+    # OPENCODE_CONFIG_CONTENT is valid JSON the agent can parse.
+    config = json.loads(env["OPENCODE_CONFIG_CONTENT"])
+    assert "provider" in config
+
+    # Second provision call must mint a NEW password — never re-use.
+    DockerSandboxManager._instance = None
+    mgr2 = _bare_manager()
+    mgr2._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr2._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
+    mgr2._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
+    mgr2._memory_limit = "2g"  # type: ignore[attr-defined]
+    mgr2._cpu_limit = 1.0  # type: ignore[attr-defined]
+    mgr2._compose_project = None  # type: ignore[attr-defined]
+    mgr2._docker.containers.get.side_effect = dsm.NotFound("none")
+    mgr2._docker.networks.get.return_value = MagicMock()
+    mgr2._docker.volumes.get.return_value = MagicMock()
+    run_calls2: list[dict[str, Any]] = []
+    mgr2._docker.containers.run.side_effect = lambda **kw: (
+        run_calls2.append(kw) or fake_container
+    )
+    mgr2.provision(
+        sandbox_id=_SBX,
+        user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        tenant_id="tenant-abc",
+        llm_config=llm_config,
+        onyx_pat="pat-redacted",
+    )
+    pw2 = run_calls2[0]["environment"][OPENCODE_SERVER_PASSWORD_ENV]
+    assert pw2 != pw, "password must be unique per provision call"
+
+
+def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
+    """The Docker manager must mirror K8s's cleanup contract: on
+    terminate the per-sandbox event bus is closed and the sandbox id
+    is added to ``_terminated_sandboxes`` so a late ``subscribe`` won't
+    spin up a fresh reader thread against a deleted container."""
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    # No real container — terminate should still cleanly run.
+    mgr._docker.containers.get.return_value = None
+    mgr._docker.volumes.get.side_effect = dsm.NotFound("none")
+
+    # Pre-seed an event bus so the terminate path takes the bus.close()
+    # branch (would silently no-op otherwise).
+    fake_bus = MagicMock()
+    fake_bus.closed = False
+    mgr._event_buses[_SBX] = fake_bus
+
+    mgr.terminate(_SBX)
+
+    assert _SBX in mgr._terminated_sandboxes
+    assert _SBX not in mgr._event_buses
+    fake_bus.close.assert_called_once()
