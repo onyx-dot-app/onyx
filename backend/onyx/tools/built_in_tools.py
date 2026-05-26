@@ -8,9 +8,6 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileRea
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
-    KnowledgeGraphTool,
-)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -25,7 +22,6 @@ BUILT_IN_TOOL_TYPES = Union[
     SearchTool,
     ImageGenerationTool,
     WebSearchTool,
-    KnowledgeGraphTool,
     OpenURLTool,
     PythonTool,
     FileReaderTool,
@@ -37,7 +33,6 @@ BUILT_IN_TOOL_MAP: dict[str, Type[BUILT_IN_TOOL_TYPES]] = {
     SearchTool.__name__: SearchTool,
     ImageGenerationTool.__name__: ImageGenerationTool,
     WebSearchTool.__name__: WebSearchTool,
-    KnowledgeGraphTool.__name__: KnowledgeGraphTool,
     OpenURLTool.__name__: OpenURLTool,
     PythonTool.__name__: PythonTool,
     FileReaderTool.__name__: FileReaderTool,

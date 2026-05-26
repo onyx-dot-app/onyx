@@ -16,14 +16,11 @@ from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
-from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
@@ -38,10 +35,6 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.file_store.utils import store_plaintext
-from onyx.kg.models import KGException
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_missing_default_entity_types__commit,
-)
 from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
@@ -344,26 +337,6 @@ def extract_headers(
             if lowercase_key in headers:
                 extracted_headers[lowercase_key] = headers[lowercase_key]
     return extracted_headers
-
-
-def process_kg_commands(
-    message: str,
-    persona_name: str,
-    tenant_id: str,  # noqa: ARG001
-    db_session: Session,
-) -> None:
-    # Temporarily, until we have a draft UI for the KG Operations/Management
-    # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
-        return
-
-    kg_config_settings = get_kg_config_settings()
-    if not is_kg_config_settings_enabled_valid(kg_config_settings):
-        return
-
-    if message == "kg_setup":
-        populate_missing_default_entity_types__commit(db_session=db_session)
-        raise KGException("KG setup done")
 
 
 def _get_or_extract_plaintext(

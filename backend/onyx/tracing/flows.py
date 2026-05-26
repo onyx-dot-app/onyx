@@ -39,10 +39,6 @@ class LLMFlow(StrEnum):
     CONTEXTUAL_RAG_CHUNK_CONTEXT = "contextual_rag_chunk_context"
     IMAGE_SUMMARIZATION = "image_summarization"
 
-    # Knowledge graph
-    KG_DOCUMENT_CLASSIFICATION = "kg_document_classification"
-    KG_DEEP_EXTRACTION = "kg_deep_extraction"
-
     # Image generation
     IMAGE_GENERATION = "image_generation"
     IMAGE_EDIT = "image_edit"

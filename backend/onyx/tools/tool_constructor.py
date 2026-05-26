@@ -320,25 +320,6 @@ def _construct_tools_impl(
                     )
                 ]
 
-            # Handle KG Tool
-            # TODO: disabling for now because it's broken in the refactor
-            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-            #     # skip the knowledge graph tool if KG is not enabled/exposed
-            #     kg_config = get_kg_config_settings()
-            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
-            #         continue
-
-            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
-            #         # TODO: remove this after the beta period
-            #         raise ValueError(
-            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
-            #         )
-            #     tool_dict[db_tool_model.id] = [
-            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
-            #     ]
-
         # Handle custom tools
         elif db_tool_model.openapi_schema:
             if not custom_tool_config:
