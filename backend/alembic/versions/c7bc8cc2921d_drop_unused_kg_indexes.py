@@ -21,6 +21,7 @@ needed indexes should be reintroduced via a forward migration tailored
 to the new workload rather than blindly restored.
 """
 
+import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -89,7 +90,7 @@ INDEXES_TO_DROP = [
 
 def upgrade() -> None:
     for index_name in INDEXES_TO_DROP:
-        op.execute(f"DROP INDEX IF EXISTS {index_name};")
+        op.execute(sa.text(f"DROP INDEX IF EXISTS {index_name};"))
 
 
 def downgrade() -> None:
