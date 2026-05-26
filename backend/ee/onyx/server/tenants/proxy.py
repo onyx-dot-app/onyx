@@ -43,7 +43,7 @@ from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 BILLING_INFO_CACHE_KEY = "proxy:billing-information:v1"
-BILLING_INFO_CACHE_TTL_SEC = 300
+BILLING_INFO_CACHE_TTL_SECONDS = 300
 
 logger = setup_logger()
 
@@ -371,7 +371,7 @@ async def proxy_billing_information(
 
     Auth: Valid (non-expired) license required.
 
-    Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SEC.
+    Caches the response in Redis per tenant for BILLING_INFO_CACHE_TTL_SECONDS.
     The frontend polls this endpoint on a tight loop, but Stripe-backed
     billing state doesn't change second-to-second, so a short shared cache
     eliminates almost all control-plane round trips.
@@ -416,7 +416,7 @@ async def proxy_billing_information(
         try:
             redis_client.setex(
                 BILLING_INFO_CACHE_KEY,
-                BILLING_INFO_CACHE_TTL_SEC,
+                BILLING_INFO_CACHE_TTL_SECONDS,
                 billing_info.model_dump_json(),
             )
         except RedisError as exc:
