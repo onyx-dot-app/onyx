@@ -58,6 +58,7 @@ import shlex
 import tarfile
 import threading
 import time
+from collections.abc import Callable
 from collections.abc import Generator
 from pathlib import Path
 from typing import TypedDict
@@ -502,6 +503,8 @@ class DockerSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,  # noqa: ARG002
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,  # noqa: ARG002 — serve-only
     ) -> SandboxInfo:
         if not onyx_pat:
             raise ValueError("onyx_pat is required for Docker sandbox provisioning")
@@ -1038,6 +1041,13 @@ printf '%s' '{opencode_json}' > {session_path}/opencode.json
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
+        *,
+        opencode_session_id: str | None = None,  # noqa: ARG002 — serve-only
+        agent_provider: str | None = None,  # noqa: ARG002 — serve-only
+        agent_model: str | None = None,  # noqa: ARG002 — serve-only
+        on_opencode_session_resolved: (  # noqa: ARG002 — serve-only
+            Callable[[str], None] | None
+        ) = None,
     ) -> Generator[ACPEvent, None, None]:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"

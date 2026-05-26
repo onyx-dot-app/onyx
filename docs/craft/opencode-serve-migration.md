@@ -16,7 +16,9 @@ The current ACP integration spawns a fresh `opencode acp` process for every user
 
 5. **Cancellation is implicit.** There's no `POST /sessions/{id}/cancel` endpoint today. The only cancel path is the user closing their SSE stream, which triggers `GeneratorExit` and an internal `session/cancel` notification on the way down. Scheduled tasks (`scheduled_tasks/executor.py:341-353`) enforce a 30-min budget with the same disconnect-kills-the-process pattern.
 
-Migrating to `opencode serve` collapses the per-message process lifecycle into a single per-sandbox HTTP server, which fixes 1–4 directly and gives us a clean place to wire up explicit cancel for 5.
+6. **opencode acp 1.15.7 drops the turn terminator non-deterministically.** Confirmed empirically (2026-05-21, repro in `/tmp/opencode_wait.py` against the `opencode-probe` pod): on the same prompt, the same opencode binary sends the terminating JSON-RPC response (or `session/update` with `sessionUpdate=prompt_response`) on only ~1 in 5 turns. The other ~4 send `agent_message_chunk` × N, then a final `usage_update` notification, then **nothing**. opencode does not exit and does not error — it just stops emitting on stdout. Onyx's `send_message` loop has no terminator other than the two ACP-defined ones, so it sits in `_response_queue.get(timeout=1.0)` for the full `ACP_MESSAGE_TIMEOUT` (900s) yielding SSEKeepalive every 15s. From the UI, the turn appears to "drop packets and terminate early" — the text streams in, then the turn freezes; any subsequent user action triggers `GeneratorExit` → `session/cancel` and the now-cancelled opencode process is killed. This is the active production bug motivating this migration.
+
+Migrating to `opencode serve` collapses the per-message process lifecycle into a single per-sandbox HTTP server, which fixes 1–4 directly, gives us a clean place to wire up explicit cancel for 5, and routes around 6 (serve emits multiple redundant turn-end signals on the `/event` stream — see "Empirical validation" below).
 
 ## Important Notes
 
@@ -32,9 +34,24 @@ From the public docs ([opencode.ai/docs/server](https://opencode.ai/docs/server/
 - **TS SDK:** `@opencode-ai/sdk` with `createOpencodeClient()` plus `event.subscribe()` as an async iterable over `/event`. No first-party Python SDK — generate one from `/doc` with `openapi-python-client`, or hand-write a thin wrapper.
 - **Concurrency:** Designed for multiple concurrent clients. Single `opencode serve` process per data dir; do *not* run two pointed at the same `opencode.db`.
 
+### Empirical validation (May 2026)
+
+Phase 0 of this plan was run against `opencode 1.15.7` in the kind cluster's `opencode-probe` pod. Scripts: `/tmp/probe_serve.py` (basic) and `/tmp/probe_serve_hard.py` (long output, tool call, multi-paragraph essay). Findings:
+
+- **Reliability:** 5/5 simple prompts and 3/3 hard prompts emitted a clear, observable terminator on `/event`. Same prompts on `opencode acp` produced a terminator in 1/5 simple runs (see Issue 6 above). Serve is the fix.
+- **Multiple redundant terminators on `/event`.** After every assistant turn, the server fires *all* of: `message.updated` with `info.role=assistant` and `info.time.completed=<unix-ms>` (the most directly usable); `session.idle`; `session.status` transitioning to idle; a final `session.updated`; and `session.diff`. Use `message.updated assistant completed=<ts>` as the primary terminator and treat any of the others as a backstop — even if the primary ever races again, three other signals converge.
+- **Text streaming uses `message.part.delta`, not `message.part.updated`.** The mapping table below has been corrected — `message.part.updated` fires at part boundaries (start/end with the accumulated text) while `message.part.delta` carries the per-token deltas. Frontends that want token-by-token UI need to consume `delta`.
+- **`prompt_async` returns `204 No Content`** as documented; the response body is empty and all turn state arrives via `/event`. Subscribe to `/event` *before* POSTing `prompt_async` or you will miss the first events (the plan already calls this out).
+- **`message.part.updated` (type=text) is the gap-fill anchor, not `GET /session/:id/message`.** During streaming, the snapshot's `part.text` is empty until the turn terminates (confirmed empirically — see [`opencode-serve-test-report.md`](./opencode-serve-test-report.md) §Gap-fill). The reliable reconcile point is the `message.part.updated` event itself, which carries cumulative `part.text` and fires at part-creation (empty) and part-finalization (full). The revised gap-fill algorithm lives in [`features/opencode-serve-client.md`](./features/opencode-serve-client.md).
+- **`server.heartbeat` events** arrive on `/event` at ~10s intervals. Pass through transparently as our existing `SSEKeepalive` marker or ignore — the API server already emits its own 15s keepalive to the browser.
+- **Permission flow is real and exercised.** `permission.asked` → POST `/session/.../permissions/{id}` with `{response: "once"|"always"}` → `permission.replied` → tool resumes → turn terminator. See test report §Permission flow for the full grammar. Phase-1 decision: pass through to the frontend as a new SSE event, or auto-deny to keep the wire format frozen? Documented as an open question in the design doc.
+- **`server.connected`** is emitted to every new `/event` subscriber immediately on connect, before any prompt activity. Use it as a "stream-ready" signal.
+- **Per-prompt informational events** to filter or pass through unchanged: `session.created`, `session.next.agent.switched`, `session.next.model.switched` (each emitted once at the start of a turn).
+- **Tool calls** appear on `message.part.updated` with `part.type=tool` and `state.status` cycling through `pending → running → completed`. Lifecycle observed end-to-end in the bash-ls repro.
+
 ### Known opencode bugs we must design around
 
-- **No SSE replay.** `/event` does not honor `Last-Event-ID` ([#25657](https://github.com/anomalyco/opencode/issues/25657)). On reconnect, we lose deltas from the disconnect window. **Mitigation:** on reconnect, call `GET /session/:id/message` to snapshot current state, then re-subscribe to `/event`. Persist deltas into our DB the moment we see them so the user-facing replay path stays in Onyx.
+- **No SSE replay.** `/event` does not honor `Last-Event-ID` ([#25657](https://github.com/anomalyco/opencode/issues/25657)). On reconnect, we lose deltas from the disconnect window. **Mitigation (revised after empirical testing):** the in-pod `GET /session/:id/message` snapshot does *not* contain `part.text` during streaming — it's only populated after the turn terminator (see test report). The correct reconcile point is `message.part.updated`, which fires reliably for each text part and carries cumulative `part.text`. The reader keeps a per-partID accumulator and reconciles against `part.text` on every `message.part.updated`. After reconnect, the next such event refills any gap automatically. Full algorithm: [`features/opencode-serve-client.md`](./features/opencode-serve-client.md) §Reconnect & gap-fill. Persist deltas into our DB the moment we see them so the user-facing replay path stays in Onyx.
 - **REST subagent flows can hang.** [#6573](https://github.com/anomalyco/opencode/issues/6573): when an agent spawns subagents via the Task tool, the REST path can stall with `session.status = busy` forever. **Mitigation:** enforce our existing `ACP_MESSAGE_TIMEOUT` (currently 900s, `configs.py:128`) as a wall clock; on timeout, call `POST /session/:id/abort` and surface an error event. Verify the subagent path explicitly in integration tests before turning on for production.
 - **Heartbeat mismatch.** [#17769](https://github.com/anomalyco/opencode/issues/17769): server-side heartbeat (~30s) vs typical client expectation (15s) causes premature disconnects after laptop sleep. **Mitigation:** we already emit our own SSE keepalive every 15s (`SSE_KEEPALIVE_INTERVAL`, `configs.py:120`) to the *browser*. Between Onyx API server and `opencode serve`, use a long httpx timeout and tolerate `/event` reconnects.
 
@@ -143,17 +160,21 @@ Notes:
 
 | Onyx `acp.schema` event | Opencode event(s) on `/event` |
 |---|---|
-| `AgentMessageChunk` | `message.part.updated` where `part.type=text` and role=assistant |
-| `AgentThoughtChunk` | `message.part.updated` where `part.type=reasoning` (or `thinking`, verify in `/doc`) |
-| `ToolCallStart` | `message.part.updated` where `part.type=tool` and `state.status=running` (first sighting) |
-| `ToolCallProgress` | `message.part.updated` for the same `part.id` with subsequent `state` |
+| `AgentMessageChunk` | `message.part.delta` where target part has `type=text` and role=assistant — **per-token deltas** |
+| `AgentThoughtChunk` | `message.part.delta` where target part has `type=reasoning` (verify field name against `/doc`) |
+| `ToolCallStart` | `message.part.updated` where `part.type=tool` and `state.status=pending` (first sighting) |
+| `ToolCallProgress` | `message.part.updated` for the same `part.id` with `state.status` cycling `running` → `completed` |
 | `AgentPlanUpdate` | (no direct equivalent — opencode tracks plan as session state, not deltas) |
 | `CurrentModeUpdate` | (no direct equivalent — `mode` is on session record) |
-| `PromptResponse` | terminal `message.updated` for the assistant turn (stop_reason on message) |
-| `Error` | `session.error` or HTTP error response to `prompt_async` |
+| `PromptResponse` | `message.updated` for the assistant message where `info.time.completed` is a non-null unix-ms timestamp — primary terminator. Backstops on the same turn: `session.idle`, `session.status` → idle |
+| `Error` | `session.error` or non-2xx HTTP response to `prompt_async` |
 | `RequestPermissionRequest` | `permission.asked` (then `permission.replied` for the response) |
 
-`AgentPlanUpdate` and `CurrentModeUpdate` are emitted only in V0 of the agent today and aren't load-bearing for any current consumer — confirm with a grep of consumers and either drop them or synthesize from `session.updated` if needed. The mapping must be verified against the live `/doc` before implementation; ship a small probe script (next to `local/try_agent_client.py`) that prints raw `/event` traffic during an exercised turn.
+Pass-through / ignore (informational only; emitted on every prompt): `server.connected`, `session.created`, `session.next.agent.switched`, `session.next.model.switched`, `session.diff`, `session.updated` (when not the post-terminator one).
+
+Note: `message.part.updated` for `part.type=text` *also* fires (at part start/end with the accumulated text) but the per-token streaming experience is driven from `message.part.delta`. Use `delta` for `AgentMessageChunk`; the `updated` events on text parts can be ignored or used as a sanity check that the accumulator matches.
+
+`AgentPlanUpdate` and `CurrentModeUpdate` are emitted only in V0 of the agent today and aren't load-bearing for any current consumer — confirm with a grep of consumers and either drop them or synthesize from `session.updated` if needed.
 
 ### Persistence model
 
@@ -194,8 +215,9 @@ No more ephemeral process spawn. No more `kubectl exec` per message. No more `_c
 
 1. **Entrypoint becomes a supervisor.** `entrypoint.sh` in the `sandbox` container currently is a trivial sleep-loop (per `sidecar-reimplementation.md` Phase 3). Replace with a small supervisor that:
    - Sets `XDG_DATA_HOME=/workspace/.opencode-data` (so SQLite lives on the shared volume and survives container restart within the same pod, and is captured by snapshots).
-   - Sets `OPENCODE_SERVER_PASSWORD=$ONYX_OPENCODE_SERVE_PASSWORD` (pod-unique secret, injected like `ONYX_PAT`).
-   - Runs `opencode serve --hostname 0.0.0.0 --port 4096` in a loop with exponential backoff on exit. Logs stderr/stdout.
+   - Reads `OPENCODE_SERVER_PASSWORD` from env (mounted from a **per-pod K8s Secret**, generated and provisioned by the sandbox manager as part of `provision()` — same lifecycle as the existing `ONYX_PAT` Secret it already manages; see [`features/opencode-serve-client.md`](./features/opencode-serve-client.md) §Decisions #2). On pod delete, the K8s ownerReferences cascade deletes the Secret.
+   - Runs `opencode serve --hostname 0.0.0.0 --port 4096` in a loop with exponential backoff on exit. Backgrounding via `&` from kubectl exec does NOT survive the exec session ending — use `setsid` + `nohup` + `</dev/null` from the supervisor's `exec` call so the process detaches from any controlling terminal. (Discovered empirically; see test report.)
+   - Logs stderr/stdout to a path the sidecar can mirror to k8s logs.
    - Optionally runs a tiny `/health` proxy if we don't want to expose `opencode serve`'s `GET /` directly for k8s probes.
 2. **Pod spec.** Declare `containerPort: 4096` (`OPENCODE_SERVE_PORT`) in the `sandbox` container. Add a readiness probe on `GET /doc` (returns the spec quickly without authentication).
 3. **Pre-flight on `setup_session_workspace`.** After workspace setup, call `OpencodeServeClient.health_check`; fail provisioning if not green.
@@ -214,7 +236,7 @@ Frontend wires a "stop" button to this. Scheduled tasks call it on timeout inste
 
 ### Migration phases
 
-**Phase 0 — probe.** Build a small script (`sandbox/opencode/try_serve_client.py`) that runs `opencode serve` locally, exercises every event type we care about, and dumps the `/event` payload. Use to lock the mapping in §"Event type mapping" before writing the production client.
+**Phase 0 — probe. (DONE 2026-05-21.)** First-pass probe ran against `opencode 1.15.7` in the `opencode-probe` pod in the local kind cluster. Findings folded into "Empirical validation" above and the event-type mapping table. Scripts (move into `sandbox/opencode/try_serve_client.py` when landing Phase 1): `/tmp/probe_serve.py`, `/tmp/probe_serve_hard.py`. Remaining gap: exercise the `permission.asked` path explicitly (not exercised in the probe runs) and confirm `AgentThoughtChunk` against a reasoning-capable model.
 
 **Phase 1 — client library.** Land `OpencodeServeClient` with full unit tests against a fake `opencode serve` (httpx mock + canned SSE). Do not call from sandbox managers yet. Add `OPENCODE_SERVE_PORT`, `OPENCODE_SERVER_PASSWORD_ENV`, `ACP_TRANSPORT={"acp","serve"}` configs.
 
@@ -224,7 +246,7 @@ Frontend wires a "stop" button to this. Scheduled tasks call it on timeout inste
 
 **Phase 4 — k8s backend behind a flag.** Swap `KubernetesSandboxManager.send_message` to use serve when `ACP_TRANSPORT=serve`. Default off in prod, default on in staging. Add `opencode_session_id` migration.
 
-**Phase 5 — cutover.** Flip default to `serve` in prod after one week of staging soak. Keep the ACP path callable for two weeks of safety net, then delete `acp_exec_client.py`, `agent_client.py` (except its docstring/example value), and the `_try_resume_existing_session` heuristic.
+**Phase 5 — cutover.** Flip default to `serve` in prod after one week of staging soak. Keep the ACP path callable for two weeks of safety net, then remove the `ACP_TRANSPORT={"acp","serve"}` flag and make serve the only runtime path. **The ACP code itself stays in the tree at the end of Phase 5** — `sandbox/acp/base.py`, the two `acp_exec_client.py` files, the `_try_resume_existing_session` heuristic, and the `agent-client-protocol` PyPI dep are all now dead, but deleting them is a deliberate follow-up so this migration PR isn't also a cross-cutting type/import rewrite. The cleanup is documented separately in [`drop-acp-layer.md`](./drop-acp-layer.md).
 
 Each phase is independently revertable.
 
@@ -263,7 +285,8 @@ Prefer external-dependency-unit and integration tests; opencode is not mockable 
 
 ## Out of scope
 
-- Replacing `acp.schema` types with opencode-native types in the SSE wire to the browser. Doable later; not load-bearing for this migration. Frontend doesn't care which transport produced the events.
+- Deleting the ACP code from the tree once serve is the only runtime path. Documented separately in [`drop-acp-layer.md`](./drop-acp-layer.md); a deliberately-decoupled follow-up so this migration PR stays focused on the transport swap.
+- Replacing the internal event types with opencode-native types in the SSE wire to the browser. Even more aggressive than the `drop-acp-layer.md` follow-up; doable later. Frontend doesn't care which transport produced the events.
 - Multi-tenancy of a single `opencode serve` across sandboxes. We continue to run one per pod.
 - Sharing the opencode session DB across pod restarts in different pods (e.g. sandbox migration). Snapshot/restore already covers this; opencode reads SQLite on startup and is happy.
 - Hardening the sidecar reimplementation against IRSA leakage. Tracked separately in `sidecar-reimplementation.md`.
