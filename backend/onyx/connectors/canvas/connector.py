@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -418,6 +419,31 @@ _DOC_TYPE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 
+def _normalize_canvas_course_ids(
+    course_ids: Sequence[int | str] | None,
+) -> list[int] | None:
+    if course_ids is None:
+        return None
+
+    normalized_course_ids: list[int] = []
+    seen_course_ids: set[int] = set()
+    for raw_course_id in course_ids:
+        try:
+            course_id = int(str(raw_course_id).strip())
+        except ValueError as e:
+            raise ValueError("Canvas course_ids must contain numeric course IDs") from e
+
+        if course_id <= 0:
+            raise ValueError("Canvas course_ids must contain positive course IDs")
+        if course_id in seen_course_ids:
+            continue
+
+        seen_course_ids.add(course_id)
+        normalized_course_ids.append(course_id)
+
+    return normalized_course_ids
+
+
 def _course_type_folder_id(course_id: int, doc_type: str) -> str:
     return f"canvas-type-course-{course_id}-{doc_type}"
 
@@ -460,9 +486,13 @@ class CanvasConnector(
     def __init__(
         self,
         canvas_base_url: str,
+        course_ids: Sequence[int | str] | None = None,
+        lti_context_id: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.canvas_base_url = canvas_base_url.rstrip("/").removesuffix("/api/v1")
+        self.course_ids = _normalize_canvas_course_ids(course_ids)
+        self.lti_context_id = lti_context_id
         self.batch_size = batch_size
         self._canvas_client: CanvasApiClient | None = None
         self._respect_release_dates = True
@@ -1198,7 +1228,15 @@ class CanvasConnector(
                 bearer_token=access_token,
                 canvas_base_url=self.canvas_base_url,
             )
-            client.get("courses", params={"per_page": "1"})
+            if self.course_ids is None or len(self.course_ids) == 0:
+                client.get("courses", params={"per_page": "1"})
+            else:
+                for course_id in self.course_ids:
+                    course_payload, _ = client.get(f"courses/{course_id}")
+                    if isinstance(course_payload, dict):
+                        self._courses_by_id[course_id] = CanvasCourse.from_api(
+                            course_payload
+                        )
         except ValueError as e:
             raise ConnectorValidationError(f"Invalid Canvas base URL: {e}")
         except OnyxError as e:
@@ -1224,6 +1262,17 @@ class CanvasConnector(
 
         # First call: materialize the list of course IDs
         if not new_checkpoint.course_ids:
+            if self.course_ids is not None:
+                new_checkpoint.course_ids = list(self.course_ids)
+                new_checkpoint.current_course_index = 0
+                new_checkpoint.stage = "pages"
+                logger.info(
+                    "Found %d configured Canvas courses to process",
+                    len(new_checkpoint.course_ids),
+                )
+                new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
+                return new_checkpoint
+
             try:
                 courses = self._list_courses()
             except Exception as e:

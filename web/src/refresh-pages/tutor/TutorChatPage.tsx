@@ -37,6 +37,10 @@ import TutorHistoryPanel from "@/refresh-pages/tutor/TutorHistoryPanel";
 import TutorSuggestions from "@/refresh-pages/tutor/TutorSuggestions";
 import TutorNoAgent from "@/refresh-pages/tutor/TutorNoAgent";
 import TutorPickerView from "@/refresh-pages/tutor/TutorPickerView";
+import CanvasCourseSetupView, {
+  CanvasCoursePreparingView,
+  type LtiCourseConnectorStatus,
+} from "@/refresh-pages/tutor/CanvasCourseSetupView";
 import TutorInstructorInsights from "@/refresh-pages/tutor/TutorInstructorInsights";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Button } from "@opal/components";
@@ -44,6 +48,15 @@ import { SvgBarChart, SvgBubbleText, SvgChevronDown } from "@opal/icons";
 import Dropzone from "react-dropzone";
 import { useEmbeddedMode } from "@/hooks/useEmbeddedMode";
 import { UserRole } from "@/lib/types";
+
+function BlankLtiStartupView() {
+  return (
+    <div
+      className="h-screen w-full bg-background-neutral-00"
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function TutorChatPage() {
   const router = useRouter();
@@ -96,10 +109,33 @@ export default function TutorChatPage() {
     courseTutorsSwrKey,
     errorHandlingFetcher
   );
+  const courseConnectorStatusSwrKey = ltiContextId
+    ? `/api/auth/lti/course/${encodeURIComponent(
+        ltiContextId
+      )}/connector-status`
+    : null;
+  const {
+    data: courseConnectorStatus,
+    error: courseConnectorStatusError,
+    isLoading: isLoadingCourseConnectorStatus,
+    mutate: refreshCourseConnectorStatus,
+  } = useSWR<LtiCourseConnectorStatus>(
+    courseConnectorStatusSwrKey,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestStatus) => {
+        if (!latestStatus) return 0;
+        if (!latestStatus.has_connector) return 5000;
+        return latestStatus.has_indexed_documents ? 0 : 5000;
+      },
+    }
+  );
   const courseTutorIds = useMemo(() => {
     if (!courseTutors) return null;
     return new Set(courseTutors.map((t) => t.id));
   }, [courseTutors]);
+  const canManageCourseTutors =
+    isInstructor || Boolean(courseConnectorStatus?.setup);
 
   const {
     chatSessions,
@@ -190,6 +226,10 @@ export default function TutorChatPage() {
   const handleScrollToBottom = useCallback(() => {
     scrollContainerRef.current?.scrollToBottom();
   }, []);
+
+  const handleCanvasConnectorReady = useCallback(() => {
+    void refreshCourseConnectorStatus();
+  }, [refreshCourseConnectorStatus]);
 
   // Derive course name from project (strip "[Canvas] " prefix)
   const courseName = useMemo(() => {
@@ -353,7 +393,40 @@ export default function TutorChatPage() {
   );
 
   // Loading state
-  if (!isReady) return <OnyxInitializingLoader />;
+  if (!isReady) {
+    if (ltiContextId) return <BlankLtiStartupView />;
+    return <OnyxInitializingLoader />;
+  }
+
+  if (ltiContextId && isLoadingCourseConnectorStatus) {
+    return <BlankLtiStartupView />;
+  }
+
+  if (ltiContextId && courseConnectorStatusError) {
+    return <TutorNoAgent />;
+  }
+
+  if (ltiContextId && courseConnectorStatus) {
+    if (
+      !courseConnectorStatus.has_connector &&
+      courseConnectorStatus.setup?.can_setup
+    ) {
+      return (
+        <CanvasCourseSetupView
+          courseId={ltiContextId}
+          status={courseConnectorStatus}
+          onReady={handleCanvasConnectorReady}
+        />
+      );
+    }
+
+    if (
+      !courseConnectorStatus.has_connector ||
+      !courseConnectorStatus.has_indexed_documents
+    ) {
+      return <CanvasCoursePreparingView status={courseConnectorStatus} />;
+    }
+  }
 
   if (activeTutorTab === "insights" && projectId !== null) {
     return renderWithInstructorShell(
@@ -370,6 +443,7 @@ export default function TutorChatPage() {
           ltiContextId={ltiContextId}
           projectId={projectId}
           ltiCanvasCourseNodeId={ltiCanvasCourseNodeId}
+          canManageTutors={canManageCourseTutors}
         />
       );
     }
@@ -409,7 +483,7 @@ export default function TutorChatPage() {
           onToggleHistory={toggleHistory}
           historyOpen={historyOpen}
           onManageTutors={
-            isInstructor && ltiContextId ? handleManageTutors : null
+            canManageCourseTutors && ltiContextId ? handleManageTutors : null
           }
         />
 

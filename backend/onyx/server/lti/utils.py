@@ -8,7 +8,6 @@ is the runtime side of that contract.
 """
 
 import contextlib
-import json
 import secrets
 import string
 import time
@@ -19,7 +18,9 @@ import jwt as pyjwt
 from fastapi_users import exceptions
 from jwt import PyJWKSet
 from jwt.exceptions import InvalidTokenError
+from pydantic import BaseModel
 from redis import asyncio as aioredis
+from redis.client import Redis
 from sqlalchemy import select
 
 from onyx.auth.schemas import UserCreate
@@ -62,6 +63,8 @@ _LTI_INSTRUCTOR_ROLES = {
 
 # Redis key prefix for LTI OIDC state
 _LTI_STATE_PREFIX = "lti_state:"
+_LTI_LAUNCH_CONTEXT_PREFIX = "lti_launch_context:"
+_LTI_LAUNCH_CONTEXT_TTL_SECONDS = 24 * 60 * 60
 
 # In-memory JWKS cache
 _jwks_cache: dict[str, dict] = {}
@@ -69,22 +72,52 @@ _jwks_cache_time: float = 0.0
 _JWKS_CACHE_TTL = 3600  # 1 hour
 
 
+class LtiLaunchContext(BaseModel):
+    course_id: str
+    course_label: str | None = None
+    course_title: str | None = None
+    roles: list[str]
+    issuer: str | None = None
+    canvas_base_url: str | None = None
+    canvas_course_id: int | None = None
+
+
+class LtiStoredState(BaseModel):
+    nonce: str
+    created: int
+    canvas_base_url: str | None = None
+
+
+def lti_roles_include_instructor(roles: list[str]) -> bool:
+    role_set = set(roles)
+    return bool(role_set & (_LTI_INSTRUCTOR_ROLES | _LTI_ADMIN_ROLES))
+
+
+def _lti_launch_context_key(user_id: UUID) -> str:
+    return f"{_LTI_LAUNCH_CONTEXT_PREFIX}{user_id}"
+
+
 async def store_lti_state(
     redis: aioredis.Redis,
     state: str,
     nonce: str,
+    canvas_base_url: str | None = None,
 ) -> None:
     """Store OIDC state+nonce in Redis with a short TTL."""
     key = f"{_LTI_STATE_PREFIX}{state}"
-    data = json.dumps({"nonce": nonce, "created": int(time.time())})
+    data = LtiStoredState(
+        nonce=nonce,
+        created=int(time.time()),
+        canvas_base_url=canvas_base_url,
+    ).model_dump_json()
     await redis.set(key, data, ex=LTI_NONCE_TTL_SECONDS)
 
 
 async def validate_and_consume_state(
     redis: aioredis.Redis,
     state: str,
-) -> str:
-    """Retrieve and atomically delete the state from Redis. Returns the nonce."""
+) -> LtiStoredState:
+    """Retrieve and atomically delete the state from Redis."""
     key = f"{_LTI_STATE_PREFIX}{state}"
     raw = await redis.getdel(key)
     if raw is None:
@@ -92,8 +125,40 @@ async def validate_and_consume_state(
             OnyxErrorCode.UNAUTHENTICATED,
             "LTI state expired or not found (possible replay)",
         )
-    data = json.loads(raw)
-    return str(data["nonce"])
+    raw_state = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    return LtiStoredState.model_validate_json(raw_state)
+
+
+async def store_lti_launch_context(
+    redis: aioredis.Redis,
+    user_id: UUID,
+    launch_context: LtiLaunchContext,
+) -> None:
+    await redis.set(
+        _lti_launch_context_key(user_id),
+        launch_context.model_dump_json(),
+        ex=_LTI_LAUNCH_CONTEXT_TTL_SECONDS,
+    )
+
+
+def get_lti_launch_context(
+    redis: Redis,
+    user_id: UUID,
+) -> LtiLaunchContext | None:
+    raw_context = redis.get(_lti_launch_context_key(user_id))
+    if raw_context is None:
+        return None
+
+    raw_context_str = (
+        raw_context.decode("utf-8")
+        if isinstance(raw_context, bytes)
+        else str(raw_context)
+    )
+    try:
+        return LtiLaunchContext.model_validate_json(raw_context_str)
+    except Exception:
+        logger.exception("Failed to parse cached LTI launch context")
+        return None
 
 
 async def _fetch_jwks() -> dict:

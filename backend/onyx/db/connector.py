@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from typing import cast
 
 from sqlalchemy import and_
@@ -7,6 +8,7 @@ from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
@@ -67,6 +69,52 @@ def fetch_connectors(
         stmt = stmt.where(Connector.input_type.in_(input_types))
     results = db_session.scalars(stmt)
     return list(results.all())
+
+
+def _canvas_config_matches_lti_course(
+    connector_specific_config: dict[str, Any],
+    lti_context_id: str,
+) -> bool:
+    config_lti_context_id = connector_specific_config.get("lti_context_id")
+    if (
+        config_lti_context_id is not None
+        and str(config_lti_context_id) == lti_context_id
+    ):
+        return True
+
+    course_ids = connector_specific_config.get("course_ids")
+    if course_ids is None:
+        return False
+
+    if isinstance(course_ids, list):
+        return any(str(course_id) == lti_context_id for course_id in course_ids)
+
+    return str(course_ids) == lti_context_id
+
+
+def fetch_canvas_cc_pair_for_lti_course(
+    db_session: Session,
+    lti_context_id: str,
+) -> ConnectorCredentialPair | None:
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector)
+        .options(joinedload(ConnectorCredentialPair.connector))
+        .where(Connector.source == DocumentSource.CANVAS)
+        .order_by(ConnectorCredentialPair.id.asc())
+    )
+
+    cc_pairs = db_session.scalars(stmt).unique().all()
+    for cc_pair in cc_pairs:
+        if cc_pair.connector is None:
+            continue
+        if _canvas_config_matches_lti_course(
+            connector_specific_config=cc_pair.connector.connector_specific_config or {},
+            lti_context_id=lti_context_id,
+        ):
+            return cc_pair
+
+    return None
 
 
 def connector_by_name_source_exists(

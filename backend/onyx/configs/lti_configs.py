@@ -19,6 +19,10 @@ LTI_AUTH_TOKEN_URL: str | None = os.environ.get("LTI_AUTH_TOKEN_URL")
 # JWKS endpoint on the LMS for verifying signed JWTs
 LTI_JWKS_URL: str | None = os.environ.get("LTI_JWKS_URL")
 
+# Canvas API/web base URL for connector setup. Optional because hosted Canvas
+# often exposes the real school URL in launch claims.
+LTI_CANVAS_BASE_URL: str | None = os.environ.get("LTI_CANVAS_BASE_URL")
+
 # Deployment ID from the LMS
 LTI_DEPLOYMENT_ID: str | None = os.environ.get("LTI_DEPLOYMENT_ID")
 
