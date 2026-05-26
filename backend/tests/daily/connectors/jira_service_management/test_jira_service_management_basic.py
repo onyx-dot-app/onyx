@@ -53,7 +53,6 @@ def _make_connector(
     return_value=None,
 )
 def test_jira_service_management_connector_basic(
-    reset: None,  # noqa: ARG001
     mock_get_api_key: object,  # noqa: ARG001
     test_secrets: dict[TestSecret, str],
 ) -> None:

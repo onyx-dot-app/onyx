@@ -1,5 +1,3 @@
-from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 from typing_extensions import override
@@ -36,21 +34,19 @@ class JiraServiceManagementConnector(JiraConnector):
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+        base_jql = super()._get_jql_query(start, end)
 
         if self.jql_query:
-            return f"({self.jql_query}) AND {JSM_SPACE_TYPE_JQL} AND {time_jql}"
+            return base_jql.replace(
+                f"({self.jql_query}) AND ",
+                f"({self.jql_query}) AND {JSM_SPACE_TYPE_JQL} AND ",
+                1,
+            )
 
         if self.jira_project:
-            return f"project = {self.quoted_jira_project} AND {time_jql}"
+            return base_jql
 
-        return f"{JSM_SPACE_TYPE_JQL} AND {time_jql}"
+        return f"{JSM_SPACE_TYPE_JQL} AND {base_jql}"
 
     @override
     def validate_connector_settings(self) -> None:
