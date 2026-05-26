@@ -457,7 +457,10 @@ def test_user_message_updated_does_not_terminate() -> None:
     assert out == []
 
 
-def test_assistant_message_without_completed_is_noop() -> None:
+def test_in_progress_assistant_message_updated_is_noop() -> None:
+    # Companion to `test_message_updated_alone_does_not_terminate`: the
+    # in-progress variant (time.completed is None) also never terminates.
+    # message.updated is never a turn-level signal regardless of completed.
     s = _state()
     out = _drain(
         translate_opencode_event(
