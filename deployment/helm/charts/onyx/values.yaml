@@ -1388,6 +1388,8 @@ configMap:
   SMTP_USER: ""
   # 'your-gmail-password'
   # SMTP_PASS: ""
+  # Set to "false" for internal/IP-whitelisted relays that don't advertise STARTTLS
+  SMTP_STARTTLS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
   # MinIO/S3 Configuration override

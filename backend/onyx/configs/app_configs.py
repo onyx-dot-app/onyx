@@ -283,10 +283,16 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
 SMTP_PASS = os.environ.get("SMTP_PASS") or ""
+# Whether to issue STARTTLS on the SMTP connection. Default true preserves
+# behavior for hosted providers (Gmail / SendGrid / SES on port 587). Set to
+# false for internal/whitelisted relays that don't advertise STARTTLS.
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() == "true"
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
+# SMTP creds are optional — relays whitelisted by IP need only a server
+# address. SendGrid path is independent and gated by its own API key.
+EMAIL_CONFIGURED = bool(SMTP_SERVER) or bool(SENDGRID_API_KEY)
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
