@@ -40,10 +40,16 @@ if TYPE_CHECKING:
 DEFAULT_OPENAI_API_BASE = "https://api.openai.com"
 
 
-# OpenAI Realtime API only streams transcription for `gpt-realtime-whisper`.
+# OpenAI's GA Realtime WebSocket requires two model identifiers:
+#  - The *session* model in the URL's `?model=` query parameter. This is the
+#    speech-to-speech realtime model; even transcription-only sessions must
+#    specify one (the endpoint returns `missing_model` otherwise).
+#  - The *transcription* model, passed in-band via
+#    `audio.input.transcription.model` on `session.update`.
 # `whisper-1`, `gpt-4o-transcribe`, and `gpt-4o-mini-transcribe` are HTTP-only
 # and remain selectable for the chunked path; the streaming WS always uses
-# this model regardless of the provider's stored `stt_model`.
+# these constants regardless of the provider's stored `stt_model`.
+OPENAI_REALTIME_SESSION_MODEL = "gpt-realtime-1.5"
 OPENAI_REALTIME_STT_MODEL = "gpt-realtime-whisper"
 
 
@@ -102,16 +108,16 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
         self._session = aiohttp.ClientSession()
 
-        # GA Realtime API: connect to bare `/v1/realtime` with no query
-        # string. Speech-to-speech sessions use `?model=<realtime-model>`,
-        # but transcription-only sessions reject any `model` query
-        # parameter ("You must not provide a model parameter for
-        # transcription sessions"); the transcription model is configured
-        # in-band via `audio.input.transcription.model` below. The Beta
-        # `?intent=transcription` form returns `beta_api_shape_disabled`
-        # and the `OpenAI-Beta: realtime=v1` header is no longer required.
+        # GA Realtime API: `?model=` must be a realtime *session* model
+        # (e.g. `gpt-realtime-1.5`), not a transcription model — passing
+        # `gpt-realtime-whisper` here yields `invalid_model`, and omitting
+        # the parameter entirely yields `missing_model`. The transcription
+        # model is specified in-band via `audio.input.transcription.model`
+        # on `session.update` below. The Beta `?intent=transcription` form
+        # returns `beta_api_shape_disabled` and the `OpenAI-Beta` header is
+        # no longer required.
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
-        url = f"{ws_base}/v1/realtime"
+        url = f"{ws_base}/v1/realtime?model={OPENAI_REALTIME_SESSION_MODEL}"
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         try:
