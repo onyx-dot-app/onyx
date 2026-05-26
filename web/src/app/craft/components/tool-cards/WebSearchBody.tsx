@@ -12,7 +12,12 @@ interface SearchResult {
   snippet?: string;
 }
 
-const URL_RE = /https?:\/\/[^\s)]+/g;
+// URL_RE is stateless — used with .test() in filters. URL_RE_G is the
+// /g-flagged variant used with .match() to collect all URLs in a block.
+// A single shared /g constant would let .test() leak lastIndex between
+// iterations and misclassify every other URL line.
+const URL_RE = /https?:\/\/[^\s)]+/;
+const URL_RE_G = new RegExp(URL_RE, "g");
 
 /**
  * Best-effort parser for websearch raw output. Handles two common shapes:
@@ -34,7 +39,7 @@ function parseResults(rawOutput: string): SearchResult[] {
       .map((l) => l.trim())
       .filter(Boolean);
     if (lines.length === 0) continue;
-    const urls = block.match(URL_RE);
+    const urls = block.match(URL_RE_G);
     if (!urls || urls.length === 0) continue;
     const url = urls[0]!;
 
