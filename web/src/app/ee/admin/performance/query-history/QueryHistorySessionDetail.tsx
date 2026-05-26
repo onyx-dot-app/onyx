@@ -1,0 +1,99 @@
+"use client";
+
+import { Text } from "@opal/components";
+import Title from "@/components/ui/title";
+import Separator from "@/refresh-components/Separator";
+import Spacer from "@/refresh-components/Spacer";
+import {
+  ChatSessionSnapshot,
+  MessageSnapshot,
+} from "@/app/ee/admin/performance/usage/types";
+import { FiBook } from "react-icons/fi";
+import { timestampToReadableDate } from "@/lib/dateUtils";
+import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
+
+function MessageDisplay({ message }: { message: MessageSnapshot }) {
+  return (
+    <div>
+      <p className="text-xs font-bold mb-1">
+        {message.message_type === "user" ? "User" : "AI"}
+      </p>
+      <Text as="p">{message.message}</Text>
+      {message.documents.length > 0 && (
+        <div className="flex flex-col gap-y-2 mt-2">
+          <p className="font-bold text-xs">Reference Documents</p>
+          {message.documents.slice(0, 5).map((document) => {
+            return (
+              <div className="text-sm flex" key={document.document_id}>
+                <FiBook
+                  className={
+                    "my-auto mr-1" + (document.link ? " text-link" : " ")
+                  }
+                />
+                {document.link ? (
+                  <a
+                    href={document.link}
+                    target="_blank"
+                    className="text-link"
+                    rel="noreferrer"
+                  >
+                    {document.semantic_identifier}
+                  </a>
+                ) : (
+                  document.semantic_identifier
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {message.feedback_type && (
+        <div className="mt-2">
+          <p className="font-bold text-xs">Feedback</p>
+          {message.feedback_text && <Text as="p">{message.feedback_text}</Text>}
+          <div className="mt-1">
+            <FeedbackBadge feedback={message.feedback_type} />
+          </div>
+        </div>
+      )}
+      <Separator />
+    </div>
+  );
+}
+
+export function QueryHistorySessionDetail({
+  chatSessionSnapshot,
+  title = "Chat Session Details",
+}: {
+  chatSessionSnapshot: ChatSessionSnapshot;
+  title?: string;
+}) {
+  return (
+    <>
+      <Title>{title}</Title>
+
+      <Spacer rem={0.25} />
+      {chatSessionSnapshot.assistant_name && (
+        <Text as="p">{chatSessionSnapshot.assistant_name}</Text>
+      )}
+      <Spacer rem={0.25} />
+      <Text as="p">
+        {`${
+          chatSessionSnapshot.user_email
+            ? `${chatSessionSnapshot.user_email}, `
+            : ""
+        }${timestampToReadableDate(chatSessionSnapshot.time_created)}, ${
+          chatSessionSnapshot.flow_type
+        }`}
+      </Text>
+
+      <Separator />
+
+      <div className="flex flex-col">
+        {chatSessionSnapshot.messages.map((message) => {
+          return <MessageDisplay key={message.id} message={message} />;
+        })}
+      </div>
+    </>
+  );
+}

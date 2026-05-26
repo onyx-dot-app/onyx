@@ -74,6 +74,8 @@ DEFAULT_PERSONA_ID = 0
 
 DEFAULT_CC_PAIR_ID = 1
 
+LTI_CANVAS_COURSE_PROJECT_DESCRIPTION_PREFIX = "lti:canvas:course:"
+
 
 CANCEL_CHECK_INTERVAL = 20
 DISPATCH_SEP_CHAR = "\n"
@@ -189,6 +191,10 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
+
+# Query history exports can scan large windows and write CSV artifacts, so give
+# workers a longer pickup window while still preventing unbounded queue growth.
+CELERY_QUERY_HISTORY_EXPORT_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 CELERY_SANDBOX_FILE_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 
