@@ -39,7 +39,7 @@ class DiscoursePerms(BaseModel):
 def discourse_request(
     endpoint: str, perms: DiscoursePerms, params: dict | None = None
 ) -> Response:
-    headers = {}
+    headers: dict[str, str] = {}
     if perms.api_key.strip():
         headers["Api-Key"] = perms.api_key
     if perms.api_username.strip():
@@ -101,9 +101,7 @@ class DiscourseConnector(PollConnector):
 
             for subcategory in cat.get("subcategory_list", []):
                 subcategory_matches = (
-                    category_matches
-                    or not self.categories
-                    or subcategory["name"].lower() in self.categories
+                    category_matches or subcategory["name"].lower() in self.categories
                 )
                 if subcategory_matches:
                     self.category_id_map[subcategory["id"]] = {
@@ -169,6 +167,7 @@ class DiscourseConnector(PollConnector):
     ) -> list[int]:
         assert self.permissions is not None
         topic_ids = []
+        seen_topic_ids: set[int] = set()
 
         if not self.categories:
             latest_endpoint = urllib.parse.urljoin(
@@ -205,7 +204,12 @@ class DiscourseConnector(PollConnector):
             if (start and start > last_time_dt) or (end and end < last_time_dt):
                 continue
 
-            topic_ids.append(topic["id"])
+            topic_id = topic["id"]
+            if topic_id in seen_topic_ids:
+                continue
+
+            seen_topic_ids.add(topic_id)
+            topic_ids.append(topic_id)
 
         return topic_ids
 

@@ -123,3 +123,39 @@ def test_get_categories_map_can_filter_directly_to_subcategory() -> None:
 
     assert connector.category_id_map == {2: {"name": "Dining", "slug": "dining"}}
     assert connector.active_categories == {2}
+
+
+def test_get_latest_topics_deduplicates_parent_and_subcategory_results() -> None:
+    connector = DiscourseConnector(
+        base_url="https://forum.example.com",
+        categories=["Walt Disney World"],
+    )
+    connector.permissions = DiscoursePerms(api_key="", api_username="")
+    connector.category_id_map = {
+        1: {"name": "Walt Disney World", "slug": "walt-disney-world"},
+        2: {"name": "Dining", "slug": "dining"},
+    }
+
+    parent_response = MagicMock()
+    parent_response.json.return_value = {
+        "topic_list": {
+            "topics": [
+                {"id": 10, "last_posted_at": "2026-05-25T00:00:00.000Z"},
+                {"id": 11, "last_posted_at": "2026-05-25T00:00:00.000Z"},
+            ]
+        }
+    }
+    subcategory_response = MagicMock()
+    subcategory_response.json.return_value = {
+        "topic_list": {
+            "topics": [
+                {"id": 10, "last_posted_at": "2026-05-25T00:00:00.000Z"},
+                {"id": 12, "last_posted_at": "2026-05-25T00:00:00.000Z"},
+            ]
+        }
+    }
+    connector._make_request = MagicMock(  # type: ignore[method-assign]
+        side_effect=[parent_response, subcategory_response]
+    )
+
+    assert connector._get_latest_topics(start=None, end=None, page=0) == [10, 11, 12]
