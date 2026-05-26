@@ -1,4 +1,5 @@
 from collections import defaultdict
+from enum import StrEnum
 
 from jira import JIRA
 from jira.resources import PermissionScheme
@@ -32,6 +33,17 @@ SUPPORTED_STATIC_HOLDER_TYPES = {
     HOLDER_TYPE_PROJECT_ROLE,
     HOLDER_TYPE_GROUP,
 }
+
+# Jira DC/Server returns project-role actors flat with this `type` discriminator;
+# Jira Cloud v3 instead wraps them in nested `actorGroup` / `actorUser` objects.
+ATLASSIAN_GROUP_ROLE_ACTOR_TYPE = "atlassian-group-role-actor"
+ATLASSIAN_USER_ROLE_ACTOR_TYPE = "atlassian-user-role-actor"
+
+
+class _RoleActorCategory(StrEnum):
+    GROUP = "group"
+    USER = "user"
+    UNSUPPORTED = "unsupported"
 
 
 def _get_role_id(holder: Holder) -> str | None:
@@ -216,6 +228,30 @@ def _get_user_emails(jira_project: str, user_holders: list[Holder]) -> list[str]
     return emails
 
 
+def _classify_role_actor(actor: object) -> _RoleActorCategory:
+    """Categorize a project-role actor across Cloud v3's nested
+    `actorGroup`/`actorUser` shape and DC/Server's flat `type=atlassian-*-role-actor`
+    shape."""
+    if (
+        _get_obj_value(actor, "actorGroup") is not None
+        or _get_raw_value(actor, "actorGroup") is not None
+    ):
+        return _RoleActorCategory.GROUP
+    if (
+        _get_obj_value(actor, "actorUser") is not None
+        or _get_raw_value(actor, "actorUser") is not None
+    ):
+        return _RoleActorCategory.USER
+
+    actor_type = _get_first_str_value(actor, ("type",))
+    if actor_type == ATLASSIAN_GROUP_ROLE_ACTOR_TYPE:
+        return _RoleActorCategory.GROUP
+    if actor_type == ATLASSIAN_USER_ROLE_ACTOR_TYPE:
+        return _RoleActorCategory.USER
+
+    return _RoleActorCategory.UNSUPPORTED
+
+
 def _get_actor_group_name(actor: object) -> str | None:
     for actor_group in [
         _get_obj_value(actor, "actorGroup"),
@@ -340,11 +376,9 @@ def _get_user_emails_and_groups_from_project_roles(
             continue
 
         for actor in role.actors:
-            actor_group = _get_obj_value(actor, "actorGroup") or _get_raw_value(
-                actor, "actorGroup"
-            )
-            # Handle group actors
-            if actor_group is not None:
+            category = _classify_role_actor(actor)
+
+            if category is _RoleActorCategory.GROUP:
                 actor_group_seen_count += 1
                 group_name = _get_actor_group_name(actor)
                 if group_name:
@@ -352,20 +386,23 @@ def _get_user_emails_and_groups_from_project_roles(
                 else:
                     actor_group_missing_name_count += 1
                     logger.warning(
-                        "Jira project %s project role %s has actorGroup with no "
-                        "name/displayName; actor_group=%s",
+                        "Jira project %s project role %s has group actor with no "
+                        "name/displayName; actor=%s",
                         jira_project,
                         role_id,
-                        actor_group,
+                        actor,
                     )
                 continue
 
-            actor_user = _get_obj_value(actor, "actorUser") or _get_raw_value(
-                actor, "actorUser"
-            )
-            # Handle user actors
-            if actor_user is not None:
+            if category is _RoleActorCategory.USER:
                 actor_user_seen_count += 1
+                # Prefer Cloud's nested `actorUser` (keeps accountId lookup);
+                # fall back to the actor itself for DC's flat shape.
+                actor_user = (
+                    _get_obj_value(actor, "actorUser")
+                    or _get_raw_value(actor, "actorUser")
+                    or actor
+                )
                 email = _get_actor_user_email(
                     jira_client=jira_client,
                     jira_project=jira_project,
